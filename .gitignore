@@ -1,0 +1,16 @@
+node_modules/
+dist/
+coverage/
+.env
+.env.*
+!.env.example
+.DS_Store
+*.log
+.vite/
+.turbo/
+
+.idea/
+.vscode/
+*.swp
+*.swo
+*~

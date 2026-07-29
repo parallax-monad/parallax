@@ -1,0 +1,20 @@
+{
+  "name": "parallax",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": "22.x"
+  },
+  "scripts": {
+    "lint": "biome check .",
+    "format": "biome format --write .",
+    "typecheck": "tsc --noEmit -p tsconfig.base.json",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.6",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.10"
+  }
+}

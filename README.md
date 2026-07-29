@@ -1,0 +1,61 @@
+# Parallax
+
+Parallax is a Moss-powered pre-transaction decision layer for Monad swaps.
+
+Before a user signs or retries a swap, Parallax uses execution evidence to help the user decide whether to proceed, adjust, stop, or wait for more evidence.
+
+> Moss tells us what will happen. Parallax tells the user what to do next.
+
+## P0 scope
+
+The hackathon MVP focuses on:
+
+- a wallet-style single-page experience;
+- structured swap intent;
+- real Moss quote, action, and simulation evidence;
+- deterministic verdicts;
+- actionable adjustment guidance;
+- one Adjust & Re-run flow;
+- no signing, broadcasting, or asset custody.
+
+These capabilities are the planned P0 scope and are not yet complete.
+
+## Repository
+
+https://github.com/parallax-monad/parallax
+
+## Structure
+
+```text
+apps/api       Backend API and orchestration
+apps/web       Frontend application
+packages/*     Shared contracts, Moss bridge, orchestration, and risk logic
+docs/*         Product, research, risk methodology, demo, and ADR documents
+fixtures/      Test, evidence, and replay fixtures
+scripts/       Development and operational scripts
+```
+
+## Team
+
+| Member | GitHub | Area |
+|---|---|---|
+| Kai | [@chin0312](https://github.com/chin0312) | Product and demo |
+| Rei | [@rainypilgrimage-beep](https://github.com/rainypilgrimage-beep) | Risk methodology and research |
+| Jie | [@jzhao0](https://github.com/jzhao0) | Moss integration and risk engine |
+| Clare | [@brightheartma](https://github.com/brightheartma) | API, backend, orchestration, and deployment |
+| Antony | [@antony819](https://github.com/antony819) | Web frontend |
+
+## Development status
+
+The repository is currently in the P0 scaffold stage. Module owners will define internal source structures as implementation begins.
+
+Target MVP completion date: August 5, 2026.
+
+## Collaboration
+
+- `main` is the shared integration branch.
+- Development work should use short-lived branches.
+- Changes should be submitted through pull requests.
+- Technical changes require technical review.
+- Documentation is primarily reviewed by Kai and Rei.
+- README changes are reviewed by the full team.
