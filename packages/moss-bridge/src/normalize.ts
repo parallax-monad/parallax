@@ -1,3 +1,4 @@
+import { normalizeMossError } from "./errors.js";
 import type {
   EvidenceSource,
   IntegrationStatus,
@@ -15,11 +16,17 @@ export function normalizeRecordedKuruEvidence(input: {
   mossVersion: string;
   mossCommit?: string;
   integrationStatus?: IntegrationStatus;
+  fetchedAt?: string;
 }): NormalizedKuruEvidence {
-  const integrationStatus = input.integrationStatus ?? "OK";
+  const errors = normalizedErrors(input.raw.errors);
+  const integrationStatus = aggregateIntegrationStatus(
+    input.integrationStatus ?? "OK",
+    errors,
+  );
   const quote = queryData(input.raw.quote);
-  const action = actionSummary(input.raw.action);
-  const simulation = simulationSummary(input.raw.simulation);
+  const transactions = transactionNodes(input.raw.action);
+  const action = transactions.length === 0 ? null : transactions.map(summary);
+  const simulation = simulationSummary(input.raw.simulation, transactions);
   const approval = approvalStatus(input.raw.action, input.intent.tokenIn);
   const limitations = [
     "Recorded simulation synthetic-prefunds native MON only and does not prove ERC-20 affordability.",
@@ -39,7 +46,7 @@ export function normalizeRecordedKuruEvidence(input: {
     protocol: "kuru",
     intent: input.intent,
     integrationStatus,
-    executionStatus: executionStatus(integrationStatus, simulation),
+    executionStatus: executionStatus(integrationStatus, errors, simulation),
     quote: sourced(
       quote,
       quote ? "quote" : "unknown",
@@ -77,6 +84,18 @@ export function normalizeRecordedKuruEvidence(input: {
       input.raw.simulation ? "moss" : "unknown",
       input,
     ),
+    simulationCoverage: sourced(
+      simulation.coverage,
+      input.raw.action ? "derived" : "unknown",
+      input,
+      "Expected transactions are derived from the action capability tree; observed results are derived from the simulator result list.",
+    ),
+    errors: sourced(
+      errors,
+      input.raw.errors ? "moss" : "unknown",
+      input,
+      "Structured errors are normalized from recorded stage errors.",
+    ),
     blockNumber: sourced(
       input.blockNumber,
       input.blockNumber ? "rpc" : "unknown",
@@ -90,7 +109,7 @@ export function normalizeRecordedKuruEvidence(input: {
       approval,
       action ? "derived" : "unknown",
       input,
-      "Derived from the recorded Moss capability tree.",
+      approvalFormula(approval),
     ),
     walletAffordabilityChecked: false,
     limitations,
@@ -109,13 +128,14 @@ export function replayKuruEvidence(
 function sourced<T>(
   value: T | null,
   source: EvidenceSource,
-  input: { blockNumber: string | null },
+  input: { blockNumber: string | null; fetchedAt?: string },
   formula?: string,
 ): Sourced<T> {
   return {
     value,
     source,
     ...(input.blockNumber ? { blockNumber: input.blockNumber } : {}),
+    ...(input.fetchedAt ? { fetchedAt: input.fetchedAt } : {}),
     ...(formula ? { formula } : {}),
     ...(value === null
       ? { limitation: "No corresponding recorded evidence is available." }
@@ -126,19 +146,6 @@ function sourced<T>(
 function queryData(value: JsonValue | null): JsonValue | null {
   if (!record(value)) return null;
   return record(value.data) ? value.data : null;
-}
-
-function actionSummary(value: JsonValue | null): JsonValue | null {
-  if (!record(value)) return null;
-  const transactions = transactionNodes(value);
-  if (transactions.length === 0) return null;
-  return transactions.map((transaction) => ({
-    protocol: transaction.protocol,
-    method: transaction.method,
-    target: transaction.target,
-    nativeValue: transaction.nativeValue,
-    calldataBytes: transaction.calldataBytes,
-  }));
 }
 
 function approvalStatus(
@@ -154,7 +161,10 @@ function approvalStatus(
     : "UNKNOWN";
 }
 
-function simulationSummary(value: JsonValue | null): {
+function simulationSummary(
+  value: JsonValue | null,
+  transactions: TransactionNode[],
+): {
   receipt: JsonValue | null;
   outcome: JsonValue | null;
   assetChanges: JsonValue[];
@@ -163,6 +173,7 @@ function simulationSummary(value: JsonValue | null): {
   gas: JsonValue;
   reverted: boolean;
   unsupportedReceipt: boolean;
+  coverage: import("./types.js").SimulationCoverage;
 } {
   if (!record(value) || !Array.isArray(value.results)) {
     return {
@@ -174,9 +185,12 @@ function simulationSummary(value: JsonValue | null): {
       gas: [],
       reverted: false,
       unsupportedReceipt: false,
+      coverage: coverageSummary(transactions, [], false, undefined),
     };
   }
   const results = value.results.filter(record);
+  const halted = value.halted !== undefined && value.halted !== false;
+  const haltReason = haltReasonOf(value.halted);
   const warnings = results.flatMap((result) =>
     Array.isArray(result.warnings) ? result.warnings : [],
   );
@@ -188,7 +202,14 @@ function simulationSummary(value: JsonValue | null): {
   const assetChanges = results.flatMap((result) =>
     Array.isArray(result.changes) ? result.changes : [],
   );
-  const reverted = results.some((result) => result.reverted === true);
+  const coverage = coverageSummary(transactions, results, halted, haltReason);
+  const reverted = results.some(
+    (result) =>
+      result.reverted === true &&
+      transactions.some((transaction) =>
+        resultMatchesTransaction(result, transaction),
+      ),
+  );
   const revertReason = results.find(
     (result) => typeof result.revertReason === "string",
   )?.revertReason;
@@ -204,14 +225,18 @@ function simulationSummary(value: JsonValue | null): {
     gas: results.map((result) => result.gas ?? null),
     reverted,
     unsupportedReceipt,
+    coverage,
   };
 }
 
 function executionStatus(
   integrationStatus: IntegrationStatus,
+  errors: import("./types.js").NormalizedMossError[],
   simulation: ReturnType<typeof simulationSummary>,
 ): NormalizedKuruEvidence["executionStatus"] {
   if (integrationStatus !== "OK") return "UNKNOWN";
+  if (errors.some((error) => error.code === "NO_ROUTE")) return "NO_ROUTE";
+  if (!simulation.coverage.complete) return "UNKNOWN";
   if (simulation.reverted) return "REVERTED";
   if (simulation.unsupportedReceipt || simulation.receipt === null)
     return "UNKNOWN";
@@ -232,17 +257,27 @@ function capabilityNodes(
   return [...own, ...children];
 }
 
-function transactionNodes(value: JsonValue): Array<{
+type TransactionNode = {
   protocol: string;
   method: string;
   target: string | null;
   nativeValue: string | null;
   calldataBytes: number | null;
-}> {
+  transaction: Record<string, JsonValue>;
+};
+
+function transactionNodes(
+  value: JsonValue | null,
+  parent: Pick<TransactionNode, "protocol" | "method"> = {
+    protocol: "unknown",
+    method: "unknown",
+  },
+): TransactionNode[] {
   if (!record(value)) return [];
   const protocol =
-    typeof value.protocol === "string" ? value.protocol : "unknown";
-  const method = typeof value.method === "string" ? value.method : "unknown";
+    typeof value.protocol === "string" ? value.protocol : parent.protocol;
+  const method =
+    typeof value.method === "string" ? value.method : parent.method;
   const transaction = record(value.transaction) ? value.transaction : null;
   const own = transaction
     ? [
@@ -256,13 +291,147 @@ function transactionNodes(value: JsonValue): Array<{
             typeof transaction.data === "string"
               ? Math.max(0, (transaction.data.length - 2) / 2)
               : null,
+          transaction,
         },
       ]
     : [];
   const children = Array.isArray(value.children)
-    ? value.children.flatMap(transactionNodes)
+    ? value.children.flatMap((child) =>
+        transactionNodes(child, { protocol, method }),
+      )
     : [];
   return [...own, ...children];
+}
+
+function summary(transaction: TransactionNode): JsonValue {
+  return {
+    protocol: transaction.protocol,
+    method: transaction.method,
+    target: transaction.target,
+    nativeValue: transaction.nativeValue,
+    calldataBytes: transaction.calldataBytes,
+  };
+}
+
+function coverageSummary(
+  transactions: TransactionNode[],
+  results: Record<string, JsonValue>[],
+  halted: boolean,
+  haltReason: string | undefined,
+): import("./types.js").SimulationCoverage {
+  const missingTransactionIndexes = transactions.flatMap(
+    (transaction, index) =>
+      results.some((result) => resultMatchesTransaction(result, transaction))
+        ? []
+        : [index],
+  );
+  return {
+    expectedTransactions: transactions.length,
+    observedResults: results.length,
+    halted,
+    complete:
+      results.length === transactions.length &&
+      !halted &&
+      missingTransactionIndexes.length === 0,
+    missingTransactionIndexes,
+    ...(haltReason ? { haltReason } : {}),
+  };
+}
+
+function resultMatchesTransaction(
+  result: Record<string, JsonValue> | undefined,
+  transaction: TransactionNode | undefined,
+): boolean {
+  if (!result || !transaction || !record(result.transaction)) return false;
+  const resultTransaction = result.transaction;
+  return ["to", "data", "value"].every(
+    (key) =>
+      comparable(resultTransaction[key]) ===
+      comparable(transaction.transaction[key]),
+  );
+}
+
+function comparable(value: JsonValue | undefined): string | null {
+  return typeof value === "string" ? value.toLowerCase() : null;
+}
+
+function haltReasonOf(value: JsonValue | undefined): string | undefined {
+  if (!record(value)) return undefined;
+  return typeof value.reason === "string" ? value.reason : undefined;
+}
+
+function normalizedErrors(
+  errors: RawKuruEvidence["errors"],
+): import("./types.js").NormalizedMossError[] {
+  if (!errors) return [];
+  return Object.entries(errors).flatMap(([key, value]) => {
+    const stage = stageOf(key);
+    return errorMessages(value).map((message) =>
+      normalizeMossError(message, {
+        ...(stage ? { stage } : {}),
+        source: errorSource(stage),
+      }),
+    );
+  });
+}
+
+function errorMessages(value: JsonValue): string[] {
+  if (typeof value === "string") return [value];
+  if (Array.isArray(value)) return value.flatMap(errorMessages);
+  if (!record(value)) return [JSON.stringify(value)];
+  if (typeof value.message === "string") return [value.message];
+  if (typeof value.error === "string") return [value.error];
+  return [JSON.stringify(value)];
+}
+
+function stageOf(
+  key: string,
+): import("./types.js").NormalizedMossError["stage"] {
+  const normalized = key.toUpperCase();
+  return ["DISCOVER", "LOAD", "QUOTE", "ACTION", "SIMULATE"].includes(
+    normalized,
+  )
+    ? (normalized as import("./types.js").NormalizedMossError["stage"])
+    : undefined;
+}
+
+function errorSource(
+  stage: import("./types.js").NormalizedMossError["stage"],
+): import("./types.js").NormalizedMossError["source"] {
+  if (stage === "QUOTE") return "quote";
+  if (stage === "SIMULATE") return "rpc";
+  return stage ? "moss" : "unknown";
+}
+
+function aggregateIntegrationStatus(
+  baseline: IntegrationStatus,
+  errors: import("./types.js").NormalizedMossError[],
+): IntegrationStatus {
+  const ranked = [baseline, ...errors.map((error) => error.integrationStatus)];
+  return ranked.reduce((current, candidate) =>
+    integrationRank(candidate) > integrationRank(current) ? candidate : current,
+  );
+}
+
+function integrationRank(status: IntegrationStatus): number {
+  return {
+    OK: 0,
+    UNAVAILABLE: 1,
+    TIMEOUT: 2,
+    INTEGRATION_ERROR: 3,
+  }[status];
+}
+
+function approvalFormula(
+  approval: "REQUIRED" | "NOT_APPLICABLE" | "UNKNOWN",
+): string {
+  if (approval === "REQUIRED") {
+    return "Derived from the recorded ERC-20 approval capability preceding the Kuru swap action.";
+  }
+  if (approval === "NOT_APPLICABLE") {
+    return "Native MON input has no ERC-20 approval action.";
+  }
+  return "The recorded action capability tree does not establish an ERC-20 approval requirement.";
 }
 
 function sourcedFields(
@@ -277,6 +446,8 @@ function sourcedFields(
     evidence.warnings,
     evidence.revertReason,
     evidence.gas,
+    evidence.simulationCoverage,
+    evidence.errors,
     evidence.blockNumber,
     evidence.approval,
   ];

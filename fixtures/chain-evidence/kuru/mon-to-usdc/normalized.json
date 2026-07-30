@@ -1,21 +1,14 @@
 {
   "protocol": "kuru",
-  "capability": "swap",
   "intent": {
     "chainId": "143",
     "sender": "0xcccccccccccccccccccccccccccccccccccccccc",
     "tokenIn": "MON",
     "tokenOut": "0x754704Bc059F8C67012fEd69BC8A327a5aafb603",
-    "amountIn": "0.01",
-    "slippageBps": 50
+    "amountIn": "0.01"
   },
-  "route": {
-    "value": ["native", "0x754704Bc059F8C67012fEd69BC8A327a5aafb603"],
-    "source": "quote",
-    "blockNumber": "91383505",
-    "fetchedAt": "2026-07-29T15:48:24.684Z",
-    "formula": "Kuru quote path was returned by Moss."
-  },
+  "integrationStatus": "OK",
+  "executionStatus": "UNKNOWN",
   "quote": {
     "value": {
       "amountSide": "amountIn",
@@ -26,19 +19,8 @@
     },
     "source": "quote",
     "blockNumber": "91383505",
-    "fetchedAt": "2026-07-29T15:48:24.684Z"
-  },
-  "expectedOutput": {
-    "value": "0.000223",
-    "source": "quote",
-    "blockNumber": "91383505",
-    "fetchedAt": "2026-07-29T15:48:24.684Z"
-  },
-  "minimumOutput": {
-    "value": "0.000221",
-    "source": "quote",
-    "blockNumber": "91383505",
-    "fetchedAt": "2026-07-29T15:48:24.684Z"
+    "fetchedAt": "2026-07-29T15:48:24.685Z",
+    "formula": "Quote returned by the recorded Moss query."
   },
   "action": {
     "value": [
@@ -52,45 +34,21 @@
     ],
     "source": "moss",
     "blockNumber": "91383505",
-    "fetchedAt": "2026-07-29T15:48:24.684Z"
+    "fetchedAt": "2026-07-29T15:48:24.685Z"
   },
-  "actionTarget": {
-    "value": "0xd651346d7c789536ebf06dc72aE3C8502cd695CC",
-    "source": "moss",
+  "receipt": {
+    "value": null,
+    "source": "unknown",
     "blockNumber": "91383505",
-    "fetchedAt": "2026-07-29T15:48:24.684Z"
+    "fetchedAt": "2026-07-29T15:48:24.685Z",
+    "limitation": "No corresponding recorded evidence is available."
   },
-  "actionDataMetadata": {
-    "value": {
-      "to": "0xd651346d7c789536ebf06dc72aE3C8502cd695CC",
-      "dataLength": 842,
-      "value": "0x2386f26fc10000"
-    },
-    "source": "derived",
-    "blockNumber": "91383505",
-    "fetchedAt": "2026-07-29T15:48:24.684Z",
-    "formula": "Derived from Moss unsigned transaction metadata; calldata is retained only in raw evidence."
-  },
-  "nativeValue": {
-    "value": "0x2386f26fc10000",
-    "source": "moss",
-    "blockNumber": "91383505",
-    "fetchedAt": "2026-07-29T15:48:24.684Z"
-  },
-  "approval": {
-    "value": "NOT_APPLICABLE",
-    "source": "derived",
-    "blockNumber": "91383505",
-    "fetchedAt": "2026-07-29T15:48:24.684Z",
-    "formula": "Native MON input has no ERC-20 approval child."
-  },
-  "simulationStatus": "UNKNOWN",
   "outcome": {
     "value": null,
     "source": "unknown",
     "blockNumber": "91383505",
-    "fetchedAt": "2026-07-29T15:48:24.684Z",
-    "limitation": "No corresponding Moss evidence was available."
+    "fetchedAt": "2026-07-29T15:48:24.685Z",
+    "limitation": "No corresponding recorded evidence is available."
   },
   "assetChanges": {
     "value": [
@@ -159,7 +117,7 @@
     ],
     "source": "moss",
     "blockNumber": "91383505",
-    "fetchedAt": "2026-07-29T15:48:24.684Z"
+    "fetchedAt": "2026-07-29T15:48:24.685Z"
   },
   "warnings": {
     "value": [
@@ -170,41 +128,63 @@
     ],
     "source": "moss",
     "blockNumber": "91383505",
-    "fetchedAt": "2026-07-29T15:48:24.684Z"
+    "fetchedAt": "2026-07-29T15:48:24.685Z"
   },
   "revertReason": {
-    "value": "Unexpected Change: Kuru market emitted FlipOrderUpdated",
-    "source": "moss",
+    "value": null,
+    "source": "unknown",
     "blockNumber": "91383505",
-    "fetchedAt": "2026-07-29T15:48:24.684Z"
+    "fetchedAt": "2026-07-29T15:48:24.685Z",
+    "limitation": "No corresponding recorded evidence is available."
   },
-  "gasEvidence": {
+  "gas": {
     "value": [null],
     "source": "moss",
     "blockNumber": "91383505",
-    "fetchedAt": "2026-07-29T15:48:24.684Z"
+    "fetchedAt": "2026-07-29T15:48:24.685Z"
+  },
+  "simulationCoverage": {
+    "value": {
+      "expectedTransactions": 1,
+      "observedResults": 1,
+      "halted": true,
+      "complete": false,
+      "missingTransactionIndexes": [],
+      "haltReason": "Unexpected Change: Kuru market emitted FlipOrderUpdated"
+    },
+    "source": "derived",
+    "blockNumber": "91383505",
+    "fetchedAt": "2026-07-29T15:48:24.685Z",
+    "formula": "Expected transactions are derived from the action capability tree; observed results are derived from the simulator result list."
+  },
+  "errors": {
+    "value": [],
+    "source": "moss",
+    "blockNumber": "91383505",
+    "fetchedAt": "2026-07-29T15:48:24.685Z",
+    "formula": "Structured errors are normalized from recorded stage errors."
   },
   "blockNumber": {
     "value": "91383505",
     "source": "rpc",
     "blockNumber": "91383505",
-    "fetchedAt": "2026-07-29T15:48:24.684Z"
+    "fetchedAt": "2026-07-29T15:48:24.685Z"
   },
   "mossVersion": "workspace @themoss/protocol-kuru@0.1.0",
   "mossCommit": "d09b38cbc44ee7f5722c5d09e7224f7750187762",
-  "rawFixturePath": "fixtures/chain-evidence/kuru-mon-to-usdc/raw.json",
   "source": "moss",
-  "integrationStatus": "OK",
-  "simulationPrestate": {
-    "value": "NATIVE_PREFUND_ONLY",
+  "replayMode": false,
+  "approval": {
+    "value": "NOT_APPLICABLE",
     "source": "derived",
     "blockNumber": "91383505",
-    "fetchedAt": "2026-07-29T15:48:24.684Z",
-    "formula": "Moss createTraceSimulator defaults to a 10^24 wei native-balance state override per transaction sender."
+    "fetchedAt": "2026-07-29T15:48:24.685Z",
+    "formula": "Native MON input has no ERC-20 approval action."
   },
   "walletAffordabilityChecked": false,
   "limitations": [
-    "Moss trace simulation synthetic-prefunds native MON only; it does not prove real ERC-20 balance or allowance.",
-    "No signing, broadcast, custody, or wallet mutation occurred."
+    "Recorded simulation synthetic-prefunds native MON only and does not prove ERC-20 affordability.",
+    "No signing, broadcast, custody, or wallet mutation occurred while recording this evidence.",
+    "Kuru receipt evidence is unsupported for FlipOrderUpdated on the recorded Moss baseline."
   ]
 }

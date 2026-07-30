@@ -1,30 +1,32 @@
-import type { IntegrationStatus } from "./types.js";
+import type { NormalizedMossError } from "./types.js";
 
-export type NormalizedMossError = {
-  code:
-    | "NO_ROUTE"
-    | "REVERTED"
-    | "TIMEOUT"
-    | "UNAVAILABLE"
-    | "INTEGRATION_ERROR";
-  message: string;
-  integrationStatus: IntegrationStatus;
-};
-
-export function normalizeMossError(message: string): NormalizedMossError {
+export function normalizeMossError(
+  message: string,
+  context: Pick<NormalizedMossError, "stage" | "source"> = {
+    source: "unknown",
+  },
+): NormalizedMossError {
   if (/no verified Kuru market path|no Kuru market path/i.test(message)) {
-    return { code: "NO_ROUTE", message, integrationStatus: "OK" };
+    return { ...context, code: "NO_ROUTE", message, integrationStatus: "OK" };
   }
   if (/debug_traceCall|simulator unavailable|does not expose/i.test(message)) {
-    return { code: "UNAVAILABLE", message, integrationStatus: "UNAVAILABLE" };
+    return {
+      ...context,
+      code: "UNAVAILABLE",
+      message,
+      integrationStatus: "UNAVAILABLE",
+    };
   }
   if (/timed out|timeout/i.test(message)) {
-    return { code: "TIMEOUT", message, integrationStatus: "TIMEOUT" };
-  }
-  if (/revert/i.test(message)) {
-    return { code: "REVERTED", message, integrationStatus: "OK" };
+    return {
+      ...context,
+      code: "TIMEOUT",
+      message,
+      integrationStatus: "TIMEOUT",
+    };
   }
   return {
+    ...context,
     code: "INTEGRATION_ERROR",
     message,
     integrationStatus: "INTEGRATION_ERROR",

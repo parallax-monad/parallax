@@ -40,6 +40,29 @@ export type IntegrationStatus =
 
 export type ExecutionStatus = "SUCCESS" | "NO_ROUTE" | "REVERTED" | "UNKNOWN";
 
+export type SimulationCoverage = {
+  expectedTransactions: number;
+  observedResults: number;
+  halted: boolean;
+  complete: boolean;
+  missingTransactionIndexes: number[];
+  haltReason?: string;
+};
+
+export type NormalizedMossError = {
+  stage?: "DISCOVER" | "LOAD" | "QUOTE" | "ACTION" | "SIMULATE";
+  code:
+    | "NO_ROUTE"
+    | "REVERTED"
+    | "TIMEOUT"
+    | "UNAVAILABLE"
+    | "INTEGRATION_ERROR"
+    | "UNKNOWN";
+  message: string;
+  integrationStatus: IntegrationStatus;
+  source: "moss" | "rpc" | "quote" | "unknown";
+};
+
 export type NormalizedKuruEvidence = {
   protocol: "kuru";
   intent: KuruSwapIntent;
@@ -53,6 +76,8 @@ export type NormalizedKuruEvidence = {
   warnings: Sourced<JsonValue[]>;
   revertReason: Sourced<string>;
   gas: Sourced<JsonValue>;
+  simulationCoverage: Sourced<SimulationCoverage>;
+  errors: Sourced<NormalizedMossError[]>;
   blockNumber: Sourced<string>;
   mossVersion: string;
   mossCommit?: string;
