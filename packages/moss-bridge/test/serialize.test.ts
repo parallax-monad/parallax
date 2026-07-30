@@ -17,5 +17,9 @@ describe("evidence serialization", () => {
       code: "INTEGRATION_ERROR",
       integrationStatus: "INTEGRATION_ERROR",
     });
+    expect(normalizeMossError("failed to decode revert data")).toMatchObject({
+      code: "INTEGRATION_ERROR",
+      integrationStatus: "INTEGRATION_ERROR",
+    });
   });
 });
