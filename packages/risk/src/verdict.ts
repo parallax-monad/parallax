@@ -58,7 +58,9 @@ export function evaluateKuruEvidence(
       economicBoundary,
       "ADJUST",
       ["Expected output is below the caller-provided minimum received."],
-      ["Adjust amount, route, or the explicit acceptance boundary."],
+      [
+        "Adjust amount, route, protocol, or change the user's acceptance boundary.",
+      ],
     );
   }
   if (economicBoundary === "PASS") {
@@ -73,14 +75,22 @@ export function evaluateKuruEvidence(
       [],
     );
   }
+  if (economicBoundary === "NOT_APPLICABLE") {
+    return result(
+      evidence,
+      completeness,
+      economicBoundary,
+      "PROCEED",
+      ["No blocking evidence was found within the checked scope."],
+      [],
+    );
+  }
   return result(
     evidence,
     completeness,
     economicBoundary,
     "UNKNOWN",
-    [
-      "No minimum received was supplied, so no economic acceptance decision was inferred.",
-    ],
+    ["The supplied economic acceptance boundary could not be evaluated."],
     [],
   );
 }

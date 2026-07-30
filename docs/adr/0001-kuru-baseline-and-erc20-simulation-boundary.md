@@ -22,7 +22,7 @@ Recorded at block `91383505`: quote and action were constructed, but receipt par
 
 ## USDC to MON status
 
-Recorded at block `91383528`: capability, quote, action, and exact approval construction succeeded. Simulation reverted generically. The root cause is unproven; no balance-insufficiency claim is made.
+Recorded at block `91383528`: capability, quote, action, and exact approval construction succeeded. The simulator halted on a generic revert, so coverage is incomplete and execution remains `UNKNOWN`. The root cause is unproven; no balance-insufficiency claim is made.
 
 ## Initial ERC-20 state problem
 
@@ -41,6 +41,8 @@ ERC-20 simulation needs balance and allowance state in addition to native gas/va
 ## Security and trust boundaries
 
 No private key, signing, broadcast, custody, or wallet mutation is used. Replay retains evidence source and marks replay mode. Synthetic state never proves live wallet affordability.
+
+`PROCEED` means no blocking evidence was found within the checked scope. It does not mean the transaction, token, protocol, or future outcome is safe.
 
 ## P0 decision
 

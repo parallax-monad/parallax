@@ -1,4 +1,7 @@
-import type { NormalizedKuruEvidence } from "@parallax/moss-bridge";
+import {
+  type NormalizedKuruEvidence,
+  normalizeRecordedKuruEvidence,
+} from "@parallax/moss-bridge";
 import { describe, expect, it } from "vitest";
 import { evaluateKuruEvidence } from "../src/index.js";
 
@@ -24,6 +27,17 @@ function evidence(
     warnings: { value: [], source: "moss" },
     revertReason: { value: null, source: "unknown" },
     gas: { value: ["1"], source: "moss" },
+    simulationCoverage: {
+      value: {
+        expectedTransactions: 1,
+        observedResults: 1,
+        halted: false,
+        complete: true,
+        missingTransactionIndexes: [],
+      },
+      source: "derived",
+    },
+    errors: { value: [], source: "moss" },
     blockNumber: { value: "1", source: "rpc" },
     mossVersion: "test",
     source: "moss",
@@ -43,8 +57,13 @@ describe("deterministic Kuru decisions", () => {
     ).toBe("UNKNOWN");
   });
 
-  it("does not turn success into proceed without minimum received", () => {
-    expect(evaluateKuruEvidence(evidence()).verdict).toBe("UNKNOWN");
+  it("returns proceed for complete successful evidence without an economic boundary", () => {
+    const result = evaluateKuruEvidence(evidence());
+    expect(result.economicBoundary).toBe("NOT_APPLICABLE");
+    expect(result.verdict).toBe("PROCEED");
+    expect(result.reasons).toEqual([
+      "No blocking evidence was found within the checked scope.",
+    ]);
   });
 
   it("returns proceed only with an explicit passing boundary", () => {
@@ -59,6 +78,24 @@ describe("deterministic Kuru decisions", () => {
     expect(
       evaluateKuruEvidence(evidence({ executionStatus: "NO_ROUTE" })).verdict,
     ).toBe("STOP");
+  });
+
+  it("maps structured quote no-route evidence to stop", () => {
+    const normalized = normalizeRecordedKuruEvidence({
+      intent: evidence().intent,
+      raw: {
+        discover: null,
+        load: null,
+        quote: null,
+        action: null,
+        simulation: null,
+        errors: { quote: "no verified Kuru market path" },
+      },
+      blockNumber: "1",
+      mossVersion: "test",
+    });
+    expect(normalized.executionStatus).toBe("NO_ROUTE");
+    expect(evaluateKuruEvidence(normalized).verdict).toBe("STOP");
   });
 
   it("does not guess that a generic revert means an insufficient balance", () => {
@@ -80,11 +117,63 @@ describe("deterministic Kuru decisions", () => {
     ).toBe("UNKNOWN");
   });
 
+  it("keeps decode-revert-data integration failures unknown", () => {
+    const normalized = normalizeRecordedKuruEvidence({
+      intent: evidence().intent,
+      raw: {
+        discover: null,
+        load: null,
+        quote: null,
+        action: null,
+        simulation: null,
+        errors: { simulate: "failed to decode revert data" },
+      },
+      blockNumber: "1",
+      mossVersion: "test",
+    });
+    expect(normalized.integrationStatus).toBe("INTEGRATION_ERROR");
+    expect(evaluateKuruEvidence(normalized).verdict).toBe("UNKNOWN");
+  });
+
   it("returns adjust when a supplied boundary is not met", () => {
     expect(
       evaluateKuruEvidence(
         evidence({ intent: { ...evidence().intent, minimumReceived: "11" } }),
       ).verdict,
     ).toBe("ADJUST");
+  });
+
+  it("returns unknown when a supplied boundary cannot be evaluated", () => {
+    const result = evaluateKuruEvidence(
+      evidence({
+        quote: {
+          value: { estimatedAmountOut: "not-a-decimal" },
+          source: "quote",
+        },
+        intent: { ...evidence().intent, minimumReceived: "9" },
+      }),
+    );
+    expect(result.economicBoundary).toBe("UNKNOWN");
+    expect(result.verdict).toBe("UNKNOWN");
+  });
+
+  it("returns unknown for partial or halted simulation coverage", () => {
+    const result = evaluateKuruEvidence(
+      evidence({
+        simulationCoverage: {
+          value: {
+            expectedTransactions: 2,
+            observedResults: 1,
+            halted: true,
+            complete: false,
+            missingTransactionIndexes: [1],
+            haltReason: "execution halted",
+          },
+          source: "derived",
+        },
+      }),
+    );
+    expect(result.evidenceCompleteness).toBe("MISSING");
+    expect(result.verdict).toBe("UNKNOWN");
   });
 });
