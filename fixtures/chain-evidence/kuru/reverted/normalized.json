@@ -1,0 +1,7 @@
+{
+  "protocol": "kuru",
+  "source": "mock",
+  "simulationStatus": "REVERTED",
+  "integrationStatus": "OK",
+  "revertReason": { "value": "execution reverted", "source": "mock" }
+}

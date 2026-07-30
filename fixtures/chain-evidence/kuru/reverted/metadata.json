@@ -1,0 +1,5 @@
+{
+  "real": false,
+  "source": "mock",
+  "purpose": "Rule-engine unknown-revert fixture; no chain call was made."
+}

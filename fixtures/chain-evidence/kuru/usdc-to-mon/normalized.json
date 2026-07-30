@@ -1,0 +1,170 @@
+{
+  "protocol": "kuru",
+  "capability": "swap",
+  "intent": {
+    "chainId": "143",
+    "sender": "0xcccccccccccccccccccccccccccccccccccccccc",
+    "tokenIn": "0x754704Bc059F8C67012fEd69BC8A327a5aafb603",
+    "tokenOut": "MON",
+    "amountIn": "1",
+    "slippageBps": 50
+  },
+  "route": {
+    "value": ["0x754704Bc059F8C67012fEd69BC8A327a5aafb603", "native"],
+    "source": "quote",
+    "blockNumber": "91383528",
+    "fetchedAt": "2026-07-29T15:48:31.471Z",
+    "formula": "Kuru quote path was returned by Moss."
+  },
+  "quote": {
+    "value": {
+      "amountSide": "amountIn",
+      "amountIn": "1",
+      "estimatedAmountOut": "47.4270808631",
+      "minimumAmountOut": "47.1899454587845",
+      "path": ["0x754704Bc059F8C67012fEd69BC8A327a5aafb603", "native"]
+    },
+    "source": "quote",
+    "blockNumber": "91383528",
+    "fetchedAt": "2026-07-29T15:48:31.471Z"
+  },
+  "expectedOutput": {
+    "value": "47.4270808631",
+    "source": "quote",
+    "blockNumber": "91383528",
+    "fetchedAt": "2026-07-29T15:48:31.471Z"
+  },
+  "minimumOutput": {
+    "value": "47.1899454587845",
+    "source": "quote",
+    "blockNumber": "91383528",
+    "fetchedAt": "2026-07-29T15:48:31.471Z"
+  },
+  "action": {
+    "value": [
+      {
+        "protocol": "erc20",
+        "method": "approve",
+        "target": "0x754704Bc059F8C67012fEd69BC8A327a5aafb603",
+        "nativeValue": "0x0",
+        "calldataBytes": 68
+      },
+      {
+        "protocol": "kuru",
+        "method": "swap",
+        "target": "0xd651346d7c789536ebf06dc72aE3C8502cd695CC",
+        "nativeValue": "0x0",
+        "calldataBytes": 420
+      }
+    ],
+    "source": "moss",
+    "blockNumber": "91383528",
+    "fetchedAt": "2026-07-29T15:48:31.471Z"
+  },
+  "actionTarget": {
+    "value": "0xd651346d7c789536ebf06dc72aE3C8502cd695CC",
+    "source": "moss",
+    "blockNumber": "91383528",
+    "fetchedAt": "2026-07-29T15:48:31.471Z"
+  },
+  "actionDataMetadata": {
+    "value": {
+      "to": "0xd651346d7c789536ebf06dc72aE3C8502cd695CC",
+      "dataLength": 842,
+      "value": "0x0"
+    },
+    "source": "derived",
+    "blockNumber": "91383528",
+    "fetchedAt": "2026-07-29T15:48:31.471Z",
+    "formula": "Derived from Moss unsigned transaction metadata; calldata is retained only in raw evidence."
+  },
+  "nativeValue": {
+    "value": "0x0",
+    "source": "moss",
+    "blockNumber": "91383528",
+    "fetchedAt": "2026-07-29T15:48:31.471Z"
+  },
+  "approval": {
+    "value": "REQUIRED",
+    "source": "derived",
+    "blockNumber": "91383528",
+    "fetchedAt": "2026-07-29T15:48:31.471Z",
+    "formula": "Native MON input has no ERC-20 approval child."
+  },
+  "simulationStatus": "REVERTED",
+  "outcome": {
+    "value": {
+      "operation": "approve",
+      "token": "0x754704bc059f8c67012fed69bc8a327a5aafb603",
+      "owner": "0xCcCCccccCCCCcCCCCCCcCcCccCcCCCcCcccccccC",
+      "spender": "0xd651346d7c789536ebf06dc72aE3C8502cd695CC",
+      "amount": "1000000"
+    },
+    "source": "moss",
+    "blockNumber": "91383528",
+    "fetchedAt": "2026-07-29T15:48:31.471Z"
+  },
+  "assetChanges": {
+    "value": [
+      {
+        "kind": "event",
+        "address": "0x754704bc059f8c67012fed69bc8a327a5aafb603",
+        "topics": [
+          "0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925",
+          "0x000000000000000000000000cccccccccccccccccccccccccccccccccccccccc",
+          "0x000000000000000000000000d651346d7c789536ebf06dc72ae3c8502cd695cc"
+        ],
+        "data": "0x00000000000000000000000000000000000000000000000000000000000f4240"
+      }
+    ],
+    "source": "moss",
+    "blockNumber": "91383528",
+    "fetchedAt": "2026-07-29T15:48:31.471Z"
+  },
+  "warnings": {
+    "value": [
+      {
+        "code": "REVERTED",
+        "message": "transaction reverted: execution reverted"
+      }
+    ],
+    "source": "moss",
+    "blockNumber": "91383528",
+    "fetchedAt": "2026-07-29T15:48:31.471Z"
+  },
+  "revertReason": {
+    "value": "execution reverted",
+    "source": "moss",
+    "blockNumber": "91383528",
+    "fetchedAt": "2026-07-29T15:48:31.471Z"
+  },
+  "gasEvidence": {
+    "value": ["87844", null],
+    "source": "moss",
+    "blockNumber": "91383528",
+    "fetchedAt": "2026-07-29T15:48:31.471Z"
+  },
+  "blockNumber": {
+    "value": "91383528",
+    "source": "rpc",
+    "blockNumber": "91383528",
+    "fetchedAt": "2026-07-29T15:48:31.471Z"
+  },
+  "mossVersion": "workspace @themoss/protocol-kuru@0.1.0",
+  "mossCommit": "d09b38cbc44ee7f5722c5d09e7224f7750187762",
+  "rawFixturePath": "fixtures/chain-evidence/kuru-usdc-to-mon/raw.json",
+  "source": "moss",
+  "integrationStatus": "OK",
+  "simulationPrestate": {
+    "value": "NATIVE_PREFUND_ONLY",
+    "source": "derived",
+    "blockNumber": "91383528",
+    "fetchedAt": "2026-07-29T15:48:31.471Z",
+    "formula": "Moss createTraceSimulator defaults to a 10^24 wei native-balance state override per transaction sender."
+  },
+  "walletAffordabilityChecked": false,
+  "limitations": [
+    "Moss trace simulation synthetic-prefunds native MON only; it does not prove real ERC-20 balance or allowance.",
+    "No signing, broadcast, custody, or wallet mutation occurred."
+  ]
+}

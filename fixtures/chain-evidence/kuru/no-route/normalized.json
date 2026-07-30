@@ -1,0 +1,9 @@
+{
+  "protocol": "kuru",
+  "source": "mock",
+  "simulationStatus": "UNKNOWN",
+  "integrationStatus": "OK",
+  "limitations": [
+    "Moss reported no verified Kuru market path for this token pair."
+  ]
+}
