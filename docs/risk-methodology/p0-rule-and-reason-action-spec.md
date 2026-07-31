@@ -62,6 +62,19 @@ type P0ReasonCode =
   | "OUTPUT_SOURCE_CONFLICT"
   | "RULE_CLASSIFICATION_NOT_VERIFIED";
 
+type P0ActionReasonCode =
+  | "ALTERNATIVE_PATH_VERIFIED"
+  | "OUTPUT_IMPROVEMENT_VERIFIED"
+  | "CANNOT_CREATE_MISSING_ROUTE"
+  | "CHANGES_ACCEPTANCE_BOUNDARY_ONLY"
+  | "EFFECT_NOT_VERIFIED"
+  | "RESTORES_CHECK_ONLY";
+
+type P0ApplicabilityReasonCode =
+  | "BOUNDARY_NOT_PROVIDED"
+  | "RULE_PRECONDITION_ABSENT"
+  | "STAGE_NOT_ENTERED_AFTER_TERMINAL_RESULT";
+
 type BoundarySource =
   | "original_swap"
   | "user_declared"
@@ -74,11 +87,11 @@ Semantics:
 - `PASS`: Evidence is sufficient and the rule requirement is satisfied. This does not mean the transaction is safe overall.
 - `FAIL`: Evidence is sufficient and the rule requirement is violated.
 - `UNKNOWN`: The rule applies, but the available evidence is insufficient or unreliable.
-- `NOT_APPLICABLE`: The rule precondition does not exist, or the current execution path does not enter the relevant stage.
+- `NOT_APPLICABLE`: The rule precondition does not exist, or the current execution path does not enter the relevant stage. A structured `applicabilityReasonCode` records which condition applies without affecting Verdict priority.
 
 ### 3.2 Reason Codes Drive Aggregation and Tests
 
-Free-form explanations are not aggregation inputs. Aggregation, contract tests, and frontend mapping use stable `ruleId + status + reasonCode` tuples.
+Free-form explanations are not aggregation inputs. Aggregation, contract tests, and frontend mapping use stable `ruleId + status + reasonCode` tuples for `FAIL` and `UNKNOWN`. `NOT_APPLICABLE` uses a structured `applicabilityReasonCode` for scope mapping without changing Verdict priority.
 
 ```text
 (P0-EXECUTION-001, FAIL, NO_ROUTE_FOUND)
@@ -113,25 +126,41 @@ type ActionEvaluation = {
   action: NextAction;
   relevance: "RELEVANT" | "IRRELEVANT" | "UNKNOWN";
   recommendable: boolean;
-  reasonCode: P0ReasonCode;
+  actionReasonCode: P0ActionReasonCode;
   evidenceRefs: EvidenceRef[];
 };
 ```
 
 Constraints:
 
-- A `TRANSACTION_ADJUSTMENT` changes transaction conditions. It may enter `recommendedActions` only when its relevance is `RELEVANT`, `recommendable = true`, and the Evidence Gate is satisfied.
+- A `TRANSACTION_ADJUSTMENT` changes transaction conditions. It may enter `recommendedActions` only when its relevance is `RELEVANT`, `recommendable = true`, its Evidence references support the action, and the Action Recommendation Gate is satisfied.
 - An `ACCEPTANCE_BOUNDARY_CHANGE` changes only the user's evaluation threshold; it does not improve the transaction outcome. In P0, it has `recommendable = false` and must not manufacture a `PROCEED` verdict by lowering the boundary.
 - A `SYSTEM_RECOVERY` action only helps complete or restore the check. It does not change the transaction outcome.
-- `IRRELEVANT` actions enter `irrelevantActions`; consumers must not silently discard them.
+- `IRRELEVANT` requires `recommendable = false`. Only actions with a verified irrelevant classification enter `irrelevantActions`; consumers must not silently discard them.
+- `UNKNOWN` requires `recommendable = false`. Unknown or unverified candidates enter neither public action list.
+- `recommendable = true` requires `relevance = RELEVANT`, supporting Evidence references, and a passed Action Recommendation Gate.
+- Unknown or unverified candidates remain available to internal Rule Evaluation, candidate-action analysis, and tests even though they are hidden from `recommendedActions` and `irrelevantActions`.
 - `USE_REPLAY` must be explicitly labeled as a Replay or Demo fallback and must not be presented as evidence from the current Live Run.
+
+Rule Reason Codes and Action Reason Codes answer different questions. `P0ReasonCode` explains why a Rule failed or could not be evaluated; `P0ActionReasonCode` explains why an action is relevant, irrelevant, unverified, or limited to system recovery. Consumers must not use Action Reason Codes as Verdict aggregation inputs.
+
+Examples:
+
+| Action basis | `actionReasonCode` |
+|---|---|
+| A rerun verifies an alternative execution path | `ALTERNATIVE_PATH_VERIFIED` |
+| A rerun verifies improved output against the unchanged boundary | `OUTPUT_IMPROVEMENT_VERIFIED` |
+| The action cannot create a missing Route | `CANNOT_CREATE_MISSING_ROUTE` |
+| The action changes only the user's acceptance threshold | `CHANGES_ACCEPTANCE_BOUNDARY_ONLY` |
+| The causal effect has not been verified | `EFFECT_NOT_VERIFIED` |
+| The action restores or completes the check only | `RESTORES_CHECK_ONLY` |
 
 Boundary-source constraints:
 
 - `original_swap`: Explicitly provided by the original transaction or DEX intent.
 - `user_declared`: Explicitly entered by the user.
 - `demo_preset`: Allowed only in clearly labeled Demo or Replay flows; it must not be presented as the user's real boundary.
-- `unavailable`: No usable boundary exists, so the Economic Boundary Rule returns `NOT_APPLICABLE`.
+- `unavailable`: No usable boundary exists, so the Economic Boundary Rule returns `NOT_APPLICABLE / BOUNDARY_NOT_PROVIDED`.
 - Boundary source must be included in the Decision Receipt and Evidence Disclosure.
 
 ### 3.4 Evidence References Preserve Provenance
@@ -154,6 +183,8 @@ type EvidenceRef = {
 
 Mock evidence must not support a core verdict. Replay evidence must preserve its real provenance while setting `isReplay = true`.
 
+External Evidence must not independently support a core P0 `PASS` or `FAIL` unless the consuming Rule Contract explicitly allows that source class and defines its identity, provenance, freshness, and reproducibility requirements. Otherwise, external Evidence is disclosure-only or causes a dependent Rule to return `UNKNOWN`.
+
 ### 3.5 Separate Rule Results, Policy, and Decisions
 
 An individual rule reports only its local finding. It does not generate the final verdict or declare a free-form `verdictEffect`.
@@ -169,12 +200,19 @@ type RuleResultBase = {
 type RuleResult = RuleResultBase &
   (
     | {
-        status: "PASS" | "NOT_APPLICABLE";
+        status: "PASS";
         reasonCode?: never;
+        applicabilityReasonCode?: never;
+      }
+    | {
+        status: "NOT_APPLICABLE";
+        reasonCode?: never;
+        applicabilityReasonCode: P0ApplicabilityReasonCode;
       }
     | {
         status: "FAIL" | "UNKNOWN";
         reasonCode: P0ReasonCode;
+        applicabilityReasonCode?: never;
       }
   );
 
@@ -233,6 +271,18 @@ INTEGRATION_ERROR | UNAVAILABLE | TIMEOUT -> INTEGRATION_ERROR
 
 The specific cause remains available through a structured error code and must not be lost when public statuses are collapsed.
 
+When the current response shape also requires `verdict = UNKNOWN`, that Verdict is a compatibility value meaning that the system did not complete a trustworthy transaction check. It must not be presented as a transaction-risk or protocol-risk conclusion.
+
+The machine-level guarantees for `systemStatus = INTEGRATION_ERROR` are:
+
+- no protocol-risk or transaction-risk Rule `FAIL` is generated from the integration failure;
+- no transaction adjustment or acceptance-boundary change is recommended;
+- only applicable `SYSTEM_RECOVERY` actions may enter `recommendedActions`;
+- Scope Disclosure identifies which checks were not completed; and
+- consumers distinguish an incomplete system check from uncertainty about the transaction or protocol itself.
+
+User-facing title, copy, CTA, and page priority remain outside this Rule Contract and belong in the Product/UI specification.
+
 ### 3.7 Evidence Status Does Not Directly Determine Verdict
 
 Raw Evidence status is an input to stage-aware rules, not a direct Verdict mapping:
@@ -244,7 +294,7 @@ Raw Evidence
 -> aggregate the global Verdict centrally
 ```
 
-- Evidence from a later stage that was never entered because of a trusted earlier terminal result is `NOT_APPLICABLE` at the rule or stage level, not `UNKNOWN`.
+- Evidence from a later stage that was never entered because of a trusted earlier terminal result is `NOT_APPLICABLE / STAGE_NOT_ENTERED_AFTER_TERMINAL_RESULT` at the rule or stage level, not `UNKNOWN`.
 - Evidence required by the current path that is missing, incomplete, unreliable, or of unverified origin produces a blocking Rule `UNKNOWN`.
 - An unclassified Moss warning produces Rule `UNKNOWN`; consumers must not infer `ADJUST` or `STOP` from warning text.
 - A warning with a verified interpretation may support Rule `FAIL`; the Rule and Action Gate then determine whether the final Verdict is `ADJUST` or `STOP`.
@@ -270,6 +320,19 @@ The conservative precedence for blocking results is:
 ```text
 blocking UNKNOWN > STOP > ADJUST > PROCEED
 ```
+
+`blocking` is centralized Verdict Policy behavior, not a boolean that an individual Rule Result may freely declare. P0 defines the following mappings:
+
+| Rule Result | Central policy behavior |
+|---|---|
+| `P0-EVIDENCE-001 = UNKNOWN` | blocking `UNKNOWN` |
+| `P0-EXECUTION-001 = UNKNOWN`, when applicable | blocking `UNKNOWN` |
+| `P0-EXECUTION-001 = FAIL / NO_ROUTE_FOUND`, after the Classification Gate | `STOP` |
+| `P0-ECONOMIC-001 = UNKNOWN`, when applicable | blocking `UNKNOWN` |
+| `P0-ECONOMIC-001 = FAIL / OUTPUT_BELOW_BOUNDARY` | `ADJUST` after the Action Recommendation Gate; otherwise `STOP` |
+| Any uncovered Rule Result combination | `UNKNOWN` |
+
+Disclosure-only or unchecked information belongs in Scope Disclosure rather than an ad hoc non-blocking Rule `UNKNOWN`. Any future non-blocking Rule `UNKNOWN` requires an explicit central policy entry and reviewed test vectors.
 
 An `UNKNOWN` result does not remove local facts already confirmed by other rules, but the aggregation layer may prevent candidate transaction actions from entering the current `recommendedActions`.
 
@@ -365,7 +428,7 @@ A Fixture with `RULE_TEST_INPUT`, `real = false`, or `source = mock` can validat
 | `QUOTE` | Quote Error, Normalized Error, Intent, Protocol, Token Pair, Provenance | Action, Simulation, Simulation Coverage |
 | `ACTION` | Quote, Action Construction Error, Normalized Error, Intent, Protocol, Token Pair, Provenance | Simulation, Simulation Coverage |
 
-Before treating missing stage evidence as `UNKNOWN`, first determine whether that stage was required to occur on the current path.
+Before treating missing stage evidence as `UNKNOWN`, first determine whether that stage was required to occur on the current path. Later-stage Rules that were not entered because of this trusted terminal result use `NOT_APPLICABLE / STAGE_NOT_ENTERED_AFTER_TERMINAL_RESULT`.
 
 ### 6.4 Rule Result and Policy Mapping
 
@@ -391,9 +454,17 @@ The Rule Result itself does not declare the final verdict.
 | Route / Protocol | `RELEVANT` | Changing the execution path or market may make another route available. | Action Gate |
 | Token Pair | `RELEVANT` | Changing the market may make a new route available. | Action Gate |
 | Priority Fee | `IRRELEVANT` | It affects ordering and inclusion speed but cannot create a route. | Classification Gate |
-| Slippage | `IRRELEVANT` | A wider price-movement tolerance cannot replace a missing route. P0 prohibits blindly increasing slippage. | Classification Gate |
+| Slippage | `UNKNOWN` | The current Fixture does not yet prove that the normalized `NO_ROUTE` mapping excludes slippage-related quote constraints. | Do not recommend |
 | Amount | `UNKNOWN` | Trade size may affect liquidity or quoting, but no real Fixture currently verifies this relationship. | Do not recommend |
 | Minimum Received | `IRRELEVANT` | It changes only the user's acceptance boundary and cannot create a route. | Classification Gate |
+
+Action Reason Codes for this mapping include:
+
+- verified alternative Route, Protocol, or Token Pair: `ALTERNATIVE_PATH_VERIFIED`;
+- Priority Fee or Minimum Received after the Classification Gate: `CANNOT_CREATE_MISSING_ROUTE` or `CHANGES_ACCEPTANCE_BOUNDARY_ONLY` respectively; and
+- Slippage or Amount without sufficient causal Evidence: `EFFECT_NOT_VERIFIED`.
+
+Slippage may be upgraded to scope-limited `IRRELEVANT` only after a real Fixture proves that the verified Protocol, Runtime Revision, stage, and raw-error mapping exclude slippage-related constraints.
 
 ### 6.6 Independent Verification Gates
 
@@ -453,8 +524,8 @@ Purpose: Determine whether the simulated amount actually received for `tokenOut`
 
 ### 7.2 Applicability
 
-- If no usable Minimum Received exists, return `NOT_APPLICABLE`.
-- If a trusted earlier terminal result, such as classified `NO_ROUTE_FOUND`, means the execution path never enters Simulation, return `NOT_APPLICABLE`.
+- If no usable Minimum Received exists, return `NOT_APPLICABLE / BOUNDARY_NOT_PROVIDED`.
+- If a trusted earlier terminal result, such as classified `NO_ROUTE_FOUND`, means the execution path never enters Simulation, return `NOT_APPLICABLE / STAGE_NOT_ENTERED_AFTER_TERMINAL_RESULT`.
 - If the current path requires Simulation but Simulation is missing, incomplete, halted, unreliable, or cannot produce a trustworthy received `tokenOut` amount, return `UNKNOWN / SIMULATED_OUTPUT_UNAVAILABLE`.
 - Evaluate `PASS` or `FAIL` only after the required Simulation and provenance gates are satisfied.
 
@@ -544,7 +615,7 @@ Given:
   minimumReceivedSource = unavailable
 
 Expect:
-  Economic Boundary Rule = NOT_APPLICABLE
+  Economic Boundary Rule = NOT_APPLICABLE / BOUNDARY_NOT_PROVIDED
   this status alone does not prevent other rules from producing a scope-limited PROCEED
 ```
 
@@ -614,9 +685,12 @@ Given:
 
 Expect:
   public systemStatus = INTEGRATION_ERROR
-  no protocol FAIL is generated
+  no protocol-risk or transaction-risk Rule FAIL is generated
   Decision.verdict = UNKNOWN
-  applicable SYSTEM_RECOVERY actions enter recommendedActions
+  Decision.verdict is treated as an incomplete-check compatibility value
+  only applicable SYSTEM_RECOVERY actions enter recommendedActions
+  no transaction adjustment or acceptance-boundary change is recommended
+  Scope Disclosure identifies checks that were not completed
   a structured Error Code preserves the specific cause
 ```
 
@@ -632,7 +706,7 @@ Given:
 Expect:
   P0-EXECUTION-001.status = FAIL
   reasonCode = NO_ROUTE_FOUND
-  Action / Simulation / Simulation Coverage = NOT_APPLICABLE at rule-stage level
+  Action / Simulation / Simulation Coverage = NOT_APPLICABLE / STAGE_NOT_ENTERED_AFTER_TERMINAL_RESULT at rule-stage level
   Decision.verdict = STOP
 ```
 
@@ -647,7 +721,7 @@ Given:
 
 Expect:
   Action Construction Error is required evidence
-  Simulation / Simulation Coverage = NOT_APPLICABLE at rule-stage level
+  Simulation / Simulation Coverage = NOT_APPLICABLE / STAGE_NOT_ENTERED_AFTER_TERMINAL_RESULT at rule-stage level
   P0-EXECUTION-001.status = FAIL
   reasonCode = NO_ROUTE_FOUND
   Decision.verdict = STOP
@@ -706,12 +780,55 @@ Expect:
   no consumer independently infers a priority
 ```
 
+### TV-009: No Route with Blocking Evidence Unknown
+
+```text
+Given:
+  P0-EXECUTION-001 = FAIL / NO_ROUTE_FOUND
+  P0-EVIDENCE-001 = UNKNOWN / CRITICAL_EVIDENCE_MISSING
+
+Expect:
+  Decision.verdict = UNKNOWN
+  the Route FAIL remains in ruleResults
+  only applicable SYSTEM_RECOVERY actions enter recommendedActions
+  unverified transaction adjustments do not enter either public action list
+```
+
+### TV-010: All Required Rules Are Satisfied or Not Applicable
+
+```text
+Given:
+  systemStatus = OK
+  every Rule required by the current path is PASS or NOT_APPLICABLE
+  every NOT_APPLICABLE Rule includes an applicabilityReasonCode
+  no uncovered Rule Result combination exists
+
+Expect:
+  Decision.verdict = PROCEED
+  PROCEED remains limited to the checked scope
+```
+
+### TV-ACTION-001: Invalid or Unverified Action Combinations
+
+```text
+Expect Contract rejection:
+  relevance = IRRELEVANT and recommendable = true
+  relevance = UNKNOWN and recommendable = true
+  recommendable = true without supporting Evidence
+
+Expect public filtering:
+  only verified RELEVANT actions enter recommendedActions
+  only verified IRRELEVANT actions enter irrelevantActions
+  UNKNOWN or unverified candidates remain internal and enter neither public list
+```
+
 ## 9. Open Questions and Implementation TODOs
 
 ### 9.1 Contract
 
 - [ ] Decide whether `candidateActions` belongs in the Shared Contract or remains internal to Risk and Aggregation.
 - [ ] Replace free-form `reasons / actions` with structured `RuleResult`, Reason Code, and `ActionEvaluation` values.
+- [ ] Add separate `P0ActionReasonCode` and `P0ApplicabilityReasonCode` schemas and enforce the ActionEvaluation combination invariants.
 - [ ] Complete the Contract mapping for `Checked / Not Checked / Unknown`, Boundary Source, and Replay / Mock.
 - [ ] Implement `P0-ECONOMIC-001 / OUTPUT_MEETS_BOUNDARY` and convert TV-ECO-001 through TV-ECO-006 into Contract and policy tests.
 
@@ -723,9 +840,11 @@ Expect:
 - [ ] Add a real or sanitized recorded Fixture for simulated output provenance and an explicit Quote-versus-Simulation conflict vector.
 - [ ] Obtain a sanitized real `NO_ROUTE` raw Moss output, normalized evidence, Runtime Revision, and Fixture metadata.
 - [ ] Verify the exact scope of the `NO_ROUTE` Classification Gate.
+- [ ] Re-evaluate Slippage relevance using a real `NO_ROUTE` Fixture scoped to Protocol, Runtime Revision, stage, and raw-error mapping.
 - [ ] Validate the Action Recommendation Gate with an alternative route, token pair, or rerun.
 - [ ] Convert this document's test vectors into automated Shared Contract and Risk Engine tests.
 - [ ] Declare the concrete Evidence Requirements for each P0 Rule instead of maintaining a free-form global list of critical keys.
 - [ ] Define which warnings always produce `UNKNOWN` in P0 and which have sufficient real evidence for narrower classifications.
+- [ ] Define which external Evidence source classes, if any, may support core P0 Rule results and how their provenance, freshness, and reproducibility are verified.
 
 Real Fixtures must not contain private keys, access credentials, non-public RPC endpoints, or unnecessary user-identifying information.
