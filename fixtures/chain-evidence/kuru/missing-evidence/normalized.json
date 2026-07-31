@@ -1,0 +1,7 @@
+{
+  "protocol": "kuru",
+  "source": "mock",
+  "executionStatus": "UNKNOWN",
+  "integrationStatus": "OK",
+  "limitations": ["No corresponding Moss evidence was available."]
+}

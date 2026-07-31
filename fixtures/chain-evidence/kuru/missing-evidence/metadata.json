@@ -1,0 +1,6 @@
+{
+  "fixtureType": "RULE_TEST_INPUT",
+  "real": false,
+  "source": "mock",
+  "purpose": "Missing-evidence UNKNOWN fixture; no chain call was made."
+}

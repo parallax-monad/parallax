@@ -9,11 +9,13 @@
   "scripts": {
     "lint": "biome check .",
     "format": "biome format --write .",
-    "typecheck": "tsc --noEmit -p tsconfig.base.json",
-    "test": "vitest run"
+    "typecheck": "tsc --noEmit -p tsconfig.base.json && pnpm -r --if-present typecheck",
+    "test": "vitest run",
+    "smoke:kuru": "node scripts/chain-smoke/kuru.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.6",
+    "@types/node": "22.13.14",
     "typescript": "^7.0.2",
     "vitest": "^4.1.10"
   }

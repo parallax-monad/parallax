@@ -1,0 +1,59 @@
+{
+  "recordedAt": "2026-07-29T15:48:24.685Z",
+  "chainId": "143",
+  "blockNumber": "91383505",
+  "mossVersion": "workspace @themoss/protocol-kuru@0.1.0",
+  "mossCommit": "d09b38cbc44ee7f5722c5d09e7224f7750187762",
+  "packageVersions": {
+    "@themoss/core": "recorded workspace baseline",
+    "@themoss/erc": "recorded workspace baseline",
+    "@themoss/protocol-kuru": "recorded workspace baseline",
+    "@themoss/simulator": "recorded workspace baseline",
+    "@themoss/system": "recorded workspace baseline"
+  },
+  "nodeVersion": "v24.14.0",
+  "pnpmVersion": "unknown",
+  "rpcType": "environment-supplied",
+  "sender": "0xcccccccccccccccccccccccccccccccccccccccc",
+  "tokenIn": "MON",
+  "tokenOut": "0x754704Bc059F8C67012fEd69BC8A327a5aafb603",
+  "amount": "0.01",
+  "amountIn": "0.01",
+  "protocol": "kuru",
+  "direction": "MON_TO_USDC",
+  "real": true,
+  "replayMode": false,
+  "syntheticPrestate": "NATIVE_PREFUND_ONLY",
+  "walletAffordabilityChecked": false,
+  "limitations": [
+    "Moss trace simulation synthetic-prefunds native MON only; it does not prove real ERC-20 balance or allowance.",
+    "No signing, broadcast, custody, or wallet mutation occurred."
+  ],
+  "stageStatus": [
+    {
+      "stage": "DISCOVER",
+      "status": "OK",
+      "error": null
+    },
+    {
+      "stage": "LOAD",
+      "status": "OK",
+      "error": null
+    },
+    {
+      "stage": "QUOTE",
+      "status": "OK",
+      "error": null
+    },
+    {
+      "stage": "ACTION",
+      "status": "OK",
+      "error": null
+    },
+    {
+      "stage": "SIMULATE",
+      "status": "OK",
+      "error": null
+    }
+  ]
+}
