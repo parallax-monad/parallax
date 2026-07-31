@@ -18,6 +18,7 @@
       "path": ["0x754704Bc059F8C67012fEd69BC8A327a5aafb603", "native"]
     },
     "source": "quote",
+    "reproducibility": "REPRODUCIBLE",
     "blockNumber": "91383528",
     "fetchedAt": "2026-07-29T15:48:31.474Z",
     "formula": "Quote returned by the recorded Moss query."
@@ -27,6 +28,7 @@
       {
         "protocol": "erc20",
         "method": "approve",
+        "sender": "0xcccccccccccccccccccccccccccccccccccccccc",
         "target": "0x754704Bc059F8C67012fEd69BC8A327a5aafb603",
         "nativeValue": "0x0",
         "calldataBytes": 68
@@ -34,12 +36,14 @@
       {
         "protocol": "kuru",
         "method": "swap",
+        "sender": "0xcccccccccccccccccccccccccccccccccccccccc",
         "target": "0xd651346d7c789536ebf06dc72aE3C8502cd695CC",
         "nativeValue": "0x0",
         "calldataBytes": 420
       }
     ],
     "source": "moss",
+    "reproducibility": "REPRODUCIBLE",
     "blockNumber": "91383528",
     "fetchedAt": "2026-07-29T15:48:31.474Z"
   },
@@ -80,6 +84,7 @@
       "protocol": "erc20"
     },
     "source": "moss",
+    "reproducibility": "REPRODUCIBLE",
     "blockNumber": "91383528",
     "fetchedAt": "2026-07-29T15:48:31.474Z"
   },
@@ -92,6 +97,7 @@
       "amount": "1000000"
     },
     "source": "moss",
+    "reproducibility": "REPRODUCIBLE",
     "blockNumber": "91383528",
     "fetchedAt": "2026-07-29T15:48:31.474Z"
   },
@@ -109,9 +115,11 @@
       }
     ],
     "source": "moss",
+    "reproducibility": "REPRODUCIBLE",
     "blockNumber": "91383528",
     "fetchedAt": "2026-07-29T15:48:31.474Z"
   },
+  "assetChangeAssessment": "UNKNOWN",
   "warnings": {
     "value": [
       {
@@ -120,18 +128,21 @@
       }
     ],
     "source": "moss",
+    "reproducibility": "REPRODUCIBLE",
     "blockNumber": "91383528",
     "fetchedAt": "2026-07-29T15:48:31.474Z"
   },
   "revertReason": {
     "value": "execution reverted",
     "source": "moss",
+    "reproducibility": "REPRODUCIBLE",
     "blockNumber": "91383528",
     "fetchedAt": "2026-07-29T15:48:31.474Z"
   },
   "gas": {
     "value": ["87844", null],
     "source": "moss",
+    "reproducibility": "REPRODUCIBLE",
     "blockNumber": "91383528",
     "fetchedAt": "2026-07-29T15:48:31.474Z"
   },
@@ -139,12 +150,14 @@
     "value": {
       "expectedTransactions": 2,
       "observedResults": 2,
+      "unmatchedResultIndexes": [],
       "halted": true,
       "complete": false,
       "missingTransactionIndexes": [],
       "haltReason": "execution reverted"
     },
     "source": "derived",
+    "reproducibility": "REPRODUCIBLE",
     "blockNumber": "91383528",
     "fetchedAt": "2026-07-29T15:48:31.474Z",
     "formula": "Expected transactions are derived from the action capability tree; observed results are derived from the simulator result list."
@@ -152,6 +165,7 @@
   "errors": {
     "value": [],
     "source": "moss",
+    "reproducibility": "REPRODUCIBLE",
     "blockNumber": "91383528",
     "fetchedAt": "2026-07-29T15:48:31.474Z",
     "formula": "Structured errors are normalized from recorded stage errors."
@@ -159,6 +173,7 @@
   "blockNumber": {
     "value": "91383528",
     "source": "rpc",
+    "reproducibility": "REPRODUCIBLE",
     "blockNumber": "91383528",
     "fetchedAt": "2026-07-29T15:48:31.474Z"
   },
@@ -169,6 +184,7 @@
   "approval": {
     "value": "REQUIRED",
     "source": "derived",
+    "reproducibility": "REPRODUCIBLE",
     "blockNumber": "91383528",
     "fetchedAt": "2026-07-29T15:48:31.474Z",
     "formula": "Derived from the recorded ERC-20 approval capability preceding the Kuru swap action."

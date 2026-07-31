@@ -18,6 +18,7 @@
       "path": ["native", "0x754704Bc059F8C67012fEd69BC8A327a5aafb603"]
     },
     "source": "quote",
+    "reproducibility": "REPRODUCIBLE",
     "blockNumber": "91383505",
     "fetchedAt": "2026-07-29T15:48:24.685Z",
     "formula": "Quote returned by the recorded Moss query."
@@ -27,18 +28,21 @@
       {
         "protocol": "kuru",
         "method": "swap",
+        "sender": "0xcccccccccccccccccccccccccccccccccccccccc",
         "target": "0xd651346d7c789536ebf06dc72aE3C8502cd695CC",
         "nativeValue": "0x2386f26fc10000",
         "calldataBytes": 420
       }
     ],
     "source": "moss",
+    "reproducibility": "REPRODUCIBLE",
     "blockNumber": "91383505",
     "fetchedAt": "2026-07-29T15:48:24.685Z"
   },
   "receipt": {
     "value": null,
     "source": "unknown",
+    "reproducibility": "UNKNOWN",
     "blockNumber": "91383505",
     "fetchedAt": "2026-07-29T15:48:24.685Z",
     "limitation": "No corresponding recorded evidence is available."
@@ -46,6 +50,7 @@
   "outcome": {
     "value": null,
     "source": "unknown",
+    "reproducibility": "UNKNOWN",
     "blockNumber": "91383505",
     "fetchedAt": "2026-07-29T15:48:24.685Z",
     "limitation": "No corresponding recorded evidence is available."
@@ -116,9 +121,11 @@
       }
     ],
     "source": "moss",
+    "reproducibility": "REPRODUCIBLE",
     "blockNumber": "91383505",
     "fetchedAt": "2026-07-29T15:48:24.685Z"
   },
+  "assetChangeAssessment": "UNKNOWN",
   "warnings": {
     "value": [
       {
@@ -127,12 +134,14 @@
       }
     ],
     "source": "moss",
+    "reproducibility": "REPRODUCIBLE",
     "blockNumber": "91383505",
     "fetchedAt": "2026-07-29T15:48:24.685Z"
   },
   "revertReason": {
     "value": null,
     "source": "unknown",
+    "reproducibility": "UNKNOWN",
     "blockNumber": "91383505",
     "fetchedAt": "2026-07-29T15:48:24.685Z",
     "limitation": "No corresponding recorded evidence is available."
@@ -140,6 +149,7 @@
   "gas": {
     "value": [null],
     "source": "moss",
+    "reproducibility": "REPRODUCIBLE",
     "blockNumber": "91383505",
     "fetchedAt": "2026-07-29T15:48:24.685Z"
   },
@@ -147,12 +157,14 @@
     "value": {
       "expectedTransactions": 1,
       "observedResults": 1,
+      "unmatchedResultIndexes": [],
       "halted": true,
       "complete": false,
       "missingTransactionIndexes": [],
       "haltReason": "Unexpected Change: Kuru market emitted FlipOrderUpdated"
     },
     "source": "derived",
+    "reproducibility": "REPRODUCIBLE",
     "blockNumber": "91383505",
     "fetchedAt": "2026-07-29T15:48:24.685Z",
     "formula": "Expected transactions are derived from the action capability tree; observed results are derived from the simulator result list."
@@ -160,6 +172,7 @@
   "errors": {
     "value": [],
     "source": "moss",
+    "reproducibility": "REPRODUCIBLE",
     "blockNumber": "91383505",
     "fetchedAt": "2026-07-29T15:48:24.685Z",
     "formula": "Structured errors are normalized from recorded stage errors."
@@ -167,6 +180,7 @@
   "blockNumber": {
     "value": "91383505",
     "source": "rpc",
+    "reproducibility": "REPRODUCIBLE",
     "blockNumber": "91383505",
     "fetchedAt": "2026-07-29T15:48:24.685Z"
   },
@@ -177,6 +191,7 @@
   "approval": {
     "value": "NOT_APPLICABLE",
     "source": "derived",
+    "reproducibility": "REPRODUCIBLE",
     "blockNumber": "91383505",
     "fetchedAt": "2026-07-29T15:48:24.685Z",
     "formula": "Native MON input has no ERC-20 approval action."

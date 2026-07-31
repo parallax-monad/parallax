@@ -97,7 +97,35 @@ function economicBoundaryStatus(
   evidence: NormalizedKuruEvidence,
 ): EconomicBoundaryStatus {
   const minimumReceived = evidence.intent.minimumReceived;
-  if (minimumReceived === undefined) return "NOT_APPLICABLE";
+  const source = evidence.intent.minimumReceivedSource;
+
+  if (source === "unavailable") {
+    return minimumReceived === undefined ? "NOT_APPLICABLE" : "UNKNOWN";
+  }
+
+  if (minimumReceived === undefined) {
+    return source === undefined ? "NOT_APPLICABLE" : "UNKNOWN";
+  }
+
+  if (source === undefined) return "UNKNOWN";
+
+  if (source === "demo_preset") {
+    return evidence.replayMode
+      ? evaluateBoundary(evidence, minimumReceived)
+      : "UNKNOWN";
+  }
+
+  if (source === "original_swap" || source === "user_declared") {
+    return evaluateBoundary(evidence, minimumReceived);
+  }
+
+  return "UNKNOWN";
+}
+
+function evaluateBoundary(
+  evidence: NormalizedKuruEvidence,
+  minimumReceived: string,
+): EconomicBoundaryStatus {
   const quote = quoteOutput(evidence);
   if (!quote || !decimal(quote) || !decimal(minimumReceived)) return "UNKNOWN";
   return compareDecimal(quote, minimumReceived) >= 0 ? "PASS" : "FAIL";
