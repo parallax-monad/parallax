@@ -45,6 +45,16 @@ export type KuruSwapIntent = {
   minimumReceivedSource?: BoundarySource;
 };
 
+export type NormalizedKuruSwapIntent = {
+  chainId: string;
+  sender: string;
+  tokenIn: string;
+  tokenOut: string;
+  amountIn: string;
+  minimumReceived?: string;
+  minimumReceivedSource: BoundarySource;
+};
+
 export type IntegrationStatus =
   | "OK"
   | "INTEGRATION_ERROR"
@@ -86,7 +96,7 @@ export type NormalizedMossError = {
 
 export type NormalizedKuruEvidence = {
   protocol: "kuru";
-  intent: KuruSwapIntent;
+  intent: NormalizedKuruSwapIntent;
   integrationStatus: IntegrationStatus;
   executionStatus: ExecutionStatus;
   quote: Sourced<JsonValue>;

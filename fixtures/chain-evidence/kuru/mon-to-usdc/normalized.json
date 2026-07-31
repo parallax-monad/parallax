@@ -5,7 +5,8 @@
     "sender": "0xcccccccccccccccccccccccccccccccccccccccc",
     "tokenIn": "MON",
     "tokenOut": "0x754704Bc059F8C67012fEd69BC8A327a5aafb603",
-    "amountIn": "0.01"
+    "amountIn": "0.01",
+    "minimumReceivedSource": "unavailable"
   },
   "integrationStatus": "OK",
   "executionStatus": "UNKNOWN",

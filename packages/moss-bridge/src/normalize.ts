@@ -1,12 +1,14 @@
 import { normalizeMossError } from "./errors.js";
 import type {
   AssetChangeAssessment,
+  BoundarySource,
   EvidenceReproducibility,
   EvidenceSource,
   IntegrationStatus,
   JsonValue,
   KuruSwapIntent,
   NormalizedKuruEvidence,
+  NormalizedKuruSwapIntent,
   NormalizedMossError,
   RawKuruEvidence,
   Sourced,
@@ -48,7 +50,7 @@ export function normalizeRecordedKuruEvidence(input: {
   }
   return {
     protocol: "kuru",
-    intent: input.intent,
+    intent: normalizeIntent(input.intent),
     integrationStatus,
     executionStatus: executionStatus(integrationStatus, errors, simulation),
     quote: sourced(
@@ -575,6 +577,30 @@ function approvalFormula(
     return "Native MON input has no ERC-20 approval action.";
   }
   return "The recorded action capability tree does not establish an ERC-20 approval requirement.";
+}
+
+function normalizeIntent(intent: KuruSwapIntent): NormalizedKuruSwapIntent {
+  const hasValue = intent.minimumReceived !== undefined;
+  const source = intent.minimumReceivedSource;
+
+  if (!hasValue && source === undefined) {
+    return { ...intent, minimumReceivedSource: "unavailable" };
+  }
+
+  // Inconsistent states are materialized explicitly so the risk layer can fail
+  // closed. A value without a source, or a value with an unavailable source,
+  // is treated as an unavailable boundary and evaluates to UNKNOWN.
+  if (hasValue && (source === undefined || source === "unavailable")) {
+    return { ...intent, minimumReceivedSource: "unavailable" };
+  }
+
+  // A missing value with a source that requires a value is kept as-is; the
+  // risk layer will return UNKNOWN because the boundary cannot be evaluated.
+  if (!hasValue && source !== undefined && source !== "unavailable") {
+    return { ...intent, minimumReceivedSource: source };
+  }
+
+  return { ...intent, minimumReceivedSource: source as BoundarySource };
 }
 
 function sourcedFields(

@@ -435,3 +435,65 @@ describe("structured errors", () => {
     expect(normalized.executionStatus).toBe("UNKNOWN");
   });
 });
+
+describe("economic boundary provenance", () => {
+  it("materializes unavailable provenance when no minimumReceived is supplied", () => {
+    const normalized = normalize({
+      discover: null,
+      load: null,
+      quote: { data: { estimatedAmountOut: "1" } },
+      action: null,
+      simulation: null,
+    });
+    expect(normalized.intent.minimumReceivedSource).toBe("unavailable");
+    expect(normalized.intent.minimumReceived).toBeUndefined();
+  });
+
+  it("preserves an explicit boundary source", () => {
+    const normalized = normalizeRecordedKuruEvidence({
+      intent: {
+        chainId: "143",
+        sender: "0xsender",
+        tokenIn: "MON",
+        tokenOut: "USDC",
+        amountIn: "1",
+        minimumReceived: "9",
+        minimumReceivedSource: "user_declared",
+      },
+      raw: {
+        discover: null,
+        load: null,
+        quote: null,
+        action: null,
+        simulation: null,
+      },
+      blockNumber: "1",
+      mossVersion: "test",
+    });
+    expect(normalized.intent.minimumReceivedSource).toBe("user_declared");
+    expect(normalized.intent.minimumReceived).toBe("9");
+  });
+
+  it("materializes unavailable for a value with missing or unavailable source", () => {
+    const normalized = normalizeRecordedKuruEvidence({
+      intent: {
+        chainId: "143",
+        sender: "0xsender",
+        tokenIn: "MON",
+        tokenOut: "USDC",
+        amountIn: "1",
+        minimumReceived: "9",
+      },
+      raw: {
+        discover: null,
+        load: null,
+        quote: null,
+        action: null,
+        simulation: null,
+      },
+      blockNumber: "1",
+      mossVersion: "test",
+    });
+    expect(normalized.intent.minimumReceivedSource).toBe("unavailable");
+  });
+});
