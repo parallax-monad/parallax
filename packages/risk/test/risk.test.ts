@@ -136,11 +136,16 @@ describe("deterministic Kuru decisions", () => {
   });
 
   it("returns adjust when a supplied boundary is not met", () => {
-    expect(
-      evaluateKuruEvidence(
-        evidence({ intent: { ...evidence().intent, minimumReceived: "11" } }),
-      ).verdict,
-    ).toBe("ADJUST");
+    const result = evaluateKuruEvidence(
+      evidence({ intent: { ...evidence().intent, minimumReceived: "11" } }),
+    );
+    expect(result.verdict).toBe("ADJUST");
+    expect(result.actions).toEqual([
+      "Adjust amount, route, or protocol, then re-run the check.",
+    ]);
+    expect(result.actions.join(" ").toLowerCase()).not.toMatch(
+      /acceptance boundary|lower minimum|minimumreceived/,
+    );
   });
 
   it("returns unknown when a supplied boundary cannot be evaluated", () => {
@@ -172,6 +177,14 @@ describe("deterministic Kuru decisions", () => {
           source: "derived",
         },
       }),
+    );
+    expect(result.evidenceCompleteness).toBe("MISSING");
+    expect(result.verdict).toBe("UNKNOWN");
+  });
+
+  it("fails closed when simulation coverage is null", () => {
+    const result = evaluateKuruEvidence(
+      evidence({ simulationCoverage: { value: null, source: "unknown" } }),
     );
     expect(result.evidenceCompleteness).toBe("MISSING");
     expect(result.verdict).toBe("UNKNOWN");

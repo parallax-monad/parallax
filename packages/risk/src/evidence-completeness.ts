@@ -5,7 +5,7 @@ export function evidenceCompleteness(
   evidence: NormalizedKuruEvidence,
 ): EvidenceCompleteness {
   if (evidence.integrationStatus !== "OK") return "UNKNOWN";
-  if (evidence.simulationCoverage.value?.complete === false) return "MISSING";
+  if (evidence.simulationCoverage.value?.complete !== true) return "MISSING";
   if (evidence.warnings.value && evidence.warnings.value.length > 0)
     return "MISSING";
   if (

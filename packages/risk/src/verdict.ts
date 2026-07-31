@@ -58,9 +58,7 @@ export function evaluateKuruEvidence(
       economicBoundary,
       "ADJUST",
       ["Expected output is below the caller-provided minimum received."],
-      [
-        "Adjust amount, route, protocol, or change the user's acceptance boundary.",
-      ],
+      ["Adjust amount, route, or protocol, then re-run the check."],
     );
   }
   if (economicBoundary === "PASS") {
