@@ -45,7 +45,8 @@ type RuleStatus =
 
 type P0RuleId =
   | "P0-EVIDENCE-001"
-  | "P0-EXECUTION-001";
+  | "P0-EXECUTION-001"
+  | "P0-ECONOMIC-001";
 
 type P0ReasonCode =
   | "SIMULATION_COVERAGE_MISSING"
@@ -56,6 +57,9 @@ type P0ReasonCode =
   | "EVIDENCE_SOURCE_UNKNOWN"
   | "EVIDENCE_NOT_REPRODUCIBLE"
   | "NO_ROUTE_FOUND"
+  | "SIMULATED_OUTPUT_UNAVAILABLE"
+  | "OUTPUT_BELOW_BOUNDARY"
+  | "OUTPUT_SOURCE_CONFLICT"
   | "RULE_CLASSIFICATION_NOT_VERIFIED";
 
 type BoundarySource =
@@ -229,6 +233,26 @@ INTEGRATION_ERROR | UNAVAILABLE | TIMEOUT -> INTEGRATION_ERROR
 
 The specific cause remains available through a structured error code and must not be lost when public statuses are collapsed.
 
+### 3.7 Evidence Status Does Not Directly Determine Verdict
+
+Raw Evidence status is an input to stage-aware rules, not a direct Verdict mapping:
+
+```text
+Raw Evidence
+-> determine whether the current path requires it
+-> produce a Rule Result
+-> aggregate the global Verdict centrally
+```
+
+- Evidence from a later stage that was never entered because of a trusted earlier terminal result is `NOT_APPLICABLE` at the rule or stage level, not `UNKNOWN`.
+- Evidence required by the current path that is missing, incomplete, unreliable, or of unverified origin produces a blocking Rule `UNKNOWN`.
+- An unclassified Moss warning produces Rule `UNKNOWN`; consumers must not infer `ADJUST` or `STOP` from warning text.
+- A warning with a verified interpretation may support Rule `FAIL`; the Rule and Action Gate then determine whether the final Verdict is `ADJUST` or `STOP`.
+- Evidence explicitly classified as disclosure-only, and not required by any active rule, may coexist with a scope-limited `PROCEED`.
+- Items that are outside P0 or were not checked belong in Scope Disclosure. Consumers must not create ad hoc non-blocking `UNKNOWN` results.
+
+Each Rule Contract declares its own Evidence Requirements. A separate free-form list of "critical Evidence keys" must not become an independent source of Verdict behavior.
+
 ## 4. Central Verdict Policy: Conservative Total Function
 
 The central policy is the only source of the final verdict. The frontend, individual rules, and natural-language copy must not generate a global verdict independently.
@@ -236,9 +260,16 @@ The central policy is the only source of the final verdict. The frontend, indivi
 1. If public `systemStatus = INTEGRATION_ERROR`, return `UNKNOWN`. Provide only applicable system-recovery actions and do not generate a protocol-risk conclusion.
 2. If any blocking rule is `UNKNOWN`, return `UNKNOWN` and do not allow `PROCEED`.
 3. If `ROUTE_AVAILABILITY = FAIL / NO_ROUTE_FOUND` has passed the Classification Gate and no other rule required on the current path has a blocking `UNKNOWN`, return `STOP`.
-4. If evidence supports an adjustable rule `FAIL` and no higher-priority `STOP` or blocking `UNKNOWN` exists, return `ADJUST`.
-5. If the system is healthy, all rules required on the current path are `PASS` or `NOT_APPLICABLE`, and no blocking rule exists, return a scope-limited `PROCEED`.
-6. Return `UNKNOWN` for every combination not covered by the preceding reviewed policy vectors. Do not invent a new priority.
+4. If `OUTPUT_MEETS_BOUNDARY = FAIL` and no blocking `UNKNOWN` exists, return `ADJUST` only when a transaction adjustment has passed the Action Recommendation Gate against the unchanged boundary; otherwise return `STOP` for the current transaction.
+5. If evidence supports another adjustable rule `FAIL` and no higher-priority `STOP` or blocking `UNKNOWN` exists, return `ADJUST`.
+6. If the system is healthy, all rules required on the current path are `PASS` or `NOT_APPLICABLE`, and no blocking rule exists, return a scope-limited `PROCEED`.
+7. Return `UNKNOWN` for every combination not covered by the preceding reviewed policy vectors. Do not invent a new priority.
+
+The conservative precedence for blocking results is:
+
+```text
+blocking UNKNOWN > STOP > ADJUST > PROCEED
+```
 
 An `UNKNOWN` result does not remove local facts already confirmed by other rules, but the aggregation layer may prevent candidate transaction actions from entering the current `recommendedActions`.
 
@@ -409,7 +440,69 @@ This rule must not infer that:
 - a synthetic Fixture proves that a real user-facing `STOP` is trustworthy; or
 - one real Fixture validates every action recommendation.
 
-## 7. Initial Test Vectors
+## 7. Rule P0-ECONOMIC-001: OUTPUT_MEETS_BOUNDARY
+
+### 7.1 Rule Definition
+
+```text
+ruleId = P0-ECONOMIC-001
+ruleName = OUTPUT_MEETS_BOUNDARY
+```
+
+Purpose: Determine whether the simulated amount actually received for `tokenOut` satisfies the user's original Economic Boundary without replacing missing execution evidence with a Quote estimate or changing the boundary to manufacture `PROCEED`.
+
+### 7.2 Applicability
+
+- If no usable Minimum Received exists, return `NOT_APPLICABLE`.
+- If a trusted earlier terminal result, such as classified `NO_ROUTE_FOUND`, means the execution path never enters Simulation, return `NOT_APPLICABLE`.
+- If the current path requires Simulation but Simulation is missing, incomplete, halted, unreliable, or cannot produce a trustworthy received `tokenOut` amount, return `UNKNOWN / SIMULATED_OUTPUT_UNAVAILABLE`.
+- Evaluate `PASS` or `FAIL` only after the required Simulation and provenance gates are satisfied.
+
+### 7.3 Comparator and Source Priority
+
+The comparator is the normalized simulated amount received by the intended recipient for the intended `tokenOut`. It should be derived from a validated recipient balance delta or equivalent asset change, rather than accepted solely because a generic field is named `outcome`.
+
+The following Quote values are supplementary Evidence only:
+
+- `estimatedAmountOut` is an estimate, not a completed simulated result.
+- `quote.minimumAmountOut` is the transaction or protocol slippage guard, not the user's declared boundary and not an observed output.
+
+Neither Quote value may replace missing Simulation evidence to produce final Economic `PASS` or `FAIL`.
+
+Comparison semantics:
+
+```text
+simulatedReceived >= minimumReceived -> PASS
+simulatedReceived < minimumReceived  -> FAIL / OUTPUT_BELOW_BOUNDARY
+```
+
+Equality therefore returns `PASS`.
+
+If Quote and Simulation conflict, preserve the local Economic comparison derived from Simulation and record the discrepancy separately. An unexplained critical conflict produces `P0-EVIDENCE-001 = UNKNOWN / OUTPUT_SOURCE_CONFLICT`; Quote must not silently override Simulation.
+
+### 7.4 Verdict and Action Mapping
+
+Economic `PASS` does not independently produce `PROCEED`. Economic `NOT_APPLICABLE` does not independently block `PROCEED`.
+
+For Economic `FAIL`:
+
+- return `ADJUST` only when a `TRANSACTION_ADJUSTMENT` is `RELEVANT`, `recommendable = true`, and a rerun or equivalent Action Gate proves that the changed transaction can satisfy the unchanged original boundary;
+- otherwise return `STOP` for the current transaction when no blocking `UNKNOWN` exists; and
+- return global `UNKNOWN` when any blocking Rule `UNKNOWN` exists, while preserving the Economic `FAIL` in `ruleResults` and showing only applicable system-recovery actions.
+
+Lowering Minimum Received is an `ACCEPTANCE_BOUNDARY_CHANGE`, not a transaction improvement. It must not enter `recommendedActions` or be used to convert Economic `FAIL` into `ADJUST` or `PROCEED`. If the user independently changes the boundary, the system treats it as a new Intent and Run.
+
+### 7.5 Non-Inference Boundary
+
+This rule must not infer that:
+
+- a Quote estimate proves the simulated execution result;
+- a protocol-generated `minimumAmountOut` is the user's own Minimum Received;
+- the protocol as a whole is unsafe because the current transaction misses the boundary;
+- a plausible transaction change will improve the result without Action Gate Evidence; or
+- changing the user's acceptance threshold improves the transaction outcome.
+
+## 8. Initial Test Vectors
 
 ### TV-001: Required Coverage Value Is Missing
 
@@ -427,9 +520,7 @@ Expect:
   recommendedActions does not contain TRANSACTION_ADJUSTMENT
 ```
 
-### Policy Example PE-001: Economic Fail with Blocking Evidence Unknown
-
-> This example validates the aggregation boundary defined by PRD v0.4. `P0-ECONOMIC-001` is not yet defined by this specification, so this is not currently an executable Rule Contract test.
+### TV-ECO-001: Economic Fail with Blocking Evidence Unknown
 
 ```text
 Given:
@@ -443,9 +534,7 @@ Expect:
   related Route / Amount candidate actions do not enter recommendedActions
 ```
 
-### Policy Example PE-002: Minimum Received Is Not Provided
-
-> This example validates the `NOT_APPLICABLE` semantics defined by PRD v0.4. It can become a Contract Test after the Economic Rule Contract is defined.
+### TV-ECO-002: Minimum Received Is Not Provided
 
 ```text
 Given:
@@ -457,6 +546,64 @@ Given:
 Expect:
   Economic Boundary Rule = NOT_APPLICABLE
   this status alone does not prevent other rules from producing a scope-limited PROCEED
+```
+
+### TV-ECO-003: Quote Exists but Simulated Output Is Unavailable
+
+```text
+Given:
+  minimumReceived is available
+  estimatedAmountOut is available
+  quote.minimumAmountOut is available
+  SIMULATE is required
+  no trustworthy simulated tokenOut received amount exists
+
+Expect:
+  P0-ECONOMIC-001.status = UNKNOWN
+  reasonCode = SIMULATED_OUTPUT_UNAVAILABLE
+  neither Quote value is used as a fallback for PASS or FAIL
+  Decision.verdict = UNKNOWN
+```
+
+### TV-ECO-004: Simulated Output Equals the Boundary
+
+```text
+Given:
+  required Simulation Evidence is complete
+  simulatedReceived = minimumReceived
+
+Expect:
+  P0-ECONOMIC-001.status = PASS
+  this PASS alone does not determine PROCEED
+```
+
+### TV-ECO-005: Economic Fail Without a Verified Adjustment
+
+```text
+Given:
+  P0-ECONOMIC-001.status = FAIL
+  reasonCode = OUTPUT_BELOW_BOUNDARY
+  no blocking Rule UNKNOWN exists
+  no transaction adjustment has passed the Action Recommendation Gate
+
+Expect:
+  Decision.verdict = STOP
+  recommendedActions does not contain an unverified transaction adjustment
+  lowering Minimum Received is not recommended
+```
+
+### TV-ECO-006: Economic Fail with a Verified Adjustment
+
+```text
+Given:
+  P0-ECONOMIC-001.status = FAIL
+  reasonCode = OUTPUT_BELOW_BOUNDARY
+  no blocking Rule UNKNOWN or higher-priority STOP exists
+  a transaction adjustment rerun satisfies the unchanged original boundary
+
+Expect:
+  Decision.verdict = ADJUST
+  the verified transaction adjustment may enter recommendedActions
 ```
 
 ### TV-002: Internal Integration Error
@@ -559,23 +706,26 @@ Expect:
   no consumer independently infers a priority
 ```
 
-## 8. Open Questions and Implementation TODOs
+## 9. Open Questions and Implementation TODOs
 
-### 8.1 Contract
+### 9.1 Contract
 
 - [ ] Decide whether `candidateActions` belongs in the Shared Contract or remains internal to Risk and Aggregation.
 - [ ] Replace free-form `reasons / actions` with structured `RuleResult`, Reason Code, and `ActionEvaluation` values.
 - [ ] Complete the Contract mapping for `Checked / Not Checked / Unknown`, Boundary Source, and Replay / Mock.
-- [ ] Define `P0-ECONOMIC-001 / OUTPUT_MEETS_BOUNDARY`, then promote PE-001 and PE-002 to Contract Tests.
+- [ ] Implement `P0-ECONOMIC-001 / OUTPUT_MEETS_BOUNDARY` and convert TV-ECO-001 through TV-ECO-006 into Contract and policy tests.
 
-### 8.2 Evidence and Rules
+### 9.2 Evidence and Rules
 
 - [ ] Handle `simulationCoverage.value = null` as missing evidence and add a regression test.
 - [ ] Remove "change the user's acceptance boundary" from recommended actions.
+- [ ] Define and test the normalized recipient-and-token-matched simulated output extraction used by `P0-ECONOMIC-001`.
+- [ ] Add a real or sanitized recorded Fixture for simulated output provenance and an explicit Quote-versus-Simulation conflict vector.
 - [ ] Obtain a sanitized real `NO_ROUTE` raw Moss output, normalized evidence, Runtime Revision, and Fixture metadata.
 - [ ] Verify the exact scope of the `NO_ROUTE` Classification Gate.
 - [ ] Validate the Action Recommendation Gate with an alternative route, token pair, or rerun.
 - [ ] Convert this document's test vectors into automated Shared Contract and Risk Engine tests.
+- [ ] Declare the concrete Evidence Requirements for each P0 Rule instead of maintaining a free-form global list of critical keys.
 - [ ] Define which warnings always produce `UNKNOWN` in P0 and which have sufficient real evidence for narrower classifications.
 
 Real Fixtures must not contain private keys, access credentials, non-public RPC endpoints, or unnecessary user-identifying information.
