@@ -20,6 +20,7 @@ It does not attempt to define a complete risk taxonomy. Version 0.1 provides the
 - Define a conservative total function for centralized verdict aggregation.
 - Propose `P0-EVIDENCE-001 / EVIDENCE_COMPLETENESS`.
 - Propose `P0-EXECUTION-001 / ROUTE_AVAILABILITY`.
+- Propose `P0-ECONOMIC-001 / OUTPUT_MEETS_BOUNDARY`.
 - Provide initial vectors that can become contract and rule tests.
 
 ### Excluded
@@ -221,13 +222,29 @@ type EconomicBoundaryContext = {
   source: BoundarySource;
 };
 
-type RuleEngineDecision = {
-  systemStatus: "OK" | "INTEGRATION_ERROR";
-  verdict: "PROCEED" | "ADJUST" | "STOP" | "UNKNOWN";
+type IntegrationError = {
+  code:
+    | "MOSS_UNAVAILABLE"
+    | "RPC_UNAVAILABLE"
+    | "TIMEOUT"
+    | "UNSUPPORTED"
+    | "INVALID_RESPONSE"
+    | "INTERNAL_ERROR";
+  stage: "quote" | "action" | "simulation" | "normalization" | "unknown";
+  message: string;
+  retryable: boolean;
+};
+
+type SystemRecoveryActionEvaluation = ActionEvaluation & {
+  action: Extract<NextAction, { kind: "SYSTEM_RECOVERY" }>;
+  relevance: "RELEVANT";
+  recommendable: true;
+  actionReasonCode: "RESTORES_CHECK_ONLY";
+};
+
+type RuleEngineDecisionBase = {
   summary: string;
   boundary: EconomicBoundaryContext;
-  recommendedActions: ActionEvaluation[];
-  irrelevantActions: ActionEvaluation[];
   checked: string[];
   notChecked: string[];
   unknowns: string[];
@@ -235,13 +252,33 @@ type RuleEngineDecision = {
   ruleResults: RuleResult[];
   replayMode: boolean;
 };
+
+type RuleEngineDecision = RuleEngineDecisionBase &
+  (
+    | {
+        systemStatus: "OK";
+        verdict: "PROCEED" | "ADJUST" | "STOP" | "UNKNOWN";
+        error?: never;
+        recommendedActions: ActionEvaluation[];
+        irrelevantActions: ActionEvaluation[];
+      }
+    | {
+        systemStatus: "INTEGRATION_ERROR";
+        verdict: "UNKNOWN";
+        error: IntegrationError;
+        recommendedActions: SystemRecoveryActionEvaluation[];
+        irrelevantActions: [];
+      }
+  );
 ```
 
-The API or orchestration layer adds the PRD Reference Contract fields:
+The API or orchestration layer adds the run and transport-envelope fields:
 
 - `runId`
 - `parentRunId`
 - `diff`
+- `status = completed` when `systemStatus = OK`
+- `status = integration_error` when `systemStatus = INTEGRATION_ERROR`
 - API route and serialization fields
 
 `boundary.source` must be included in the final Decision Receipt. A `demo_preset` source must also be consistent with `replayMode = true` or another explicit Demo marker.
@@ -270,6 +307,31 @@ INTEGRATION_ERROR | UNAVAILABLE | TIMEOUT -> INTEGRATION_ERROR
 ```
 
 The specific cause remains available through a structured error code and must not be lost when public statuses are collapsed.
+
+The canonical public Integration Error payload is the `systemStatus = INTEGRATION_ERROR` branch of `RuleEngineDecision`, plus API run identity and `status = integration_error`. It always includes:
+
+```text
+status = integration_error
+systemStatus = INTEGRATION_ERROR
+verdict = UNKNOWN
+error.code
+error.stage
+error.retryable
+error.message
+```
+
+The existing Shared Contract `integration_error` result variant may remain the Run-status carrier, but it must map without loss to this public branch. The Shared Contract or API serializer adds `systemStatus = INTEGRATION_ERROR` and compatibility `verdict = UNKNOWN`; its existing structured `error` object maps directly to `RuleEngineDecision.error`.
+
+Internal mapping requirements:
+
+| Internal result | Public mapping |
+|---|---|
+| `OK` | `status = completed`, `systemStatus = OK`, no `error` |
+| Moss or RPC unavailable | `status = integration_error`, `systemStatus = INTEGRATION_ERROR`, subsystem-specific unavailable `error.code` |
+| `TIMEOUT` | `status = integration_error`, `systemStatus = INTEGRATION_ERROR`, `error.code = TIMEOUT` |
+| Invalid response or internal integration failure | `status = integration_error`, `systemStatus = INTEGRATION_ERROR`, the applicable structured `error.code` |
+
+`error.code`, `error.stage`, and `error.retryable` are stable machine fields. `error.message` is replaceable display text and must not drive Verdict aggregation.
 
 When the current response shape also requires `verdict = UNKNOWN`, that Verdict is a compatibility value meaning that the system did not complete a trustworthy transaction check. It must not be presented as a transaction-risk or protocol-risk conclusion.
 
@@ -311,9 +373,10 @@ The central policy is the only source of the final verdict. The frontend, indivi
 2. If any blocking rule is `UNKNOWN`, return `UNKNOWN` and do not allow `PROCEED`.
 3. If `ROUTE_AVAILABILITY = FAIL / NO_ROUTE_FOUND` has passed the Classification Gate and no other rule required on the current path has a blocking `UNKNOWN`, return `STOP`.
 4. If `OUTPUT_MEETS_BOUNDARY = FAIL` and no blocking `UNKNOWN` exists, return `ADJUST` only when a transaction adjustment has passed the Action Recommendation Gate against the unchanged boundary; otherwise return `STOP` for the current transaction.
-5. If evidence supports another adjustable rule `FAIL` and no higher-priority `STOP` or blocking `UNKNOWN` exists, return `ADJUST`.
-6. If the system is healthy, all rules required on the current path are `PASS` or `NOT_APPLICABLE`, and no blocking rule exists, return a scope-limited `PROCEED`.
-7. Return `UNKNOWN` for every combination not covered by the preceding reviewed policy vectors. Do not invent a new priority.
+5. If the system is healthy, all rules required on the current path are `PASS` or `NOT_APPLICABLE`, and no blocking rule exists, return a scope-limited `PROCEED`.
+6. Return `UNKNOWN` for every combination not covered by the preceding reviewed policy vectors. Do not invent a new priority.
+
+There is no generic "adjustable Rule" fallback. Every Rule Result combination that may produce `ADJUST` requires an explicit central-policy entry, an Action Recommendation Gate, and reviewed test vectors.
 
 The conservative precedence for blocking results is:
 
@@ -684,14 +747,17 @@ Given:
   internal integrationStatus = INTEGRATION_ERROR | UNAVAILABLE | TIMEOUT
 
 Expect:
+  public status = integration_error
   public systemStatus = INTEGRATION_ERROR
   no protocol-risk or transaction-risk Rule FAIL is generated
   Decision.verdict = UNKNOWN
   Decision.verdict is treated as an incomplete-check compatibility value
+  error.code preserves the specific collapsed cause
+  error.stage preserves the failed integration stage
+  error.retryable is explicit
   only applicable SYSTEM_RECOVERY actions enter recommendedActions
   no transaction adjustment or acceptance-boundary change is recommended
   Scope Disclosure identifies checks that were not completed
-  a structured Error Code preserves the specific cause
 ```
 
 ### TV-003: Structured No Route at Quote Stage
@@ -829,6 +895,7 @@ Expect public filtering:
 - [ ] Decide whether `candidateActions` belongs in the Shared Contract or remains internal to Risk and Aggregation.
 - [ ] Replace free-form `reasons / actions` with structured `RuleResult`, Reason Code, and `ActionEvaluation` values.
 - [ ] Add separate `P0ActionReasonCode` and `P0ApplicabilityReasonCode` schemas and enforce the ActionEvaluation combination invariants.
+- [ ] Align the Shared Contract `integration_error` variant and API serializer with the canonical public `systemStatus`, compatibility `verdict`, and structured `error` mapping.
 - [ ] Complete the Contract mapping for `Checked / Not Checked / Unknown`, Boundary Source, and Replay / Mock.
 - [ ] Implement `P0-ECONOMIC-001 / OUTPUT_MEETS_BOUNDARY` and convert TV-ECO-001 through TV-ECO-006 into Contract and policy tests.
 
