@@ -13,15 +13,27 @@ export type EvidenceSource =
   | "mock"
   | "unknown";
 
+export type EvidenceReproducibility =
+  | "REPRODUCIBLE"
+  | "NOT_REPRODUCIBLE"
+  | "UNKNOWN";
+
 export type Sourced<T> = {
   value: T | null;
   source: EvidenceSource;
+  reproducibility: EvidenceReproducibility;
   blockNumber?: string;
   fetchedAt?: string;
   formula?: string;
   limitation?: string;
   isReplay?: boolean;
 };
+
+export type BoundarySource =
+  | "original_swap"
+  | "user_declared"
+  | "demo_preset"
+  | "unavailable";
 
 export type KuruSwapIntent = {
   chainId: string;
@@ -30,6 +42,7 @@ export type KuruSwapIntent = {
   tokenOut: string;
   amountIn: string;
   minimumReceived?: string;
+  minimumReceivedSource?: BoundarySource;
 };
 
 export type IntegrationStatus =
@@ -40,9 +53,16 @@ export type IntegrationStatus =
 
 export type ExecutionStatus = "SUCCESS" | "NO_ROUTE" | "REVERTED" | "UNKNOWN";
 
+export type AssetChangeAssessment =
+  | "EXPLAINED"
+  | "UNEXPLAINED"
+  | "UNKNOWN"
+  | "NOT_APPLICABLE";
+
 export type SimulationCoverage = {
   expectedTransactions: number;
   observedResults: number;
+  unmatchedResultIndexes: number[];
   halted: boolean;
   complete: boolean;
   missingTransactionIndexes: number[];
@@ -61,6 +81,7 @@ export type NormalizedMossError = {
   message: string;
   integrationStatus: IntegrationStatus;
   source: "moss" | "rpc" | "quote" | "unknown";
+  normalization: "PRESERVED" | "DERIVED";
 };
 
 export type NormalizedKuruEvidence = {
@@ -73,6 +94,7 @@ export type NormalizedKuruEvidence = {
   receipt: Sourced<JsonValue>;
   outcome: Sourced<JsonValue>;
   assetChanges: Sourced<JsonValue[]>;
+  assetChangeAssessment: AssetChangeAssessment;
   warnings: Sourced<JsonValue[]>;
   revertReason: Sourced<string>;
   gas: Sourced<JsonValue>;

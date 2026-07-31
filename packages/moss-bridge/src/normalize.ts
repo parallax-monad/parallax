@@ -1,10 +1,13 @@
 import { normalizeMossError } from "./errors.js";
 import type {
+  AssetChangeAssessment,
+  EvidenceReproducibility,
   EvidenceSource,
   IntegrationStatus,
   JsonValue,
   KuruSwapIntent,
   NormalizedKuruEvidence,
+  NormalizedMossError,
   RawKuruEvidence,
   Sourced,
 } from "./types.js";
@@ -28,6 +31,7 @@ export function normalizeRecordedKuruEvidence(input: {
   const action = transactions.length === 0 ? null : transactions.map(summary);
   const simulation = simulationSummary(input.raw.simulation, transactions);
   const approval = approvalStatus(input.raw.action, input.intent.tokenIn);
+  const assetChangeAssessment = assessAssetChanges(simulation.assetChanges);
   const limitations = [
     "Recorded simulation synthetic-prefunds native MON only and does not prove ERC-20 affordability.",
     "No signing, broadcast, custody, or wallet mutation occurred while recording this evidence.",
@@ -69,6 +73,7 @@ export function normalizeRecordedKuruEvidence(input: {
       input.raw.simulation ? "moss" : "unknown",
       input,
     ),
+    assetChangeAssessment,
     warnings: sourced(
       simulation.warnings,
       input.raw.simulation ? "moss" : "unknown",
@@ -128,12 +133,17 @@ export function replayKuruEvidence(
 function sourced<T>(
   value: T | null,
   source: EvidenceSource,
-  input: { blockNumber: string | null; fetchedAt?: string },
+  input: {
+    blockNumber: string | null;
+    fetchedAt?: string;
+    mossCommit?: string;
+  },
   formula?: string,
 ): Sourced<T> {
   return {
     value,
     source,
+    reproducibility: reproducibilityOf(source, input),
     ...(input.blockNumber ? { blockNumber: input.blockNumber } : {}),
     ...(input.fetchedAt ? { fetchedAt: input.fetchedAt } : {}),
     ...(formula ? { formula } : {}),
@@ -143,9 +153,32 @@ function sourced<T>(
   };
 }
 
+function reproducibilityOf(
+  source: EvidenceSource,
+  input: {
+    blockNumber: string | null;
+    fetchedAt?: string;
+    mossCommit?: string;
+  },
+): EvidenceReproducibility {
+  if (source === "mock") return "NOT_REPRODUCIBLE";
+  if (source === "unknown") return "UNKNOWN";
+  if (input.blockNumber && input.mossCommit) return "REPRODUCIBLE";
+  if (input.blockNumber || input.fetchedAt) return "UNKNOWN";
+  return "NOT_REPRODUCIBLE";
+}
+
 function queryData(value: JsonValue | null): JsonValue | null {
   if (!record(value)) return null;
   return record(value.data) ? value.data : null;
+}
+
+function assessAssetChanges(changes: JsonValue[]): AssetChangeAssessment {
+  if (changes.length === 0) return "NOT_APPLICABLE";
+  // P0: a full asset-change predicate is not yet available. Any non-empty
+  // recorded change set is treated as unknown until it can be explicitly
+  // explained against the expected swap intent.
+  return "UNKNOWN";
 }
 
 function approvalStatus(
@@ -260,6 +293,7 @@ function capabilityNodes(
 type TransactionNode = {
   protocol: string;
   method: string;
+  sender: string | null;
   target: string | null;
   nativeValue: string | null;
   calldataBytes: number | null;
@@ -284,6 +318,8 @@ function transactionNodes(
         {
           protocol,
           method,
+          sender:
+            typeof transaction.from === "string" ? transaction.from : null,
           target: typeof transaction.to === "string" ? transaction.to : null,
           nativeValue:
             typeof transaction.value === "string" ? transaction.value : null,
@@ -307,6 +343,7 @@ function summary(transaction: TransactionNode): JsonValue {
   return {
     protocol: transaction.protocol,
     method: transaction.method,
+    sender: transaction.sender,
     target: transaction.target,
     nativeValue: transaction.nativeValue,
     calldataBytes: transaction.calldataBytes,
@@ -319,18 +356,36 @@ function coverageSummary(
   halted: boolean,
   haltReason: string | undefined,
 ): import("./types.js").SimulationCoverage {
-  const missingTransactionIndexes = transactions.flatMap(
-    (transaction, index) =>
-      results.some((result) => resultMatchesTransaction(result, transaction))
-        ? []
-        : [index],
-  );
+  const usedResultIndexes = new Set<number>();
+  const missingTransactionIndexes: number[] = [];
+
+  for (let index = 0; index < transactions.length; index++) {
+    const transaction = transactions[index];
+    const matchIndex = results.findIndex(
+      (result, resultIndex) =>
+        !usedResultIndexes.has(resultIndex) &&
+        resultMatchesTransaction(result, transaction),
+    );
+    if (matchIndex === -1) {
+      missingTransactionIndexes.push(index);
+    } else {
+      usedResultIndexes.add(matchIndex);
+    }
+  }
+
+  const unmatchedResultIndexes = results
+    .map((_, index) => index)
+    .filter((index) => !usedResultIndexes.has(index));
+
   return {
     expectedTransactions: transactions.length,
-    observedResults: results.length,
+    observedResults: usedResultIndexes.size,
+    unmatchedResultIndexes,
     halted,
     complete:
-      results.length === transactions.length &&
+      transactions.length > 0 &&
+      usedResultIndexes.size === transactions.length &&
+      unmatchedResultIndexes.length === 0 &&
       !halted &&
       missingTransactionIndexes.length === 0,
     missingTransactionIndexes,
@@ -344,15 +399,18 @@ function resultMatchesTransaction(
 ): boolean {
   if (!result || !transaction || !record(result.transaction)) return false;
   const resultTransaction = result.transaction;
-  return ["to", "data", "value"].every(
-    (key) =>
-      comparable(resultTransaction[key]) ===
-      comparable(transaction.transaction[key]),
-  );
+  const keys = ["from", "to", "data", "value"] as const;
+  return keys.every((key) => {
+    const left = comparable(resultTransaction[key]);
+    const right = comparable(transaction.transaction[key]);
+    if (left === null || right === null) return false;
+    return left === right;
+  });
 }
 
 function comparable(value: JsonValue | undefined): string | null {
-  return typeof value === "string" ? value.toLowerCase() : null;
+  if (typeof value !== "string") return null;
+  return value.toLowerCase();
 }
 
 function haltReasonOf(value: JsonValue | undefined): string | undefined {
@@ -362,17 +420,102 @@ function haltReasonOf(value: JsonValue | undefined): string | undefined {
 
 function normalizedErrors(
   errors: RawKuruEvidence["errors"],
-): import("./types.js").NormalizedMossError[] {
+): NormalizedMossError[] {
   if (!errors) return [];
   return Object.entries(errors).flatMap(([key, value]) => {
     const stage = stageOf(key);
-    return errorMessages(value).map((message) =>
-      normalizeMossError(message, {
-        ...(stage ? { stage } : {}),
-        source: errorSource(stage),
-      }),
-    );
+    const items = Array.isArray(value) ? value : [value];
+    return items.flatMap((item) => {
+      const structured = parseStructuredError(item, stage);
+      if (structured) return [structured];
+      return errorMessages(item).map((message) =>
+        normalizeMossError(message, {
+          ...(stage ? { stage } : {}),
+          source: errorSource(stage),
+        }),
+      );
+    });
   });
+}
+
+function parseStructuredError(
+  value: JsonValue,
+  fallbackStage?: NormalizedMossError["stage"],
+): NormalizedMossError | null {
+  if (!record(value)) return null;
+  if (typeof value.message !== "string") return null;
+
+  const code = normalizeErrorCode(value.code);
+  const stage = normalizeErrorStage(value.stage) ?? fallbackStage;
+  const integrationStatus = normalizeIntegrationStatus(value.integrationStatus);
+  const source = normalizeErrorSource(value.source);
+
+  // A fully preserved record requires a valid code and integration status.
+  // Missing stage or source are tolerated and filled from context.
+  if (!code || !integrationStatus) return null;
+
+  return {
+    stage,
+    code,
+    message: value.message,
+    integrationStatus,
+    source,
+    normalization: "PRESERVED",
+  };
+}
+
+function normalizeErrorCode(
+  value: JsonValue,
+): NormalizedMossError["code"] | null {
+  const code = typeof value === "string" ? value : null;
+  if (
+    code &&
+    [
+      "NO_ROUTE",
+      "REVERTED",
+      "TIMEOUT",
+      "UNAVAILABLE",
+      "INTEGRATION_ERROR",
+      "UNKNOWN",
+    ].includes(code)
+  ) {
+    return code as NormalizedMossError["code"];
+  }
+  return null;
+}
+
+function normalizeErrorStage(
+  value: JsonValue,
+): NormalizedMossError["stage"] | undefined {
+  const stage = typeof value === "string" ? value : undefined;
+  if (
+    stage &&
+    ["DISCOVER", "LOAD", "QUOTE", "ACTION", "SIMULATE"].includes(stage)
+  ) {
+    return stage as NormalizedMossError["stage"];
+  }
+  return undefined;
+}
+
+function normalizeIntegrationStatus(
+  value: JsonValue,
+): IntegrationStatus | null {
+  const status = typeof value === "string" ? value : null;
+  if (
+    status &&
+    ["OK", "INTEGRATION_ERROR", "UNAVAILABLE", "TIMEOUT"].includes(status)
+  ) {
+    return status as IntegrationStatus;
+  }
+  return null;
+}
+
+function normalizeErrorSource(value: JsonValue): NormalizedMossError["source"] {
+  const source = typeof value === "string" ? value : null;
+  if (source && ["moss", "rpc", "quote"].includes(source)) {
+    return source as NormalizedMossError["source"];
+  }
+  return "unknown";
 }
 
 function errorMessages(value: JsonValue): string[] {

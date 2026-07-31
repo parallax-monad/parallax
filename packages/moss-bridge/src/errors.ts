@@ -7,7 +7,13 @@ export function normalizeMossError(
   },
 ): NormalizedMossError {
   if (/no verified Kuru market path|no Kuru market path/i.test(message)) {
-    return { ...context, code: "NO_ROUTE", message, integrationStatus: "OK" };
+    return {
+      ...context,
+      code: "NO_ROUTE",
+      message,
+      integrationStatus: "OK",
+      normalization: "DERIVED",
+    };
   }
   if (/debug_traceCall|simulator unavailable|does not expose/i.test(message)) {
     return {
@@ -15,6 +21,7 @@ export function normalizeMossError(
       code: "UNAVAILABLE",
       message,
       integrationStatus: "UNAVAILABLE",
+      normalization: "DERIVED",
     };
   }
   if (/timed out|timeout/i.test(message)) {
@@ -23,6 +30,7 @@ export function normalizeMossError(
       code: "TIMEOUT",
       message,
       integrationStatus: "TIMEOUT",
+      normalization: "DERIVED",
     };
   }
   return {
@@ -30,5 +38,6 @@ export function normalizeMossError(
     code: "INTEGRATION_ERROR",
     message,
     integrationStatus: "INTEGRATION_ERROR",
+    normalization: "DERIVED",
   };
 }

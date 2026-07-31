@@ -191,6 +191,99 @@ describe("simulation coverage", () => {
     });
     expect(normalized.executionStatus).toBe("UNKNOWN");
   });
+
+  it("requires matching from address for transaction identity", () => {
+    const swap = transaction("0xpool", "0xswap");
+    const normalized = normalize({
+      discover: null,
+      load: null,
+      quote: { data: { estimatedAmountOut: "1" } },
+      action: { protocol: "kuru", method: "swap", transaction: swap },
+      simulation: {
+        results: [result({ ...swap, from: "0xother" })],
+      },
+    });
+    expect(normalized.simulationCoverage.value).toMatchObject({
+      expectedTransactions: 1,
+      observedResults: 0,
+      complete: false,
+    });
+    expect(normalized.executionStatus).toBe("UNKNOWN");
+  });
+
+  it("does not match when a required transaction field is missing", () => {
+    const swap = { to: "0xpool", data: "0xswap", value: "0x0" };
+    const normalized = normalize({
+      discover: null,
+      load: null,
+      quote: { data: { estimatedAmountOut: "1" } },
+      action: { protocol: "kuru", method: "swap", transaction: swap },
+      simulation: {
+        results: [result(transaction("0xpool", "0xswap"))],
+      },
+    });
+    expect(normalized.simulationCoverage.value).toMatchObject({
+      expectedTransactions: 1,
+      observedResults: 0,
+      complete: false,
+    });
+  });
+
+  it("does not let one result cover two action transactions", () => {
+    const approve = transaction("0xtoken", "0xapprove");
+    const normalized = normalize({
+      discover: null,
+      load: null,
+      quote: { data: { estimatedAmountOut: "1" } },
+      action: actionWithApprovalAndSwap(),
+      simulation: { results: [result(approve), result(approve)] },
+    });
+    expect(normalized.simulationCoverage.value).toMatchObject({
+      expectedTransactions: 2,
+      observedResults: 1,
+      complete: false,
+      missingTransactionIndexes: [1],
+    });
+  });
+
+  it("reports extra unmatched results", () => {
+    const approve = transaction("0xtoken", "0xapprove");
+    const swap = transaction("0xpool", "0xswap");
+    const extra = transaction("0xextra", "0xextra");
+    const normalized = normalize({
+      discover: null,
+      load: null,
+      quote: { data: { estimatedAmountOut: "1" } },
+      action: actionWithApprovalAndSwap(),
+      simulation: {
+        results: [result(approve), result(swap), result(extra)],
+      },
+    });
+    expect(normalized.simulationCoverage.value).toMatchObject({
+      expectedTransactions: 2,
+      observedResults: 2,
+      complete: false,
+      unmatchedResultIndexes: [2],
+    });
+  });
+
+  it("does not establish REVERTED from a mismatched reverted result", () => {
+    const swap = transaction("0xpool", "0xswap");
+    const other = transaction("0xother", "0xother");
+    const normalized = normalize({
+      discover: null,
+      load: null,
+      quote: { data: { estimatedAmountOut: "1" } },
+      action: { protocol: "kuru", method: "swap", transaction: swap },
+      simulation: { results: [result(other, true)] },
+    });
+    expect(normalized.simulationCoverage.value).toMatchObject({
+      expectedTransactions: 1,
+      observedResults: 0,
+      complete: false,
+    });
+    expect(normalized.executionStatus).toBe("UNKNOWN");
+  });
 });
 
 describe("structured errors", () => {
@@ -245,5 +338,100 @@ describe("structured errors", () => {
     });
     expect(normalized.executionStatus).toBe("REVERTED");
     expect(normalized.revertReason.value).toBe("execution reverted");
+  });
+
+  it("preserves structured error fields exactly", () => {
+    const normalized = normalize({
+      discover: null,
+      load: null,
+      quote: null,
+      action: null,
+      simulation: null,
+      errors: {
+        quote: {
+          stage: "QUOTE",
+          code: "NO_ROUTE",
+          message: "no path",
+          integrationStatus: "OK",
+          source: "quote",
+        },
+        simulate: {
+          stage: "SIMULATE",
+          code: "INTEGRATION_ERROR",
+          message: "rpc down",
+          integrationStatus: "INTEGRATION_ERROR",
+          source: "rpc",
+        },
+      },
+    });
+    expect(normalized.errors.value).toEqual([
+      expect.objectContaining({
+        stage: "QUOTE",
+        code: "NO_ROUTE",
+        message: "no path",
+        integrationStatus: "OK",
+        source: "quote",
+        normalization: "PRESERVED",
+      }),
+      expect.objectContaining({
+        stage: "SIMULATE",
+        code: "INTEGRATION_ERROR",
+        message: "rpc down",
+        integrationStatus: "INTEGRATION_ERROR",
+        source: "rpc",
+        normalization: "PRESERVED",
+      }),
+    ]);
+  });
+
+  it("does not let a structured REVERTED error establish execution revert", () => {
+    const normalized = normalize({
+      discover: null,
+      load: null,
+      quote: null,
+      action: null,
+      simulation: null,
+      errors: {
+        simulate: {
+          stage: "SIMULATE",
+          code: "REVERTED",
+          message: "execution reverted",
+          integrationStatus: "OK",
+          source: "rpc",
+        },
+      },
+    });
+    expect(normalized.errors.value?.[0]).toMatchObject({
+      code: "REVERTED",
+      normalization: "PRESERVED",
+    });
+    expect(normalized.executionStatus).toBe("UNKNOWN");
+  });
+
+  it("does not overwrite explicit structured fields with message heuristics", () => {
+    const normalized = normalize({
+      discover: null,
+      load: null,
+      quote: null,
+      action: null,
+      simulation: null,
+      errors: {
+        quote: {
+          stage: "QUOTE",
+          code: "INTEGRATION_ERROR",
+          message: "no verified Kuru market path",
+          integrationStatus: "INTEGRATION_ERROR",
+          source: "quote",
+        },
+      },
+    });
+    expect(normalized.errors.value?.[0]).toMatchObject({
+      stage: "QUOTE",
+      code: "INTEGRATION_ERROR",
+      integrationStatus: "INTEGRATION_ERROR",
+      source: "quote",
+      normalization: "PRESERVED",
+    });
+    expect(normalized.executionStatus).toBe("UNKNOWN");
   });
 });
