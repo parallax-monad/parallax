@@ -20,7 +20,7 @@ The following remain outside this document:
 - API serialization; and
 - final frontend visual styling.
 
-The Product View Model in Section 12 is a product proposal. It is not the frozen Shared Contract and does not activate runtime behavior.
+The Product View Model in Section 12 is a product proposal. It is not the frozen Shared Contract and does not activate runtime behavior. The merged Evidence implementation, reviewed Rule Methodology, and pending Shared Contract/API work remain separate sources with separate ownership.
 
 ## 2. Current product boundary
 
@@ -35,6 +35,8 @@ Real recorded Moss/Kuru Evidence
 ```
 
 The real recorded Fixtures currently demonstrate Evidence capture, normalization, provenance preservation, replay, fail-closed handling, and conservative `UNKNOWN` results. They do not yet demonstrate a verified transaction improvement.
+
+PR #1 is now merged into `main`, so the merged Moss bridge, Risk package, recorded Fixtures, tests, and ADR are the Evidence implementation source of truth. That implementation still exposes a provisional legacy Rule result and free-text Action shape; it does not implement the structured Rule and Action contracts proposed by the Rule Methodology.
 
 The following complete loop is not proven by a real Fixture:
 
@@ -134,16 +136,18 @@ An Acceptance Boundary change is not a transaction improvement and must not be u
 | --- | --- |
 | Title | **No blocking evidence found in the checked scope** |
 | Short explanation | **Parallax found no blocking evidence within the checks completed for this Intent. Review what was not checked before deciding what to do next.** |
-| Primary CTA | `Review checked scope`. Product delivery does not authorize signing or broadcasting a transaction. |
-| Optional secondary CTA | `View evidence`. |
+| Primary CTA | `Return to transaction`. This returns control to the originating transaction surface; Parallax does not authorize, sign, or broadcast the transaction. |
+| Optional secondary CTA | `Review checked scope` or `View evidence`. |
 | Actions that may appear | Verified informative Actions only if the central policy allows them; an empty list is valid. |
 | Prohibited wording | “Safe,” “guaranteed,” “risk-free,” “approved protocol,” “no warnings” without trusted Warning Evidence, or any claim beyond the checked scope. |
 
-`PROCEED` means only that no blocking Evidence was found within the checked scope.
+`PROCEED` means only that no blocking Evidence was found within the checked scope. It is not authorization and does not claim safety.
 
 ## 5. Reason-code-to-copy mapping
 
 Reason codes are stable machine inputs to product copy. The UI maps codes to approved text; it must not parse natural-language messages to derive Rule status, Action applicability, or Verdict.
+
+The mappings below mirror the reviewed [P0 Rule and Reason-to-Action proposal](https://github.com/parallax-monad/parallax/pull/3) for frontend implementation. They are repeated here only to define Product copy and presentation. PR #3 remains a Draft, and the current [Shared Contract/API work](https://github.com/parallax-monad/parallax/pull/4) remains open with unresolved contract review; neither set of copied types is independently frozen by this document. Future Rule or Contract changes require a corresponding Product mapping review.
 
 ### Rule reasons: `P0ReasonCode`
 
@@ -228,6 +232,8 @@ Public transaction Actions and System Recovery Actions are separate product conc
 - They appear in a separate **Check recovery** area, not under transaction adjustment.
 - A recovery Action cannot change a Rule result or imply transaction improvement.
 
+The reviewed Rule Methodology permits verified `SYSTEM_RECOVERY` evaluations inside the canonical machine-level `recommendedActions` collection. The Product adapter partitions those entries into the Product View Model's `recoveryActions` presentation group and leaves verified transaction adjustments in `recommendedActions`. This is a presentation mapping only: the adapter must not create recovery Actions independently or drop, duplicate, change the applicability of, or reinterpret any canonical `ActionEvaluation`. The current merged Risk result still uses a legacy free-text `actions` field, while PR #4's pending Contract uses different `recommendations` and `adjustments` fields; the final API-to-adapter field mapping remains a Contract decision.
+
 ### Acceptance Boundary changes
 
 - Changing Minimum Received changes the user's acceptance boundary; it does not improve the transaction.
@@ -254,11 +260,13 @@ If `Unknown > 0`, provide `View evidence gaps`. The compact summary must remain 
 | Group | Meaning | Required item details |
 | --- | --- | --- |
 | Checked | The check ran with trusted, reproducible Evidence and produced a usable Rule result. | Check name, status, concise result, source, stage, Run/Fixture reference, and replay label. |
-| Unknown | The check could not support a conclusion. | Reason code, missing or unresolved Evidence, source/reproducibility state, and recovery Action if one exists. |
-| Not Checked | The check was in scope but did not run or lacks implementation. | Check name and explicit reason; never imply a pass. |
-| Not Applicable | The check legitimately did not apply to this Intent. | Applicability reason code and the absent precondition or terminal stage. |
+| Unknown | A check or Rule is required by the current execution path, but required Evidence is missing, incomplete, unreliable, unsupported, unclassified, or not reproducible; or the check started but did not produce a trustworthy conclusion. | Rule reason code, missing or unresolved Evidence, source/reproducibility state, and recovery Action if one exists. |
+| Not Checked | Product or P0 coverage was not performed as part of the current checked scope, for example a capability outside P0, an unclaimed security dimension, or a check not implemented or selected for this product scope. | Check name and explicit scope reason; never imply a pass. |
+| Not Applicable | The Rule exists, but its explicit precondition is absent, or a trusted earlier terminal result means a later stage was legitimately not entered. | Structured applicability reason code and the absent precondition or trusted terminal stage. |
 
-`Not Applicable` is not a hidden pass. It is included in scope disclosure and is used by central policy only according to the Rule specification.
+A required check that did not successfully run is `Unknown`, not `Not Checked`. Product/UI must not move it into `Not Checked` to avoid a blocking Rule `UNKNOWN`.
+
+`Not Checked` and `Not Applicable` are not hidden Rule passes. `Not Checked` does not replace an active Rule result and does not participate in Verdict aggregation. `Not Applicable` requires a structured applicability reason and is consumed by central policy only according to the Rule Methodology. Product/UI presents these categories but does not redefine central Verdict behavior.
 
 The UI may say **No trusted warnings were recorded in this Run** only when Warning Evidence has an explicit trusted source and is reproducible. It must not say “no warnings” based on an absent, unknown-source, mock, or non-reproducible Warning field.
 
@@ -278,7 +286,7 @@ The following presentation is limited to the latest reviewed real recorded Fixtu
 | --- | --- |
 | Successfully checked | Fixture provenance; Quote and Action capture; simulation attempt; transaction identity matching; trusted recorded warning provenance. |
 | Unknown | Execution outcome; warning classification; critical asset-change interpretation; final transaction conclusion. |
-| Not checked | Verified economic output against Minimum Received; alternative Action effect; user wallet affordability; real rerun comparison. |
+| Not checked | Alternative Action effect; user wallet affordability; real rerun comparison. |
 | Not applicable | Approval action for the native-input path, where explicitly reported as absent by the Fixture. Minimum Received evaluation only when the explicit normalized boundary state makes the Rule inapplicable. |
 
 **Allowed CTA:** `View evidence gaps`; optional `Use recorded replay` when replay is available.
@@ -297,8 +305,8 @@ The following presentation is limited to the latest reviewed real recorded Fixtu
 | --- | --- |
 | Successfully checked | Fixture provenance; Quote and Action capture; approval and swap action coverage; transaction identity matching; recorded revert Evidence and warning provenance. |
 | Unknown | Root cause of the generic revert; final execution conclusion beyond the supported Evidence mapping; critical asset-change interpretation; transaction improvement. |
-| Not checked | Verified simulated received output against Minimum Received; alternative path; modified transaction rerun; user wallet affordability. |
-| Not applicable | Only checks explicitly marked inapplicable by the normalized result. Do not infer inapplicability from missing data. |
+| Not checked | Alternative path; modified transaction rerun; user wallet affordability. |
+| Not applicable | Minimum Received evaluation when the normalized boundary explicitly reports `unavailable`; any other check explicitly marked inapplicable by the normalized result. Do not infer inapplicability from missing data. |
 
 **Allowed CTA:** `View evidence gaps`; optional `Use recorded replay` when replay is available.
 
@@ -372,8 +380,17 @@ Mock before/after data must be labeled **Mock comparison** on both sides and can
 
 The following is a **Product View Model proposal** for frontend consumption. It avoids direct UI binding to raw Moss types. It is not the frozen Shared Contract, API response, or runtime implementation.
 
+This proposal deliberately retains a separate `MockRulePreviewView`. That discriminator prevents Mock data, preview Verdicts, preview Actions, and mock comparisons from entering a completed user-result path.
+
+For Integration Error mode, this proposal chooses the replay-aware model: `IntegrationErrorProductView.mode` is `ProductRunMode`. The merged replay implementation can preserve an Evidence result whose integration status is not `OK`, and the pending PR #4 Run model also permits `live | replay` on its integration-error variant. A replay-mode Integration Error describes the recorded or replay-loading result in that Run; it must not be presented as a current Live integration outage. PR #4 is not yet accepted, so the exact Contract field name and serialization remain open even though the Product mode behavior is explicit here.
+
 ```ts
 type Verdict = "PROCEED" | "ADJUST" | "STOP" | "UNKNOWN";
+
+type P0RuleId =
+  | "P0-EVIDENCE-001"
+  | "P0-EXECUTION-001"
+  | "P0-ECONOMIC-001";
 
 type P0ReasonCode =
   | "SIMULATION_COVERAGE_MISSING"
@@ -412,16 +429,24 @@ type IntegrationErrorCode =
 
 type ProductRunMode = "LIVE" | "RECORDED_REPLAY";
 
+type MinimumReceivedView =
+  | {
+      availability: "available";
+      value: string;
+      source: "original_swap" | "user_declared" | "demo_preset";
+    }
+  | {
+      availability: "unavailable";
+      source: "unavailable";
+    };
+
 interface IntentSummaryView {
   intentId: string;
   tokenIn: { symbol: string; address?: string };
   tokenOut: { symbol: string; address?: string };
   amountIn: string;
   protocol: string;
-  minimumReceived?: {
-    value?: string;
-    source: "original_swap" | "user_declared" | "demo_preset" | "unavailable";
-  };
+  minimumReceived: MinimumReceivedView;
 }
 
 interface EvidenceSummaryView {
@@ -436,43 +461,106 @@ interface EvidenceSummaryView {
   summary: string;
 }
 
-interface RuleResultView {
-  ruleId: "P0-EVIDENCE-001" | "P0-EXECUTION-001" | "P0-ECONOMIC-001";
-  status: "PASS" | "FAIL" | "UNKNOWN" | "NOT_APPLICABLE";
-  reasonCodes: P0ReasonCode[];
-  applicabilityReason?: P0ApplicabilityReasonCode;
+type RuleResultView =
+  | {
+      ruleId: P0RuleId;
+      status: "PASS";
+      reasonCode?: never;
+      applicabilityReasonCode?: never;
+      evidenceIds: string[];
+    }
+  | {
+      ruleId: P0RuleId;
+      status: "FAIL" | "UNKNOWN";
+      reasonCode: P0ReasonCode;
+      applicabilityReasonCode?: never;
+      evidenceIds: string[];
+    }
+  | {
+      ruleId: P0RuleId;
+      status: "NOT_APPLICABLE";
+      reasonCode?: never;
+      applicabilityReasonCode: P0ApplicabilityReasonCode;
+      evidenceIds: string[];
+    };
+
+interface ProductActionBaseView {
+  actionId: string;
+  label: string;
+  reasonCode: P0ActionReasonCode;
   evidenceIds: string[];
 }
 
-interface ProductActionView {
-  actionId: string;
-  category: "TRANSACTION_ADJUSTMENT" | "ACCEPTANCE_BOUNDARY_CHANGE";
-  label: string;
-  applicability: "RELEVANT" | "IRRELEVANT";
-  reasonCodes: P0ActionReasonCode[];
-  evidenceIds: string[];
+interface TransactionAdjustmentView extends ProductActionBaseView {
+  category: "TRANSACTION_ADJUSTMENT";
   changes: Array<{
-    field: "amountIn" | "tokenPair" | "protocol" | "slippage" | "minimumReceived";
+    field: "amountIn" | "tokenPair" | "protocol" | "slippage";
     from?: string;
     to: string;
   }>;
 }
+
+interface AcceptanceBoundaryChangeView extends ProductActionBaseView {
+  category: "ACCEPTANCE_BOUNDARY_CHANGE";
+  changes: Array<{
+    field: "minimumReceived";
+    from?: string;
+    to: string;
+  }>;
+}
+
+type RecommendedActionView = TransactionAdjustmentView & {
+  applicability: "RELEVANT";
+  reasonCode: "ALTERNATIVE_PATH_VERIFIED" | "OUTPUT_IMPROVEMENT_VERIFIED";
+};
+
+type IrrelevantActionView =
+  | (TransactionAdjustmentView & {
+      applicability: "IRRELEVANT";
+      reasonCode: "CANNOT_CREATE_MISSING_ROUTE";
+    })
+  | (AcceptanceBoundaryChangeView & {
+      applicability: "IRRELEVANT";
+      reasonCode: "CHANGES_ACCEPTANCE_BOUNDARY_ONLY";
+    });
 
 interface RecoveryActionView {
   actionId: string;
   kind: "RETRY_CHECK" | "VIEW_MISSING_EVIDENCE" | "USE_REPLAY";
   label: string;
   reasonCode: "RESTORES_CHECK_ONLY";
+  evidenceIds: string[];
 }
 
-interface ScopeItemView {
+interface ScopeItemBaseView {
   checkId: string;
   label: string;
-  group: "CHECKED" | "UNKNOWN" | "NOT_CHECKED" | "NOT_APPLICABLE";
-  reasonCodes: Array<P0ReasonCode | P0ApplicabilityReasonCode>;
   evidenceIds: string[];
   summary: string;
 }
+
+type ScopeItemView =
+  | (ScopeItemBaseView & {
+      group: "CHECKED";
+      reasonCode?: never;
+      applicabilityReasonCode?: never;
+    })
+  | (ScopeItemBaseView & {
+      group: "UNKNOWN";
+      reasonCode: P0ReasonCode;
+      applicabilityReasonCode?: never;
+    })
+  | (ScopeItemBaseView & {
+      group: "NOT_CHECKED";
+      scopeReason: string;
+      reasonCode?: never;
+      applicabilityReasonCode?: never;
+    })
+  | (ScopeItemBaseView & {
+      group: "NOT_APPLICABLE";
+      reasonCode?: never;
+      applicabilityReasonCode: P0ApplicabilityReasonCode;
+    });
 
 interface ScopeDisclosureView {
   counts: {
@@ -506,8 +594,8 @@ interface CompletedProductView {
   intent: IntentSummaryView;
   verdict: Verdict;
   rules: RuleResultView[];
-  recommendedActions: ProductActionView[];
-  irrelevantActions: ProductActionView[];
+  recommendedActions: RecommendedActionView[];
+  irrelevantActions: IrrelevantActionView[];
   recoveryActions: RecoveryActionView[];
   scope: ScopeDisclosureView;
   evidence: EvidenceSummaryView[];
@@ -517,7 +605,7 @@ interface CompletedProductView {
 interface IntegrationErrorProductView {
   kind: "INTEGRATION_ERROR_RESULT";
   systemStatus: "INTEGRATION_ERROR";
-  mode: "LIVE";
+  mode: ProductRunMode;
   runId: string;
   intent: IntentSummaryView;
   error: {
@@ -559,20 +647,11 @@ Contract and API owners must confirm field names, versioning, serialization, err
 
 | Stakeholder | Primary review responsibility |
 | --- | --- |
-| Rei (`rainypilgrimage-beep`) | Rule-to-product semantic accuracy, Action visibility boundaries, Scope Disclosure, unsupported inference |
+| Rei (`rainypilgrimage-beep`) | Rule-to-product semantic accuracy, Scope categories, Action visibility boundaries, unsupported inference |
 | Jie (`jzhao0`) | Real Fixture accuracy, Moss Evidence, provenance, Live／Replay／Mock claims, technical feasibility |
-| Antony (`antony819`) | Frontend implementability, information hierarchy, interaction and empty states |
-| Clare (`brightheartma`) | Targeted review only where the document references API, Shared Contract, Integration Error payload, or Product View Model mapping |
+| Clare (`brightheartma`) | Product View Model, Contract/API mapping, Integration Error payload, and recovery-action adapter mapping |
+| Antony (`antony819`) | Frontend implementability, CTA and information hierarchy, interaction and empty states, implementation ergonomics |
 
-The intended review sequence is:
+All stakeholders may review in parallel. Rei and Jie remain the primary semantic and Evidence-boundary reviewers because this specification is derived from their Rule and Evidence work. Their findings about Rule meaning, Fixture truth, provenance, or unsupported inference take precedence over frontend refinements. Clare owns review of the proposal's Contract/API adapter assumptions. Antony owns frontend usability and may review at any time.
 
-```text
-Rei + Jie
-→ resolve semantic and Evidence-boundary comments
-→ Antony reviews frontend implementation usability
-→ Clare reviews only Contract/API-dependent sections where needed
-```
-
-Antony may read and review in parallel. Rei and Jie are the primary acceptance reviewers because this specification is derived from their Rule and Evidence work. Clare's review is targeted to the proposed Product View Model, Integration Error payload, and any Contract/API-dependent mapping; it is not required for unrelated product copy.
-
-The document deliberately leaves the following gates open: real `NO_ROUTE` classification, Action Recommendation and causal rerun proof, simulated-output economic evaluation, Warning classification, critical asset-change classification, external Evidence policy, Shared Contract implementation, and API mapping. Until the relevant gate passes, Product/UI must disclose `UNKNOWN`, omit speculative public Actions, or show an explicitly labeled Mock preview.
+The document deliberately leaves the following gates open: real `NO_ROUTE` classification, Action Recommendation and causal rerun proof, simulated-output economic evaluation, Warning classification, critical asset-change classification, external Evidence policy, structured Rule/Action Contract implementation, and final API mapping. Until the relevant gate passes, Product/UI must disclose `UNKNOWN`, omit speculative public Actions, or show an explicitly labeled Mock preview.
