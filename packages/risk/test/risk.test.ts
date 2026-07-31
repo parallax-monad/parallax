@@ -5,6 +5,19 @@ import {
 import { describe, expect, it } from "vitest";
 import { evaluateKuruEvidence } from "../src/index.js";
 
+function sourced<T>(
+  value: T | null,
+  source: NormalizedKuruEvidence["quote"]["source"],
+  reproducibility: NormalizedKuruEvidence["quote"]["reproducibility"] = "REPRODUCIBLE",
+): NormalizedKuruEvidence["quote"] & { value: T | null } {
+  return {
+    value,
+    source,
+    reproducibility,
+    blockNumber: "1",
+  } as NormalizedKuruEvidence["quote"] & { value: T | null };
+}
+
 function evidence(
   overrides: Partial<NormalizedKuruEvidence> = {},
 ): NormalizedKuruEvidence {
@@ -19,30 +32,35 @@ function evidence(
     },
     integrationStatus: "OK",
     executionStatus: "SUCCESS",
-    quote: { value: { estimatedAmountOut: "10" }, source: "quote" },
-    action: { value: {}, source: "moss" },
-    receipt: { value: {}, source: "moss" },
-    outcome: { value: {}, source: "moss" },
-    assetChanges: { value: [], source: "moss" },
-    warnings: { value: [], source: "moss" },
-    revertReason: { value: null, source: "unknown" },
-    gas: { value: ["1"], source: "moss" },
+    quote: sourced({ estimatedAmountOut: "10" }, "quote"),
+    action: sourced({}, "moss"),
+    receipt: sourced({}, "moss"),
+    outcome: sourced({}, "moss"),
+    assetChanges: sourced([], "moss"),
+    assetChangeAssessment: "NOT_APPLICABLE",
+    warnings: sourced([], "moss"),
+    revertReason: sourced(null, "unknown"),
+    gas: sourced(["1"], "moss"),
     simulationCoverage: {
       value: {
         expectedTransactions: 1,
         observedResults: 1,
+        unmatchedResultIndexes: [],
         halted: false,
         complete: true,
         missingTransactionIndexes: [],
       },
       source: "derived",
+      reproducibility: "REPRODUCIBLE",
+      blockNumber: "1",
     },
-    errors: { value: [], source: "moss" },
-    blockNumber: { value: "1", source: "rpc" },
+    errors: sourced([], "moss"),
+    blockNumber: sourced("1", "rpc"),
     mossVersion: "test",
+    mossCommit: "test",
     source: "moss",
     replayMode: false,
-    approval: { value: "NOT_APPLICABLE", source: "derived" },
+    approval: sourced("NOT_APPLICABLE", "derived"),
     walletAffordabilityChecked: false,
     limitations: [],
     ...overrides,
@@ -69,7 +87,13 @@ describe("deterministic Kuru decisions", () => {
   it("returns proceed only with an explicit passing boundary", () => {
     expect(
       evaluateKuruEvidence(
-        evidence({ intent: { ...evidence().intent, minimumReceived: "9" } }),
+        evidence({
+          intent: {
+            ...evidence().intent,
+            minimumReceived: "9",
+            minimumReceivedSource: "user_declared",
+          },
+        }),
       ).verdict,
     ).toBe("PROCEED");
   });
@@ -110,8 +134,12 @@ describe("deterministic Kuru decisions", () => {
     expect(
       evaluateKuruEvidence(
         evidence({
-          receipt: { value: null, source: "unknown" },
-          intent: { ...evidence().intent, minimumReceived: "9" },
+          receipt: sourced(null, "unknown"),
+          intent: {
+            ...evidence().intent,
+            minimumReceived: "9",
+            minimumReceivedSource: "user_declared",
+          },
         }),
       ).verdict,
     ).toBe("UNKNOWN");
@@ -137,7 +165,13 @@ describe("deterministic Kuru decisions", () => {
 
   it("returns adjust when a supplied boundary is not met", () => {
     const result = evaluateKuruEvidence(
-      evidence({ intent: { ...evidence().intent, minimumReceived: "11" } }),
+      evidence({
+        intent: {
+          ...evidence().intent,
+          minimumReceived: "11",
+          minimumReceivedSource: "user_declared",
+        },
+      }),
     );
     expect(result.verdict).toBe("ADJUST");
     expect(result.actions).toEqual([
@@ -151,11 +185,12 @@ describe("deterministic Kuru decisions", () => {
   it("returns unknown when a supplied boundary cannot be evaluated", () => {
     const result = evaluateKuruEvidence(
       evidence({
-        quote: {
-          value: { estimatedAmountOut: "not-a-decimal" },
-          source: "quote",
+        quote: sourced({ estimatedAmountOut: "not-a-decimal" }, "quote"),
+        intent: {
+          ...evidence().intent,
+          minimumReceived: "9",
+          minimumReceivedSource: "user_declared",
         },
-        intent: { ...evidence().intent, minimumReceived: "9" },
       }),
     );
     expect(result.economicBoundary).toBe("UNKNOWN");
@@ -169,12 +204,15 @@ describe("deterministic Kuru decisions", () => {
           value: {
             expectedTransactions: 2,
             observedResults: 1,
+            unmatchedResultIndexes: [],
             halted: true,
             complete: false,
             missingTransactionIndexes: [1],
             haltReason: "execution halted",
           },
           source: "derived",
+          reproducibility: "REPRODUCIBLE",
+          blockNumber: "1",
         },
       }),
     );
@@ -184,9 +222,135 @@ describe("deterministic Kuru decisions", () => {
 
   it("fails closed when simulation coverage is null", () => {
     const result = evaluateKuruEvidence(
-      evidence({ simulationCoverage: { value: null, source: "unknown" } }),
+      evidence({
+        simulationCoverage: {
+          value: null,
+          source: "unknown",
+          reproducibility: "UNKNOWN",
+        },
+      }),
     );
     expect(result.evidenceCompleteness).toBe("MISSING");
     expect(result.verdict).toBe("UNKNOWN");
+  });
+
+  it("fails closed when critical evidence source is unknown", () => {
+    expect(
+      evaluateKuruEvidence(
+        evidence({ quote: sourced({ estimatedAmountOut: "10" }, "unknown") }),
+      ).verdict,
+    ).toBe("UNKNOWN");
+  });
+
+  it("fails closed when critical evidence reproducibility is unknown", () => {
+    expect(
+      evaluateKuruEvidence(
+        evidence({
+          quote: sourced({ estimatedAmountOut: "10" }, "quote", "UNKNOWN"),
+        }),
+      ).verdict,
+    ).toBe("UNKNOWN");
+  });
+
+  it("does not proceed on mock-sourced critical evidence", () => {
+    expect(
+      evaluateKuruEvidence(
+        evidence({ quote: sourced({ estimatedAmountOut: "10" }, "mock") }),
+      ).verdict,
+    ).toBe("UNKNOWN");
+  });
+
+  it("blocks completeness on non-empty unexplained asset changes", () => {
+    const result = evaluateKuruEvidence(
+      evidence({
+        assetChanges: sourced([{ kind: "nativeTransfer" }], "moss"),
+        assetChangeAssessment: "UNKNOWN",
+      }),
+    );
+    expect(result.evidenceCompleteness).toBe("MISSING");
+    expect(result.verdict).toBe("UNKNOWN");
+  });
+
+  it("blocks completeness on explicitly unexplained asset changes", () => {
+    const result = evaluateKuruEvidence(
+      evidence({
+        assetChanges: sourced([{ kind: "nativeTransfer" }], "moss"),
+        assetChangeAssessment: "UNEXPLAINED",
+      }),
+    );
+    expect(result.evidenceCompleteness).toBe("MISSING");
+    expect(result.verdict).toBe("UNKNOWN");
+  });
+
+  it("treats unavailable minimumReceived as not applicable", () => {
+    const result = evaluateKuruEvidence(
+      evidence({
+        intent: {
+          ...evidence().intent,
+          minimumReceivedSource: "unavailable",
+        },
+      }),
+    );
+    expect(result.economicBoundary).toBe("NOT_APPLICABLE");
+    expect(result.verdict).toBe("PROCEED");
+  });
+
+  it("treats original_swap minimumReceived as a real boundary", () => {
+    expect(
+      evaluateKuruEvidence(
+        evidence({
+          intent: {
+            ...evidence().intent,
+            minimumReceived: "11",
+            minimumReceivedSource: "original_swap",
+          },
+        }),
+      ).verdict,
+    ).toBe("ADJUST");
+  });
+
+  it("only accepts demo_preset boundary in replay mode", () => {
+    expect(
+      evaluateKuruEvidence(
+        evidence({
+          replayMode: false,
+          intent: {
+            ...evidence().intent,
+            minimumReceived: "9",
+            minimumReceivedSource: "demo_preset",
+          },
+        }),
+      ).verdict,
+    ).toBe("UNKNOWN");
+    expect(
+      evaluateKuruEvidence(
+        evidence({
+          replayMode: true,
+          intent: {
+            ...evidence().intent,
+            minimumReceived: "9",
+            minimumReceivedSource: "demo_preset",
+          },
+        }),
+      ).verdict,
+    ).toBe("PROCEED");
+  });
+
+  it("returns unknown for inconsistent minimumReceived source states", () => {
+    const invalidCases: Array<Partial<NormalizedKuruEvidence["intent"]>> = [
+      { minimumReceived: "9" },
+      { minimumReceived: "9", minimumReceivedSource: "unavailable" },
+      { minimumReceivedSource: "user_declared" },
+      { minimumReceivedSource: "original_swap" },
+    ];
+    for (const intent of invalidCases) {
+      expect(
+        evaluateKuruEvidence(
+          evidence({
+            intent: { ...evidence().intent, ...intent },
+          }),
+        ).verdict,
+      ).toBe("UNKNOWN");
+    }
   });
 });
