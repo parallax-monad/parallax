@@ -834,8 +834,8 @@ Expect public filtering:
 
 ### 9.2 Evidence and Rules
 
-- [ ] Handle `simulationCoverage.value = null` as missing evidence and add a regression test.
-- [ ] Remove "change the user's acceptance boundary" from recommended actions.
+- [ ] Implement stage-aware `P0-EVIDENCE-001` Rule Result handling: missing, null, or incomplete coverage is `UNKNOWN` when `SIMULATE` is required, while later stages after a trusted terminal result are `NOT_APPLICABLE`.
+- [ ] Add Contract and Risk regression coverage preventing `ACCEPTANCE_BOUNDARY_CHANGE` from entering `recommendedActions`.
 - [ ] Define and test the normalized recipient-and-token-matched simulated output extraction used by `P0-ECONOMIC-001`.
 - [ ] Add a real or sanitized recorded Fixture for simulated output provenance and an explicit Quote-versus-Simulation conflict vector.
 - [ ] Obtain a sanitized real `NO_ROUTE` raw Moss output, normalized evidence, Runtime Revision, and Fixture metadata.
