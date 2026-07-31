@@ -6,19 +6,20 @@ export function evidenceCompleteness(
 ): EvidenceCompleteness {
   if (evidence.integrationStatus !== "OK") return "UNKNOWN";
   if (evidence.simulationCoverage.value?.complete !== true) return "MISSING";
-  if (evidence.warnings.value && evidence.warnings.value.length > 0)
-    return "MISSING";
-
   const alwaysCritical: Sourced<unknown>[] = [
     evidence.quote,
     evidence.action,
     evidence.simulationCoverage,
     evidence.blockNumber,
+    evidence.warnings,
   ];
   for (const field of alwaysCritical) {
     if (field.value === null) return "MISSING";
     if (!isTrusted(field)) return "MISSING";
   }
+
+  if (evidence.warnings.value && evidence.warnings.value.length > 0)
+    return "MISSING";
 
   if (
     evidence.executionStatus === "SUCCESS" &&

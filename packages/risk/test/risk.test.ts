@@ -29,6 +29,7 @@ function evidence(
       tokenIn: "MON",
       tokenOut: "USDC",
       amountIn: "1",
+      minimumReceivedSource: "unavailable",
     },
     integrationStatus: "OK",
     executionStatus: "SUCCESS",
@@ -232,6 +233,38 @@ describe("deterministic Kuru decisions", () => {
     );
     expect(result.evidenceCompleteness).toBe("MISSING");
     expect(result.verdict).toBe("UNKNOWN");
+  });
+
+  it("fails closed when empty warnings have unknown source", () => {
+    const result = evaluateKuruEvidence(
+      evidence({ warnings: sourced([], "unknown") }),
+    );
+    expect(result.evidenceCompleteness).toBe("MISSING");
+    expect(result.verdict).toBe("UNKNOWN");
+  });
+
+  it("fails closed when empty warnings have unknown reproducibility", () => {
+    const result = evaluateKuruEvidence(
+      evidence({ warnings: sourced([], "moss", "UNKNOWN") }),
+    );
+    expect(result.evidenceCompleteness).toBe("MISSING");
+    expect(result.verdict).toBe("UNKNOWN");
+  });
+
+  it("does not proceed on mock-sourced empty warnings", () => {
+    const result = evaluateKuruEvidence(
+      evidence({ warnings: sourced([], "mock") }),
+    );
+    expect(result.evidenceCompleteness).toBe("MISSING");
+    expect(result.verdict).toBe("UNKNOWN");
+  });
+
+  it("allows empty trusted reproducible warnings to pass provenance", () => {
+    const result = evaluateKuruEvidence(
+      evidence({ warnings: sourced([], "moss") }),
+    );
+    expect(result.evidenceCompleteness).toBe("COMPLETE");
+    expect(result.verdict).toBe("PROCEED");
   });
 
   it("fails closed when critical evidence source is unknown", () => {
