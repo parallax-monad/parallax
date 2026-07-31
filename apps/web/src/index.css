@@ -1,0 +1,71 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    background: #000;
+  }
+  body {
+    @apply min-w-[320px] bg-ink text-white font-sans text-sm leading-relaxed antialiased;
+  }
+  button,
+  input,
+  select {
+    font: inherit;
+  }
+  button:focus-visible,
+  a:focus-visible,
+  input:focus-visible,
+  select:focus-visible {
+    @apply outline-2 outline-offset-[3px] outline-accent;
+  }
+}
+
+@layer components {
+  .shell {
+    @apply mx-auto w-[min(90vw,1500px)] px-4 pb-28 pt-16;
+  }
+  .eyebrow {
+    @apply mb-2 block text-[10px] font-bold uppercase tracking-[0.13em] text-accent;
+  }
+  .card {
+    @apply border border-line bg-ink-elev p-5 transition-colors hover:border-line-strong;
+  }
+  .card-head {
+    @apply mb-1 flex items-baseline justify-between gap-3 border-b border-line pb-3;
+  }
+  .card-head h3 {
+    @apply text-xs font-bold uppercase tracking-[0.06em];
+  }
+  .btn {
+    @apply inline-flex cursor-pointer items-center justify-center border border-neutral-600 bg-transparent px-4 py-2.5 text-[10px] font-extrabold uppercase tracking-[0.08em] text-white transition-colors hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:border-neutral-600 disabled:hover:text-white;
+  }
+  .btn-primary {
+    @apply border-accent bg-accent text-accent-ink hover:bg-accent-bright hover:text-black hover:border-accent-bright;
+  }
+  .pill {
+    @apply inline-flex items-center gap-1.5 rounded-full border border-line-strong bg-ink-rail px-2 py-[3px] text-[9px] font-bold uppercase leading-tight tracking-[0.05em] text-dim;
+  }
+  .field label {
+    @apply mb-1.5 block text-[9px] font-bold uppercase tracking-[0.1em] text-faint;
+  }
+  .field input,
+  .field select {
+    @apply w-full border border-line-strong bg-ink-rail px-3 py-2.5 text-xs text-white outline-none hover:border-neutral-500;
+  }
+  .kv {
+    @apply grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-t border-line py-2.5;
+  }
+  .kv-label {
+    @apply text-[11.5px] text-dim;
+  }
+  .kv-note {
+    @apply text-[10px] text-faint;
+  }
+  .mono {
+    @apply break-all font-mono text-[11px];
+  }
+}
