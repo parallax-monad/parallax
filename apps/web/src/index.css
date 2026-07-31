@@ -5,11 +5,14 @@
 @tailwind utilities;
 
 @layer base {
+  :root {
+    --header-h: 82px;
+  }
   html {
     background: #000;
   }
   body {
-    @apply min-w-[320px] bg-ink text-white font-sans text-sm leading-relaxed antialiased;
+    @apply min-w-[320px] overflow-x-clip bg-ink text-white font-sans text-sm leading-relaxed antialiased;
   }
   button,
   input,

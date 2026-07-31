@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Analyzer from "@/components/Analyzer";
 import { SiteNav } from "@/components/SiteNav";
+import { localizeText, getInitialLanguage, pick, type Language } from "@/lib/i18n";
 import { PROTOCOL_PROFILES } from "@/lib/protocols";
 import { RouteGraph } from "@/components/RouteGraph";
 
@@ -33,6 +34,7 @@ const SCALE_BADGE: Record<string, string> = {
 };
 
 export default function App() {
+  const [language, setLanguage] = useState<Language>(getInitialLanguage);
   const [route, setRoute] = useState(
     window.location.hash === "#/analyze" ? "analyze" : "home",
   );
@@ -46,17 +48,70 @@ export default function App() {
 
   return (
     <div className="min-h-[calc(100vh-65px)]">
-      <SiteNav active={route} />
-      {route === "analyze" ? <Analyzer profiles={PROTOCOL_PROFILES} /> : <Home />}
+      <SiteNav active={route} language={language} onLanguageChange={setLanguage} />
+      {route === "analyze" ? (
+        <Analyzer profiles={PROTOCOL_PROFILES} language={language} />
+      ) : (
+        <Home language={language} />
+      )}
     </div>
   );
 }
 
-function Home() {
+function Home({ language }: { language: Language }) {
+  const glowRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const moveGlow = (event: PointerEvent) => {
+      const glow = glowRef.current;
+      if (!glow) return;
+
+      const bounds = glow.getBoundingClientRect();
+      const isOverGrid =
+        event.clientX >= bounds.left &&
+        event.clientX <= bounds.right &&
+        event.clientY >= bounds.top &&
+        event.clientY <= bounds.bottom;
+
+      if (!isOverGrid) {
+        glow.style.opacity = "0";
+        return;
+      }
+
+      glow.style.setProperty("--glow-x", `${event.clientX - bounds.left}px`);
+      glow.style.setProperty("--glow-y", `${event.clientY - bounds.top}px`);
+      glow.style.opacity = "1";
+    };
+
+    const hideGlow = () => {
+      if (glowRef.current) glowRef.current.style.opacity = "0";
+    };
+
+    window.addEventListener("pointermove", moveGlow, { passive: true });
+    window.addEventListener("blur", hideGlow);
+    document.documentElement.addEventListener("pointerleave", hideGlow);
+
+    return () => {
+      window.removeEventListener("pointermove", moveGlow);
+      window.removeEventListener("blur", hideGlow);
+      document.documentElement.removeEventListener("pointerleave", hideGlow);
+    };
+  }, []);
+
   return (
     <main className="shell">
-      <section className="relative grid min-h-[560px] items-center overflow-hidden border border-line">
-        <RouteGraph />
+      <section className="relative grid min-h-[560px] items-center border border-line">
+        {/* Full-bleed grid that bleeds upward behind the transparent header. */}
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute left-1/2 top-[calc(-1*(var(--header-h)+4rem))] z-0 h-[calc(100%+var(--header-h)+4rem)] w-screen -translate-x-1/2 bg-[linear-gradient(rgba(30,30,30,0.55)_1px,transparent_1px),linear-gradient(90deg,rgba(30,30,30,0.55)_1px,transparent_1px),linear-gradient(#0c0c0c,#0c0c0c)] bg-[length:28px_28px,28px_28px,100%_100%]"
+        />
+        <div
+          ref={glowRef}
+          aria-hidden="true"
+          className="pointer-events-none absolute left-1/2 top-[calc(-1*(var(--header-h)+4rem))] z-[1] h-[calc(100%+var(--header-h)+4rem)] w-screen -translate-x-1/2 opacity-0 transition-opacity duration-300 [background:radial-gradient(200px_circle_at_var(--glow-x)_var(--glow-y),rgba(204,255,0,0.16),transparent_70%)]"
+        />
+        <RouteGraph language={language} />
         <div className="relative z-[2] w-full p-8 sm:w-[min(46%,620px)] sm:p-14">
           <span className="eyebrow">PARALLAX / MOSS ON MONAD</span>
           <h1 className="m-0 mb-5 text-[clamp(48px,6vw,92px)] font-extrabold leading-[0.88] tracking-[-0.09em]">
@@ -65,7 +120,11 @@ function Home() {
             <em className="not-italic text-accent">BEFORE YOU SIGN.</em>
           </h1>
           <p className="m-0 max-w-[570px] text-[15px] leading-[1.8] text-dim">
-            基於 Moss 的 Monad Swap 簽名前解釋與調整層。簽名前看清交易會發生什麼、哪裡可能造成明顯損耗或暴露，以及現在可以調整什麼。
+            {pick(
+              language,
+              "A pre-sign explanation and adjustment layer for Monad swaps powered by Moss. Understand what will happen, where material loss or exposure may occur, and what you can adjust before signing.",
+              "基于 Moss 的 Monad Swap 签名前解释与调整层。签名前看清交易会发生什么、哪里可能造成明显损耗或暴露，以及现在可以调整什么。",
+            )}
           </p>
           <div className="mt-7 flex flex-wrap gap-3">
             <a href="#/analyze" className="btn btn-primary">
@@ -90,7 +149,11 @@ function Home() {
           Four layers. One receipt.
         </h2>
         <p className="mb-5 text-xs text-faint">
-          不將複雜風險壓成黑箱分數；每個結論都保留原因與來源。
+          {pick(
+            language,
+            "Keep the reason and source behind every conclusion instead of compressing complex risk into a black-box score.",
+            "不将复杂风险压成黑箱分数；每个结论都保留原因与来源。",
+          )}
         </p>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {DIMENSIONS.map(([key, title, body]) => (
@@ -101,8 +164,10 @@ function Home() {
               <span className="text-[9px] font-extrabold uppercase tracking-[0.1em] text-accent">
                 {key}
               </span>
-              <h3 className="mb-2 mt-5 text-[15px]">{title}</h3>
-              <p className="m-0 min-h-[53px] text-[11px] text-dim">{body}</p>
+              <h3 className="mb-2 mt-5 text-[15px]">{localizeText(title, language)}</h3>
+              <p className="m-0 min-h-[53px] text-[11px] text-dim">
+                {localizeText(body, language)}
+              </p>
               <b className="text-[8.5px] tracking-[0.08em]">VIEW EVIDENCE →</b>
             </article>
           ))}
@@ -116,7 +181,11 @@ function Home() {
             Read the signal.
           </h2>
           <p className="mt-3 max-w-[410px] text-[15px] leading-[1.75] text-faint">
-            色彩輔助判斷，但每個狀態永遠以文字說明。
+            {pick(
+              language,
+              "Color supports judgment, but every status is always explained in words.",
+              "色彩辅助判断，但每个状态始终以文字说明。",
+            )}
           </p>
         </div>
         <div className="border-t border-line">
@@ -134,9 +203,11 @@ function Home() {
                 <span
                   className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-bold uppercase ${SCALE_BADGE[level]}`}
                 >
-                  {title}
+                {localizeText(title, language)}
                 </span>
-                <p className="mt-2 text-sm leading-[1.65] text-faint">{body}</p>
+                <p className="mt-2 text-sm leading-[1.65] text-faint">
+                  {localizeText(body, language)}
+                </p>
               </div>
             </div>
           ))}

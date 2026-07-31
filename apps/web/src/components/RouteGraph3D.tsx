@@ -1,4 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import type { Language } from "@/lib/i18n";
+import { pick } from "@/lib/i18n";
 import ForceGraph3D from "react-force-graph-3d";
 import * as THREE from "three";
 
@@ -162,7 +164,7 @@ export function RouteGraph3D() {
   return (
     <div
       aria-label="Moss 能力路徑 3D 圖，可拖動旋轉與縮放"
-      className="absolute inset-0 bg-[radial-gradient(circle_at_50%_48%,rgba(204,255,0,0.1),transparent_4px),#0c0c0c] before:absolute before:inset-0 before:bg-[linear-gradient(#1e1e1e_1px,transparent_1px),linear-gradient(90deg,#1e1e1e_1px,transparent_1px)] before:bg-[length:28px_28px] before:opacity-55 before:content-['']"
+      className="absolute inset-0 bg-[radial-gradient(circle_at_50%_48%,rgba(204,255,0,0.1),transparent_4px)]"
     >
       <div
         ref={containerRef}
