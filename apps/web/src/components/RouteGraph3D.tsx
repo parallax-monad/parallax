@@ -95,7 +95,7 @@ function createNodeObject(node: Graph3DNode) {
   return group;
 }
 
-export function RouteGraph3D() {
+export function RouteGraph3D({ language }: { language: Language }) {
   const graphRef = useRef<ForceGraph3D<Graph3DNode, Graph3DLink> | undefined>(
     undefined,
   );
@@ -163,7 +163,11 @@ export function RouteGraph3D() {
 
   return (
     <div
-      aria-label="Moss 能力路徑 3D 圖，可拖動旋轉與縮放"
+      aria-label={pick(
+        language,
+        "Moss capability route 3D graph; drag to rotate and scroll to zoom",
+        "Moss 能力路径 3D 图；可拖动旋转与滚动缩放",
+      )}
       className="absolute inset-0 bg-[radial-gradient(circle_at_50%_48%,rgba(204,255,0,0.1),transparent_4px)]"
     >
       <div
@@ -191,7 +195,7 @@ export function RouteGraph3D() {
       </div>
       <div className="absolute bottom-4 left-4 z-[3] text-[8.5px] font-bold tracking-[0.08em] text-faint">
         <i className="mr-1.5 inline-block h-1.5 w-1.5 rounded-full bg-accent shadow-[0_0_8px_#ccff00]" />
-        MOSS CAPABILITY GRAPH · DRAG TO ROTATE
+        {pick(language, "MOSS CAPABILITY GRAPH · DRAG TO ROTATE", "MOSS 能力图谱 · 拖动旋转")}
       </div>
     </div>
   );

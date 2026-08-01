@@ -1,3 +1,4 @@
+import { localizeText, pick, type Language } from "@/lib/i18n";
 import { formatBps, formatGwei, formatPercent, formatUsd } from "@/lib/format";
 import type {
   PreliminaryAssessment,
@@ -32,66 +33,94 @@ function Row({
   );
 }
 
-export function SimulationPanel({ sim }: { sim: SimulationResult }) {
+export function SimulationPanel({
+  sim,
+  language,
+}: {
+  sim: SimulationResult;
+  language: Language;
+}) {
   const source = sim.simulatorVersion?.startsWith("fixture-") ? "fixture" : "moss";
-  const stageLabel = source === "fixture" ? "階段 2 · 樣例模擬" : "階段 2 · Moss";
+  const stageLabel = pick(
+    language,
+    source === "fixture" ? "Stage 2 · Fixture simulation" : "Stage 2 · Moss",
+    source === "fixture" ? "阶段 2 · 样例模拟" : "阶段 2 · Moss",
+  );
 
   return (
     <div className="card">
       <div className="card-head">
-        <h3>模擬結果</h3>
+        <h3>{pick(language, "Simulation result", "模拟结果")}</h3>
         <span className="pill">{stageLabel}</span>
       </div>
       <Row
-        label="執行狀態"
+        label={pick(language, "Execution status", "执行状态")}
         value={
           <span className={sim.success ? "text-risk-low" : "text-risk-high"}>
-            {sim.success ? "成功" : "回滾"}
+            {pick(language, sim.success ? "Success" : "Reverted", sim.success ? "成功" : "回滚")}
           </span>
         }
-        source={<SourceTag source={source} />}
+        source={<SourceTag source={source} language={language} />}
         note={sim.revertReason}
       />
       <Row
-        label="Gas 用量"
+        label={pick(language, "Gas used", "Gas 用量")}
         value={<span>{sim.gasUsed}</span>}
-        source={<SourceTag source={source} />}
-        note={`上限 ${sim.gasLimit}`}
+        source={<SourceTag source={source} language={language} />}
+        note={pick(language, `Limit ${sim.gasLimit}`, `上限 ${sim.gasLimit}`)}
       />
       <Row
-        label="Gas 單價"
+        label={pick(language, "Gas price", "Gas 单价")}
         value={<span>{formatGwei(sim.gasPriceWei)}</span>}
-        source={<SourceTag source={source} />}
+        source={<SourceTag source={source} language={language} />}
       />
       <Row
-        label="Gas 成本"
+        label={pick(language, "Gas cost", "Gas 成本")}
         value={
           <span>
             {sim.gasCostNative} MON
             {sim.gasCostUsd !== null ? ` · ${formatUsd(sim.gasCostUsd)}` : ""}
           </span>
         }
-        source={<SourceTag source={source} />}
+        source={<SourceTag source={source} language={language} />}
       />
       <Row
-        label="回執狀態"
+        label={pick(language, "Receipt status", "回执状态")}
         value={sim.receipt.status}
-        source={<SourceTag source={source} />}
-        note={`區塊 ${sim.receipt.blockNumber ?? "不可用"} · 日誌 ${sim.receipt.logsCount} 條`}
+        source={<SourceTag source={source} language={language} />}
+        note={pick(
+          language,
+          `Block ${sim.receipt.blockNumber ?? "unavailable"} · ${sim.receipt.logsCount} logs`,
+          `区块 ${sim.receipt.blockNumber ?? "不可用"} · 日志 ${sim.receipt.logsCount} 条`,
+        )}
       />
       <Row
-        label="模擬器告警"
+        label={pick(language, "Simulator warnings", "模拟器警告")}
         value={
-          <span>{sim.warnings.length === 0 ? "無" : `${sim.warnings.length} 條`}</span>
+          <span>
+            {pick(
+              language,
+              sim.warnings.length === 0 ? "None" : `${sim.warnings.length} warnings`,
+              sim.warnings.length === 0 ? "无" : `${sim.warnings.length} 条`,
+            )}
+          </span>
         }
-        source={<SourceTag source={source} />}
-        note={sim.simulatorVersion ? `模擬器版本 ${sim.simulatorVersion}` : undefined}
+        source={<SourceTag source={source} language={language} />}
+        note={
+          sim.simulatorVersion
+            ? pick(
+                language,
+                `Simulator version ${sim.simulatorVersion}`,
+                `模拟器版本 ${sim.simulatorVersion}`,
+              )
+            : undefined
+        }
       />
       {sim.assetDeltas.length > 0 ? (
         sim.assetDeltas.map((delta, index) => (
           <Row
             key={`${delta.token}-${index}`}
-            label={`資產變動 · ${delta.symbol}`}
+            label={`${pick(language, "Asset change", "资产变动")} · ${delta.symbol}`}
             value={
               <span
                 className={
@@ -102,14 +131,14 @@ export function SimulationPanel({ sim }: { sim: SimulationResult }) {
                 {delta.amount}
               </span>
             }
-            source={<SourceTag source={source} />}
+            source={<SourceTag source={source} language={language} />}
           />
         ))
       ) : (
         <Row
-          label="資產變動"
-          value="模擬器未返回明細"
-          source={<SourceTag source={source} />}
+          label={pick(language, "Asset changes", "资产变动")}
+          value={pick(language, "No details returned by simulator", "模拟器未返回明细")}
+          source={<SourceTag source={source} language={language} />}
         />
       )}
     </div>

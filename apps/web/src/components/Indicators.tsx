@@ -1,3 +1,4 @@
+import { localizeText, type Language } from "@/lib/i18n";
 import type { Severity, SourceKind } from "@/lib/types";
 
 const SEVERITY_COLOR: Record<Severity, string> = {
@@ -48,12 +49,12 @@ export const LEVEL_TEXT: Record<string, string> = {
   unknown: "text-faint",
 };
 
-export function SourceTag({ source }: { source: SourceKind }) {
+export function SourceTag({ source, language }: { source: SourceKind; language: Language }) {
   return (
     <span
       className={`ml-1.5 inline-block whitespace-nowrap border px-1.5 py-px text-[8.5px] uppercase tracking-[0.06em] ${SOURCE_CLASS[source]}`}
     >
-      {SOURCE_LABEL[source]}
+      {localizeText(SOURCE_LABEL[source], language)}
     </span>
   );
 }
