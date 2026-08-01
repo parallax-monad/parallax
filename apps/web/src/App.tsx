@@ -1,8 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import Analyzer from "@/components/Analyzer";
 import { SiteNav } from "@/components/SiteNav";
 import { localizeText, getInitialLanguage, pick, type Language } from "@/lib/i18n";
-import { PROTOCOL_PROFILES } from "@/lib/protocols";
 import { RouteGraph } from "@/components/RouteGraph";
 
 const DIMENSIONS = [
@@ -49,11 +47,7 @@ export default function App() {
   return (
     <div className="min-h-[calc(100vh-65px)]">
       <SiteNav active={route} language={language} onLanguageChange={setLanguage} />
-      {route === "analyze" ? (
-        <Analyzer profiles={PROTOCOL_PROFILES} language={language} />
-      ) : (
-        <Home language={language} />
-      )}
+      <Home language={language} />
     </div>
   );
 }
