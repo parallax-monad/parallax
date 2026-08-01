@@ -22,13 +22,13 @@ export function SiteNav({
   return (
     <nav
       aria-label={pick(language, "Primary navigation", "主导航")}
-      className="sticky top-0 z-20 flex min-h-[var(--header-h)] items-center gap-6 bg-transparent px-[max(5vw,18px)] sm:gap-11"
+      className="relative z-20 flex min-h-[var(--header-h)] items-center gap-6 bg-transparent px-[max(5vw,18px)] sm:gap-11"
     >
       <a
         href="#/"
         className="text-[25px] font-extrabold tracking-[-0.07em] text-accent no-underline sm:text-[29px]"
       >
-        PARALLAX
+        PARAL<span className="text-white">LAX</span>
       </a>
       <div className="ml-auto flex items-center gap-4 sm:gap-[30px]">
         <div className="hidden items-center gap-[30px] sm:flex">

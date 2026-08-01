@@ -37,8 +37,11 @@ const LINKS: Graph3DLink[] = [
 ];
 
 const LABEL_FONT = "700 30px Inter, sans-serif";
+const PARTICLE_COUNT = 520;
+/** Half-extents of the drifting particle field, wide enough to fill the frame. */
+const PARTICLE_BOUND_XZ = 460;
+const PARTICLE_BOUND_Y = 300;
 
-/** Renders the node label into a canvas texture so no extra font dependency is needed. */
 function createLabelSprite(text: string, color: string) {
   const canvas = document.createElement("canvas");
   const context = canvas.getContext("2d");
@@ -66,7 +69,6 @@ function createLabelSprite(text: string, color: string) {
   return sprite;
 }
 
-/** Core sphere plus a larger additive shell that reads as a neon glow. */
 function createNodeObject(node: Graph3DNode) {
   const color = new THREE.Color(node.color);
   const group = new THREE.Group();
@@ -95,6 +97,35 @@ function createNodeObject(node: Graph3DNode) {
   return group;
 }
 
+function createParticleSystem() {
+  const positions = new Float32Array(PARTICLE_COUNT * 3);
+  const velocities = new Float32Array(PARTICLE_COUNT * 3);
+
+  for (let i = 0; i < PARTICLE_COUNT; i++) {
+    positions[i * 3] = (Math.random() - 0.5) * 2 * PARTICLE_BOUND_XZ;
+    positions[i * 3 + 1] = (Math.random() - 0.5) * 2 * PARTICLE_BOUND_Y;
+    positions[i * 3 + 2] = (Math.random() - 0.5) * 2 * PARTICLE_BOUND_XZ;
+    velocities[i * 3] = (Math.random() - 0.5) * 0.08;
+    velocities[i * 3 + 1] = (Math.random() - 0.5) * 0.06;
+    velocities[i * 3 + 2] = (Math.random() - 0.5) * 0.08;
+  }
+
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+
+  const material = new THREE.PointsMaterial({
+    color: 0xccff00,
+    size: 1.4,
+    transparent: true,
+    opacity: 0.45,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+  });
+
+  const points = new THREE.Points(geometry, material);
+  return { points, positions, velocities };
+}
+
 export function RouteGraph3D({ language }: { language: Language }) {
   const graphRef = useRef<ForceGraph3D<Graph3DNode, Graph3DLink> | undefined>(
     undefined,
@@ -102,9 +133,22 @@ export function RouteGraph3D({ language }: { language: Language }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ width: 1, height: 1 });
   const [interacting, setInteracting] = useState(false);
+  const resumeTimerRef = useRef<number | undefined>(undefined);
+  const angleRef = useRef(0);
 
-  // d3-force mutates link source/target into node references, so both nodes and
-  // links must be fresh copies or a remount would reuse stale node objects.
+  const pauseOrbit = () => {
+    window.clearTimeout(resumeTimerRef.current);
+    setInteracting(true);
+  };
+
+  // Hand the camera back to the ambient orbit once the user settles.
+  const scheduleResume = () => {
+    window.clearTimeout(resumeTimerRef.current);
+    resumeTimerRef.current = window.setTimeout(() => setInteracting(false), 1500);
+  };
+
+  useEffect(() => () => window.clearTimeout(resumeTimerRef.current), []);
+
   const graphData = useMemo(
     () => ({
       nodes: NODES.map((node) => ({ ...node })),
@@ -129,6 +173,46 @@ export function RouteGraph3D({ language }: { language: Language }) {
     if (!graph) return;
     graph.d3Force("charge")?.strength(-150);
     graph.d3Force("link")?.distance(90);
+
+    // 3d-force-graph uses TrackballControls by default (noZoom); OrbitControls
+    // uses enableZoom. Set both so the wheel always scrolls the page instead.
+    const controls = graph.controls() as {
+      noZoom?: boolean;
+      enableZoom?: boolean;
+    } | null;
+    if (controls) {
+      controls.noZoom = true;
+      controls.enableZoom = false;
+    }
+
+    const { points, positions, velocities } = createParticleSystem();
+    graph.scene().add(points);
+
+    let animFrame = 0;
+    const animate = () => {
+      for (let i = 0; i < PARTICLE_COUNT; i++) {
+        positions[i * 3] += velocities[i * 3];
+        positions[i * 3 + 1] += velocities[i * 3 + 1];
+        positions[i * 3 + 2] += velocities[i * 3 + 2];
+
+        for (let axis = 0; axis < 3; axis++) {
+          const limit = axis === 1 ? PARTICLE_BOUND_Y : PARTICLE_BOUND_XZ;
+          if (Math.abs(positions[i * 3 + axis]) > limit) {
+            velocities[i * 3 + axis] *= -1;
+          }
+        }
+      }
+      points.geometry.attributes.position.needsUpdate = true;
+      animFrame = requestAnimationFrame(animate);
+    };
+    animFrame = requestAnimationFrame(animate);
+
+    return () => {
+      cancelAnimationFrame(animFrame);
+      graph.scene().remove(points);
+      points.geometry.dispose();
+      (points.material as THREE.PointsMaterial).dispose();
+    };
   }, []);
 
   useEffect(() => {
@@ -137,17 +221,21 @@ export function RouteGraph3D({ language }: { language: Language }) {
     return () => window.clearTimeout(timer);
   }, [size]);
 
-  // Slow orbit that yields to the user as soon as they drag the scene.
   useEffect(() => {
     if (interacting) return;
     let frame = 0;
     const radius = 320;
-    let angle = 0;
+
+    // Resume from where the user left the camera so the orbit does not snap.
+    const camera = graphRef.current?.camera();
+    if (camera) angleRef.current = Math.atan2(camera.position.x, camera.position.z);
+
 
     const orbit = () => {
       const graph = graphRef.current;
       if (graph) {
-        angle += 0.0016;
+        angleRef.current += 0.0016;
+        const angle = angleRef.current;
         graph.cameraPosition({
           x: radius * Math.sin(angle),
           y: 90 * Math.sin(angle * 0.6),
@@ -165,16 +253,19 @@ export function RouteGraph3D({ language }: { language: Language }) {
     <div
       aria-label={pick(
         language,
-        "Moss capability route 3D graph; drag to rotate and scroll to zoom",
-        "Moss 能力路径 3D 图；可拖动旋转与滚动缩放",
+        "Moss capability route 3D graph; drag to rotate",
+        "Moss 能力路径 3D 图；可拖动旋转",
       )}
       className="absolute inset-0 bg-[radial-gradient(circle_at_50%_48%,rgba(204,255,0,0.1),transparent_4px)]"
     >
       <div
         ref={containerRef}
-        onPointerDown={() => setInteracting(true)}
-        onWheel={() => setInteracting(true)}
-        className="absolute bottom-0 right-0 top-0 z-[2] w-full cursor-grab active:cursor-grabbing sm:w-[56%]"
+        onPointerDown={pauseOrbit}
+        onPointerUp={scheduleResume}
+        onPointerLeave={scheduleResume}
+        onPointerCancel={scheduleResume}
+
+        className="absolute inset-0 z-[1] w-full cursor-grab active:cursor-grabbing"
       >
         <ForceGraph3D
           ref={graphRef}
@@ -189,13 +280,10 @@ export function RouteGraph3D({ language }: { language: Language }) {
           linkOpacity={0.35}
           linkWidth={0.6}
           enableNodeDrag={false}
+          enableNavigationControls={true}
           warmupTicks={60}
           cooldownTicks={120}
         />
-      </div>
-      <div className="absolute bottom-4 left-4 z-[3] text-[8.5px] font-bold tracking-[0.08em] text-faint">
-        <i className="mr-1.5 inline-block h-1.5 w-1.5 rounded-full bg-accent shadow-[0_0_8px_#ccff00]" />
-        {pick(language, "MOSS CAPABILITY GRAPH · DRAG TO ROTATE", "MOSS 能力图谱 · 拖动旋转")}
       </div>
     </div>
   );
