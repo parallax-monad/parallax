@@ -1,0 +1,315 @@
+{
+  "discover": [
+    {
+      "protocol": "kuru",
+      "method": "quote",
+      "kind": "query",
+      "category": "dex",
+      "tags": ["clob", "quote"],
+      "summary": "Quote the best Kuru swap path"
+    },
+    {
+      "protocol": "kuru",
+      "method": "swap",
+      "kind": "capability",
+      "verb": "swap",
+      "category": "dex",
+      "tags": ["clob", "orderbook"],
+      "summary": "Swap tokens through the best current Kuru market path"
+    }
+  ],
+  "load": [
+    {
+      "protocol": "kuru",
+      "method": "quote",
+      "kind": "query",
+      "intent": "Quote the best Kuru swap path",
+      "category": "dex",
+      "risk": [],
+      "tags": ["clob", "quote"],
+      "params": {
+        "tokenIn": {
+          "type": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "description": "An EVM token address or the literal \"native\" for native MON.",
+            "anyOf": [
+              {
+                "description": "A 20-byte EVM address encoded as a 0x-prefixed hexadecimal string.",
+                "type": "string"
+              },
+              {
+                "type": "string",
+                "const": "native"
+              }
+            ]
+          },
+          "description": "Asset offered to the swap."
+        },
+        "tokenOut": {
+          "type": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "description": "An EVM token address or the literal \"native\" for native MON.",
+            "anyOf": [
+              {
+                "description": "A 20-byte EVM address encoded as a 0x-prefixed hexadecimal string.",
+                "type": "string"
+              },
+              {
+                "type": "string",
+                "const": "native"
+              }
+            ]
+          },
+          "description": "Asset requested from the swap."
+        },
+        "amountIn": {
+          "type": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "description": "An optional positive base-10 decimal amount in a token's display units, such as \"1\" or \"1.5\".",
+            "type": "string",
+            "pattern": "^(?:0|[1-9]\\d*)(?:\\.\\d+)?$"
+          },
+          "description": "Fixed input quantity; omit when amountOut is supplied."
+        },
+        "amountOut": {
+          "type": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "description": "An optional positive base-10 decimal amount in a token's display units, such as \"1\" or \"1.5\".",
+            "type": "string",
+            "pattern": "^(?:0|[1-9]\\d*)(?:\\.\\d+)?$"
+          },
+          "description": "Minimum output quantity; omit when amountIn is supplied."
+        },
+        "slippage": {
+          "type": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "default": 50,
+            "description": "An integer basis-point count from 50 through 5000; 1 bps equals 0.01%.",
+            "type": "integer",
+            "minimum": 50,
+            "maximum": 5000
+          },
+          "description": "Maximum adverse movement allowed between quoting and execution."
+        }
+      }
+    },
+    {
+      "protocol": "kuru",
+      "method": "swap",
+      "kind": "capability",
+      "intent": "Swap tokens through the best current Kuru market path",
+      "verb": "swap",
+      "category": "dex",
+      "risk": ["fundOut", "approval", "priceImpact"],
+      "tags": ["clob", "orderbook"],
+      "params": {
+        "tokenIn": {
+          "type": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "description": "An EVM token address or the literal \"native\" for native MON.",
+            "anyOf": [
+              {
+                "description": "A 20-byte EVM address encoded as a 0x-prefixed hexadecimal string.",
+                "type": "string"
+              },
+              {
+                "type": "string",
+                "const": "native"
+              }
+            ]
+          },
+          "description": "Asset offered to the swap."
+        },
+        "tokenOut": {
+          "type": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "description": "An EVM token address or the literal \"native\" for native MON.",
+            "anyOf": [
+              {
+                "description": "A 20-byte EVM address encoded as a 0x-prefixed hexadecimal string.",
+                "type": "string"
+              },
+              {
+                "type": "string",
+                "const": "native"
+              }
+            ]
+          },
+          "description": "Asset requested from the swap."
+        },
+        "amountIn": {
+          "type": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "description": "An optional positive base-10 decimal amount in a token's display units, such as \"1\" or \"1.5\".",
+            "type": "string",
+            "pattern": "^(?:0|[1-9]\\d*)(?:\\.\\d+)?$"
+          },
+          "description": "Fixed input quantity; omit when amountOut is supplied."
+        },
+        "amountOut": {
+          "type": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "description": "An optional positive base-10 decimal amount in a token's display units, such as \"1\" or \"1.5\".",
+            "type": "string",
+            "pattern": "^(?:0|[1-9]\\d*)(?:\\.\\d+)?$"
+          },
+          "description": "Minimum output quantity; omit when amountIn is supplied."
+        },
+        "slippage": {
+          "type": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "default": 50,
+            "description": "An integer basis-point count from 50 through 5000; 1 bps equals 0.01%.",
+            "type": "integer",
+            "minimum": 50,
+            "maximum": 5000
+          },
+          "description": "Maximum adverse movement allowed between quoting and execution."
+        }
+      }
+    }
+  ],
+  "quote": {
+    "kind": "query",
+    "protocol": "kuru",
+    "method": "quote",
+    "data": {
+      "amountSide": "amountIn",
+      "amountIn": "1",
+      "estimatedAmountOut": "47.4270808631",
+      "minimumAmountOut": "47.1899454587845",
+      "path": ["0x754704Bc059F8C67012fEd69BC8A327a5aafb603", "native"]
+    }
+  },
+  "action": {
+    "kind": "capability",
+    "protocol": "kuru",
+    "method": "swap",
+    "params": {
+      "tokenIn": "0x754704Bc059F8C67012fEd69BC8A327a5aafb603",
+      "tokenOut": "native",
+      "amountIn": "1",
+      "slippage": 50
+    },
+    "children": [
+      {
+        "kind": "capability",
+        "protocol": "erc20",
+        "method": "approve",
+        "params": {
+          "token": "0x754704Bc059F8C67012fEd69BC8A327a5aafb603",
+          "spender": "0xd651346d7c789536ebf06dc72aE3C8502cd695CC",
+          "amount": "1000000"
+        },
+        "children": [
+          {
+            "kind": "transaction",
+            "transaction": {
+              "from": "0xcccccccccccccccccccccccccccccccccccccccc",
+              "to": "0x754704Bc059F8C67012fEd69BC8A327a5aafb603",
+              "data": "0x095ea7b3000000000000000000000000d651346d7c789536ebf06dc72ae3c8502cd695cc00000000000000000000000000000000000000000000000000000000000f4240",
+              "value": "0x0"
+            }
+          }
+        ]
+      },
+      {
+        "kind": "transaction",
+        "transaction": {
+          "from": "0xcccccccccccccccccccccccccccccccccccccccc",
+          "to": "0xd651346d7c789536ebf06dc72aE3C8502cd695CC",
+          "data": "0xffa5210a00000000000000000000000000000000000000000000000000000000000000e000000000000000000000000000000000000000000000000000000000000001200000000000000000000000000000000000000000000000000000000000000160000000000000000000000000754704bc059f8c67012fed69bc8a327a5aafb603000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000f42400000000000000000000000000000000000000000000000028ec490d2d3d2d3e00000000000000000000000000000000000000000000000000000000000000001000000000000000000000000065c9d28e428a0db40191a54d33d5b7c71a9c3940000000000000000000000000000000000000000000000000000000000000001000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000000",
+          "value": "0x0"
+        }
+      }
+    ]
+  },
+  "simulation": {
+    "results": [
+      {
+        "protocol": "erc20",
+        "method": "approve",
+        "transaction": {
+          "from": "0xcccccccccccccccccccccccccccccccccccccccc",
+          "to": "0x754704Bc059F8C67012fEd69BC8A327a5aafb603",
+          "data": "0x095ea7b3000000000000000000000000d651346d7c789536ebf06dc72ae3c8502cd695cc00000000000000000000000000000000000000000000000000000000000f4240",
+          "value": "0x0"
+        },
+        "reverted": false,
+        "receipt": {
+          "kind": "receipt",
+          "outcome": {
+            "operation": "approve",
+            "token": "0x754704bc059f8c67012fed69bc8a327a5aafb603",
+            "owner": "0xCcCCccccCCCCcCCCCCCcCcCccCcCCCcCcccccccC",
+            "spender": "0xd651346d7c789536ebf06dc72aE3C8502cd695CC",
+            "amount": "1000000"
+          },
+          "text": "ERC20 Approval: 0xCcCCccccCCCCcCCCCCCcCcCccCcCCCcCcccccccC approved 0xd651346d7c789536ebf06dc72aE3C8502cd695CC for 1000000 0x754704bc059f8c67012fed69bc8a327a5aafb603",
+          "changes": [
+            {
+              "kind": "change",
+              "change": {
+                "kind": "event",
+                "address": "0x754704bc059f8c67012fed69bc8a327a5aafb603",
+                "topics": [
+                  "0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925",
+                  "0x000000000000000000000000cccccccccccccccccccccccccccccccccccccccc",
+                  "0x000000000000000000000000d651346d7c789536ebf06dc72ae3c8502cd695cc"
+                ],
+                "data": "0x00000000000000000000000000000000000000000000000000000000000f4240"
+              },
+              "data": {
+                "operation": "approve",
+                "token": "0x754704bc059f8c67012fed69bc8a327a5aafb603",
+                "owner": "0xCcCCccccCCCCcCCCCCCcCcCccCcCCCcCcccccccC",
+                "spender": "0xd651346d7c789536ebf06dc72aE3C8502cd695CC",
+                "amount": "1000000"
+              },
+              "text": "ERC20 Approval: 0xCcCCccccCCCCcCCCCCCcCcCccCcCCCcCcccccccC approved 0xd651346d7c789536ebf06dc72aE3C8502cd695CC for 1000000 0x754704bc059f8c67012fed69bc8a327a5aafb603"
+            }
+          ],
+          "protocol": "erc20"
+        },
+        "changes": [
+          {
+            "kind": "event",
+            "address": "0x754704bc059f8c67012fed69bc8a327a5aafb603",
+            "topics": [
+              "0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925",
+              "0x000000000000000000000000cccccccccccccccccccccccccccccccccccccccc",
+              "0x000000000000000000000000d651346d7c789536ebf06dc72ae3c8502cd695cc"
+            ],
+            "data": "0x00000000000000000000000000000000000000000000000000000000000f4240"
+          }
+        ],
+        "warnings": [],
+        "gas": "87844"
+      },
+      {
+        "protocol": "kuru",
+        "method": "swap",
+        "transaction": {
+          "from": "0xcccccccccccccccccccccccccccccccccccccccc",
+          "to": "0xd651346d7c789536ebf06dc72aE3C8502cd695CC",
+          "data": "0xffa5210a00000000000000000000000000000000000000000000000000000000000000e000000000000000000000000000000000000000000000000000000000000001200000000000000000000000000000000000000000000000000000000000000160000000000000000000000000754704bc059f8c67012fed69bc8a327a5aafb603000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000f42400000000000000000000000000000000000000000000000028ec490d2d3d2d3e00000000000000000000000000000000000000000000000000000000000000001000000000000000000000000065c9d28e428a0db40191a54d33d5b7c71a9c3940000000000000000000000000000000000000000000000000000000000000001000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000000",
+          "value": "0x0"
+        },
+        "reverted": true,
+        "revertReason": "execution reverted",
+        "warnings": [
+          {
+            "code": "REVERTED",
+            "message": "transaction reverted: execution reverted"
+          }
+        ],
+        "gas": null
+      }
+    ],
+    "halted": {
+      "transactionIndex": 1,
+      "reason": "execution reverted"
+    }
+  },
+  "errors": {}
+}
