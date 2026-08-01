@@ -241,15 +241,27 @@ A verified acceptance-boundary action may appear in `irrelevantActions` only as 
 
 P0 v0.1 uses one canonical Action Recommendation Gate model for public transaction adjustments:
 
-1. The current failing evaluation is the **baseline Run**. It retains the original normalized Intent and Economic Boundary.
+1. The current failing evaluation is the **baseline Run**. It retains the original normalized Intent and Economic Boundary. Until every verification child Run spawned for a public Action candidate reaches a terminal state, this baseline remains an internal, non-final evaluation and is not exposed as a public Completed or Integration Error Receipt.
 2. A proposed transaction adjustment creates a distinct **verification child Run** with `parentRunId = baselineRun.runId`. Its normalized Intent equals the baseline Intent except for the exact proposed change recorded in `diff`.
 3. The verification child Run evaluates the unchanged original Economic Boundary. A user acceptance-boundary change is not a valid substitute for verification.
-4. A verified child Run produces a derived `ActionGateAttestation` in the baseline Run's canonical Evidence collection. The attestation links `baselineRunId`, `verificationRunId`, the baseline normalized Intent snapshot, the exact proposed Intent change, the unchanged Boundary identity/value/source, the required child Rule Results, the resolving child Evidence, and the verified result.
-5. The public Action in the baseline Run points to that local attestation through an `EvidenceRef`. Any references from the attestation to Evidence in the verification child Run are nested provenance links, not public same-Run EvidenceRefs.
+4. A verified child Run produces a derived `ActionGateAttestation` in the baseline Run's canonical Evidence collection. The attestation links `baselineRunId`, `verificationRunId`, the baseline normalized Intent snapshot, the exact proposed Intent change, the unchanged Boundary identity/value/source, dedicated cross-Run locators for the required child Rule Results, dedicated cross-Run locators for the resolving child Evidence, and the verified result. It never embeds a complete child `RuleResult` or copies child Evidence into the baseline Run.
+5. The public Action in the baseline Run points to that local attestation through an `EvidenceRef`. Any references from the attestation to the verification child Run are nested cross-Run provenance links, not public same-Run `EvidenceRef` values.
 
 The minimum semantic shape of the derived attestation is:
 
 ```text
+CrossRunRuleResultRef = {
+  kind: "CROSS_RUN_RULE_RESULT";
+  runId: string;
+  ruleId: P0RuleId;
+}
+
+CrossRunEvidenceRef = {
+  kind: "CROSS_RUN_EVIDENCE";
+  runId: string;
+  evidenceId: string;
+}
+
 ActionGateAttestation = {
   kind: "ACTION_GATE";
   baselineRunId: string;
@@ -262,17 +274,19 @@ ActionGateAttestation = {
   };
   proposedIntentChange: exact normalized Intent diff;
   originalBoundary: identity/value/source snapshot;
-  requiredChildRuleResults: RuleResult[];
-  verificationEvidenceRefs: cross-Run { runId, evidenceId } references;
+  requiredChildRuleResultRefs: CrossRunRuleResultRef[];
+  verificationEvidenceRefs: CrossRunEvidenceRef[];
   result: "VERIFIED";
 }
 ```
 
-`baselineRunId` must equal the Run that contains the attestation. `verificationRunId` must identify a child Run whose `parentRunId` equals `baselineRunId`. The child normalized Intent must equal the baseline snapshot after applying the complete proposed diff; `recipient` and `recipientSource` must not be silently re-resolved, and any `tokenOut` change must be explicit through a token-pair diff. The attestation is the only P0 v0.1 bridge between the two Runs for a public Action.
+`baselineRunId` must equal the Run that contains the attestation. `verificationRunId` must identify a child Run whose `parentRunId` equals `baselineRunId`. Every `CrossRunRuleResultRef` and `CrossRunEvidenceRef` in the attestation must resolve to that verification child Run's immutable Receipt; the child Rule Result's own `EvidenceRef[]` remain child-scoped and are never resolved against the baseline Run. These locators are not `ActionSupportRef` values, must not appear in a public Action, and must not be flattened into a second baseline Evidence or Rule Result source. The child normalized Intent must equal the baseline snapshot after applying the complete proposed diff; `recipient` and `recipientSource` must not be silently re-resolved, and any `tokenOut` change must be explicit through a token-pair diff. The attestation is the only P0 v0.1 bridge between the two Runs for a public Action.
 
 For the P0 path that can produce `ADJUST` from `P0-ECONOMIC-001 = FAIL`, the child Run must be `status = completed`, `systemStatus = OK`, have `P0-EVIDENCE-001 = PASS` when that Rule is required by the path, have `P0-EXECUTION-001 = PASS`, have `P0-ECONOMIC-001 = PASS` against the unchanged original Boundary, have no `unknown` Scope Item, and provide child Evidence that resolves the simulated received `tokenOut` for the normalized recipient plus the target-specific effect claimed by the Action. A child Rule Result or Evidence that is missing, unresolved, mock-only, or inconsistent with the exact diff makes the attestation ineligible for `result = VERIFIED`.
 
 Only a `VERIFIED` ActionGateAttestation can make a transaction Action `recommendable = true`. A verification Run that is incomplete, mismatched, ends with an Integration Error, changes the Boundary, or fails to verify the claimed effect leaves the candidate internal. P0 v0.1 does not treat an unrecorded "equivalent Evidence" or an in-place alternative evaluation as sufficient for a public transaction Action.
+
+Every `completed` or `integration_error` Run exposed through the public envelope is an immutable Receipt. A verification child Run must reach `status = completed` or `status = integration_error` before the baseline can be finalized. If any spawned child Run is still pending, the baseline remains internal and exposes neither a public Verdict nor public Action lists. Once all spawned child Runs terminate, the baseline Receipt is finalized and exposed atomically with its final Verdict and any verified `ActionGateAttestation`; the same `runId` cannot later change from `STOP` to `ADJUST`, append a new attestation, or otherwise be mutated. A failed, incomplete, mismatched, or Integration Error child Run therefore finalizes the baseline without a public transaction adjustment, and a new user Intent requires a new Run.
 
 A `SYSTEM_RECOVERY` Action only helps complete or restore the check:
 
@@ -385,6 +399,8 @@ The public Run envelope preserves a single set of audit fields across Completed 
 - `createdAt`, Rule Version, and the applicable Moss Runtime Version or Revision.
 
 The later Shared Contract implementation freezes the public field names and technically equivalent wire encodings, but it must preserve these semantics.
+
+The public Run envelope is a finalized Receipt, not a mutable progress record. A baseline evaluation with pending verification child Runs is an internal non-final state and must not be serialized as either the `completed` or `integration_error` branch. Finalization waits until every spawned verification child Run reaches a terminal branch; the baseline's public Verdict, canonical Evidence, Scope Disclosure, Rule Results, and Action lists are then exposed atomically and remain immutable for that `runId`.
 
 The Run envelope begins only after the untrusted request has passed API validation and a normalized Intent exists. Invalid user input or failed Intent normalization is an API validation result, not an `integration_error` Run. An Integration Error at the `normalization` stage refers to downstream integration or Evidence normalization after the Run has begun.
 
@@ -693,11 +709,7 @@ The Gate allows `STOP` only within the verified scope. One Fixture must not glob
 
 Goal: Verify that changing the Protocol or Token Pair can produce a new executable path instead of being merely plausible in principle.
 
-Minimum requirements:
-
-- an alternative Protocol or Token Pair; or
-- a rerun after the change; and
-- a new result demonstrating an actionable relationship between the recommendation and `NO_ROUTE_FOUND`.
+For P0 v0.1, this Gate is satisfied only by the canonical lifecycle in Section 3.3.1: a concrete proposed Protocol or Token Pair change is recorded in the normalized Intent `diff`, a distinct verification child Run reaches a terminal state, and a verified `ActionGateAttestation` binds that exact change to the unchanged original Boundary and the child result. A Protocol or Token Pair alternative by itself, or an in-place evaluation that is not a verification child Receipt, is not sufficient evidence.
 
 If the Classification Gate passes but the Action Recommendation Gate does not, the system may return a scope-limited `STOP` but must not recommend a specific unverified transaction adjustment.
 
@@ -1221,6 +1233,7 @@ Given:
   the child Run changes exactly the proposed Intent fields
   the child Run evaluates the unchanged original Economic Boundary
   the child Run verifies the claimed effect
+  every cross-Run Rule Result and Evidence locator resolves to the verification child Receipt
   a VERIFIED ActionGateAttestation is stored in the baseline Run's canonical Evidence collection
 
 Expect:
@@ -1228,7 +1241,45 @@ Expect:
   the public Action identifies the concrete proposed change
   the Action EvidenceRef resolves to the baseline Run's ActionGateAttestation
   the attestation links the baseline Run, verification child Run, exact change, unchanged Boundary, and verified result
-  nested child-Run provenance is not used as a public same-Run EvidenceRef
+  nested child-Run provenance uses dedicated cross-Run locators and is not used as a public same-Run EvidenceRef
+```
+
+### TV-ACTION-006: Cross-Run Locators Preserve Child Receipt Ownership
+
+```text
+Given:
+  the baseline Run contains a public Action whose EvidenceRef resolves to its local ActionGateAttestation
+  the attestation contains CrossRunRuleResultRef and CrossRunEvidenceRef values for verificationRunId
+  the verification child Receipt contains the referenced Rule Results and Evidence
+
+Expect:
+  each CrossRunRuleResultRef resolves only against the verification child Receipt
+  each Rule Result's EvidenceRef resolves only within that same child Receipt
+  CrossRunEvidenceRef values remain nested provenance and are not valid public ActionSupportRef values
+  no complete child RuleResult is embedded in the baseline attestation
+  copying or rewriting child Rule Results or Evidence into the baseline Run is rejected
+```
+
+### TV-ENVELOPE-004: Baseline Finalization Waits for Terminal Child Runs
+
+```text
+Given:
+  the baseline Run has a failing evaluation and a verification child Run is still pending
+
+Expect:
+  the baseline remains an internal, non-final evaluation
+  no public Completed or Integration Error Receipt is exposed
+  no public Verdict or transaction Action list is exposed
+
+Given:
+  every verification child Run spawned for the baseline has reached Completed or Integration Error
+  one child has produced a valid VERIFIED ActionGateAttestation
+
+Expect:
+  the baseline Receipt is exposed atomically with its final Verdict and canonical Evidence
+  the public transaction Action resolves to the baseline attestation
+  the completed baseline Receipt and child Receipts are immutable
+  a later change from STOP to ADJUST for the same baseline runId is rejected
 ```
 
 ### TV-ENVELOPE-001: Failed Re-run Preserves Intent Diff
@@ -1315,7 +1366,7 @@ The semantic requirements in Sections 1 through 8 are normative for P0 v0.1. The
 - [ ] Implement the mutually exclusive Completed and Integration Error Run envelope, including the single canonical public Verdict, partial Rule Results, Scope, optional Route Evidence, Boundary context, branch-specific Action constraints, metadata, and Re-run Diff preservation.
 - [ ] Include Protocol, Slippage when supported, and the other P0 transaction conditions in normalized Intent and Re-run Diff; implement the PRD `Route / Protocol` adjustment through the P0 `protocol` target and do not expose Moss Route Evidence as a user-editable Action target.
 - [ ] Materialize omitted `recipient` as `sender` during P0 normalization, preserve `recipientSource`, and reject adapter paths that require a different implicit recipient unless the user supplies it explicitly.
-- [ ] Implement the baseline-Run `ActionGateAttestation` and verification-child-Run lifecycle, including exact Intent diff, unchanged Boundary binding, nested cross-Run provenance, and same-Run public EvidenceRef resolution.
+- [ ] Implement the baseline-Run `ActionGateAttestation` and verification-child-Run lifecycle, including exact Intent diff, unchanged Boundary binding, dedicated cross-Run Rule Result and Evidence locators, terminal-child-before-baseline finalization, immutable Receipts, and same-Run public EvidenceRef resolution.
 - [ ] Keep Economic Boundary context separate from `P0-ECONOMIC-001` Rule Status.
 - [ ] Implement deterministic internal Integration Status to public `status`, `systemStatus`, `verdict`, and structured `error` mapping, including closed versioned `error.code` and `error.stage` enumerations.
 - [ ] Implement `P0-ECONOMIC-001 / OUTPUT_MEETS_BOUNDARY` and convert TV-ECO-001 through TV-ECO-006 into Contract and policy tests.
@@ -1331,7 +1382,7 @@ The semantic requirements in Sections 1 through 8 are normative for P0 v0.1. The
 - [ ] Obtain a sanitized real `NO_ROUTE` raw Moss output, normalized Evidence, Runtime Revision, and Fixture metadata.
 - [ ] Verify the exact scope of the `NO_ROUTE` Classification Gate.
 - [ ] Re-evaluate Slippage relevance using a real `NO_ROUTE` Fixture scoped to Protocol, Runtime Revision, stage, and raw-error mapping.
-- [ ] Validate the Action Recommendation Gate with a concrete alternative Protocol, Token Pair, Amount, Slippage change, or other reviewed rerun.
+- [ ] Validate the Action Recommendation Gate with a concrete Intent diff executed by a terminal verification child Run and a verified baseline-Run `ActionGateAttestation`; the alternative Protocol, Token Pair, Amount, or Slippage value is not sufficient without that lifecycle.
 - [ ] Convert all reviewed vectors into automated Shared Contract, Risk Engine, aggregation, and API serializer tests.
 - [ ] Implement the concrete Evidence Requirements declared by each active P0 Rule without introducing a free-form global critical-key list.
 - [ ] Implement and test Warning normalization against the frozen P0 rule boundary: unclassified Warnings produce `UNKNOWN`, and verified Warnings may only support an independently established legal Rule tuple. A complete future Warning taxonomy remains follow-up work.
