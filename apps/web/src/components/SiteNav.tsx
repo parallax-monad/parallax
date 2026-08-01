@@ -1,9 +1,5 @@
 import { useEffect } from "react";
-import {
-  LANGUAGE_STORAGE_KEY,
-  pick,
-  type Language,
-} from "@/lib/i18n";
+import { LANGUAGE_STORAGE_KEY, type Language, pick } from "@/lib/i18n";
 
 export function SiteNav({
   active,
@@ -32,8 +28,16 @@ export function SiteNav({
       </a>
       <div className="ml-auto flex items-center gap-4 sm:gap-[30px]">
         <div className="hidden items-center gap-[30px] sm:flex">
-          <NavLink href="#/" label={pick(language, "Risk graph", "风险图谱")} current={active === "home"} />
-          <NavLink href="#/analyze" label={pick(language, "Analyze", "分析")} current={active === "analyze"} />
+          <NavLink
+            href="#/"
+            label={pick(language, "Risk graph", "风险图谱")}
+            current={active === "home"}
+          />
+          <NavLink
+            href="#/analyze"
+            label={pick(language, "Analyze", "分析")}
+            current={active === "analyze"}
+          />
         </div>
         <div
           className="flex items-center border-l border-line-strong pl-4 sm:pl-[30px]"

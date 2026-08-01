@@ -1,8 +1,8 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import ForceGraph3D, { type ForceGraphMethods } from "react-force-graph-3d";
+import * as THREE from "three";
 import type { Language } from "@/lib/i18n";
 import { pick } from "@/lib/i18n";
-import ForceGraph3D from "react-force-graph-3d";
-import * as THREE from "three";
 
 type Graph3DNode = {
   id: string;
@@ -62,7 +62,11 @@ function createLabelSprite(text: string, color: string) {
   const texture = new THREE.CanvasTexture(canvas);
   texture.anisotropy = 4;
   const sprite = new THREE.Sprite(
-    new THREE.SpriteMaterial({ map: texture, transparent: true, depthWrite: false }),
+    new THREE.SpriteMaterial({
+      map: texture,
+      transparent: true,
+      depthWrite: false,
+    }),
   );
   sprite.scale.set(width / 5, height / 5, 1);
   sprite.position.set(0, 11, 0);
@@ -127,9 +131,9 @@ function createParticleSystem() {
 }
 
 export function RouteGraph3D({ language }: { language: Language }) {
-  const graphRef = useRef<ForceGraph3D<Graph3DNode, Graph3DLink> | undefined>(
-    undefined,
-  );
+  const graphRef = useRef<
+    ForceGraphMethods<Graph3DNode, Graph3DLink> | undefined
+  >(undefined);
   const containerRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ width: 1, height: 1 });
   const [interacting, setInteracting] = useState(false);
@@ -144,7 +148,10 @@ export function RouteGraph3D({ language }: { language: Language }) {
   // Hand the camera back to the ambient orbit once the user settles.
   const scheduleResume = () => {
     window.clearTimeout(resumeTimerRef.current);
-    resumeTimerRef.current = window.setTimeout(() => setInteracting(false), 1500);
+    resumeTimerRef.current = window.setTimeout(
+      () => setInteracting(false),
+      1500,
+    );
   };
 
   useEffect(() => () => window.clearTimeout(resumeTimerRef.current), []);
@@ -217,7 +224,10 @@ export function RouteGraph3D({ language }: { language: Language }) {
 
   useEffect(() => {
     if (size.width <= 1 || size.height <= 1) return;
-    const timer = window.setTimeout(() => graphRef.current?.zoomToFit(600, 90), 400);
+    const timer = window.setTimeout(
+      () => graphRef.current?.zoomToFit(600, 90),
+      400,
+    );
     return () => window.clearTimeout(timer);
   }, [size]);
 
@@ -228,8 +238,8 @@ export function RouteGraph3D({ language }: { language: Language }) {
 
     // Resume from where the user left the camera so the orbit does not snap.
     const camera = graphRef.current?.camera();
-    if (camera) angleRef.current = Math.atan2(camera.position.x, camera.position.z);
-
+    if (camera)
+      angleRef.current = Math.atan2(camera.position.x, camera.position.z);
 
     const orbit = () => {
       const graph = graphRef.current;
@@ -264,7 +274,6 @@ export function RouteGraph3D({ language }: { language: Language }) {
         onPointerUp={scheduleResume}
         onPointerLeave={scheduleResume}
         onPointerCancel={scheduleResume}
-
         className="absolute inset-0 z-[1] w-full cursor-grab active:cursor-grabbing"
       >
         <ForceGraph3D

@@ -1,20 +1,61 @@
 import { useEffect, useRef, useState } from "react";
-import { SiteNav } from "@/components/SiteNav";
-import { localizeText, getInitialLanguage, pick, type Language } from "@/lib/i18n";
 import { RouteGraph } from "@/components/RouteGraph";
+import { SiteNav } from "@/components/SiteNav";
+import {
+  getInitialLanguage,
+  type Language,
+  localizeText,
+  pick,
+} from "@/lib/i18n";
 
 const DIMENSIONS = [
-  ["Cause", "发生了什么", "Moss 完成 quote、action 与 simulation，呈现这笔交易的真实执行结果。"],
-  ["Evidence", "证据是什么", "每个结论都追溯到归一化后的执行证据，并标注来源、区块与 Replay。"],
-  ["Adjust", "可以改什么", "给出与真实原因相关的调整：Route、Token Pair、Amount 或 Slippage。"],
-  ["Irrelevant", "改了也无效", "与当前原因无关的修改会被标为无效，避免反复无效重试。"],
+  [
+    "Cause",
+    "发生了什么",
+    "Moss 完成 quote、action 与 simulation，呈现这笔交易的真实执行结果。",
+  ],
+  [
+    "Evidence",
+    "证据是什么",
+    "每个结论都追溯到归一化后的执行证据，并标注来源、区块与 Replay。",
+  ],
+  [
+    "Adjust",
+    "可以改什么",
+    "给出与真实原因相关的调整：Route、Token Pair、Amount 或 Slippage。",
+  ],
+  [
+    "Irrelevant",
+    "改了也无效",
+    "与当前原因无关的修改会被标为无效，避免反复无效重试。",
+  ],
 ];
 
 const SCALE = [
-  ["PROCEED", "low", "未发现阻断证据", "在本次已检查范围内未发现阻断证据，这不代表交易绝对安全。"],
-  ["ADJUST", "moderate", "修改一个条件", "需要修改一个交易条件，之后可以重新检查。"],
-  ["STOP", "high", "不应继续", "当前路径无法执行，请更换 Route／Token Pair 或停止。"],
-  ["UNKNOWN", "elevated", "证据不足", "证据不足以作出可信结论；Unknown 不会被自动放行。"],
+  [
+    "PROCEED",
+    "low",
+    "未发现阻断证据",
+    "在本次已检查范围内未发现阻断证据，这不代表交易绝对安全。",
+  ],
+  [
+    "ADJUST",
+    "moderate",
+    "修改一个条件",
+    "需要修改一个交易条件，之后可以重新检查。",
+  ],
+  [
+    "STOP",
+    "high",
+    "不应继续",
+    "当前路径无法执行，请更换 Route／Token Pair 或停止。",
+  ],
+  [
+    "UNKNOWN",
+    "elevated",
+    "证据不足",
+    "证据不足以作出可信结论；Unknown 不会被自动放行。",
+  ],
 ];
 
 const SCALE_COLOR: Record<string, string> = {
@@ -46,14 +87,18 @@ export default function App() {
 
   return (
     <div className="min-h-[calc(100vh-65px)]">
-      <SiteNav active={route} language={language} onLanguageChange={setLanguage} />
+      <SiteNav
+        active={route}
+        language={language}
+        onLanguageChange={setLanguage}
+      />
       <Home language={language} />
     </div>
   );
 }
 
 function useScrollReveal(
-  heroRef: React.RefObject<HTMLElement>,
+  heroRef: React.RefObject<HTMLDivElement>,
   shadeRef: React.RefObject<HTMLDivElement>,
   revealRef: React.RefObject<HTMLDivElement>,
 ) {
@@ -63,7 +108,9 @@ function useScrollReveal(
     const reveal = revealRef.current;
     if (!hero || !shade || !reveal) return;
 
-    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const reduceMotion = window.matchMedia(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
 
     // Measured on resize only, so the animation loop never reads layout.
     let heroTop = 0;
@@ -125,7 +172,7 @@ function useScrollReveal(
 
 function Home({ language }: { language: Language }) {
   const glowRef = useRef<HTMLDivElement>(null);
-  const heroRef = useRef<HTMLElement>(null);
+  const heroRef = useRef<HTMLDivElement>(null);
   const shadeRef = useRef<HTMLDivElement>(null);
   const revealRef = useRef<HTMLDivElement>(null);
   useScrollReveal(heroRef, shadeRef, revealRef);
@@ -246,7 +293,9 @@ function Home({ language }: { language: Language }) {
               <span className="text-[9px] font-extrabold uppercase tracking-[0.1em] text-accent">
                 {key}
               </span>
-              <h3 className="mb-2 mt-5 text-[15px]">{localizeText(title, language)}</h3>
+              <h3 className="mb-2 mt-5 text-[15px]">
+                {localizeText(title, language)}
+              </h3>
               <p className="m-0 min-h-[53px] text-[11px] text-dim">
                 {localizeText(body, language)}
               </p>
@@ -309,7 +358,8 @@ function Home({ language }: { language: Language }) {
       </section>
 
       <footer className="pt-6 text-[9px] font-semibold tracking-[0.04em] text-faint">
-        Parallax · Pre-sign decision layer · Explanation and adjustment only; not investment advice.
+        Parallax · Pre-sign decision layer · Explanation and adjustment only;
+        not investment advice.
       </footer>
     </main>
   );
