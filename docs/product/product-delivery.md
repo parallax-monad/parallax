@@ -143,6 +143,23 @@ An Acceptance Boundary change is not a transaction improvement and must not be u
 
 `PROCEED` means only that no blocking Evidence was found within the checked scope. It is not authorization and does not claim safety.
 
+### CTA vocabulary and destination mapping
+
+The following are Product/UI CTA values, not transaction Actions or `SYSTEM_RECOVERY` Action evaluations. A recovery CTA may carry a `recoveryActionId` that resolves to a separate canonical recovery Action; navigation CTAs never enter any Action list.
+
+| User-facing copy | CTA kind | Destination rule |
+| --- | --- | --- |
+| **Retry check** | `RETRY_CHECK` | Resolves to one applicable `recoveryActions` entry and is allowed only when retry is applicable. |
+| **View evidence gaps** | `VIEW_MISSING_EVIDENCE` | Resolves to one applicable recovery entry and is allowed only when the projected evidence-gap destination is non-empty. |
+| **Use recorded replay** | `USE_REPLAY` | Resolves to one same-Run replay fallback recovery entry. |
+| **View details** | `VIEW_DETAILS` | Opens the details target; it never applies or recommends a transaction change. |
+| **Review blocking evidence** | `REVIEW_BLOCKING_EVIDENCE` | Opens the blocking Scope/Evidence view for `STOP`. |
+| **Review checked scope** | `REVIEW_CHECKED_SCOPE` | Opens the canonical Scope/Evidence view without changing the Verdict. |
+| **Return to transaction** | `RETURN_TO_TRANSACTION` | Uses normalized `origin`; it does not authorize, sign, or broadcast. |
+| **Apply verified transaction Action** | `APPLY_TRANSACTION_ACTION` | Exists only as the `ADJUST` primary CTA and resolves to its selected public transaction Action. |
+
+`View evidence gaps`, `Review checked scope`, and `Review blocking evidence` are distinct copy/target pairs even when they open related panels. The adapter must not substitute one destination for another based on display text.
+
 ## 5. Reason-code-to-copy mapping
 
 Reason codes are stable machine inputs to product copy. The UI maps codes to approved text; it must not parse natural-language messages to derive Rule status, Action applicability, or Verdict.
@@ -299,7 +316,7 @@ A required check that did not successfully run is `unknown`, not `not_checked`. 
 
 Every Scope item uses a stable subject: a P0 Rule ID or one of `P0-CHECK-ACTION-001`, `P0-CHECK-SIMULATION-001`, and `P0-CHECK-SIMULATION-COVERAGE-001`. Rule-bound Scope must agree mechanically with its Rule Result. Rule-bound unknown items use a Rule-specific `ruleReasonCode` plus a closed Scope `scopeReasonCode`; they never reuse a generic `P0ReasonCode` as a Scope reason. The independent Check IDs must never be serialized as Rule Results.
 
-Expanded Scope uses a stable adapter order: Unknown first, then checked Rule `FAIL`, then other checked items, then not checked. It must not silently cap or truncate items; if pagination or collapsing is needed, the UI exposes an explicit **Show all scope items** control and uses a documented default expand/collapse state.
+Expanded Scope uses a stable adapter order: Unknown first, then checked Rule `FAIL`, then other checked items, then not checked. The initial and reset state is fully expanded with all items visible; a surface may persist a user-selected collapse only after rendering all items once, must keep Unknown and checked `FAIL` rows expanded by default, and must expose an explicit **Show all scope items** control whenever any rows are collapsed. No item may be silently capped or truncated.
 
 The UI may say **No trusted warnings were recorded in this Run** only when Warning Evidence has an explicit trusted source and is reproducible. It must not say “no warnings” based on absent, unknown-source, mock, or non-reproducible data.
 
@@ -358,9 +375,13 @@ Every finalized result or preview has one mandatory mode label near its main tit
 | Demo | **Demo preset** | **This result uses an explicitly labeled Demo/Replay preset. It is not a user-declared boundary or current Live Evidence.** | May exercise a product state for demonstration only; it cannot be presented as current Live Evidence. |
 | Mock | **Mock rule preview** | **This preview uses synthetic test input to validate code or UI behavior. It is not a real transaction result.** | Cannot activate a real user Verdict, public transaction recommendation, or real Evidence claim. |
 
+`MockRulePreviewView.kind = "MOCK_RULE_PREVIEW"` is the only Mock Preview discriminator. Mock Preview is not a `ProductRunMode`, must not be labeled `LIVE`, `RECORDED_REPLAY`, or `DEMO`, and its Evidence and Scope provenance use `authority = "MOCK"`, `mode = "MOCK_PREVIEW"`, and `previewId`. It cannot be serialized as a finalized user Run, and it has no public transaction or recovery Action surface.
+
 Replay preserves the original Evidence source, stage, block/runtime context, Fixture identity, and recorded/live distinction. A Run-level `ReplayFallbackDescriptor` must identify its fallback mode and source. Relabeling recorded Evidence as replay must not change underlying provenance. An Integration Error uses the same `ProductRunMode` as the underlying finalized Run because loading, parsing, or reproducing a Recorded Replay/Demo can also fail; `LIVE` therefore means a Live integration failure, while `RECORDED_REPLAY` and `DEMO` retain their explicit non-Live labels. The proposal does not invent a second replay-error state.
 
 Demo presets must remain visually and semantically separate from user results. `demo_preset` may never appear as `original_swap` or `user_declared`. Mock Evidence is never core Verdict Evidence.
+
+`PendingProductView` is deliberately not a partial Receipt: it has no Verdict, Rule Results, Scope Disclosure, Evidence collection, Action list, or Replay fallback. Product/UI must not stream partial Scope or Evidence into a finalized state, and a progress indicator must not be treated as a provisional Verdict. An adapter may fetch or evaluate incrementally internally, but it exposes only the terminal Completed or Integration Error projection once the Run is finalized.
 
 ## 10. Minimum Received
 
@@ -553,13 +574,13 @@ interface RunProvenanceView {
   runtimeRevision?: string;
 }
 
-interface EvidenceSummaryView {
+interface RealEvidenceSummaryView {
   evidenceId: string;
   label: string;
-  source: EvidenceSource;
+  source: Exclude<EvidenceSource, "mock">;
   stage: EvidenceStage;
   reproducible: "yes" | "no" | "unknown";
-  authority: "CORE" | "SUPPLEMENTARY" | "MOCK";
+  authority: "CORE" | "SUPPLEMENTARY";
   runId: string;
   mode: ProductRunMode;
   fixtureId?: string;
@@ -568,6 +589,21 @@ interface EvidenceSummaryView {
   runtimeRevision?: string;
   summary: string;
 }
+
+interface MockEvidenceSummaryView {
+  evidenceId: string;
+  label: string;
+  source: "mock";
+  stage: EvidenceStage;
+  reproducible: "yes" | "no" | "unknown";
+  authority: "MOCK";
+  previewId: string;
+  mode: MockPreviewMode;
+  fixtureId?: string;
+  summary: string;
+}
+
+type EvidenceSummaryView = RealEvidenceSummaryView | MockEvidenceSummaryView;
 
 type EvidenceRuleResultView =
   | {
@@ -654,11 +690,23 @@ interface IntentChangeView {
   after: string;
 }
 
+type TransactionAdjustmentChangeView = {
+  field: "amountIn" | "tokenPair" | "protocol" | "slippage";
+  before?: string;
+  after: string;
+};
+
+type AcceptanceBoundaryChangeView = {
+  field: "minimumReceived";
+  before?: string;
+  after: string;
+};
+
 interface VerifiedActionGateView {
   attestationEvidenceId: string;
   baselineRunId: string;
   verificationRunId: string;
-  exactIntentDiff: IntentChangeView[];
+  exactIntentDiff: TransactionAdjustmentChangeView[];
   originalBoundary: MinimumReceivedView;
   result: "VERIFIED";
 }
@@ -669,22 +717,31 @@ type ProductActionSupportRef =
   | { kind: "SCOPE_REF"; runId: string; subjectId: P0ScopeSubjectId }
   | { kind: "REPLAY_FALLBACK"; runId: string; fallbackId: string };
 
+type NonEmpty<T> = [T, ...T[]];
+type ActionGateEvidenceRef = Extract<ProductActionSupportRef, { kind: "EVIDENCE_REF" }>;
+type TransactionActionSupportRefs = [ActionGateEvidenceRef, ...ProductActionSupportRef[]];
+type RecoverySupportRef = Extract<ProductActionSupportRef, { kind: "EVIDENCE_REF" | "ERROR_REF" | "SCOPE_REF" }>;
+type RecoverySupportRefs = NonEmpty<RecoverySupportRef>;
+type ReplaySupportRef = Extract<ProductActionSupportRef, { kind: "REPLAY_FALLBACK" }>;
+type ReplaySupportRefs = NonEmpty<ReplaySupportRef>;
+
 interface ProductActionBaseView {
   actionId: string;
   copyKey: ProductCopyKey;
   actionReasonCode: P0ActionReasonCode;
-  supportRefs: ProductActionSupportRef[];
+  supportRefs: NonEmpty<ProductActionSupportRef>;
   addressesRuleId?: P0RuleId;
-  changes: IntentChangeView[];
 }
 
 interface TransactionAdjustmentView extends ProductActionBaseView {
   category: "TRANSACTION_ADJUSTMENT";
+  changes: NonEmpty<TransactionAdjustmentChangeView>;
+  supportRefs: TransactionActionSupportRefs;
 }
 
-interface AcceptanceBoundaryChangeView extends ProductActionBaseView {
+interface AcceptanceBoundaryChangeActionView extends ProductActionBaseView {
   category: "ACCEPTANCE_BOUNDARY_CHANGE";
-  changes: [IntentChangeView & { field: "minimumReceived" }];
+  changes: [AcceptanceBoundaryChangeView];
 }
 
 type RecommendedActionView = TransactionAdjustmentView & {
@@ -699,7 +756,7 @@ type IrrelevantActionView =
       applicability: "IRRELEVANT";
       actionReasonCode: "CANNOT_CREATE_MISSING_ROUTE";
     })
-  | (AcceptanceBoundaryChangeView & {
+  | (AcceptanceBoundaryChangeActionView & {
       applicability: "IRRELEVANT";
       actionReasonCode: "CHANGES_ACCEPTANCE_BOUNDARY_ONLY";
     });
@@ -721,33 +778,51 @@ type RecoveryActionView =
       kind: "RETRY_CHECK" | "VIEW_MISSING_EVIDENCE";
       copyKey: ProductCopyKey;
       actionReasonCode: "RESTORES_CHECK_ONLY";
-      supportRefs: ProductActionSupportRef[];
+      supportRefs: RecoverySupportRefs;
     }
   | {
       actionId: string;
       kind: "USE_REPLAY";
       copyKey: ProductCopyKey;
       actionReasonCode: "RESTORES_CHECK_ONLY";
-      supportRefs: Array<Extract<ProductActionSupportRef, { kind: "REPLAY_FALLBACK" }>>;
+      supportRefs: ReplaySupportRefs;
       fallbackId: string;
     };
 
-interface ScopeItemCommonView {
+type MockPreviewMode = "MOCK_PREVIEW";
+
+type RealScopeItemProvenanceView = {
+  authority: "CORE" | "SUPPLEMENTARY";
+  source: Exclude<EvidenceSource, "mock"> | "mixed";
+  stage: EvidenceStage | "mixed";
+  runId: string;
+  fixtureId?: string;
+  mode: ProductRunMode;
+};
+
+type MockScopeItemProvenanceView = {
+  authority: "MOCK";
+  source: "mock";
+  stage: EvidenceStage;
+  previewId: string;
+  fixtureId?: string;
+  mode: MockPreviewMode;
+};
+
+interface ScopeItemCommonFields {
   subjectId: P0ScopeSubjectId;
   copyKey: ProductCopyKey;
   evidenceIds: string[];
+  replayFallbackIds: string[];
   summary: string;
-  provenance: {
-    source: EvidenceSource | "mixed";
-    stage: EvidenceStage | "mixed";
-    runId: string;
-    fixtureId?: string;
-    mode: ProductRunMode;
-  };
 }
 
+type ScopeItemCommonView<P extends RealScopeItemProvenanceView | MockScopeItemProvenanceView> = ScopeItemCommonFields & {
+  provenance: P;
+};
+
 type RuleScopeItemView =
-  | (ScopeItemCommonView & {
+  | (ScopeItemCommonView<RealScopeItemProvenanceView> & {
       subjectId: "P0-EVIDENCE-001";
       status: "CHECKED";
       ruleStatus: "PASS";
@@ -755,7 +830,7 @@ type RuleScopeItemView =
       applicabilityReasonCode?: never;
       scopeReasonCode?: never;
     })
-  | (ScopeItemCommonView & {
+  | (ScopeItemCommonView<RealScopeItemProvenanceView> & {
       subjectId: "P0-EVIDENCE-001";
       status: "UNKNOWN";
       ruleStatus: "UNKNOWN";
@@ -763,15 +838,23 @@ type RuleScopeItemView =
       applicabilityReasonCode?: never;
       scopeReasonCode: P0ScopeUnknownReasonCode;
     })
-  | (ScopeItemCommonView & {
+  | (ScopeItemCommonView<RealScopeItemProvenanceView> & {
       subjectId: "P0-EXECUTION-001";
       status: "CHECKED";
-      ruleStatus: "PASS" | "FAIL";
+      ruleStatus: "PASS";
       ruleReasonCode?: never;
       applicabilityReasonCode?: never;
       scopeReasonCode?: never;
     })
-  | (ScopeItemCommonView & {
+  | (ScopeItemCommonView<RealScopeItemProvenanceView> & {
+      subjectId: "P0-EXECUTION-001";
+      status: "CHECKED";
+      ruleStatus: "FAIL";
+      ruleReasonCode: "NO_ROUTE_FOUND";
+      applicabilityReasonCode?: never;
+      scopeReasonCode?: never;
+    })
+  | (ScopeItemCommonView<RealScopeItemProvenanceView> & {
       subjectId: "P0-EXECUTION-001";
       status: "UNKNOWN";
       ruleStatus: "UNKNOWN";
@@ -779,15 +862,23 @@ type RuleScopeItemView =
       applicabilityReasonCode?: never;
       scopeReasonCode: P0ScopeUnknownReasonCode;
     })
-  | (ScopeItemCommonView & {
+  | (ScopeItemCommonView<RealScopeItemProvenanceView> & {
       subjectId: "P0-ECONOMIC-001";
       status: "CHECKED";
-      ruleStatus: "PASS" | "FAIL";
+      ruleStatus: "PASS";
       ruleReasonCode?: never;
       applicabilityReasonCode?: never;
       scopeReasonCode?: never;
     })
-  | (ScopeItemCommonView & {
+  | (ScopeItemCommonView<RealScopeItemProvenanceView> & {
+      subjectId: "P0-ECONOMIC-001";
+      status: "CHECKED";
+      ruleStatus: "FAIL";
+      ruleReasonCode: "OUTPUT_BELOW_BOUNDARY";
+      applicabilityReasonCode?: never;
+      scopeReasonCode?: never;
+    })
+  | (ScopeItemCommonView<RealScopeItemProvenanceView> & {
       subjectId: "P0-ECONOMIC-001";
       status: "UNKNOWN";
       ruleStatus: "UNKNOWN";
@@ -795,7 +886,7 @@ type RuleScopeItemView =
       applicabilityReasonCode?: never;
       scopeReasonCode: P0ScopeUnknownReasonCode;
     })
-  | (ScopeItemCommonView & {
+  | (ScopeItemCommonView<RealScopeItemProvenanceView> & {
       subjectId: "P0-ECONOMIC-001";
       status: "NOT_CHECKED";
       ruleStatus: "NOT_APPLICABLE";
@@ -806,32 +897,43 @@ type RuleScopeItemView =
     });
 
 type IndependentScopeItemView =
-  | (ScopeItemCommonView & {
+  | (ScopeItemCommonView<RealScopeItemProvenanceView> & {
       subjectId: P0ScopeCheckId;
       status: "CHECKED";
       scopeReasonCode?: never;
     })
-  | (ScopeItemCommonView & {
+  | (ScopeItemCommonView<RealScopeItemProvenanceView> & {
       subjectId: P0ScopeCheckId;
       status: "UNKNOWN";
       scopeReasonCode: P0ScopeUnknownReasonCode;
     })
-  | (ScopeItemCommonView & {
+  | (ScopeItemCommonView<RealScopeItemProvenanceView> & {
       subjectId: P0ScopeCheckId;
       status: "NOT_CHECKED";
       scopeReasonCode: P0ScopeNotCheckedReasonCode;
     });
 
 type ScopeItemView = RuleScopeItemView | IndependentScopeItemView;
+type MockScopeItemView = ScopeItemCommonView<MockScopeItemProvenanceView> & {
+  status: "CHECKED" | "UNKNOWN" | "NOT_CHECKED";
+  scopeReasonCode?: P0ScopeUnknownReasonCode | P0ScopeNotCheckedReasonCode;
+};
+
+interface ScopeCountsView {
+  checked: number;
+  failed: number; // derived presentation count; Rule FAIL remains canonical Scope checked
+  unknown: number;
+  notChecked: number;
+}
 
 interface ScopeDisclosureView {
-  counts: {
-    checked: number;
-    failed: number; // derived presentation count; Rule FAIL remains canonical Scope checked
-    unknown: number;
-    notChecked: number;
-  };
+  counts: ScopeCountsView;
   items: ScopeItemView[];
+}
+
+interface MockScopeDisclosureView {
+  counts: ScopeCountsView;
+  items: MockScopeItemView[];
 }
 
 interface RunSideView {
@@ -857,22 +959,29 @@ interface RunDiffView {
   comparableOutput?: { previous: string; next: string };
 }
 
-type ProductCta =
-  | { kind: "RETRY_CHECK"; actionId: string }
-  | { kind: "VIEW_MISSING_EVIDENCE"; actionId: string }
-  | { kind: "USE_REPLAY"; actionId: string }
-  | { kind: "VIEW_DETAILS"; target: "INTEGRATION_ERROR_DETAILS" | "EVIDENCE_DETAILS" | "MOCK_PREVIEW_DETAILS" }
-  | { kind: "REVIEW_BLOCKING_EVIDENCE"; target: "SCOPE_AND_EVIDENCE" }
-  | { kind: "REVIEW_CHECKED_SCOPE"; target: "SCOPE_AND_EVIDENCE" }
-  | { kind: "RETURN_TO_TRANSACTION"; origin: OriginContextView }
-  | { kind: "APPLY_TRANSACTION_ACTION"; actionId: string };
+type RecoveryCta =
+  | { kind: "RETRY_CHECK"; recoveryActionId: string }
+  | { kind: "VIEW_MISSING_EVIDENCE"; recoveryActionId: string }
+  | { kind: "USE_REPLAY"; recoveryActionId: string };
+type DetailsCta = { kind: "VIEW_DETAILS"; target: "INTEGRATION_ERROR_DETAILS" | "EVIDENCE_DETAILS" | "MOCK_PREVIEW_DETAILS" };
+type ReviewBlockingEvidenceCta = { kind: "REVIEW_BLOCKING_EVIDENCE"; target: "SCOPE_AND_EVIDENCE" };
+type ReviewCheckedScopeCta = { kind: "REVIEW_CHECKED_SCOPE"; target: "SCOPE_AND_EVIDENCE" };
+type ReturnToTransactionCta = { kind: "RETURN_TO_TRANSACTION"; origin: OriginContextView };
+type ApplyTransactionActionCta = { kind: "APPLY_TRANSACTION_ACTION"; actionId: string };
+type NavigationCta = DetailsCta | ReviewBlockingEvidenceCta | ReviewCheckedScopeCta | ReturnToTransactionCta;
+type ProductCta = RecoveryCta | NavigationCta | ApplyTransactionActionCta;
+type ProceedPrimaryCta = ReturnToTransactionCta | ReviewCheckedScopeCta;
+type UnknownPrimaryCta = ReviewCheckedScopeCta | Extract<RecoveryCta, { kind: "VIEW_MISSING_EVIDENCE" }>;
+type UnknownSecondaryCta = ReviewCheckedScopeCta | RecoveryCta;
+type IntegrationErrorPrimaryCta = Extract<RecoveryCta, { kind: "RETRY_CHECK" }> | DetailsCta;
+type IntegrationErrorSecondaryCta = RecoveryCta | DetailsCta;
 
-interface ProductEvidenceView {
-  evidenceById: Record<string, EvidenceSummaryView>;
+interface RealProductEvidenceView {
+  evidenceById: Record<string, RealEvidenceSummaryView>;
   coreEvidenceIds: string[];
 }
 
-interface CompletedProductBaseView extends ProductEvidenceView {
+interface CompletedProductBaseView extends RealProductEvidenceView {
   kind: "COMPLETED_RESULT";
   status: "COMPLETED";
   systemStatus: "OK";
@@ -884,8 +993,6 @@ interface CompletedProductBaseView extends ProductEvidenceView {
   scope: ScopeDisclosureView;
   recoveryActions: RecoveryActionView[];
   replayFallbacks: Record<string, ReplayFallbackDescriptorView>;
-  primaryCta: ProductCta;
-  secondaryCta?: ProductCta;
   comparison?: RunDiffView;
 }
 
@@ -894,28 +1001,33 @@ type CompletedProductView =
       verdict: "PROCEED";
       recommendedActions: [];
       irrelevantActions: IrrelevantActionView[];
+      primaryCta: ProceedPrimaryCta;
+      secondaryCta?: ReviewCheckedScopeCta;
     })
   | (CompletedProductBaseView & {
       verdict: "ADJUST";
       recommendedActions: [RecommendedActionView, ...RecommendedActionView[]];
       irrelevantActions: IrrelevantActionView[];
       primaryActionId: string;
-      primaryCta: { kind: "APPLY_TRANSACTION_ACTION"; actionId: string };
+      primaryCta: ApplyTransactionActionCta;
+      secondaryCta?: ReviewCheckedScopeCta;
     })
   | (CompletedProductBaseView & {
       verdict: "STOP";
       recommendedActions: RecommendedActionView[];
       irrelevantActions: IrrelevantActionView[];
-      primaryCta: { kind: "REVIEW_BLOCKING_EVIDENCE"; target: "SCOPE_AND_EVIDENCE" };
+      primaryCta: ReviewBlockingEvidenceCta;
+      secondaryCta?: ReviewCheckedScopeCta;
     })
   | (CompletedProductBaseView & {
       verdict: "UNKNOWN";
       recommendedActions: [];
       irrelevantActions: [];
-      primaryCta: ProductCta;
+      primaryCta: UnknownPrimaryCta;
+      secondaryCta?: UnknownSecondaryCta;
     });
 
-interface IntegrationErrorProductView extends ProductEvidenceView {
+interface IntegrationErrorProductView extends RealProductEvidenceView {
   kind: "INTEGRATION_ERROR_RESULT";
   status: "INTEGRATION_ERROR";
   systemStatus: "INTEGRATION_ERROR";
@@ -934,8 +1046,8 @@ interface IntegrationErrorProductView extends ProductEvidenceView {
   recommendedActions: [];
   irrelevantActions: [];
   replayFallbacks: Record<string, ReplayFallbackDescriptorView>;
-  primaryCta: ProductCta;
-  secondaryCta?: ProductCta;
+  primaryCta: IntegrationErrorPrimaryCta;
+  secondaryCta?: IntegrationErrorSecondaryCta;
   comparison?: RunDiffView;
 }
 
@@ -952,8 +1064,8 @@ interface MockRulePreviewView {
   copyKey: ProductCopyKey;
   previewVerdict?: Verdict;
   rules: RuleResultView[];
-  scope: ScopeDisclosureView;
-  evidenceById: Record<string, EvidenceSummaryView>;
+  scope: MockScopeDisclosureView;
+  evidenceById: Record<string, MockEvidenceSummaryView>;
   replayFallbacks: Record<string, ReplayFallbackDescriptorView>;
   recommendedActions: [];
   irrelevantActions: [];
@@ -970,14 +1082,18 @@ type ProductDeliveryView =
 Product adapter invariants for this proposal:
 
 - `RuleResultView` must be validated against the exhaustive Rule-specific table before mapping to Product/UI.
-- Scope `status` is only `CHECKED`, `UNKNOWN`, or `NOT_CHECKED`; `presentationLabel = NOT_APPLICABLE` is not a fourth canonical state.
+- Scope `status` is only `CHECKED`, `UNKNOWN`, or `NOT_CHECKED`; `presentationLabel = NOT_APPLICABLE` is not a fourth canonical state. Checked Rule `FAIL` items carry their closed Rule reason (`NO_ROUTE_FOUND` or `OUTPUT_BELOW_BOUNDARY`) and Product copy is selected from that code, never parsed from `summary`.
 - `coreEvidenceIds` must never include `source = mock` or unresolved/unknown critical Evidence. A completed `PROCEED`, `ADJUST`, or `STOP` and every public transaction Action must resolve only to eligible non-mock Evidence.
 - Every `evidenceIds` value used to support a Rule `PASS`/`FAIL`, the completed Verdict, or a public transaction Action must resolve to `coreEvidenceIds`; supplementary or mock Evidence may be displayed as context but can never be accepted as authoritative support.
-- `recommendedActions` require `gate.result = VERIFIED`, a local attestation EvidenceRef, exact normalized Intent diff, unchanged Boundary, and terminal child Receipt. Cross-Run locators remain nested in the attestation.
-- `recoveryActions` preserve canonical `ErrorRef`, `ScopeRef`, `EvidenceRef`, and `ReplayRef` semantics; the Product proposal encodes `ReplayRef` as `kind = "REPLAY_FALLBACK"`, and `USE_REPLAY` requires a same-Run descriptor with a non-empty resolved label. A recorded fallback must reference a different source Run; a Demo fallback must identify a preset or Fixture, and the candidate is hidden when no distinct fallback exists.
-- `primaryCta` is the only source of CTA routing. `ADJUST` has exactly one `primaryActionId`; `PROCEED` needs `origin` for `RETURN_TO_TRANSACTION`, otherwise it falls back to `REVIEW_CHECKED_SCOPE`.
-- `evidenceById` is the adapter's indexed lookup surface; components must not join flat Evidence arrays during rendering.
-- English normative copy is represented by `copyKey` values so reviewed `en` and `zh-CN` translations can be supplied without hardcoding display strings into the data model.
+- Every public Action has a non-empty support-ref tuple. A transaction adjustment's first support ref must be the baseline-Run `EVIDENCE_REF` for its local `ActionGateAttestation`; the adapter must reject generic Scope, Error, Replay, supplementary, or Mock-only support. The attestation ID and baseline Run ID must match the Action's `gate` and resolve in `evidenceById`.
+- `recommendedActions` require `gate.result = VERIFIED`, a local attestation EvidenceRef, a non-empty category-specific Intent diff, unchanged Boundary, and terminal child Receipt. Cross-Run locators remain nested in the attestation.
+- `recoveryActions` use non-empty, kind-specific support refs: `RETRY_CHECK` and `VIEW_MISSING_EVIDENCE` may use only applicable `ErrorRef`, `ScopeRef`, or `EvidenceRef`; `USE_REPLAY` uses only same-Run `REPLAY_FALLBACK` refs. Its `fallbackId` must match the selected descriptor, whose label is non-empty and whose recorded source Run differs from the current Run. Any unresolved, cross-Run, mismatched, or inapplicable reference keeps the candidate internal.
+- Public transaction Action changes are limited to `amountIn`, `tokenPair`, `protocol`, and `slippage`; `minimumReceived` is only an `ACCEPTANCE_BOUNDARY_CHANGE`, and `sender`, `recipient`, and `recipientSource` are never Action targets.
+- `primaryCta` is the only source of CTA routing and is state-specific: `ADJUST` has exactly one `primaryActionId` that matches exactly one unique `recommendedActions[].actionId`; `STOP` uses `REVIEW_BLOCKING_EVIDENCE`; `PROCEED` uses `RETURN_TO_TRANSACTION` only with normalized `origin`, otherwise `REVIEW_CHECKED_SCOPE`; `UNKNOWN` never applies a transaction Action and uses `VIEW_MISSING_EVIDENCE` only when `scope.counts.unknown > 0` and its destination is non-empty; Integration Error uses `RETRY_CHECK` only when `error.retryable`, otherwise implementable `VIEW_DETAILS`. Recovery/navigation CTAs are not Action list entries.
+- `evidenceById` is the adapter's indexed lookup surface; components must not join flat Evidence arrays during rendering. `ScopeItemView.replayFallbackIds` resolve through the same Run-level `replayFallbacks` map, so a row never selects an arbitrary Evidence label.
+- `MockRulePreviewView.kind = "MOCK_RULE_PREVIEW"` is the authoritative Mock discriminator. Its Evidence entries use `authority = "MOCK"`, `mode = "MOCK_PREVIEW"`, and `previewId`; they do not carry a real `runId` or `ProductRunMode`, and the preview is never a finalized user Run or source of a user Verdict.
+- Completed and Integration Error projections may use only real Evidence provenance (`authority = CORE | SUPPLEMENTARY`); Mock Evidence is not an authoritative Scope, Rule, Verdict, or Action support source.
+- English normative copy is represented by `copyKey` values. Every emitted key must resolve through a reviewed `en` and `zh-CN` catalog before implementation; a missing locale mapping is an adapter/catalog error, not a reason to hardcode or silently reinterpret copy.
 
 Contract and API owners must confirm field names, versioning, serialization, error preservation, Evidence reference granularity, and compatibility behavior before implementation treats this proposal as stable. Product/UI must still consume the centralized result rather than reproduce Rule or Verdict logic in the adapter.
 
