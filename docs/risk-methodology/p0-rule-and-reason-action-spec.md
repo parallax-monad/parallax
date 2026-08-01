@@ -79,6 +79,11 @@ type P0ApplicabilityReasonCode =
   | "BOUNDARY_NOT_PROVIDED"
   | "STAGE_NOT_ENTERED_AFTER_TERMINAL_RESULT";
 
+type P0ScopeCheckId =
+  | "P0-CHECK-ACTION-001"
+  | "P0-CHECK-SIMULATION-001"
+  | "P0-CHECK-SIMULATION-COVERAGE-001";
+
 type BoundarySource =
   | "original_swap"
   | "user_declared"
@@ -147,6 +152,7 @@ Scope Disclosure answers whether a specific declared check completed; it does no
 Normative Scope constraints:
 
 - Every Scope Item binds to exactly one stable registered subject: either a P0 Rule ID or an independently declared Check ID. Labels and notes are replaceable display text and are not aggregation inputs.
+- P0 stage checks use the stable independent Check IDs `P0-CHECK-ACTION-001`, `P0-CHECK-SIMULATION-001`, and `P0-CHECK-SIMULATION-COVERAGE-001`. These IDs are Scope subjects, not Rule IDs, and must never be serialized as `RuleResult` entries.
 - A Rule-bound Scope Item is mechanically consistent with its Rule Result: `PASS` or `FAIL` maps to `checked`, `UNKNOWN` maps to `unknown`, and `NOT_APPLICABLE` maps to `not_checked`. It must not carry an independently authored status or reason that contradicts the Rule Result.
 - When an Integration Error interrupts a required Rule before a trustworthy Rule Result exists, the Rule Result remains absent and the Rule-bound Scope Item is `unknown / REQUIRED_CHECK_INTERRUPTED`.
 - Independent checks use a closed, Status-valid Scope reason vocabulary. P0 `unknown` reasons are `REQUIRED_CHECK_INTERRUPTED`, `REQUIRED_EVIDENCE_UNAVAILABLE`, and `CLASSIFICATION_INCOMPLETE`. P0 `not_checked` reasons are `PRECONDITION_ABSENT`, `STAGE_NOT_ENTERED_AFTER_TERMINAL_RESULT`, and `OUTSIDE_P0_SCOPE`.
@@ -189,10 +195,26 @@ This union freezes the P0 Action taxonomy, not the complete public wire encoding
 Action support is a discriminated reference to canonical machine state:
 
 ```text
-ActionSupportRef = EvidenceRef | ErrorRef | ScopeRef
+ActionSupportRef = EvidenceRef | ErrorRef | ScopeRef | ReplayRef
+
+ReplayRef = {
+  kind: "REPLAY_FALLBACK";
+  runId: string;
+  fallbackId: string;
+}
+
+ReplayFallbackDescriptor = {
+  fallbackId: string;
+  mode: "REPLAY" | "DEMO";
+  label: string;
+  source:
+    | { kind: "RECORDED_RUN"; sourceRunId: string }
+    | { kind: "DEMO_PRESET"; presetId: string }
+    | { kind: "DEMO_FIXTURE"; fixtureId: string };
+}
 ```
 
-An `EvidenceRef` resolves to canonical Evidence in the same Run. An `ErrorRef` resolves to the Run's structured Integration Error. A `ScopeRef` resolves to one canonical Scope Item. The Shared Contract freezes the exact field-discriminated encoding without changing these reference semantics.
+An `EvidenceRef` resolves to canonical Evidence in the same Run. An `ErrorRef` resolves to the Run's structured Integration Error. A `ScopeRef` resolves to one canonical Scope Item. A `ReplayRef` resolves to a Run-level `ReplayFallbackDescriptor` in the same Run, keyed by `fallbackId`. The descriptor must have an explicit `REPLAY` or `DEMO` mode, a non-empty user-facing label, and a discriminated source: `REPLAY` requires a different recorded `sourceRunId`; `DEMO` requires an identified `presetId` or `fixtureId`. Missing or unresolved source identity makes the descriptor unavailable and cannot support a public `USE_REPLAY` Action. The Shared Contract freezes the exact field-discriminated encoding without changing these reference semantics.
 
 `ActionEvaluation`, not an independently authored Recommendation, is the canonical source of public actions:
 
@@ -209,15 +231,54 @@ A `TRANSACTION_ADJUSTMENT` changes transaction conditions. `amountIn`, `tokenPai
 
 PRD v0.4 uses `Route / Protocol` as one product-level adjustable category. P0 v0.1 maps that category to the user-editable `protocol` Intent target. A concrete Route returned by Moss remains execution Evidence. A future independently editable Route selector requires a versioned Contract extension rather than being inferred from Route Evidence.
 
-A public recommended transaction adjustment must identify the concrete proposed Intent change, not only the field category. For example, it identifies the target Protocol, the complete target Token Pair, or the proposed Amount. The Shared Contract freezes the field-discriminated representation. The Action Recommendation Gate must support that specific change with a rerun or equivalent Evidence.
+A public recommended transaction adjustment must identify the concrete proposed Intent change, not only the field category. For example, it identifies the target Protocol, the complete target Token Pair, or the proposed Amount. The Shared Contract freezes the field-discriminated representation. The Action Recommendation Gate must support that exact change through the child-Run lifecycle defined below.
 
 An `ACCEPTANCE_BOUNDARY_CHANGE` changes only the user's evaluation threshold; it does not improve the transaction outcome. In P0, it has `recommendable = false` and must not manufacture `ADJUST` or `PROCEED` by lowering Minimum Received. If the user independently changes Minimum Received, that is a new Intent and Run.
+
+A verified acceptance-boundary action may appear in `irrelevantActions` only as `IRRELEVANT / recommendable = false / CHANGES_ACCEPTANCE_BOUNDARY_ONLY`, with a resolving support reference. It must remain internal when its irrelevance has not been verified. It may never enter `recommendedActions`.
+
+### 3.3.1 Action Recommendation Gate Lifecycle and Run Ownership
+
+P0 v0.1 uses one canonical Action Recommendation Gate model for public transaction adjustments:
+
+1. The current failing evaluation is the **baseline Run**. It retains the original normalized Intent and Economic Boundary.
+2. A proposed transaction adjustment creates a distinct **verification child Run** with `parentRunId = baselineRun.runId`. Its normalized Intent equals the baseline Intent except for the exact proposed change recorded in `diff`.
+3. The verification child Run evaluates the unchanged original Economic Boundary. A user acceptance-boundary change is not a valid substitute for verification.
+4. A verified child Run produces a derived `ActionGateAttestation` in the baseline Run's canonical Evidence collection. The attestation links `baselineRunId`, `verificationRunId`, the baseline normalized Intent snapshot, the exact proposed Intent change, the unchanged Boundary identity/value/source, the required child Rule Results, the resolving child Evidence, and the verified result.
+5. The public Action in the baseline Run points to that local attestation through an `EvidenceRef`. Any references from the attestation to Evidence in the verification child Run are nested provenance links, not public same-Run EvidenceRefs.
+
+The minimum semantic shape of the derived attestation is:
+
+```text
+ActionGateAttestation = {
+  kind: "ACTION_GATE";
+  baselineRunId: string;
+  verificationRunId: string;
+  baselineIntentSnapshot: {
+    sender: address;
+    recipient: address;
+    recipientSource: "explicit" | "defaulted_from_sender";
+    tokenOut: asset;
+  };
+  proposedIntentChange: exact normalized Intent diff;
+  originalBoundary: identity/value/source snapshot;
+  requiredChildRuleResults: RuleResult[];
+  verificationEvidenceRefs: cross-Run { runId, evidenceId } references;
+  result: "VERIFIED";
+}
+```
+
+`baselineRunId` must equal the Run that contains the attestation. `verificationRunId` must identify a child Run whose `parentRunId` equals `baselineRunId`. The child normalized Intent must equal the baseline snapshot after applying the complete proposed diff; `recipient` and `recipientSource` must not be silently re-resolved, and any `tokenOut` change must be explicit through a token-pair diff. The attestation is the only P0 v0.1 bridge between the two Runs for a public Action.
+
+For the P0 path that can produce `ADJUST` from `P0-ECONOMIC-001 = FAIL`, the child Run must be `status = completed`, `systemStatus = OK`, have `P0-EVIDENCE-001 = PASS` when that Rule is required by the path, have `P0-EXECUTION-001 = PASS`, have `P0-ECONOMIC-001 = PASS` against the unchanged original Boundary, have no `unknown` Scope Item, and provide child Evidence that resolves the simulated received `tokenOut` for the normalized recipient plus the target-specific effect claimed by the Action. A child Rule Result or Evidence that is missing, unresolved, mock-only, or inconsistent with the exact diff makes the attestation ineligible for `result = VERIFIED`.
+
+Only a `VERIFIED` ActionGateAttestation can make a transaction Action `recommendable = true`. A verification Run that is incomplete, mismatched, ends with an Integration Error, changes the Boundary, or fails to verify the claimed effect leaves the candidate internal. P0 v0.1 does not treat an unrecorded "equivalent Evidence" or an in-place alternative evaluation as sufficient for a public transaction Action.
 
 A `SYSTEM_RECOVERY` Action only helps complete or restore the check:
 
 - `RETRY_CHECK` is public only when retry is applicable, including consistency with `error.retryable` for Integration Errors.
 - `VIEW_MISSING_EVIDENCE` is public only when the Run identifies missing or incomplete Evidence.
-- `USE_REPLAY` is public only when a Replay or Demo fallback actually exists, is explicitly labeled, and is not presented as Evidence from the current Live Run.
+- `USE_REPLAY` is public only when a Replay or Demo fallback actually exists, is explicitly labeled, is not presented as Evidence from the current Live Run, and the Action carries a resolving same-Run `ReplayRef`.
 
 Rule Reason Codes and Action Reason Codes answer different questions. `P0ReasonCode` explains why a Rule failed or could not be evaluated; `P0ActionReasonCode` explains why an Action is relevant, irrelevant, unverified, or limited to system recovery. Consumers must not use Action Reason Codes as Verdict aggregation inputs.
 
@@ -311,7 +372,7 @@ Rule Result constraints:
 The public Run envelope preserves a single set of audit fields across Completed and Integration Error branches:
 
 - `runId` and optional `parentRunId`;
-- normalized Intent, including Protocol, Slippage when supported, and the P0 transaction conditions used by Adjust and Re-run;
+- normalized Intent, including Sender, materialized Recipient and `recipientSource`, `tokenOut`, Protocol, Slippage when supported, and the P0 transaction conditions used by Adjust and Re-run;
 - one authoritative Live, Replay, or explicit Demo execution mode;
 - `status`, `systemStatus`, and the single canonical public `verdict`;
 - replaceable `summary` display text;
@@ -320,6 +381,7 @@ The public Run envelope preserves a single set of audit fields across Completed 
 - canonical Evidence, Scope Disclosure, and Rule Results;
 - public `recommendedActions` and `irrelevantActions`;
 - optional `diff`;
+- optional Run-level Replay/Demo fallback descriptors keyed by `fallbackId`;
 - `createdAt`, Rule Version, and the applicable Moss Runtime Version or Revision.
 
 The later Shared Contract implementation freezes the public field names and technically equivalent wire encodings, but it must preserve these semantics.
@@ -411,7 +473,8 @@ Raw Evidence
 -> aggregate the global Verdict centrally
 ```
 
-- Evidence from a later stage that was never entered because of a trusted earlier terminal result maps to Rule `NOT_APPLICABLE` and Scope `not_checked`, not `UNKNOWN`.
+- Evidence from a later stage that was never entered because of a trusted earlier terminal result maps to its independent Scope Check ID as `not_checked / STAGE_NOT_ENTERED_AFTER_TERMINAL_RESULT`, not `UNKNOWN`. It does not manufacture an Action, Simulation, or Simulation Coverage `RuleResult`.
+- `P0-ECONOMIC-001` may additionally use the legal Rule tuple `NOT_APPLICABLE / STAGE_NOT_ENTERED_AFTER_TERMINAL_RESULT` when its own simulation stage was not entered. No other P0 Rule may use that tuple.
 - Evidence required by the current path that is missing, incomplete, unreliable, or of unverified origin produces a blocking Rule or Scope `unknown`.
 - An unclassified Moss Warning produces Rule and Scope `unknown`; consumers must not infer `ADJUST` or `STOP` from Warning text.
 - A Warning never selects a Rule ID, Status, or Reason Code by itself. A verified Warning may be supporting Evidence only after independent normalization maps the underlying condition to one of the legal P0 v0.1 Rule tuples. P0 has no standalone Warning `FAIL`.
@@ -480,7 +543,7 @@ Purpose: Prevent the system from silently promoting partial success, zero warnin
 Evidence requirements must be calculated from the current execution path and terminal stage:
 
 - `simulationCoverage` is required only when the current path must enter `SIMULATE`.
-- If an earlier stage has already ended with a trusted terminal result, later stage-level checks that were never entered are represented as Scope `not_checked` and, where a downstream Rule has a legal status for an unentered stage, as that Rule's `NOT_APPLICABLE` result. This does not make `P0-EVIDENCE-001` `NOT_APPLICABLE`.
+- If an earlier stage has already ended with a trusted terminal result, later stage-level checks that were never entered are represented by their independent Scope Check IDs as `not_checked / STAGE_NOT_ENTERED_AFTER_TERMINAL_RESULT`. No Action, Simulation, or Simulation Coverage `RuleResult` is manufactured. The only downstream P0 Rule that may use `NOT_APPLICABLE / STAGE_NOT_ENTERED_AFTER_TERMINAL_RESULT` is `P0-ECONOMIC-001`; this does not make `P0-EVIDENCE-001` `NOT_APPLICABLE`.
 - Raw evidence fields must not themselves be written as `NOT_APPLICABLE`; applicability is expressed by rule and stage evaluation.
 
 ### 5.3 Triggers and Reason Codes
@@ -552,12 +615,12 @@ A Fixture with `RULE_TEST_INPUT`, `real = false`, or `source = mock` can validat
 
 ### 6.3 Stage Applicability Matrix
 
-| Confirmed terminal stage | Required evidence | `NOT_APPLICABLE` |
+| Confirmed terminal stage | Required evidence | Unentered-stage representation |
 |---|---|---|
-| `QUOTE` | Quote Error, Normalized Error, Intent, Protocol, Token Pair, Provenance | Action, Simulation, Simulation Coverage |
-| `ACTION` | Quote, Action Construction Error, Normalized Error, Intent, Protocol, Token Pair, Provenance | Simulation, Simulation Coverage |
+| `QUOTE` | Quote Error, Normalized Error, Intent, Protocol, Token Pair, Provenance | `P0-CHECK-ACTION-001`, `P0-CHECK-SIMULATION-001`, and `P0-CHECK-SIMULATION-COVERAGE-001` use Scope `not_checked`; `P0-ECONOMIC-001` may use Rule `NOT_APPLICABLE` |
+| `ACTION` | Quote, Action Construction Error, Normalized Error, Intent, Protocol, Token Pair, Provenance | `P0-CHECK-SIMULATION-001` and `P0-CHECK-SIMULATION-COVERAGE-001` use Scope `not_checked`; `P0-ECONOMIC-001` may use Rule `NOT_APPLICABLE` |
 
-Before treating missing stage evidence as `UNKNOWN`, first determine whether that stage was required to occur on the current path. Later-stage Rules that were not entered because of this trusted terminal result use `NOT_APPLICABLE / STAGE_NOT_ENTERED_AFTER_TERMINAL_RESULT`.
+Before treating missing stage evidence as `UNKNOWN`, first determine whether that stage was required to occur on the current path. Only `P0-ECONOMIC-001` may use `NOT_APPLICABLE / STAGE_NOT_ENTERED_AFTER_TERMINAL_RESULT`; Action, Simulation, and Simulation Coverage use their independent Scope Check IDs instead.
 
 ### 6.4 Rule Result and Policy Mapping
 
@@ -677,7 +740,14 @@ Purpose: Determine whether the simulated amount actually received for `tokenOut`
 
 ### 7.3 Comparator and Source Priority
 
-The comparator is the normalized simulated amount received by the intended recipient for the intended `tokenOut`. It must be derived from a validated recipient balance delta or equivalent asset change, rather than accepted solely because a generic field is named `outcome`.
+P0 normalizes the recipient before a Run begins:
+
+- An explicit `recipient` is normalized as the intended recipient.
+- An omitted `recipient` is normalized to `sender` and marked `recipientSource = defaulted_from_sender`.
+- The recipient is never derived from the transaction `to`, Quote data, a Route field, or an observed balance delta.
+- If the adapter's protocol semantics require a different default, the adapter must require an explicit recipient; otherwise Intent normalization fails before a Run exists.
+
+The comparator is the normalized simulated amount received by that intended recipient for the intended `tokenOut`. It must be derived from a validated recipient balance delta or equivalent asset change, rather than accepted solely because a generic field is named `outcome`.
 
 The following Quote values are supplementary Evidence only:
 
@@ -703,7 +773,7 @@ Economic `PASS` does not independently produce `PROCEED`. Economic `NOT_APPLICAB
 
 For Economic `FAIL`:
 
-- return `ADJUST` only when a `TRANSACTION_ADJUSTMENT` is `RELEVANT`, `recommendable = true`, and a rerun or equivalent Action Gate proves that the changed transaction can satisfy the unchanged original boundary;
+- return `ADJUST` only when a `TRANSACTION_ADJUSTMENT` is `RELEVANT`, `recommendable = true`, and a VERIFIED ActionGateAttestation from the required verification child Run proves that the changed transaction can satisfy the unchanged original boundary;
 - otherwise return `STOP` for the current transaction when no blocking `UNKNOWN` exists; and
 - return global `UNKNOWN` when any blocking Rule `UNKNOWN` exists, while preserving the Economic `FAIL` in `ruleResults` and showing only applicable system-recovery actions.
 
@@ -816,11 +886,31 @@ Given:
   P0-ECONOMIC-001.status = FAIL
   reasonCode = OUTPUT_BELOW_BOUNDARY
   no blocking Rule UNKNOWN or higher-priority STOP exists
-  a transaction adjustment rerun satisfies the unchanged original boundary
+  a verification child Run has parentRunId = baselineRun.runId
+  the child Run changes exactly the proposed Intent fields and preserves the original Boundary
+  the child Run is status = completed and systemStatus = OK
+  the child Run has P0-EVIDENCE-001 = PASS when required, P0-EXECUTION-001 = PASS, and P0-ECONOMIC-001 = PASS
+  the child Run has no unknown Scope Item and resolving Evidence for the normalized recipient/tokenOut output
+  a VERIFIED ActionGateAttestation is stored in the baseline Run's canonical Evidence collection
 
 Expect:
   Decision.verdict = ADJUST
   the verified transaction adjustment may enter recommendedActions
+```
+
+### TV-ECO-007: Recipient Normalization Is Stable Across the Action Gate
+
+```text
+Given:
+  sender = 0xSENDER
+  incoming Intent omits recipient
+  tokenOut = USDC
+
+Expect:
+  normalizedIntent.recipient = 0xSENDER
+  normalizedIntent.recipientSource = defaulted_from_sender
+  the Economic comparator uses the simulated USDC amount received by 0xSENDER
+  no transaction `to`, Quote, Route, or observed balance delta changes the normalized recipient
 ```
 
 ### TV-002: Internal Integration Error
@@ -855,7 +945,10 @@ Given:
 Expect:
   P0-EXECUTION-001.status = FAIL
   reasonCode = NO_ROUTE_FOUND
-  Action / Simulation / Simulation Coverage = NOT_APPLICABLE / STAGE_NOT_ENTERED_AFTER_TERMINAL_RESULT at rule-stage level
+  P0-CHECK-ACTION-001 Scope = not_checked / STAGE_NOT_ENTERED_AFTER_TERMINAL_RESULT
+  P0-CHECK-SIMULATION-001 Scope = not_checked / STAGE_NOT_ENTERED_AFTER_TERMINAL_RESULT
+  P0-CHECK-SIMULATION-COVERAGE-001 Scope = not_checked / STAGE_NOT_ENTERED_AFTER_TERMINAL_RESULT
+  P0-ECONOMIC-001 = NOT_APPLICABLE / STAGE_NOT_ENTERED_AFTER_TERMINAL_RESULT
   Decision.verdict = STOP
 ```
 
@@ -870,7 +963,9 @@ Given:
 
 Expect:
   Action Construction Error is required evidence
-  Simulation / Simulation Coverage = NOT_APPLICABLE / STAGE_NOT_ENTERED_AFTER_TERMINAL_RESULT at rule-stage level
+  P0-CHECK-SIMULATION-001 Scope = not_checked / STAGE_NOT_ENTERED_AFTER_TERMINAL_RESULT
+  P0-CHECK-SIMULATION-COVERAGE-001 Scope = not_checked / STAGE_NOT_ENTERED_AFTER_TERMINAL_RESULT
+  P0-ECONOMIC-001 = NOT_APPLICABLE / STAGE_NOT_ENTERED_AFTER_TERMINAL_RESULT
   P0-EXECUTION-001.status = FAIL
   reasonCode = NO_ROUTE_FOUND
   Decision.verdict = STOP
@@ -968,6 +1063,7 @@ Expect Contract rejection:
   a public Action with no resolving ActionSupportRef
   a recommendable transaction adjustment without a concrete proposed Intent change
   a recommendable transaction adjustment without supporting EvidenceRef or Action Gate result
+  kind = ACCEPTANCE_BOUNDARY_CHANGE and recommendable = true
 
 Expect public filtering:
   only verified RELEVANT actions enter recommendedActions
@@ -991,6 +1087,47 @@ Expect:
   the Action contains no proposed transaction change
 ```
 
+### TV-ACTION-004: USE_REPLAY Requires a Same-Run ReplayRef
+
+```text
+Given:
+  a SYSTEM_RECOVERY Action has action = USE_REPLAY
+  the current Run contains an explicitly labeled Replay or Demo fallback descriptor
+  ReplayRef.runId equals the current Run ID
+  ReplayRef.fallbackId resolves to that descriptor
+
+Expect:
+  the Action may be public with relevance = RELEVANT and recommendable = true
+  the Action contains the resolving ReplayRef
+  the fallback is not presented as Evidence from the current Live Run
+
+Given:
+  no verified Replay or Demo fallback descriptor exists
+  or ReplayRef is absent or does not resolve within the current Run
+
+Expect:
+  the USE_REPLAY candidate remains internal
+  it enters neither recommendedActions nor irrelevantActions
+```
+
+### TV-ACTION-005: Acceptance Boundary Change Is Not a Transaction Recommendation
+
+```text
+Given:
+  kind = ACCEPTANCE_BOUNDARY_CHANGE
+  field = minimumReceived
+
+Expect Contract rejection:
+  recommendable = true
+
+Expect valid verified representation:
+  relevance = IRRELEVANT
+  recommendable = false
+  actionReasonCode = CHANGES_ACCEPTANCE_BOUNDARY_ONLY
+  the Action may enter irrelevantActions when its support reference resolves
+  the Action never enters recommendedActions and cannot produce ADJUST or PROCEED
+```
+
 ### TV-SCOPE-001: Trusted Terminal Result Does Not Manufacture Unknown
 
 ```text
@@ -1001,7 +1138,8 @@ Given:
 
 Expect:
   Route Availability Scope = checked
-  Simulation and Economic Output Scope = not_checked
+  P0-CHECK-SIMULATION-001 Scope = not_checked / STAGE_NOT_ENTERED_AFTER_TERMINAL_RESULT
+  P0-CHECK-SIMULATION-COVERAGE-001 Scope = not_checked / STAGE_NOT_ENTERED_AFTER_TERMINAL_RESULT
   P0-ECONOMIC-001 = NOT_APPLICABLE / STAGE_NOT_ENTERED_AFTER_TERMINAL_RESULT
   no Scope unknown is created for the unentered later stage
 ```
@@ -1078,14 +1216,19 @@ Expect:
   it does not enter recommendedActions
 
 Given:
-  a concrete proposed Intent change is rerun
-  the rerun verifies the claimed effect
+  baseline Run contains the failing Economic Rule Result
+  a verification child Run has parentRunId = baselineRun.runId
+  the child Run changes exactly the proposed Intent fields
+  the child Run evaluates the unchanged original Economic Boundary
+  the child Run verifies the claimed effect
+  a VERIFIED ActionGateAttestation is stored in the baseline Run's canonical Evidence collection
 
 Expect:
   recommendable = true may be valid
   the public Action identifies the concrete proposed change
-  the verified rerun Evidence is represented in the canonical Evidence collection
-  the Action Evidence references resolve within that collection
+  the Action EvidenceRef resolves to the baseline Run's ActionGateAttestation
+  the attestation links the baseline Run, verification child Run, exact change, unchanged Boundary, and verified result
+  nested child-Run provenance is not used as a public same-Run EvidenceRef
 ```
 
 ### TV-ENVELOPE-001: Failed Re-run Preserves Intent Diff
@@ -1165,11 +1308,14 @@ The semantic requirements in Sections 1 through 8 are normative for P0 v0.1. The
 - [ ] Replace flat `reasons`, independently authored `recommendations`, and legacy `adjustments` with public `RuleResult` and Action projections derived from `ActionEvaluation`.
 - [ ] Keep unverified candidate Actions internal to Risk and Aggregation; do not expose a public `candidateActions` collection.
 - [ ] Implement the three Action kinds, stable Action identity, the P0 Action target taxonomy, concrete proposed-change payloads, `ActionSupportRef` resolution, and ActionEvaluation combination invariants.
+- [ ] Implement same-Run `ReplayRef` resolution against an explicitly labeled Run-level Replay/Demo fallback descriptor, and keep unavailable or unresolved `USE_REPLAY` candidates internal.
 - [ ] Remove public free-form `nonInferenceCodes` and ensure explanatory copy is derived from stable Rule, Action, Scope, and System mappings.
 - [ ] Implement canonical Evidence identity, unique keys, reference resolution, source-aware provenance, reproducibility, Runtime or Revision context, and Replay, Fixture, and Mock invariants.
 - [ ] Implement one authoritative Run mode representation and reject contradictory Live, Replay, Demo, Fixture, and Mock combinations.
 - [ ] Implement the mutually exclusive Completed and Integration Error Run envelope, including the single canonical public Verdict, partial Rule Results, Scope, optional Route Evidence, Boundary context, branch-specific Action constraints, metadata, and Re-run Diff preservation.
 - [ ] Include Protocol, Slippage when supported, and the other P0 transaction conditions in normalized Intent and Re-run Diff; implement the PRD `Route / Protocol` adjustment through the P0 `protocol` target and do not expose Moss Route Evidence as a user-editable Action target.
+- [ ] Materialize omitted `recipient` as `sender` during P0 normalization, preserve `recipientSource`, and reject adapter paths that require a different implicit recipient unless the user supplies it explicitly.
+- [ ] Implement the baseline-Run `ActionGateAttestation` and verification-child-Run lifecycle, including exact Intent diff, unchanged Boundary binding, nested cross-Run provenance, and same-Run public EvidenceRef resolution.
 - [ ] Keep Economic Boundary context separate from `P0-ECONOMIC-001` Rule Status.
 - [ ] Implement deterministic internal Integration Status to public `status`, `systemStatus`, `verdict`, and structured `error` mapping, including closed versioned `error.code` and `error.stage` enumerations.
 - [ ] Implement `P0-ECONOMIC-001 / OUTPUT_MEETS_BOUNDARY` and convert TV-ECO-001 through TV-ECO-006 into Contract and policy tests.
@@ -1177,7 +1323,7 @@ The semantic requirements in Sections 1 through 8 are normative for P0 v0.1. The
 
 ### 9.2 Evidence, Rules, Fixtures, and Gates
 
-- [ ] Implement stage-aware `P0-EVIDENCE-001` Rule Result handling: `PASS` when Evidence required by the current path is complete, and `UNKNOWN` when required Evidence is missing, null, incomplete, unreliable, or unverified. `P0-EVIDENCE-001` never emits `NOT_APPLICABLE`; later unentered stages are represented by Scope `not_checked` and, where legal, the downstream Rule's `NOT_APPLICABLE` result.
+- [ ] Implement stage-aware `P0-EVIDENCE-001` Rule Result handling: `PASS` when Evidence required by the current path is complete, and `UNKNOWN` when required Evidence is missing, null, incomplete, unreliable, or unverified. `P0-EVIDENCE-001` never emits `NOT_APPLICABLE`; later unentered stages use independent Scope Check IDs, with `P0-ECONOMIC-001` as the only downstream Rule allowed to emit the legal terminal-stage `NOT_APPLICABLE` tuple.
 - [ ] Implement the merged Evidence Baseline adapter mapping: `COMPLETE` may support Rule `PASS`, `MISSING` is decomposed by its underlying cause rather than directly serialized, and Integration Error `UNKNOWN` produces Scope `unknown` without a fabricated Rule Result.
 - [ ] Add Contract and Risk regression coverage preventing `ACCEPTANCE_BOUNDARY_CHANGE` from entering `recommendedActions`.
 - [ ] Define and test the normalized recipient-and-token-matched simulated output extraction used by `P0-ECONOMIC-001`.
