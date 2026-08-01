@@ -261,6 +261,7 @@ export function RouteGraph3D({ language }: { language: Language }) {
 
   return (
     <div
+      role="img"
       aria-label={pick(
         language,
         "Moss capability route 3D graph; drag to rotate",
