@@ -1,0 +1,297 @@
+{
+  "discover": [
+    {
+      "protocol": "kuru",
+      "method": "quote",
+      "kind": "query",
+      "category": "dex",
+      "tags": ["clob", "quote"],
+      "summary": "Quote the best Kuru swap path"
+    },
+    {
+      "protocol": "kuru",
+      "method": "swap",
+      "kind": "capability",
+      "verb": "swap",
+      "category": "dex",
+      "tags": ["clob", "orderbook"],
+      "summary": "Swap tokens through the best current Kuru market path"
+    }
+  ],
+  "load": [
+    {
+      "protocol": "kuru",
+      "method": "quote",
+      "kind": "query",
+      "intent": "Quote the best Kuru swap path",
+      "category": "dex",
+      "risk": [],
+      "tags": ["clob", "quote"],
+      "params": {
+        "tokenIn": {
+          "type": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "description": "An EVM token address or the literal \"native\" for native MON.",
+            "anyOf": [
+              {
+                "description": "A 20-byte EVM address encoded as a 0x-prefixed hexadecimal string.",
+                "type": "string"
+              },
+              {
+                "type": "string",
+                "const": "native"
+              }
+            ]
+          },
+          "description": "Asset offered to the swap."
+        },
+        "tokenOut": {
+          "type": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "description": "An EVM token address or the literal \"native\" for native MON.",
+            "anyOf": [
+              {
+                "description": "A 20-byte EVM address encoded as a 0x-prefixed hexadecimal string.",
+                "type": "string"
+              },
+              {
+                "type": "string",
+                "const": "native"
+              }
+            ]
+          },
+          "description": "Asset requested from the swap."
+        },
+        "amountIn": {
+          "type": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "description": "An optional positive base-10 decimal amount in a token's display units, such as \"1\" or \"1.5\".",
+            "type": "string",
+            "pattern": "^(?:0|[1-9]\\d*)(?:\\.\\d+)?$"
+          },
+          "description": "Fixed input quantity; omit when amountOut is supplied."
+        },
+        "amountOut": {
+          "type": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "description": "An optional positive base-10 decimal amount in a token's display units, such as \"1\" or \"1.5\".",
+            "type": "string",
+            "pattern": "^(?:0|[1-9]\\d*)(?:\\.\\d+)?$"
+          },
+          "description": "Minimum output quantity; omit when amountIn is supplied."
+        },
+        "slippage": {
+          "type": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "default": 50,
+            "description": "An integer basis-point count from 50 through 5000; 1 bps equals 0.01%.",
+            "type": "integer",
+            "minimum": 50,
+            "maximum": 5000
+          },
+          "description": "Maximum adverse movement allowed between quoting and execution."
+        }
+      }
+    },
+    {
+      "protocol": "kuru",
+      "method": "swap",
+      "kind": "capability",
+      "intent": "Swap tokens through the best current Kuru market path",
+      "verb": "swap",
+      "category": "dex",
+      "risk": ["fundOut", "approval", "priceImpact"],
+      "tags": ["clob", "orderbook"],
+      "params": {
+        "tokenIn": {
+          "type": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "description": "An EVM token address or the literal \"native\" for native MON.",
+            "anyOf": [
+              {
+                "description": "A 20-byte EVM address encoded as a 0x-prefixed hexadecimal string.",
+                "type": "string"
+              },
+              {
+                "type": "string",
+                "const": "native"
+              }
+            ]
+          },
+          "description": "Asset offered to the swap."
+        },
+        "tokenOut": {
+          "type": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "description": "An EVM token address or the literal \"native\" for native MON.",
+            "anyOf": [
+              {
+                "description": "A 20-byte EVM address encoded as a 0x-prefixed hexadecimal string.",
+                "type": "string"
+              },
+              {
+                "type": "string",
+                "const": "native"
+              }
+            ]
+          },
+          "description": "Asset requested from the swap."
+        },
+        "amountIn": {
+          "type": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "description": "An optional positive base-10 decimal amount in a token's display units, such as \"1\" or \"1.5\".",
+            "type": "string",
+            "pattern": "^(?:0|[1-9]\\d*)(?:\\.\\d+)?$"
+          },
+          "description": "Fixed input quantity; omit when amountOut is supplied."
+        },
+        "amountOut": {
+          "type": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "description": "An optional positive base-10 decimal amount in a token's display units, such as \"1\" or \"1.5\".",
+            "type": "string",
+            "pattern": "^(?:0|[1-9]\\d*)(?:\\.\\d+)?$"
+          },
+          "description": "Minimum output quantity; omit when amountIn is supplied."
+        },
+        "slippage": {
+          "type": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "default": 50,
+            "description": "An integer basis-point count from 50 through 5000; 1 bps equals 0.01%.",
+            "type": "integer",
+            "minimum": 50,
+            "maximum": 5000
+          },
+          "description": "Maximum adverse movement allowed between quoting and execution."
+        }
+      }
+    }
+  ],
+  "quote": {
+    "kind": "query",
+    "protocol": "kuru",
+    "method": "quote",
+    "data": {
+      "amountSide": "amountIn",
+      "amountIn": "0.01",
+      "estimatedAmountOut": "0.000223",
+      "minimumAmountOut": "0.000221",
+      "path": ["native", "0x754704Bc059F8C67012fEd69BC8A327a5aafb603"]
+    }
+  },
+  "action": {
+    "kind": "capability",
+    "protocol": "kuru",
+    "method": "swap",
+    "params": {
+      "tokenIn": "native",
+      "tokenOut": "0x754704Bc059F8C67012fEd69BC8A327a5aafb603",
+      "amountIn": "0.01",
+      "slippage": 50
+    },
+    "children": [
+      {
+        "kind": "transaction",
+        "transaction": {
+          "from": "0xcccccccccccccccccccccccccccccccccccccccc",
+          "to": "0xd651346d7c789536ebf06dc72aE3C8502cd695CC",
+          "data": "0xffa5210a00000000000000000000000000000000000000000000000000000000000000e0000000000000000000000000000000000000000000000000000000000000012000000000000000000000000000000000000000000000000000000000000001600000000000000000000000000000000000000000000000000000000000000000000000000000000000000000754704bc059f8c67012fed69bc8a327a5aafb603000000000000000000000000000000000000000000000000002386f26fc1000000000000000000000000000000000000000000000000000000000000000000dd0000000000000000000000000000000000000000000000000000000000000001000000000000000000000000122c0d8683cab344163fb73e28e741754257e3fa0000000000000000000000000000000000000000000000000000000000000001000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000001",
+          "value": "0x2386f26fc10000"
+        }
+      }
+    ]
+  },
+  "simulation": {
+    "results": [
+      {
+        "protocol": "kuru",
+        "method": "swap",
+        "transaction": {
+          "from": "0xcccccccccccccccccccccccccccccccccccccccc",
+          "to": "0xd651346d7c789536ebf06dc72aE3C8502cd695CC",
+          "data": "0xffa5210a00000000000000000000000000000000000000000000000000000000000000e0000000000000000000000000000000000000000000000000000000000000012000000000000000000000000000000000000000000000000000000000000001600000000000000000000000000000000000000000000000000000000000000000000000000000000000000000754704bc059f8c67012fed69bc8a327a5aafb603000000000000000000000000000000000000000000000000002386f26fc1000000000000000000000000000000000000000000000000000000000000000000dd0000000000000000000000000000000000000000000000000000000000000001000000000000000000000000122c0d8683cab344163fb73e28e741754257e3fa0000000000000000000000000000000000000000000000000000000000000001000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000001",
+          "value": "0x2386f26fc10000"
+        },
+        "reverted": false,
+        "changes": [
+          {
+            "kind": "nativeTransfer",
+            "from": "0xcccccccccccccccccccccccccccccccccccccccc",
+            "to": "0xd651346d7c789536ebf06dc72ae3c8502cd695cc",
+            "value": "10000000000000000"
+          },
+          {
+            "kind": "nativeTransfer",
+            "from": "0xd651346d7c789536ebf06dc72ae3c8502cd695cc",
+            "to": "0x122c0d8683cab344163fb73e28e741754257e3fa",
+            "value": "10000000000000000"
+          },
+          {
+            "kind": "event",
+            "address": "0x122c0d8683cab344163fb73e28e741754257e3fa",
+            "topics": [
+              "0xb74e966bc873b8c144fab39c9981210f50130885e89caf4556c0840cec741dcd"
+            ],
+            "data": "0x0000000000000000000000000000000000000000000000000000000000028a7e000000000000000000000000000000000000000000000000000267a5db3ac9bd"
+          },
+          {
+            "kind": "event",
+            "address": "0x122c0d8683cab344163fb73e28e741754257e3fa",
+            "topics": [
+              "0xf16924fba1c18c108912fcacaac7450c98eb3f2d8c0a3cdf3df7066c08f21581"
+            ],
+            "data": "0x000000000000000000000000000000000000000000000000000000000002892300000000000000000000000052e1a9c819bd747522a93295901c6bf4fbdde01d0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000004fdd70de8d0000000000000000000000000000000000000000000000000000000000062f445efe000000000000000000000000d651346d7c789536ebf06dc72ae3c8502cd695cc000000000000000000000000cccccccccccccccccccccccccccccccccccccccc000000000000000000000000000000000000000000000000000000003b9aca00"
+          },
+          {
+            "kind": "event",
+            "address": "0x754704bc059f8c67012fed69bc8a327a5aafb603",
+            "topics": [
+              "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+              "0x0000000000000000000000002a68ba1833cdf93fa9da1eebd7f46242ad8e90c5",
+              "0x000000000000000000000000d651346d7c789536ebf06dc72ae3c8502cd695cc"
+            ],
+            "data": "0x00000000000000000000000000000000000000000000000000000000000000df"
+          },
+          {
+            "kind": "nativeTransfer",
+            "from": "0x122c0d8683cab344163fb73e28e741754257e3fa",
+            "to": "0x2a68ba1833cdf93fa9da1eebd7f46242ad8e90c5",
+            "value": "10000000000000000"
+          },
+          {
+            "kind": "event",
+            "address": "0xd651346d7c789536ebf06dc72ae3c8502cd695cc",
+            "topics": [
+              "0xae71e8ae9695e4f3523d27453a24d99edc4738fea8130c1cb33eb9ef95f53354"
+            ],
+            "data": "0x000000000000000000000000cccccccccccccccccccccccccccccccccccccccc0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000754704bc059f8c67012fed69bc8a327a5aafb603000000000000000000000000000000000000000000000000002386f26fc1000000000000000000000000000000000000000000000000000000000000000000df"
+          },
+          {
+            "kind": "event",
+            "address": "0x754704bc059f8c67012fed69bc8a327a5aafb603",
+            "topics": [
+              "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+              "0x000000000000000000000000d651346d7c789536ebf06dc72ae3c8502cd695cc",
+              "0x000000000000000000000000cccccccccccccccccccccccccccccccccccccccc"
+            ],
+            "data": "0x00000000000000000000000000000000000000000000000000000000000000df"
+          }
+        ],
+        "warnings": [
+          {
+            "code": "RECEIPT_FAILED",
+            "message": "Unexpected Change: Kuru market emitted FlipOrderUpdated"
+          }
+        ],
+        "gas": null
+      }
+    ],
+    "halted": {
+      "transactionIndex": 0,
+      "reason": "Unexpected Change: Kuru market emitted FlipOrderUpdated"
+    }
+  },
+  "errors": {}
+}
