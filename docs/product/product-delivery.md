@@ -239,6 +239,7 @@ Public transaction Actions and System Recovery Actions are separate product conc
   - `PROCEED`: **No verified transaction adjustment is needed for this checked scope.**
   - `UNKNOWN`: **No verified transaction adjustment is available because required Evidence is unresolved.**
   - `STOP`: **No verified alternative path is available for this Intent.**
+- Public list headings are stable: **Verified changes to review**, **Why other changes do not apply**, and **Check recovery**. Empty rows are explanatory text, never disabled recommendation controls.
 
 ### System Recovery Actions
 
@@ -247,7 +248,7 @@ Public transaction Actions and System Recovery Actions are separate product conc
 - `USE_REPLAY` is hidden when the current result is already `RECORDED_REPLAY` unless a distinct, resolving fallback descriptor is explicitly supplied. An unresolved or absent `ReplayRef` keeps the candidate internal.
 - A recovery Action cannot change a Rule result or imply transaction improvement.
 
-The merged Rule Methodology permits verified `SYSTEM_RECOVERY` evaluations inside the canonical machine-level `recommendedActions` collection. The Product adapter partitions those entries into the Product View Model's `recoveryActions` presentation group and leaves verified transaction adjustments in `recommendedActions`. This is a presentation mapping only: it must not drop, duplicate, change the applicability of, or reinterpret any canonical `ActionEvaluation`.
+The merged Rule Methodology permits verified `SYSTEM_RECOVERY` evaluations inside the canonical machine-level `recommendedActions` collection. The Product adapter partitions those entries into the Product View Model's `recoveryActions` presentation group and leaves verified transaction adjustments in `recommendedActions`. This is a presentation mapping only: it must not drop, duplicate, change the applicability of, or reinterpret any canonical `ActionEvaluation`. The canonical machine collection remains the source; `recommendedActions`, `irrelevantActions`, and `recoveryActions` are Product/UI presentation groups.
 
 ### Verified transaction Action lifecycle
 
@@ -280,7 +281,7 @@ Use only canonical counts:
 Checked: {count} · Unknown: {count} · Not checked: {count}
 ```
 
-A Rule-level `NOT_APPLICABLE` is projected into `not_checked`; a UI may show a **Not Applicable** badge on that row, but it is not a fourth Scope status or count. The compact summary remains visible in every finalized state, not only `PROCEED`.
+A Rule-level `NOT_APPLICABLE` is projected into `not_checked`; a UI may show a **Not Applicable** badge on that row, but it is not a fourth Scope status or count. A derived `failed` count may be shown separately because Rule `FAIL` is a checked result, not a clean pass. The compact summary remains visible in every finalized state, not only `PROCEED`.
 
 If `Unknown > 0`, the primary CTA may be `View evidence gaps`. If `verdict = UNKNOWN` but `Unknown = 0`, use `Review checked scope` or `View details`; never point to an empty evidence-gap view.
 
@@ -288,7 +289,7 @@ If `Unknown > 0`, the primary CTA may be `View evidence gaps`. If `verdict = UNK
 
 | Canonical Scope status | Meaning | Required item details |
 | --- | --- | --- |
-| Checked | The Rule or Check ran and produced a usable result. A Rule `FAIL` is still `checked`; it is not a clean pass. | Subject ID, status, concise result, source/stage summary supplied by the adapter, Run/Fixture reference, replay label, and Evidence references. |
+| Checked | The Rule or Check ran and produced a usable result. A Rule `FAIL` is still `checked`, but must render status `FAIL` and must not look like a clean pass. | Subject ID, status, concise result, source/stage summary supplied by the adapter, Run/Fixture reference, replay label, and Evidence references. |
 | Unknown | A required Rule or Check was missing, incomplete, unreliable, unsupported, unclassified, not reproducible, or interrupted before a trustworthy conclusion. | Closed Rule or Scope reason code, unresolved Evidence references, source/reproducibility state, and applicable recovery Action. Unknown must be visually distinct from Not checked. |
 | Not checked | The product/P0 capability was not performed in this checked scope, or a trusted terminal result legitimately prevented entry. This includes Rule `NOT_APPLICABLE` projections. | Closed Scope reason, optional Rule applicability reason, and the absent precondition or trusted terminal stage. It never implies a Rule pass. |
 
@@ -297,6 +298,8 @@ A required check that did not successfully run is `unknown`, not `not_checked`. 
 `PRECONDITION_ABSENT` belongs to the independent Scope reason vocabulary. `P0ApplicabilityReasonCode` remains limited to `BOUNDARY_NOT_PROVIDED` and `STAGE_NOT_ENTERED_AFTER_TERMINAL_RESULT`. Product/UI presents the derived categories but does not redefine central Verdict behavior.
 
 Every Scope item uses a stable subject: a P0 Rule ID or one of `P0-CHECK-ACTION-001`, `P0-CHECK-SIMULATION-001`, and `P0-CHECK-SIMULATION-COVERAGE-001`. Rule-bound Scope must agree mechanically with its Rule Result. Rule-bound unknown items use a Rule-specific `ruleReasonCode` plus a closed Scope `scopeReasonCode`; they never reuse a generic `P0ReasonCode` as a Scope reason. The independent Check IDs must never be serialized as Rule Results.
+
+Expanded Scope uses a stable adapter order: Unknown first, then checked Rule `FAIL`, then other checked items, then not checked. It must not silently cap or truncate items; if pagination or collapsing is needed, the UI exposes an explicit **Show all scope items** control and uses a documented default expand/collapse state.
 
 The UI may say **No trusted warnings were recorded in this Run** only when Warning Evidence has an explicit trusted source and is reproducible. It must not say “no warnings” based on absent, unknown-source, mock, or non-reproducible data.
 
@@ -355,7 +358,7 @@ Every finalized result or preview has one mandatory mode label near its main tit
 | Demo | **Demo preset** | **This result uses an explicitly labeled Demo/Replay preset. It is not a user-declared boundary or current Live Evidence.** | May exercise a product state for demonstration only; it cannot be presented as current Live Evidence. |
 | Mock | **Mock rule preview** | **This preview uses synthetic test input to validate code or UI behavior. It is not a real transaction result.** | Cannot activate a real user Verdict, public transaction recommendation, or real Evidence claim. |
 
-Replay preserves the original Evidence source, stage, block/runtime context, Fixture identity, and recorded/live distinction. A Run-level `ReplayFallbackDescriptor` must identify its fallback mode and source. Relabeling recorded Evidence as replay must not change underlying provenance.
+Replay preserves the original Evidence source, stage, block/runtime context, Fixture identity, and recorded/live distinction. A Run-level `ReplayFallbackDescriptor` must identify its fallback mode and source. Relabeling recorded Evidence as replay must not change underlying provenance. An Integration Error uses the same `ProductRunMode` as the underlying finalized Run because loading, parsing, or reproducing a Recorded Replay/Demo can also fail; `LIVE` therefore means a Live integration failure, while `RECORDED_REPLAY` and `DEMO` retain their explicit non-Live labels. The proposal does not invent a second replay-error state.
 
 Demo presets must remain visually and semantically separate from user results. `demo_preset` may never appear as `original_swap` or `user_declared`. Mock Evidence is never core Verdict Evidence.
 
@@ -664,7 +667,7 @@ type ProductActionSupportRef =
   | { kind: "EVIDENCE_REF"; runId: string; evidenceId: string }
   | { kind: "ERROR_REF"; runId: string }
   | { kind: "SCOPE_REF"; runId: string; subjectId: P0ScopeSubjectId }
-  | { kind: "REPLAY_REF"; runId: string; fallbackId: string };
+  | { kind: "REPLAY_FALLBACK"; runId: string; fallbackId: string };
 
 interface ProductActionBaseView {
   actionId: string;
@@ -704,6 +707,7 @@ type IrrelevantActionView =
 interface ReplayFallbackDescriptorView {
   fallbackId: string;
   mode: "REPLAY" | "DEMO";
+  label: string;
   copyKey: ProductCopyKey;
   source:
     | { kind: "RECORDED_RUN"; sourceRunId: string }
@@ -724,7 +728,7 @@ type RecoveryActionView =
       kind: "USE_REPLAY";
       copyKey: ProductCopyKey;
       actionReasonCode: "RESTORES_CHECK_ONLY";
-      supportRefs: Array<Extract<ProductActionSupportRef, { kind: "REPLAY_REF" }>>;
+      supportRefs: Array<Extract<ProductActionSupportRef, { kind: "REPLAY_FALLBACK" }>>;
       fallbackId: string;
     };
 
@@ -823,6 +827,7 @@ type ScopeItemView = RuleScopeItemView | IndependentScopeItemView;
 interface ScopeDisclosureView {
   counts: {
     checked: number;
+    failed: number; // derived presentation count; Rule FAIL remains canonical Scope checked
     unknown: number;
     notChecked: number;
   };
@@ -967,8 +972,9 @@ Product adapter invariants for this proposal:
 - `RuleResultView` must be validated against the exhaustive Rule-specific table before mapping to Product/UI.
 - Scope `status` is only `CHECKED`, `UNKNOWN`, or `NOT_CHECKED`; `presentationLabel = NOT_APPLICABLE` is not a fourth canonical state.
 - `coreEvidenceIds` must never include `source = mock` or unresolved/unknown critical Evidence. A completed `PROCEED`, `ADJUST`, or `STOP` and every public transaction Action must resolve only to eligible non-mock Evidence.
+- Every `evidenceIds` value used to support a Rule `PASS`/`FAIL`, the completed Verdict, or a public transaction Action must resolve to `coreEvidenceIds`; supplementary or mock Evidence may be displayed as context but can never be accepted as authoritative support.
 - `recommendedActions` require `gate.result = VERIFIED`, a local attestation EvidenceRef, exact normalized Intent diff, unchanged Boundary, and terminal child Receipt. Cross-Run locators remain nested in the attestation.
-- `recoveryActions` preserve canonical `ErrorRef`, `ScopeRef`, `EvidenceRef`, and `ReplayRef`; `USE_REPLAY` requires a same-Run descriptor and is hidden when no distinct fallback exists.
+- `recoveryActions` preserve canonical `ErrorRef`, `ScopeRef`, `EvidenceRef`, and `ReplayRef` semantics; the Product proposal encodes `ReplayRef` as `kind = "REPLAY_FALLBACK"`, and `USE_REPLAY` requires a same-Run descriptor with a non-empty resolved label. A recorded fallback must reference a different source Run; a Demo fallback must identify a preset or Fixture, and the candidate is hidden when no distinct fallback exists.
 - `primaryCta` is the only source of CTA routing. `ADJUST` has exactly one `primaryActionId`; `PROCEED` needs `origin` for `RETURN_TO_TRANSACTION`, otherwise it falls back to `REVIEW_CHECKED_SCOPE`.
 - `evidenceById` is the adapter's indexed lookup surface; components must not join flat Evidence arrays during rendering.
 - English normative copy is represented by `copyKey` values so reviewed `en` and `zh-CN` translations can be supplied without hardcoding display strings into the data model.
