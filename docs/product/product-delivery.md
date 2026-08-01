@@ -419,7 +419,7 @@ A real comparison includes:
 | --- | --- |
 | Previous Run ID / New Run ID | Identifies the two related terminal Receipts. |
 | Previous Intent / New Intent | Shows normalized Sender, Recipient, `recipientSource`, `tokenOut`, and exactly which user-controlled fields changed. |
-| Exact Intent diff | Shows before/after values, not a free-form field-name list. |
+| Exact Intent diff | Shows required before/after snapshots, including explicit present/absent states, not a free-form field-name list. |
 | Relationship | Declares rerun, modified Intent, or verified Action application. |
 | Previous / New status and system status | Distinguishes Completed from Integration Error. |
 | Previous / New mode and run provenance | Shows Live, Recorded Replay, Demo, or Mock presentation context, plus timestamp/runtime/block context where available. |
@@ -430,7 +430,7 @@ A real comparison includes:
 | Acceptance boundary diff | Makes a changed Minimum Received explicit and prevents it from being described as output improvement. |
 | Output diff | Uses comparable trusted simulated outputs only. |
 
-Use the heading **Previous Run vs New Run**. No comparison is shown for unrelated runs. Mock before/after data must be labeled **Mock comparison** on both sides and cannot prove causality. No real Action loop or improvement claim may be shown until the Action Recommendation Gate lifecycle has passed.
+Use the heading **Previous Run vs New Run**. No comparison is shown for unrelated runs. Mock before/after data must be labeled **Mock comparison** on both sides and cannot prove causality. No real Action loop or improvement claim may be shown until the Action Recommendation Gate lifecycle has passed. The Evidence diff has separate added, removed, and changed ID sets: each set is unique, the sets are pairwise disjoint, added IDs resolve in the New Run index, removed IDs resolve in the Previous Run index, and changed IDs resolve in both. Reordering alone is not a change. An Evidence diff is descriptive and never changes Verdict or Rule semantics.
 
 ## 12. Product delivery interface
 
@@ -441,6 +441,7 @@ The adapter must preserve the following authority boundaries:
 - canonical Rule tuples and Scope subjects are validated before this view is constructed;
 - `P0-ECONOMIC-001` is the only Rule that can carry the legal terminal-stage `NOT_APPLICABLE` tuple;
 - Rule `NOT_APPLICABLE` projects to Scope `not_checked`, never a second canonical Scope status;
+- the two Economic applicability-to-Scope pairs are exhaustive: `BOUNDARY_NOT_PROVIDED` with `PRECONDITION_ABSENT`, or `STAGE_NOT_ENTERED_AFTER_TERMINAL_RESULT` with the identically named Scope reason;
 - `source = mock` Evidence cannot support a completed user `PROCEED`, `ADJUST`, or `STOP`, a Rule `PASS`/`FAIL`, or a public transaction Action;
 - transaction Actions require a local `ActionGateAttestation` EvidenceRef and the complete child-Run lifecycle; and
 - recovery Actions use canonical support references, including same-Run `ReplayRef` for `USE_REPLAY`.
@@ -540,6 +541,10 @@ interface IntentAssetView {
   address: string;
 }
 
+type IntentValueSnapshot =
+  | { availability: "PRESENT"; value: string }
+  | { availability: "ABSENT" };
+
 type MinimumReceivedView =
   | {
       availability: "available";
@@ -560,6 +565,8 @@ interface IntentSummaryView {
   tokenOut: IntentAssetView;
   amountIn: string;
   protocol: string;
+  // Normalized by the adapter when supported; Product/UI must not infer it.
+  slippage: IntentValueSnapshot;
   minimumReceived: MinimumReceivedView;
   origin?: OriginContextView;
 }
@@ -686,20 +693,20 @@ type RuleResultView = EvidenceRuleResultView | ExecutionRuleResultView | Economi
 
 interface IntentChangeView {
   field: "sender" | "recipient" | "recipientSource" | "amountIn" | "tokenPair" | "protocol" | "slippage" | "minimumReceived";
-  before?: string;
-  after: string;
+  before: IntentValueSnapshot;
+  after: IntentValueSnapshot;
 }
 
 type TransactionAdjustmentChangeView = {
   field: "amountIn" | "tokenPair" | "protocol" | "slippage";
-  before?: string;
-  after: string;
+  before: IntentValueSnapshot;
+  after: IntentValueSnapshot;
 };
 
 type AcceptanceBoundaryChangeView = {
   field: "minimumReceived";
-  before?: string;
-  after: string;
+  before: IntentValueSnapshot;
+  after: IntentValueSnapshot;
 };
 
 interface VerifiedActionGateView {
@@ -886,13 +893,25 @@ type RuleScopeItemView =
       applicabilityReasonCode?: never;
       scopeReasonCode: P0ScopeUnknownReasonCode;
     })
+  | EconomicNotApplicableScopeView;
+
+type EconomicNotApplicableScopeView =
   | (ScopeItemCommonView<RealScopeItemProvenanceView> & {
       subjectId: "P0-ECONOMIC-001";
       status: "NOT_CHECKED";
       ruleStatus: "NOT_APPLICABLE";
       ruleReasonCode?: never;
-      applicabilityReasonCode: P0ApplicabilityReasonCode;
-      scopeReasonCode: P0ScopeNotCheckedReasonCode;
+      applicabilityReasonCode: "BOUNDARY_NOT_PROVIDED";
+      scopeReasonCode: "PRECONDITION_ABSENT";
+      presentationLabel?: "NOT_APPLICABLE";
+    })
+  | (ScopeItemCommonView<RealScopeItemProvenanceView> & {
+      subjectId: "P0-ECONOMIC-001";
+      status: "NOT_CHECKED";
+      ruleStatus: "NOT_APPLICABLE";
+      ruleReasonCode?: never;
+      applicabilityReasonCode: "STAGE_NOT_ENTERED_AFTER_TERMINAL_RESULT";
+      scopeReasonCode: "STAGE_NOT_ENTERED_AFTER_TERMINAL_RESULT";
       presentationLabel?: "NOT_APPLICABLE";
     });
 
@@ -914,10 +933,19 @@ type IndependentScopeItemView =
     });
 
 type ScopeItemView = RuleScopeItemView | IndependentScopeItemView;
-type MockScopeItemView = ScopeItemCommonView<MockScopeItemProvenanceView> & {
-  status: "CHECKED" | "UNKNOWN" | "NOT_CHECKED";
-  scopeReasonCode?: P0ScopeUnknownReasonCode | P0ScopeNotCheckedReasonCode;
-};
+type MockScopeItemView =
+  | (ScopeItemCommonView<MockScopeItemProvenanceView> & {
+      status: "CHECKED";
+      scopeReasonCode?: never;
+    })
+  | (ScopeItemCommonView<MockScopeItemProvenanceView> & {
+      status: "UNKNOWN";
+      scopeReasonCode: P0ScopeUnknownReasonCode;
+    })
+  | (ScopeItemCommonView<MockScopeItemProvenanceView> & {
+      status: "NOT_CHECKED";
+      scopeReasonCode: P0ScopeNotCheckedReasonCode;
+    });
 
 interface ScopeCountsView {
   checked: number;
@@ -936,13 +964,28 @@ interface MockScopeDisclosureView {
   items: MockScopeItemView[];
 }
 
-interface RunSideView {
-  runId: string;
-  status: "COMPLETED" | "INTEGRATION_ERROR";
-  systemStatus: "OK" | "INTEGRATION_ERROR";
-  verdict: Verdict;
-  mode: ProductRunMode;
-  provenance: RunProvenanceView;
+type RunSideView =
+  | {
+      runId: string;
+      status: "COMPLETED";
+      systemStatus: "OK";
+      verdict: Verdict;
+      mode: ProductRunMode;
+      provenance: RunProvenanceView;
+    }
+  | {
+      runId: string;
+      status: "INTEGRATION_ERROR";
+      systemStatus: "INTEGRATION_ERROR";
+      verdict: "UNKNOWN";
+      mode: ProductRunMode;
+      provenance: RunProvenanceView;
+    };
+
+interface EvidenceDiffView {
+  addedEvidenceIds: string[];
+  removedEvidenceIds: string[];
+  changedEvidenceIds: string[];
 }
 
 interface RunDiffView {
@@ -953,7 +996,7 @@ interface RunDiffView {
   newIntent: IntentSummaryView;
   changedIntentFields: IntentChangeView[];
   changedRuleIds: P0RuleId[];
-  changedEvidenceIds: string[];
+  evidenceDiff: EvidenceDiffView;
   appliedActionId?: string;
   acceptanceBoundaryChanged: boolean;
   comparableOutput?: { previous: string; next: string };
@@ -1082,16 +1125,18 @@ type ProductDeliveryView =
 Product adapter invariants for this proposal:
 
 - `RuleResultView` must be validated against the exhaustive Rule-specific table before mapping to Product/UI.
-- Scope `status` is only `CHECKED`, `UNKNOWN`, or `NOT_CHECKED`; `presentationLabel = NOT_APPLICABLE` is not a fourth canonical state. Checked Rule `FAIL` items carry their closed Rule reason (`NO_ROUTE_FOUND` or `OUTPUT_BELOW_BOUNDARY`) and Product copy is selected from that code, never parsed from `summary`.
+- `RunSideView` is a legal state union: `COMPLETED` requires `systemStatus = OK` and any centralized `Verdict`, while `INTEGRATION_ERROR` requires `systemStatus = INTEGRATION_ERROR` and `verdict = UNKNOWN`. `RunDiffView` may compare any two explicitly related valid sides, including Completed/Error in either direction; it never accepts an in-flight or Mock side.
+- Scope `status` is only `CHECKED`, `UNKNOWN`, or `NOT_CHECKED`; `presentationLabel = NOT_APPLICABLE` is not a fourth canonical state. Checked Rule `FAIL` items carry their closed Rule reason (`NO_ROUTE_FOUND` or `OUTPUT_BELOW_BOUNDARY`) and Product copy is selected from that code, never parsed from `summary`. Economic `NOT_APPLICABLE` Scope items accept only the two discriminated applicability/reason pairs declared above; no other Rule or Scope reason may be combined with them.
 - `coreEvidenceIds` must never include `source = mock` or unresolved/unknown critical Evidence. A completed `PROCEED`, `ADJUST`, or `STOP` and every public transaction Action must resolve only to eligible non-mock Evidence.
 - Every `evidenceIds` value used to support a Rule `PASS`/`FAIL`, the completed Verdict, or a public transaction Action must resolve to `coreEvidenceIds`; supplementary or mock Evidence may be displayed as context but can never be accepted as authoritative support.
+- Normalized `IntentSummaryView.slippage` is supplied by normalization as an explicit present/absent snapshot. Product/UI must not infer it from display copy, Quote values, Route Evidence, or Action text. Every `IntentChangeView` and Action change uses required `before` and `after` snapshots; a transaction Action diff must resolve to fields present in both the normalized baseline and child Intents, exactly equal the attested diff, and must not target identity/provenance or `minimumReceived`.
 - Every public Action has a non-empty support-ref tuple. A transaction adjustment's first support ref must be the baseline-Run `EVIDENCE_REF` for its local `ActionGateAttestation`; the adapter must reject generic Scope, Error, Replay, supplementary, or Mock-only support. The attestation ID and baseline Run ID must match the Action's `gate` and resolve in `evidenceById`.
 - `recommendedActions` require `gate.result = VERIFIED`, a local attestation EvidenceRef, a non-empty category-specific Intent diff, and `gate.exactIntentDiff` equal to the public Action `changes` field-for-field; the original Boundary must remain unchanged and the child Receipt must be terminal. Cross-Run locators remain nested in the attestation.
 - `recoveryActions` use non-empty, kind-specific support refs: `RETRY_CHECK` and `VIEW_MISSING_EVIDENCE` may use only applicable `ErrorRef`, `ScopeRef`, or `EvidenceRef`; `USE_REPLAY` uses only same-Run `REPLAY_FALLBACK` refs. Its `fallbackId` must match the selected descriptor, whose label is non-empty and whose recorded source Run differs from the current Run. Any unresolved, cross-Run, mismatched, or inapplicable reference keeps the candidate internal.
 - Public transaction Action changes are limited to `amountIn`, `tokenPair`, `protocol`, and `slippage`; `minimumReceived` is only an `ACCEPTANCE_BOUNDARY_CHANGE`, and `sender`, `recipient`, and `recipientSource` are never Action targets.
 - `primaryCta` is the only source of CTA routing and is state-specific: `ADJUST` has exactly one `primaryActionId` that matches exactly one unique `recommendedActions[].actionId`; `STOP` uses `REVIEW_BLOCKING_EVIDENCE`; `PROCEED` uses `RETURN_TO_TRANSACTION` only with normalized `origin`, otherwise `REVIEW_CHECKED_SCOPE`; `UNKNOWN` never applies a transaction Action and uses `VIEW_MISSING_EVIDENCE` only when `scope.counts.unknown > 0` and its destination is non-empty; Integration Error uses `RETRY_CHECK` only when `error.retryable`, otherwise implementable `VIEW_DETAILS`. Recovery/navigation CTAs are not Action list entries.
-- `evidenceById` is the adapter's indexed lookup surface; components must not join flat Evidence arrays during rendering. `ScopeItemView.replayFallbackIds` resolve through the same Run-level `replayFallbacks` map, so a row never selects an arbitrary Evidence label.
-- `MockRulePreviewView.kind = "MOCK_RULE_PREVIEW"` is the authoritative Mock discriminator. Its Evidence entries use `authority = "MOCK"`, `mode = "MOCK_PREVIEW"`, and `previewId`; they do not carry a real `runId` or `ProductRunMode`, and the preview is never a finalized user Run or source of a user Verdict.
+- `evidenceById` is the adapter's indexed lookup surface; components must not join flat Evidence arrays during rendering. `ScopeItemView.replayFallbackIds` resolve through the same Run-level `replayFallbacks` map, so a row never selects an arbitrary Evidence label. `RunDiffView.evidenceDiff` resolves IDs against the existing Previous/New `evidenceById` indexes supplied by the associated side projections; it creates no second Evidence store. Added, removed, and changed sets must be unique and disjoint, and Mock-only Evidence cannot be authoritative comparison support.
+- `MockRulePreviewView.kind = "MOCK_RULE_PREVIEW"` is the authoritative Mock discriminator. Its Evidence entries use `authority = "MOCK"`, `mode = "MOCK_PREVIEW"`, and `previewId`; they do not carry a real `runId` or `ProductRunMode`, and the preview is never a finalized user Run or source of a user Verdict. `MockScopeItemView` is also discriminated: `CHECKED` has no Scope reason, `UNKNOWN` requires an unknown reason, and `NOT_CHECKED` requires a not-checked reason; the adapter rejects every other pairing.
 - Completed and Integration Error projections may use only real Evidence provenance (`authority = CORE | SUPPLEMENTARY`); Mock Evidence is not an authoritative Scope, Rule, Verdict, or Action support source.
 - English normative copy is represented by `copyKey` values. Every emitted key must resolve through a reviewed `en` and `zh-CN` catalog before implementation; a missing locale mapping is an adapter/catalog error, not a reason to hardcode or silently reinterpret copy.
 
