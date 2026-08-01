@@ -480,7 +480,7 @@ Purpose: Prevent the system from silently promoting partial success, zero warnin
 Evidence requirements must be calculated from the current execution path and terminal stage:
 
 - `simulationCoverage` is required only when the current path must enter `SIMULATE`.
-- If an earlier stage has already ended with a trusted terminal result, later stages that were never entered are `NOT_APPLICABLE`.
+- If an earlier stage has already ended with a trusted terminal result, later stage-level checks that were never entered are represented as Scope `not_checked` and, where a downstream Rule has a legal status for an unentered stage, as that Rule's `NOT_APPLICABLE` result. This does not make `P0-EVIDENCE-001` `NOT_APPLICABLE`.
 - Raw evidence fields must not themselves be written as `NOT_APPLICABLE`; applicability is expressed by rule and stage evaluation.
 
 ### 5.3 Triggers and Reason Codes
@@ -1177,7 +1177,7 @@ The semantic requirements in Sections 1 through 8 are normative for P0 v0.1. The
 
 ### 9.2 Evidence, Rules, Fixtures, and Gates
 
-- [ ] Implement stage-aware `P0-EVIDENCE-001` Rule Result handling: missing, null, incomplete, unreliable, or unverified required Evidence is `UNKNOWN`, while later stages after a trusted terminal result are `NOT_APPLICABLE`.
+- [ ] Implement stage-aware `P0-EVIDENCE-001` Rule Result handling: `PASS` when Evidence required by the current path is complete, and `UNKNOWN` when required Evidence is missing, null, incomplete, unreliable, or unverified. `P0-EVIDENCE-001` never emits `NOT_APPLICABLE`; later unentered stages are represented by Scope `not_checked` and, where legal, the downstream Rule's `NOT_APPLICABLE` result.
 - [ ] Implement the merged Evidence Baseline adapter mapping: `COMPLETE` may support Rule `PASS`, `MISSING` is decomposed by its underlying cause rather than directly serialized, and Integration Error `UNKNOWN` produces Scope `unknown` without a fabricated Rule Result.
 - [ ] Add Contract and Risk regression coverage preventing `ACCEPTANCE_BOUNDARY_CHANGE` from entering `recommendedActions`.
 - [ ] Define and test the normalized recipient-and-token-matched simulated output extraction used by `P0-ECONOMIC-001`.
