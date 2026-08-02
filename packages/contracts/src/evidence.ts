@@ -39,6 +39,12 @@ export const simulationInputRoleSchema = z.enum([
   "RECIPIENT_BALANCE_SNAPSHOT",
 ]);
 
+export const routeInputRoleSchema = z.enum(["ROUTE_QUOTE", "ROUTE_ACTION"]);
+
+// The initial core Evidence map deliberately exposes only the P0 completeness
+// role. More detailed requirement attestations remain outside this PR.
+export const coreEvidenceRoleSchema = z.enum(["EVIDENCE_COMPLETENESS"]);
+
 const evidenceProvenanceShape = {
   key: z.string().trim().min(1),
   blockNumber: z.string().regex(/^\d+$/).optional(),
@@ -88,7 +94,9 @@ const genericEvidenceItemObjectSchema = z
     summary: z.string().trim().min(1),
     source: evidenceSourceSchema,
     stage: evidenceStageSchema.optional(),
+    coreRole: coreEvidenceRoleSchema.optional(),
     simulationInputRole: simulationInputRoleSchema.optional(),
+    routeInputRole: routeInputRoleSchema.optional(),
   })
   .strict();
 
@@ -489,6 +497,8 @@ export type EvidenceReproducibility = z.infer<
   typeof evidenceReproducibilitySchema
 >;
 export type SimulationInputRole = z.infer<typeof simulationInputRoleSchema>;
+export type RouteInputRole = z.infer<typeof routeInputRoleSchema>;
+export type CoreEvidenceRole = z.infer<typeof coreEvidenceRoleSchema>;
 export type EvidenceRef = z.infer<typeof evidenceRefSchema>;
 export type EvidenceStatus = z.infer<typeof evidenceStatusSchema>;
 export type GenericEvidenceItem = z.infer<typeof genericEvidenceItemSchema>;

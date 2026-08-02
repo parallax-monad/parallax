@@ -201,6 +201,77 @@ function isCoreEvidence(evidence: EvidenceItem) {
   );
 }
 
+function isCanonicalRouteInput(evidence: EvidenceItem) {
+  return (
+    isTrustedEvidence(evidence) &&
+    evidence.kind === "generic" &&
+    (evidence.source === "moss" || evidence.source === "quote") &&
+    ((evidence.routeInputRole === "ROUTE_QUOTE" &&
+      evidence.stage === "QUOTE") ||
+      (evidence.routeInputRole === "ROUTE_ACTION" &&
+        evidence.stage === "ACTION"))
+  );
+}
+
+function validateCoreRuleEvidence(
+  ruleResult: RuleResult,
+  ruleEvidence: EvidenceItem[],
+  route: z.infer<typeof routeSchema> | undefined,
+  ruleIndex: number,
+  context: z.RefinementCtx,
+) {
+  if (ruleResult.status !== "PASS" && ruleResult.status !== "FAIL") {
+    return;
+  }
+
+  const hasExactlyOneEvidence =
+    ruleResult.evidenceRefs.length === 1 && ruleEvidence.length === 1;
+  const evidence = ruleEvidence[0];
+  let valid = true;
+  let message = "";
+
+  switch (ruleResult.ruleId) {
+    case "P0-EVIDENCE-001":
+      valid =
+        ruleResult.status === "PASS" &&
+        hasExactlyOneEvidence &&
+        evidence?.kind === "generic" &&
+        evidence.source === "derived" &&
+        evidence.coreRole === "EVIDENCE_COMPLETENESS";
+      message =
+        "P0-EVIDENCE-001 PASS requires exactly one derived generic EVIDENCE_COMPLETENESS Evidence item";
+      break;
+    case "P0-EXECUTION-001":
+      if (ruleResult.status === "PASS") {
+        valid =
+          hasExactlyOneEvidence &&
+          route?.availability === "available" &&
+          evidence?.key === route.evidenceRef.key;
+        message =
+          "P0-EXECUTION-001 PASS must reference the canonical available Route Evidence";
+      } else {
+        valid =
+          hasExactlyOneEvidence && evidence?.kind === "no_route_classification";
+        message =
+          "P0-EXECUTION-001 FAIL requires exactly one no_route_classification Evidence item";
+      }
+      break;
+    case "P0-ECONOMIC-001":
+      valid = hasExactlyOneEvidence && evidence?.kind === "simulated_token_out";
+      message =
+        "P0-ECONOMIC-001 PASS/FAIL requires exactly one simulated_token_out Evidence item";
+      break;
+  }
+
+  if (!valid) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message,
+      path: ["ruleResults", ruleIndex, "evidenceRefs"],
+    });
+  }
+}
+
 function actionEvaluationIdentity(evaluation: ActionEvaluation) {
   const actionIdentity =
     evaluation.action.kind === "TRANSACTION_ADJUSTMENT" ||
@@ -358,6 +429,7 @@ function validateRuleResults(
   ruleResults: RuleResult[],
   evidenceByKey: Map<string, EvidenceItem>,
   runId: string,
+  route: z.infer<typeof routeSchema> | undefined,
   context: z.RefinementCtx,
 ) {
   const ruleIds = new Set<string>();
@@ -424,6 +496,14 @@ function validateRuleResults(
           path: ["ruleResults", ruleIndex, "evidenceRefs"],
         });
       }
+
+      validateCoreRuleEvidence(
+        ruleResult,
+        ruleEvidence,
+        route,
+        ruleIndex,
+        context,
+      );
     }
 
     validateUniqueActions(
@@ -805,7 +885,7 @@ function validateAvailableRoute(
         (reference) => reference.key === routeEvidenceKey,
       ) ||
       inputEvidence.length === 0 ||
-      !inputEvidence.every(isTrustedEvidence)
+      !inputEvidence.every(isCanonicalRouteInput)
     ) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
@@ -856,9 +936,6 @@ function validateNoRouteClassification(
 
   const classification = classifications[0];
   const rawEvidence = evidenceByKey.get(classification.rawEvidenceKey);
-  const rawIsReferenced = executionRule.evidenceRefs.some(
-    (reference) => reference.key === classification.rawEvidenceKey,
-  );
   const rawRuntimeMatches =
     rawEvidence !== undefined &&
     classification.runtimeVersion !== undefined &&
@@ -897,7 +974,6 @@ function validateNoRouteClassification(
     );
   const rawEvidenceIsTrusted =
     rawEvidence?.kind === "no_route_raw_output" &&
-    rawIsReferenced &&
     rawEvidence.status === "confirmed" &&
     (rawEvidence.source === "moss" ||
       (classification.stage === "QUOTE" && rawEvidence.source === "quote")) &&
@@ -1046,6 +1122,9 @@ function validateEconomicBoundary(
         input.stage === "SIMULATE" &&
         input.kind === "generic" &&
         input.simulationInputRole !== undefined &&
+        (!simulatedOutput.isReplay ||
+          (input.fixtureId !== undefined &&
+            input.fixtureId === simulatedOutput.fixtureId)) &&
         input.isReplay === simulatedOutput.isReplay &&
         input.reproducibility === simulatedOutput.reproducibility &&
         input.runtimeVersion === simulatedOutput.runtimeVersion &&
@@ -1125,6 +1204,7 @@ export const completedRunResultSchema = runIdentitySchema
       result.ruleResults,
       evidenceByKey,
       result.runId,
+      result.route,
       context,
     );
     validatePublicActions(
@@ -1217,6 +1297,7 @@ export const failedRunResultSchema = runIdentitySchema
       result.ruleResults,
       evidenceByKey,
       result.runId,
+      undefined,
       context,
     );
     validatePublicActions(

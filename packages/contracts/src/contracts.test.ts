@@ -92,6 +92,14 @@ const simulationReceiptEvidence = {
   simulationInputRole: "SIMULATION_RECEIPT" as const,
 };
 
+const evidenceCompletenessEvidence = {
+  ...simulationCoverageEvidence,
+  key: "evidence-completeness",
+  source: "derived" as const,
+  coreRole: "EVIDENCE_COMPLETENESS" as const,
+  summary: "P0 Evidence completeness is verified",
+};
+
 const replaySimulationCoverageEvidence = {
   ...simulationCoverageEvidence,
   key: "simulation-coverage-replay",
@@ -111,6 +119,7 @@ const routeEvidence = {
   key: "route-quote",
   stage: "QUOTE" as const,
   source: "quote" as const,
+  routeInputRole: "ROUTE_QUOTE" as const,
   summary: "Moss returned a route for the checked Intent",
 };
 
@@ -806,6 +815,60 @@ describe("completed Run Result contract", () => {
         },
       }).success,
     ).toBe(false);
+
+    const derivedRouteEvidence: EvidenceItem = {
+      ...routeEvidence,
+      key: "derived-route",
+      source: "derived",
+    };
+    const derivedRoute = {
+      ...completedResult.route,
+      source: "derived" as const,
+      evidenceRef: evidenceRef(derivedRouteEvidence),
+      inputEvidenceRefs: [evidenceRef(routeEvidence)],
+    };
+    expect(
+      runResultSchema.safeParse({
+        ...completedResult,
+        evidence: [
+          derivedRouteEvidence,
+          routeEvidence,
+          simulationCoverageEvidence,
+        ],
+        route: derivedRoute,
+      }).success,
+    ).toBe(true);
+
+    const rpcDerivedInput = {
+      ...routeEvidence,
+      key: "rpc-derived-route-input",
+      source: "rpc" as const,
+    };
+    expect(
+      runResultSchema.safeParse({
+        ...completedResult,
+        evidence: [derivedRouteEvidence, rpcDerivedInput],
+        route: {
+          ...derivedRoute,
+          inputEvidenceRefs: [evidenceRef(rpcDerivedInput)],
+        },
+      }).success,
+    ).toBe(false);
+
+    const simulationDerivedInput = {
+      ...simulationReceiptEvidence,
+      key: "simulation-derived-route-input",
+    };
+    expect(
+      runResultSchema.safeParse({
+        ...completedResult,
+        evidence: [derivedRouteEvidence, simulationDerivedInput],
+        route: {
+          ...derivedRoute,
+          inputEvidenceRefs: [evidenceRef(simulationDerivedInput)],
+        },
+      }).success,
+    ).toBe(false);
   });
 
   it("requires RuleResult and Rule-bound Scope to agree in both directions", () => {
@@ -1018,10 +1081,7 @@ describe("completed Run Result contract", () => {
       ruleId: "P0-EXECUTION-001",
       status: "FAIL",
       reasonCode: "NO_ROUTE_FOUND",
-      evidenceRefs: [
-        evidenceRef(classificationEvidence),
-        evidenceRef(rawEvidence),
-      ],
+      evidenceRefs: [evidenceRef(classificationEvidence)],
       actionEvaluations: [],
     };
 
@@ -1127,10 +1187,7 @@ describe("completed Run Result contract", () => {
           },
           {
             ...terminalExecutionRule,
-            evidenceRefs: [
-              evidenceRef(classificationEvidence),
-              evidenceRef(rawEvidence),
-            ],
+            evidenceRefs: [evidenceRef(classificationEvidence)],
           },
         ],
       }).success,
@@ -1163,11 +1220,57 @@ describe("completed Run Result contract", () => {
           },
           {
             ...terminalExecutionRule,
-            evidenceRefs: [
-              evidenceRef(classificationEvidence),
-              evidenceRef(externalRawEvidence),
-              evidenceRef(simulationCoverageEvidence),
-            ],
+            evidenceRefs: [evidenceRef(classificationEvidence)],
+          },
+        ],
+      }).success,
+    ).toBe(false);
+  });
+
+  it("binds an Execution PASS to the canonical Route Evidence", () => {
+    const executionRule: RuleResult = {
+      ruleId: "P0-EXECUTION-001",
+      status: "PASS",
+      evidenceRefs: [evidenceRef(routeEvidence)],
+      actionEvaluations: [],
+    };
+    const executionScope = [
+      {
+        key: "P0-ECONOMIC-001" as const,
+        label: "Economic result",
+        status: "not_checked" as const,
+        reason: "PRECONDITION_ABSENT" as const,
+      },
+      {
+        key: "P0-EXECUTION-001" as const,
+        label: "Execution result",
+        status: "checked" as const,
+      },
+      {
+        key: "OUTSIDE_P0_SCOPE" as const,
+        label: "Complete protocol security",
+        status: "not_checked" as const,
+        reason: "OUTSIDE_P0_SCOPE" as const,
+      },
+    ];
+
+    expect(
+      runResultSchema.safeParse({
+        ...completedResult,
+        scope: executionScope,
+        ruleResults: [unavailableEconomicRule, executionRule],
+      }).success,
+    ).toBe(true);
+
+    expect(
+      runResultSchema.safeParse({
+        ...completedResult,
+        scope: executionScope,
+        ruleResults: [
+          unavailableEconomicRule,
+          {
+            ...executionRule,
+            evidenceRefs: [evidenceRef(simulationCoverageEvidence)],
           },
         ],
       }).success,
@@ -1203,6 +1306,29 @@ describe("completed Run Result contract", () => {
         ruleResults: [rule],
       }).success,
     ).toBe(true);
+
+    expect(
+      runResultSchema.safeParse({
+        ...completedResult,
+        intent: availableIntent,
+        evidence: [
+          routeEvidence,
+          simulationCoverageEvidence,
+          simulationReceiptEvidence,
+          output,
+        ],
+        scope: scopeWithCheckedEconomic,
+        ruleResults: [
+          {
+            ...rule,
+            evidenceRefs: [
+              evidenceRef(output),
+              evidenceRef(simulationCoverageEvidence),
+            ],
+          },
+        ],
+      }).success,
+    ).toBe(false);
   });
 
   it("rejects duplicate Evidence keys, Rule IDs, and dangling references", () => {
@@ -1312,6 +1438,58 @@ describe("completed Run Result contract", () => {
     ).toBe(false);
   });
 
+  it("accepts only the closed P0 Evidence completeness core map", () => {
+    const evidenceRule: RuleResult = {
+      ruleId: "P0-EVIDENCE-001",
+      status: "PASS",
+      evidenceRefs: [evidenceRef(evidenceCompletenessEvidence)],
+      actionEvaluations: [],
+    };
+    const evidenceScope = [
+      {
+        key: "P0-EVIDENCE-001" as const,
+        label: "Evidence result",
+        status: "checked" as const,
+      },
+      ...completedResult.scope,
+    ];
+
+    expect(
+      runResultSchema.safeParse({
+        ...completedResult,
+        evidence: [
+          routeEvidence,
+          simulationCoverageEvidence,
+          simulationReceiptEvidence,
+          evidenceCompletenessEvidence,
+        ],
+        scope: evidenceScope,
+        ruleResults: [unavailableEconomicRule, evidenceRule],
+      }).success,
+    ).toBe(true);
+
+    for (const invalidEvidence of [
+      { ...evidenceCompletenessEvidence, coreRole: undefined },
+      { ...evidenceCompletenessEvidence, source: "moss" as const },
+      { ...simulationCoverageEvidence, source: "derived" as const },
+    ]) {
+      expect(
+        runResultSchema.safeParse({
+          ...completedResult,
+          evidence: [routeEvidence, invalidEvidence],
+          scope: evidenceScope,
+          ruleResults: [
+            unavailableEconomicRule,
+            {
+              ...evidenceRule,
+              evidenceRefs: [evidenceRef(invalidEvidence)],
+            },
+          ],
+        }).success,
+      ).toBe(false);
+    }
+  });
+
   it.each(["mock", "unknown", "external"] as const)(
     "rejects %s Evidence as support for core PASS",
     (source) => {
@@ -1347,7 +1525,7 @@ describe("completed Run Result contract", () => {
 
     invalidProvenance.forEach((provenance, index) => {
       const evidence = {
-        ...simulationCoverageEvidence,
+        ...evidenceCompletenessEvidence,
         key: `invalid-core-evidence-${index}`,
         ...provenance,
       };
@@ -1379,7 +1557,7 @@ describe("completed Run Result contract", () => {
     const rule: RuleResult = {
       ruleId: "P0-ECONOMIC-001",
       status: "PASS",
-      evidenceRefs: [evidenceRef(output), evidenceRef(externalEvidence)],
+      evidenceRefs: [evidenceRef(output)],
       actionEvaluations: [],
     };
 
@@ -1398,6 +1576,29 @@ describe("completed Run Result contract", () => {
         ruleResults: [rule],
       }).success,
     ).toBe(true);
+
+    expect(
+      runResultSchema.safeParse({
+        ...completedResult,
+        intent: availableIntent,
+        evidence: [
+          routeEvidence,
+          simulationCoverageEvidence,
+          simulationReceiptEvidence,
+          output,
+        ],
+        scope: scopeWithCheckedEconomic,
+        ruleResults: [
+          {
+            ...rule,
+            evidenceRefs: [
+              evidenceRef(output),
+              evidenceRef(simulationCoverageEvidence),
+            ],
+          },
+        ],
+      }).success,
+    ).toBe(false);
   });
 
   it("enforces Replay Evidence provenance and demo-preset scope", () => {
@@ -1441,6 +1642,53 @@ describe("completed Run Result contract", () => {
         ],
       }).success,
     ).toBe(true);
+
+    const parseReplayWithInput = (input: EvidenceItem) => {
+      const output = simulatedOutput("20000000", {
+        isReplay: true,
+        inputEvidenceRefs: [evidenceRef(input)],
+      });
+      return runResultSchema.safeParse({
+        ...completedResult,
+        replayMode: true,
+        intent: {
+          ...availableIntent,
+          economicBoundary: {
+            ...availableIntent.economicBoundary,
+            source: "demo_preset",
+          },
+        },
+        evidence: [replayRouteEvidence, input, output],
+        route: {
+          ...completedResult.route,
+          evidenceRef: evidenceRef(replayRouteEvidence),
+        },
+        scope: scopeWithCheckedEconomic,
+        ruleResults: [
+          {
+            ruleId: "P0-ECONOMIC-001" as const,
+            status: "PASS" as const,
+            evidenceRefs: [evidenceRef(output)],
+            actionEvaluations: [],
+          },
+        ],
+      }).success;
+    };
+
+    expect(
+      parseReplayWithInput({
+        ...replaySimulationReceiptEvidence,
+        key: "replay-input-without-fixture",
+        fixtureId: undefined,
+      }),
+    ).toBe(false);
+    expect(
+      parseReplayWithInput({
+        ...replaySimulationReceiptEvidence,
+        key: "replay-input-with-different-fixture",
+        fixtureId: "fixture-replay-other",
+      }),
+    ).toBe(false);
 
     expect(
       runResultSchema.safeParse({
