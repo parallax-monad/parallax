@@ -186,6 +186,21 @@ function isTrustedEvidence(evidence: EvidenceItem) {
   );
 }
 
+function hasImmutableRuntimeIdentity(evidence: EvidenceItem) {
+  return (
+    evidence.runtimeVersion !== undefined &&
+    evidence.runtimeRevision !== undefined
+  );
+}
+
+function isCoreEvidence(evidence: EvidenceItem) {
+  return (
+    isTrustedEvidence(evidence) &&
+    evidence.reproducibility === "REPRODUCIBLE" &&
+    hasImmutableRuntimeIdentity(evidence)
+  );
+}
+
 function actionEvaluationIdentity(evaluation: ActionEvaluation) {
   const actionIdentity =
     evaluation.action.kind === "TRANSACTION_ADJUSTMENT" ||
@@ -387,6 +402,15 @@ function validateRuleResults(
           context.addIssue({
             code: z.ZodIssueCode.custom,
             message: "Rule PASS/FAIL requires confirmed Evidence",
+            path: ["ruleResults", ruleIndex, "evidenceRefs", evidenceIndex],
+          });
+        }
+
+        if (evidence.source !== "external" && !isCoreEvidence(evidence)) {
+          context.addIssue({
+            code: z.ZodIssueCode.custom,
+            message:
+              "Core Rule PASS/FAIL requires reproducible Evidence with immutable Runtime identity",
             path: ["ruleResults", ruleIndex, "evidenceRefs", evidenceIndex],
           });
         }
@@ -1019,6 +1043,9 @@ function validateEconomicBoundary(
     !simulationInputs.every(
       (input) =>
         isTrustedEvidence(input) &&
+        input.stage === "SIMULATE" &&
+        input.kind === "generic" &&
+        input.simulationInputRole !== undefined &&
         input.isReplay === simulatedOutput.isReplay &&
         input.reproducibility === simulatedOutput.reproducibility &&
         input.runtimeVersion === simulatedOutput.runtimeVersion &&

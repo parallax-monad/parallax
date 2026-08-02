@@ -85,9 +85,23 @@ const simulationCoverageEvidence = {
   isMock: false,
 };
 
+const simulationReceiptEvidence = {
+  ...simulationCoverageEvidence,
+  key: "simulation-receipt",
+  summary: "Simulation receipt is available",
+  simulationInputRole: "SIMULATION_RECEIPT" as const,
+};
+
 const replaySimulationCoverageEvidence = {
   ...simulationCoverageEvidence,
   key: "simulation-coverage-replay",
+  fixtureId: "fixture-replay-1",
+  isReplay: true,
+};
+
+const replaySimulationReceiptEvidence = {
+  ...simulationReceiptEvidence,
+  key: "simulation-receipt-replay",
   fixtureId: "fixture-replay-1",
   isReplay: true,
 };
@@ -156,8 +170,8 @@ function simulatedOutput(
     inputEvidenceRefs: [
       evidenceRef(
         overrides.isReplay === true
-          ? replaySimulationCoverageEvidence
-          : simulationCoverageEvidence,
+          ? replaySimulationReceiptEvidence
+          : simulationReceiptEvidence,
       ),
     ],
     ...overrides,
@@ -198,7 +212,11 @@ const completedResult = {
   ruleResults: [unavailableEconomicRule],
   recommendedActions: [],
   irrelevantActions: [],
-  evidence: [routeEvidence, simulationCoverageEvidence],
+  evidence: [
+    routeEvidence,
+    simulationCoverageEvidence,
+    simulationReceiptEvidence,
+  ],
   scope: [
     {
       key: "P0-ECONOMIC-001",
@@ -248,7 +266,12 @@ function economicRun(
   return {
     ...completedResult,
     intent: availableIntent,
-    evidence: [routeEvidence, simulationCoverageEvidence, output],
+    evidence: [
+      routeEvidence,
+      simulationCoverageEvidence,
+      simulationReceiptEvidence,
+      output,
+    ],
     ruleResults: [rule],
     scope: scopeWithCheckedEconomic,
     ...overrides,
@@ -446,6 +469,53 @@ describe("Evidence provenance contracts", () => {
       simulatedTokenOutEvidenceSchema.safeParse({
         ...output,
         runtimeRevision: undefined,
+      }).success,
+    ).toBe(false);
+  });
+
+  it("requires a canonical Simulation input role for Economic PASS/FAIL", () => {
+    const untypedInputOutput = simulatedOutput("20000000", {
+      inputEvidenceRefs: [evidenceRef(simulationCoverageEvidence)],
+    });
+    const untypedInputRule: RuleResult = {
+      ruleId: "P0-ECONOMIC-001",
+      status: "PASS",
+      evidenceRefs: [evidenceRef(untypedInputOutput)],
+      actionEvaluations: [],
+    };
+    expect(
+      runResultSchema.safeParse({
+        ...economicRun("PASS", "20000000"),
+        evidence: [
+          routeEvidence,
+          simulationCoverageEvidence,
+          simulationReceiptEvidence,
+          untypedInputOutput,
+        ],
+        ruleResults: [untypedInputRule],
+      }).success,
+    ).toBe(false);
+
+    const quoteInput = {
+      ...simulationReceiptEvidence,
+      key: "quote-input",
+      source: "quote" as const,
+      stage: "QUOTE" as const,
+    };
+    const quoteInputOutput = simulatedOutput("20000000", {
+      inputEvidenceRefs: [evidenceRef(quoteInput)],
+    });
+    const quoteInputRule: RuleResult = {
+      ruleId: "P0-ECONOMIC-001",
+      status: "PASS",
+      evidenceRefs: [evidenceRef(quoteInputOutput)],
+      actionEvaluations: [],
+    };
+    expect(
+      runResultSchema.safeParse({
+        ...economicRun("PASS", "20000000"),
+        evidence: [routeEvidence, quoteInput, quoteInputOutput],
+        ruleResults: [quoteInputRule],
       }).success,
     ).toBe(false);
   });
@@ -716,6 +786,23 @@ describe("completed Run Result contract", () => {
           ...completedResult.route,
           source: "external",
           evidenceRef: evidenceRef(externalRouteEvidence),
+        },
+      }).success,
+    ).toBe(false);
+
+    const rpcRouteEvidence: EvidenceItem = {
+      ...routeEvidence,
+      key: "rpc-route",
+      source: "rpc",
+    };
+    expect(
+      runResultSchema.safeParse({
+        ...completedResult,
+        evidence: [rpcRouteEvidence, simulationCoverageEvidence],
+        route: {
+          ...completedResult.route,
+          source: "rpc",
+          evidenceRef: evidenceRef(rpcRouteEvidence),
         },
       }).success,
     ).toBe(false);
@@ -1106,7 +1193,12 @@ describe("completed Run Result contract", () => {
           recipient: otherRecipient,
           recipientSource: "explicit",
         },
-        evidence: [routeEvidence, simulationCoverageEvidence, output],
+        evidence: [
+          routeEvidence,
+          simulationCoverageEvidence,
+          simulationReceiptEvidence,
+          output,
+        ],
         scope: scopeWithCheckedEconomic,
         ruleResults: [rule],
       }).success,
@@ -1245,6 +1337,37 @@ describe("completed Run Result contract", () => {
     },
   );
 
+  it("requires reproducible immutable runtime identity for core Rule Evidence", () => {
+    const invalidProvenance = [
+      { reproducibility: "UNKNOWN" as const },
+      { reproducibility: "NOT_REPRODUCIBLE" as const },
+      { runtimeVersion: undefined },
+      { runtimeRevision: undefined },
+    ];
+
+    invalidProvenance.forEach((provenance, index) => {
+      const evidence = {
+        ...simulationCoverageEvidence,
+        key: `invalid-core-evidence-${index}`,
+        ...provenance,
+      };
+      const rule: RuleResult = {
+        ruleId: "P0-EVIDENCE-001",
+        status: "PASS",
+        evidenceRefs: [evidenceRef(evidence)],
+        actionEvaluations: [],
+      };
+
+      expect(
+        runResultSchema.safeParse({
+          ...completedResult,
+          evidence: [routeEvidence, evidence],
+          ruleResults: [unavailableEconomicRule, rule],
+        }).success,
+      ).toBe(false);
+    });
+  });
+
   it("allows External disclosure alongside independently sufficient Evidence", () => {
     const output = simulatedOutput("20000000");
     const externalEvidence: EvidenceItem = {
@@ -1267,6 +1390,7 @@ describe("completed Run Result contract", () => {
         evidence: [
           routeEvidence,
           simulationCoverageEvidence,
+          simulationReceiptEvidence,
           output,
           externalEvidence,
         ],
@@ -1299,6 +1423,7 @@ describe("completed Run Result contract", () => {
         evidence: [
           replayRouteEvidence,
           replaySimulationCoverageEvidence,
+          replaySimulationReceiptEvidence,
           replayOutput,
         ],
         route: {

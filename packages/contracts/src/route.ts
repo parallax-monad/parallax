@@ -1,6 +1,8 @@
 import { z } from "zod";
 import { assetReferenceSchema, protocolSchema } from "./common.js";
-import { evidenceRefSchema, evidenceSourceSchema } from "./evidence.js";
+import { evidenceRefSchema } from "./evidence.js";
+
+const availableRouteSourceSchema = z.enum(["moss", "quote", "derived"]);
 
 // Route is execution evidence produced by Moss, not a user-supplied Intent field.
 export const routeSchema = z
@@ -10,7 +12,7 @@ export const routeSchema = z
         availability: z.literal("available"),
         protocol: protocolSchema,
         path: z.array(assetReferenceSchema).min(2),
-        source: evidenceSourceSchema,
+        source: availableRouteSourceSchema,
         blockNumber: z.string().regex(/^\d+$/).optional(),
         evidenceRef: evidenceRefSchema,
         inputEvidenceRefs: z.array(evidenceRefSchema).min(1).optional(),

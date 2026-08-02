@@ -33,6 +33,12 @@ export const evidenceReproducibilitySchema = z.enum([
   "UNKNOWN",
 ]);
 
+export const simulationInputRoleSchema = z.enum([
+  "SIMULATION_RECEIPT",
+  "ASSET_CHANGE_SET",
+  "RECIPIENT_BALANCE_SNAPSHOT",
+]);
+
 const evidenceProvenanceShape = {
   key: z.string().trim().min(1),
   blockNumber: z.string().regex(/^\d+$/).optional(),
@@ -82,6 +88,7 @@ const genericEvidenceItemObjectSchema = z
     summary: z.string().trim().min(1),
     source: evidenceSourceSchema,
     stage: evidenceStageSchema.optional(),
+    simulationInputRole: simulationInputRoleSchema.optional(),
   })
   .strict();
 
@@ -481,6 +488,7 @@ export type EvidenceStage = z.infer<typeof evidenceStageSchema>;
 export type EvidenceReproducibility = z.infer<
   typeof evidenceReproducibilitySchema
 >;
+export type SimulationInputRole = z.infer<typeof simulationInputRoleSchema>;
 export type EvidenceRef = z.infer<typeof evidenceRefSchema>;
 export type EvidenceStatus = z.infer<typeof evidenceStatusSchema>;
 export type GenericEvidenceItem = z.infer<typeof genericEvidenceItemSchema>;
