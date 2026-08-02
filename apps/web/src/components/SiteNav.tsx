@@ -2,11 +2,9 @@ import { useEffect } from "react";
 import { LANGUAGE_STORAGE_KEY, type Language, pick } from "@/lib/i18n";
 
 export function SiteNav({
-  active,
   language,
   onLanguageChange,
 }: {
-  active: string;
   language: Language;
   onLanguageChange: (language: Language) => void;
 }) {
@@ -27,18 +25,6 @@ export function SiteNav({
         PARAL<span className="text-white">LAX</span>
       </a>
       <div className="ml-auto flex items-center gap-4 sm:gap-[30px]">
-        <div className="hidden items-center gap-[30px] sm:flex">
-          <NavLink
-            href="#/"
-            label={pick(language, "Risk graph", "风险图谱")}
-            current={active === "home"}
-          />
-          <NavLink
-            href="#/analyze"
-            label={pick(language, "Analyze", "分析")}
-            current={active === "analyze"}
-          />
-        </div>
         <div className="flex items-center border-l border-line-strong pl-4 sm:pl-[30px]">
           <button
             type="button"
@@ -72,27 +58,5 @@ export function SiteNav({
         </div>
       </div>
     </nav>
-  );
-}
-
-function NavLink({
-  href,
-  label,
-  current,
-}: {
-  href: string;
-  label: string;
-  current: boolean;
-}) {
-  return (
-    <a
-      href={href}
-      aria-current={current ? "page" : undefined}
-      className={`text-sm font-bold uppercase tracking-[0.08em] no-underline transition-colors hover:text-accent ${
-        current ? "text-accent" : "text-dim"
-      }`}
-    >
-      {label}
-    </a>
   );
 }

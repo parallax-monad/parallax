@@ -264,8 +264,8 @@ export function RouteGraph3D({ language }: { language: Language }) {
       role="img"
       aria-label={pick(
         language,
-        "Moss capability route 3D graph; drag to rotate",
-        "Moss 能力路径 3D 图；可拖动旋转",
+        "Monad DeFi ecosystem visualization; drag to rotate",
+        "Monad DeFi 生态系统可视化；可拖动旋转",
       )}
       className="absolute inset-0 bg-[radial-gradient(circle_at_50%_48%,rgba(204,255,0,0.1),transparent_4px)]"
     >

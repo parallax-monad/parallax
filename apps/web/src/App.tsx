@@ -2,60 +2,89 @@ import { useEffect, useRef, useState } from "react";
 import { RouteGraph } from "@/components/RouteGraph";
 import { SiteNav } from "@/components/SiteNav";
 import {
+  type Copy,
   getInitialLanguage,
   type Language,
-  localizeText,
   pick,
+  say,
 } from "@/lib/i18n";
 
-const DIMENSIONS = [
-  [
-    "Cause",
-    "发生了什么",
-    "Moss 完成 quote、action 与 simulation，呈现这笔交易的真实执行结果。",
-  ],
-  [
-    "Evidence",
-    "证据是什么",
-    "每个结论都追溯到归一化后的执行证据，并标注来源、区块与 Replay。",
-  ],
-  [
-    "Adjust",
-    "可以改什么",
-    "通过 Action Recommendation Gate 后，才给出与真实原因相关的调整：Protocol 选项、Token Pair、Amount 或 Slippage。",
-  ],
-  [
-    "Irrelevant",
-    "改了也无效",
-    "与当前原因无关的修改会被标为无效，避免反复无效重试。",
-  ],
+const DIMENSIONS: { key: string; title: Copy; body: Copy }[] = [
+  {
+    key: "Cause",
+    title: { en: "What happened", zh: "发生了什么" },
+    body: {
+      en: "Parallax is built to read Moss quote, action, and simulation evidence so the real execution result of an intent can be explained.",
+      zh: "Parallax 的设计目标是读取 Moss 的 quote、action 与 simulation 证据，解释这笔交易真实的执行结果。",
+    },
+  },
+  {
+    key: "Evidence",
+    title: { en: "What proves it", zh: "证据是什么" },
+    body: {
+      en: "Every conclusion is meant to trace back to normalized execution evidence, labelled with source, block, and replay.",
+      zh: "每个结论都应追溯到归一化后的执行证据，并标注来源、区块与 Replay。",
+    },
+  },
+  {
+    key: "Adjust",
+    title: { en: "What you can change", zh: "可以改什么" },
+    body: {
+      en: "Only after the Action Recommendation Gate passes are cause-linked adjustments shown: protocol option, token pair, amount, or slippage.",
+      zh: "只有在通过 Action Recommendation Gate 之后，才会给出与真实原因相关的调整：Protocol 选项、Token Pair、Amount 或 Slippage。",
+    },
+  },
+  {
+    key: "Irrelevant",
+    title: { en: "What will not help", zh: "改了也无效" },
+    body: {
+      en: "Changes unrelated to the cause are marked irrelevant, so retries stop being guesswork.",
+      zh: "与当前原因无关的修改会被标为无效，避免反复无效重试。",
+    },
+  },
 ];
-
-const SCALE = [
-  [
-    "PROCEED",
-    "low",
-    "未发现阻断证据",
-    "在本次已检查范围内未发现阻断证据，这不代表交易绝对安全。",
-  ],
-  [
-    "ADJUST",
-    "moderate",
-    "修改一个条件",
-    "需要修改一个交易条件，之后可以重新检查。",
-  ],
-  [
-    "STOP",
-    "high",
-    "不应继续",
-    "当前路径无法执行，请更换 Route／Token Pair 或停止。",
-  ],
-  [
-    "UNKNOWN",
-    "elevated",
-    "证据不足",
-    "证据不足以作出可信结论；Unknown 不会被自动放行。",
-  ],
+const SCALE: {
+  grade: string;
+  level: string;
+  title: Copy;
+  body: Copy;
+}[] = [
+  {
+    grade: "PROCEED",
+    level: "low",
+    title: { en: "No blocking evidence", zh: "未发现阻断证据" },
+    body: {
+      en: "No blocking evidence was found in the checked scope. This is not a safety guarantee.",
+      zh: "在本次已检查范围内未发现阻断证据，这不代表交易绝对安全。",
+    },
+  },
+  {
+    grade: "ADJUST",
+    level: "moderate",
+    title: { en: "Change one condition", zh: "修改一个条件" },
+    body: {
+      en: "A verified transaction adjustment applies, and the check can be re-run after the change.",
+      zh: "存在已验证的交易调整，修改之后可以重新检查。",
+    },
+  },
+  {
+    grade: "STOP",
+    level: "high",
+    title: { en: "Do not continue", zh: "不应继续" },
+    body: {
+      en: "Blocking evidence applies to this intent. Review the blocking evidence before continuing.",
+      zh: "本次 Intent 存在阻断证据，请先检视阻断证据再决定是否继续。",
+    },
+  },
+  {
+    grade: "UNKNOWN",
+    level: "elevated",
+    title: { en: "Evidence missing", zh: "证据不足" },
+    body: {
+      en: "Evidence is insufficient for a trustworthy conclusion, and unknown is never auto-passed.",
+      zh: "证据不足以作出可信结论；Unknown 不会被自动放行。",
+    },
+  },
 ];
 
 const SCALE_COLOR: Record<string, string> = {
@@ -71,32 +100,16 @@ const SCALE_BADGE: Record<string, string> = {
   elevated: "border-risk-elevated/50 text-risk-elevated",
   high: "border-risk-high/50 text-risk-high",
 };
-
 export default function App() {
   const [language, setLanguage] = useState<Language>(getInitialLanguage);
-  const [route, setRoute] = useState(
-    window.location.hash === "#/analyze" ? "analyze" : "home",
-  );
-
-  useEffect(() => {
-    const change = () =>
-      setRoute(window.location.hash === "#/analyze" ? "analyze" : "home");
-    window.addEventListener("hashchange", change);
-    return () => window.removeEventListener("hashchange", change);
-  }, []);
 
   return (
     <div className="min-h-[calc(100vh-65px)]">
-      <SiteNav
-        active={route}
-        language={language}
-        onLanguageChange={setLanguage}
-      />
+      <SiteNav language={language} onLanguageChange={setLanguage} />
       <Home language={language} />
     </div>
   );
 }
-
 function useScrollReveal(
   heroRef: React.RefObject<HTMLDivElement>,
   shadeRef: React.RefObject<HTMLDivElement>,
@@ -169,7 +182,6 @@ function useScrollReveal(
     };
   }, [heroRef, revealRef, shadeRef]);
 }
-
 function Home({ language }: { language: Language }) {
   const glowRef = useRef<HTMLDivElement>(null);
   const heroRef = useRef<HTMLDivElement>(null);
@@ -250,25 +262,24 @@ function Home({ language }: { language: Language }) {
             <p className="m-0 mx-auto max-w-[570px] text-[15px] leading-[1.8] text-dim">
               {pick(
                 language,
-                "A pre-sign explanation and adjustment layer for Monad swaps powered by Moss. Understand what will happen, where material loss or exposure may occur, and what you can adjust before signing.",
-                "基于 Moss 的 Monad Swap 签名前解释与调整层。签名前看清交易会发生什么、哪里可能造成明显损耗或暴露，以及现在可以调整什么。",
+                "A pre-sign explanation and adjustment layer for Monad swaps. Built to understand what will happen, where material loss or exposure may occur, and what you can adjust.",
+                "Monad Swap 签名前解释与调整层。帮助理解交易会发生什么、哪里可能造成明显损耗或暴露，以及现在可以调整什么。",
               )}
             </p>
             <div className="mt-7 flex flex-wrap justify-center gap-3">
-              <a href="#/analyze" className="btn btn-primary">
-                Analyze transaction
+              <a href="#framework" className="btn btn-primary">
+                {pick(language, "How it works", "工作方式")}
               </a>
-              <a href="#framework" className="btn">
-                How it works
+              <a href="#verdicts" className="btn">
+                {pick(language, "Read the verdict language", "结论语言")}
               </a>
             </div>
           </div>
         </section>
       </div>
-
       <section className="flex flex-col justify-between gap-4 border-y border-line py-3.5 text-[9px] font-bold tracking-[0.08em] text-faint sm:flex-row">
-        <span>READ-ONLY WALLET ACCESS</span>
-        <span>REPLAY FIXTURES CLEARLY LABELLED</span>
+        <span>RECORDED REPLAY WHERE AVAILABLE</span>
+        <span>NO WALLET CONNECTION</span>
         <span>NO SIGNING · NO BROADCASTING</span>
       </section>
 
@@ -285,27 +296,28 @@ function Home({ language }: { language: Language }) {
           )}
         </p>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          {DIMENSIONS.map(([key, title, body]) => (
+          {DIMENSIONS.map((dimension) => (
             <article
               className="card min-h-[180px] transition-transform hover:-translate-y-1 hover:border-accent"
-              key={key}
+              key={dimension.key}
             >
               <span className="text-[9px] font-extrabold uppercase tracking-[0.1em] text-accent">
-                {key}
+                {dimension.key}
               </span>
               <h3 className="mb-2 mt-5 text-[15px]">
-                {localizeText(title, language)}
+                {say(language, dimension.title)}
               </h3>
               <p className="m-0 min-h-[53px] text-[11px] text-dim">
-                {localizeText(body, language)}
+                {say(language, dimension.body)}
               </p>
-              <b className="text-[8.5px] tracking-[0.08em]">OPEN EVIDENCE →</b>
             </article>
           ))}
         </div>
       </section>
-
-      <section className="mt-14 grid grid-cols-1 gap-10 border-t border-line py-14 lg:grid-cols-[minmax(340px,0.8fr)_minmax(0,1.2fr)] lg:gap-24">
+      <section
+        id="verdicts"
+        className="mt-14 grid grid-cols-1 gap-10 border-t border-line py-14 lg:grid-cols-[minmax(340px,0.8fr)_minmax(0,1.2fr)] lg:gap-24"
+      >
         <div>
           <span className="eyebrow">Verdict language</span>
           <h2 className="m-0 text-[clamp(28px,3.4vw,52px)] font-extrabold uppercase leading-[0.95] tracking-[-0.06em]">
@@ -320,41 +332,29 @@ function Home({ language }: { language: Language }) {
           </p>
         </div>
         <div className="border-t border-line">
-          {SCALE.map(([grade, level, title, body]) => (
+          {SCALE.map((item) => (
             <div
               className="grid grid-cols-1 gap-2 border-b border-line py-5 sm:grid-cols-[minmax(0,180px)_1fr] sm:items-baseline sm:gap-7"
-              key={grade}
+              key={item.grade}
             >
               <strong
-                className={`block whitespace-nowrap text-[clamp(24px,2.4vw,34px)] leading-none tracking-[-0.06em] ${SCALE_COLOR[level]}`}
+                className={`block whitespace-nowrap text-[clamp(24px,2.4vw,34px)] leading-none tracking-[-0.06em] ${SCALE_COLOR[item.level]}`}
               >
-                {grade}
+                {item.grade}
               </strong>
               <div>
                 <span
-                  className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-bold uppercase ${SCALE_BADGE[level]}`}
+                  className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-bold uppercase ${SCALE_BADGE[item.level]}`}
                 >
-                  {localizeText(title, language)}
+                  {say(language, item.title)}
                 </span>
                 <p className="mt-2 text-sm leading-[1.65] text-faint">
-                  {localizeText(body, language)}
+                  {say(language, item.body)}
                 </p>
               </div>
             </div>
           ))}
         </div>
-      </section>
-
-      <section className="border border-line bg-gradient-to-br from-ink-elev via-ink-elev to-accent/[0.12] px-7 py-16">
-        <span className="eyebrow">Decision receipt</span>
-        <h2 className="m-0 mb-6 text-[clamp(28px,4vw,48px)] font-extrabold uppercase leading-[0.95] tracking-[-0.07em]">
-          Know what to do
-          <br />
-          before you sign.
-        </h2>
-        <a href="#/analyze" className="btn btn-primary">
-          Start analysis
-        </a>
       </section>
 
       <footer className="pt-6 text-[9px] font-semibold tracking-[0.04em] text-faint">
