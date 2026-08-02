@@ -869,6 +869,81 @@ describe("completed Run Result contract", () => {
         },
       }).success,
     ).toBe(false);
+
+    const wrongStageInput = {
+      ...routeEvidence,
+      key: "wrong-stage-route-input",
+      stage: "ACTION" as const,
+      routeInputRole: "ROUTE_ACTION" as const,
+    };
+    expect(
+      runResultSchema.safeParse({
+        ...completedResult,
+        evidence: [derivedRouteEvidence, wrongStageInput],
+        route: {
+          ...derivedRoute,
+          inputEvidenceRefs: [evidenceRef(wrongStageInput)],
+        },
+      }).success,
+    ).toBe(false);
+
+    const wrongRuntimeInput = {
+      ...routeEvidence,
+      key: "wrong-runtime-route-input",
+      runtimeVersion: "moss-v2",
+    };
+    expect(
+      runResultSchema.safeParse({
+        ...completedResult,
+        evidence: [derivedRouteEvidence, wrongRuntimeInput],
+        route: {
+          ...derivedRoute,
+          inputEvidenceRefs: [evidenceRef(wrongRuntimeInput)],
+        },
+      }).success,
+    ).toBe(false);
+
+    const mixedContextInput = {
+      ...routeEvidence,
+      key: "mixed-context-route-input",
+      runtimeRevision: "revision-2",
+    };
+    expect(
+      runResultSchema.safeParse({
+        ...completedResult,
+        evidence: [derivedRouteEvidence, routeEvidence, mixedContextInput],
+        route: {
+          ...derivedRoute,
+          inputEvidenceRefs: [
+            evidenceRef(routeEvidence),
+            evidenceRef(mixedContextInput),
+          ],
+        },
+      }).success,
+    ).toBe(false);
+
+    const replayDerivedRouteEvidence: EvidenceItem = {
+      ...replayRouteEvidence,
+      key: "derived-route-replay",
+      source: "derived",
+    };
+    const wrongReplayFixtureInput = {
+      ...replayRouteEvidence,
+      key: "wrong-replay-fixture-route-input",
+      fixtureId: "fixture-replay-2",
+    };
+    expect(
+      runResultSchema.safeParse({
+        ...completedResult,
+        replayMode: true,
+        evidence: [replayDerivedRouteEvidence, wrongReplayFixtureInput],
+        route: {
+          ...derivedRoute,
+          evidenceRef: evidenceRef(replayDerivedRouteEvidence),
+          inputEvidenceRefs: [evidenceRef(wrongReplayFixtureInput)],
+        },
+      }).success,
+    ).toBe(false);
   });
 
   it("requires RuleResult and Rule-bound Scope to agree in both directions", () => {

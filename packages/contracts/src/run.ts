@@ -213,6 +213,22 @@ function isCanonicalRouteInput(evidence: EvidenceItem) {
   );
 }
 
+function hasMatchingRouteEvidenceContext(
+  routeEvidence: EvidenceItem | undefined,
+  inputEvidence: EvidenceItem,
+) {
+  return (
+    routeEvidence !== undefined &&
+    inputEvidence.stage === routeEvidence.stage &&
+    inputEvidence.runtimeVersion === routeEvidence.runtimeVersion &&
+    inputEvidence.runtimeRevision === routeEvidence.runtimeRevision &&
+    inputEvidence.isReplay === routeEvidence.isReplay &&
+    (!routeEvidence.isReplay ||
+      (routeEvidence.fixtureId !== undefined &&
+        inputEvidence.fixtureId === routeEvidence.fixtureId))
+  );
+}
+
 function validateCoreRuleEvidence(
   ruleResult: RuleResult,
   ruleEvidence: EvidenceItem[],
@@ -885,12 +901,16 @@ function validateAvailableRoute(
         (reference) => reference.key === routeEvidenceKey,
       ) ||
       inputEvidence.length === 0 ||
-      !inputEvidence.every(isCanonicalRouteInput)
+      !inputEvidence.every(
+        (input) =>
+          isCanonicalRouteInput(input) &&
+          hasMatchingRouteEvidenceContext(routeEvidence, input),
+      )
     ) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
         message:
-          "Derived Routes require trusted resolving input Evidence distinct from the Route Evidence",
+          "Derived Route inputs must be canonical, distinct, and match the Route Evidence context",
         path: ["route", "inputEvidenceRefs"],
       });
     }
