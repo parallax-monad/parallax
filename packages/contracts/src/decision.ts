@@ -354,6 +354,17 @@ export const ruleResultSchema = z
     validateRuleReasonTuple(result, context);
 
     if (
+      result.status === "NOT_APPLICABLE" &&
+      result.ruleId !== "P0-ECONOMIC-001"
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "NOT_APPLICABLE is only a legal status for P0-ECONOMIC-001",
+        path: ["ruleId"],
+      });
+    }
+
+    if (
       (result.status === "PASS" || result.status === "FAIL") &&
       result.evidenceRefs.length === 0
     ) {

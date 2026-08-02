@@ -175,12 +175,26 @@ function evidenceRefIdentity(reference: EvidenceRef) {
 }
 
 function actionEvaluationIdentity(evaluation: ActionEvaluation) {
+  const actionIdentity =
+    evaluation.action.kind === "TRANSACTION_ADJUSTMENT" ||
+    evaluation.action.kind === "ACCEPTANCE_BOUNDARY_CHANGE"
+      ? [evaluation.action.kind, evaluation.action.field]
+      : [evaluation.action.kind, evaluation.action.action];
+  const proposedChangeIdentity = evaluation.proposedChange
+    ? [
+        evaluation.proposedChange.field,
+        evaluation.proposedChange.before,
+        evaluation.proposedChange.after,
+      ]
+    : null;
+
   return JSON.stringify([
     evaluation.id,
-    nextActionIdentity(evaluation),
+    actionIdentity,
     evaluation.relevance,
     evaluation.recommendable,
     evaluation.actionReasonCode,
+    proposedChangeIdentity,
     evaluation.evidenceRefs.map(evidenceRefIdentity).sort(),
   ]);
 }
@@ -247,6 +261,19 @@ function validateActionEvaluationEvidence(
     return;
   }
 
+  if (
+    evaluation.proposedChange === undefined ||
+    verification.beforeValue !== evaluation.proposedChange.before ||
+    verification.afterValue !== evaluation.proposedChange.after
+  ) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message:
+        "The proposed Intent change must match Action Verification Evidence",
+      path: [...path.slice(0, -1), "proposedChange"],
+    });
+  }
+
   const resultEvidence = evidenceByKey.get(verification.resultEvidenceKey);
   const resultIsReferenced = evaluation.evidenceRefs.some(
     (reference) => reference.key === verification.resultEvidenceKey,
@@ -281,20 +308,23 @@ function validateUniqueActions(
   evaluations: ActionEvaluation[],
   context: z.RefinementCtx,
   path: Array<string | number>,
+  allActions?: Set<string>,
 ) {
   const actions = new Set<string>();
 
   evaluations.forEach((evaluation, index) => {
     const identity = nextActionIdentity(evaluation);
-    if (actions.has(identity)) {
+    if (actions.has(identity) || allActions?.has(identity)) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "Action evaluations must be unique by action",
+        message:
+          "Action evaluations must be unique by stable identity within a Run",
         path: [...path, index, "action"],
       });
     }
 
     actions.add(identity);
+    allActions?.add(identity);
   });
 }
 
@@ -305,6 +335,7 @@ function validateRuleResults(
   context: z.RefinementCtx,
 ) {
   const ruleIds = new Set<string>();
+  const actionIds = new Set<string>();
 
   ruleResults.forEach((ruleResult, ruleIndex) => {
     if (ruleIds.has(ruleResult.ruleId)) {
@@ -360,11 +391,12 @@ function validateRuleResults(
       }
     }
 
-    validateUniqueActions(ruleResult.actionEvaluations, context, [
-      "ruleResults",
-      ruleIndex,
-      "actionEvaluations",
-    ]);
+    validateUniqueActions(
+      ruleResult.actionEvaluations,
+      context,
+      ["ruleResults", ruleIndex, "actionEvaluations"],
+      actionIds,
+    );
 
     ruleResult.actionEvaluations.forEach((evaluation, actionIndex) => {
       const path = [
@@ -388,6 +420,95 @@ function validateRuleResults(
         context,
         path,
       );
+    });
+  });
+}
+
+function validateRuleScopeConsistency(
+  ruleResults: RuleResult[],
+  scope: z.infer<typeof scopeDisclosureSchema>,
+  runStatus: "completed" | "integration_error",
+  context: z.RefinementCtx,
+) {
+  const p0RuleIds = new Set([
+    "P0-EVIDENCE-001",
+    "P0-EXECUTION-001",
+    "P0-ECONOMIC-001",
+  ]);
+  const scopeBySubject = new Map(scope.map((item) => [item.key, item]));
+
+  ruleResults.forEach((ruleResult, ruleIndex) => {
+    const scopeIndex = scope.findIndex(
+      (item) => item.key === ruleResult.ruleId,
+    );
+    const scopeItem = scopeBySubject.get(ruleResult.ruleId);
+    if (!scopeItem) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Every RuleResult must have a Rule-bound Scope item",
+        path: ["ruleResults", ruleIndex, "ruleId"],
+      });
+      return;
+    }
+
+    const expectedStatus =
+      ruleResult.status === "PASS" || ruleResult.status === "FAIL"
+        ? "checked"
+        : ruleResult.status === "UNKNOWN"
+          ? "unknown"
+          : "not_checked";
+
+    if (scopeItem.status !== expectedStatus) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Rule-bound Scope status must match the RuleResult status",
+        path: ["scope", scopeIndex, "status"],
+      });
+    }
+
+    if (
+      ruleResult.status === "NOT_APPLICABLE" &&
+      scopeItem.reason !==
+        (ruleResult.applicabilityReasonCode === "BOUNDARY_NOT_PROVIDED"
+          ? "PRECONDITION_ABSENT"
+          : "STAGE_NOT_ENTERED_AFTER_TERMINAL_RESULT")
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          "Rule-bound NOT_APPLICABLE Scope must preserve its Applicability Reason",
+        path: ["scope", scopeIndex, "reason"],
+      });
+    }
+  });
+
+  scope.forEach((scopeItem, scopeIndex) => {
+    if (!p0RuleIds.has(scopeItem.key)) {
+      return;
+    }
+
+    const hasRuleResult = ruleResults.some(
+      (ruleResult) => ruleResult.ruleId === scopeItem.key,
+    );
+    if (hasRuleResult) {
+      return;
+    }
+
+    if (
+      runStatus === "integration_error" &&
+      scopeItem.status === "unknown" &&
+      scopeItem.reason === "REQUIRED_CHECK_INTERRUPTED"
+    ) {
+      return;
+    }
+
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message:
+        runStatus === "integration_error"
+          ? "An interrupted P0 Rule without a RuleResult must be unknown / REQUIRED_CHECK_INTERRUPTED"
+          : "A Rule-bound Scope item must have a corresponding RuleResult",
+      path: ["scope", scopeIndex],
     });
   });
 }
@@ -472,6 +593,18 @@ function validatePublicActions(
         message:
           "irrelevantActions accepts only verified IRRELEVANT evaluations",
         path: ["irrelevantActions", index],
+      });
+    }
+
+    if (
+      evaluation.action.kind === "ACCEPTANCE_BOUNDARY_CHANGE" &&
+      evaluation.actionReasonCode !== "CHANGES_ACCEPTANCE_BOUNDARY_ONLY"
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          "Public acceptance-boundary actions require CHANGES_ACCEPTANCE_BOUNDARY_ONLY",
+        path: ["irrelevantActions", index, "actionReasonCode"],
       });
     }
 
@@ -601,11 +734,11 @@ function validateEconomicBoundary(
   result: {
     intent: z.infer<typeof normalizedSwapIntentSchema>;
     ruleResults: RuleResult[];
-    route: z.infer<typeof routeSchema>;
   },
   evidenceByKey: Map<string, EvidenceItem>,
   hasTrustedNoRoute: boolean,
   context: z.RefinementCtx,
+  allowMissingRuleResult = false,
 ) {
   const economicRuleIndex = result.ruleResults.findIndex(
     (ruleResult) => ruleResult.ruleId === "P0-ECONOMIC-001",
@@ -613,6 +746,10 @@ function validateEconomicBoundary(
   const economicRule = result.ruleResults[economicRuleIndex];
 
   if (!economicRule) {
+    if (allowMissingRuleResult) {
+      return;
+    }
+
     context.addIssue({
       code: z.ZodIssueCode.custom,
       message: "Completed results require P0-ECONOMIC-001",
@@ -771,6 +908,12 @@ export const completedRunResultSchema = runIdentitySchema
       evidenceByKey,
       context,
     );
+    validateRuleScopeConsistency(
+      result.ruleResults,
+      result.scope,
+      "completed",
+      context,
+    );
     const hasTrustedNoRoute = validateNoRouteClassification(
       result,
       evidenceByKey,
@@ -856,6 +999,13 @@ export const failedRunResultSchema = runIdentitySchema
       evidenceByKey,
       context,
     );
+    validateRuleScopeConsistency(
+      result.ruleResults,
+      result.scope,
+      "integration_error",
+      context,
+    );
+    validateEconomicBoundary(result, evidenceByKey, false, context, true);
 
     result.ruleResults.forEach((ruleResult, index) => {
       if (ruleResult.status === "PASS" || ruleResult.status === "FAIL") {

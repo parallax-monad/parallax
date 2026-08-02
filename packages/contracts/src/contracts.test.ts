@@ -166,9 +166,10 @@ const completedResult = {
   evidence: [simulationCoverageEvidence],
   scope: [
     {
-      key: "P0-EXECUTION-001",
-      label: "Execution result",
-      status: "checked",
+      key: "P0-ECONOMIC-001",
+      label: "Economic result",
+      status: "not_checked",
+      reason: "PRECONDITION_ABSENT",
     },
     {
       key: "OUTSIDE_P0_SCOPE",
@@ -213,9 +214,26 @@ function economicRun(
     intent: availableIntent,
     evidence: [simulationCoverageEvidence, output],
     ruleResults: [rule],
+    scope: scopeWithCheckedEconomic,
     ...overrides,
   };
 }
+
+const scopeWithCheckedEconomic = completedResult.scope.map((item) =>
+  item.key === "P0-ECONOMIC-001"
+    ? { ...item, status: "checked" as const, reason: undefined }
+    : item,
+);
+
+const scopeWithUnknownExecution = [
+  ...completedResult.scope,
+  {
+    key: "P0-EXECUTION-001" as const,
+    label: "Execution result",
+    status: "unknown" as const,
+    reason: "CLASSIFICATION_INCOMPLETE" as const,
+  },
+];
 
 describe("checkSwapRequestSchema", () => {
   it("accepts an exact-input native-to-token request", () => {
@@ -448,6 +466,21 @@ describe("RuleResult contract", () => {
     ).toBe(false);
   });
 
+  it.each(["P0-EVIDENCE-001", "P0-EXECUTION-001"] as const)(
+    "rejects NOT_APPLICABLE for non-economic Rule %s",
+    (ruleId) => {
+      expect(
+        ruleResultSchema.safeParse({
+          ruleId,
+          status: "NOT_APPLICABLE",
+          applicabilityReasonCode: "BOUNDARY_NOT_PROVIDED",
+          evidenceRefs: [],
+          actionEvaluations: [],
+        }).success,
+      ).toBe(false);
+    },
+  );
+
   it("rejects reason codes owned by a different Rule", () => {
     expect(
       ruleResultSchema.safeParse({
@@ -589,6 +622,34 @@ describe("completed Run Result contract", () => {
     const result = runResultSchema.parse(completedResult);
     expect(result.status).toBe("completed");
     expect(result.ruleResults[0]?.status).toBe("NOT_APPLICABLE");
+  });
+
+  it("requires RuleResult and Rule-bound Scope to agree in both directions", () => {
+    const mismatchedScope = completedResult.scope.map((item) =>
+      item.key === "P0-ECONOMIC-001"
+        ? { ...item, status: "checked" as const, reason: undefined }
+        : item,
+    );
+    expect(
+      runResultSchema.safeParse({
+        ...completedResult,
+        scope: mismatchedScope,
+      }).success,
+    ).toBe(false);
+
+    expect(
+      runResultSchema.safeParse({
+        ...completedResult,
+        scope: [
+          ...completedResult.scope,
+          {
+            key: "P0-EXECUTION-001" as const,
+            label: "Execution result",
+            status: "checked" as const,
+          },
+        ],
+      }).success,
+    ).toBe(false);
   });
 
   it("preserves Economic FAIL independently from the global Verdict", () => {
@@ -779,6 +840,25 @@ describe("completed Run Result contract", () => {
           availability: "unavailable",
           reason: "No route is available for this intent",
         },
+        scope: [
+          {
+            key: "P0-ECONOMIC-001",
+            label: "Economic result",
+            status: "not_checked",
+            reason: "STAGE_NOT_ENTERED_AFTER_TERMINAL_RESULT",
+          },
+          {
+            key: "P0-EXECUTION-001",
+            label: "Execution result",
+            status: "checked",
+          },
+          {
+            key: "OUTSIDE_P0_SCOPE",
+            label: "Complete protocol security",
+            status: "not_checked",
+            reason: "OUTSIDE_P0_SCOPE",
+          },
+        ],
         ruleResults: [
           {
             ...unavailableEconomicRule,
@@ -876,6 +956,7 @@ describe("completed Run Result contract", () => {
           recipientSource: "explicit",
         },
         evidence: [output],
+        scope: scopeWithCheckedEconomic,
         ruleResults: [rule],
       }).success,
     ).toBe(true);
@@ -911,6 +992,47 @@ describe("completed Run Result contract", () => {
             ],
           },
         ],
+      }).success,
+    ).toBe(false);
+  });
+
+  it("rejects duplicate stable Action IDs across RuleResults", () => {
+    const duplicateAction: ActionEvaluation = {
+      id: "duplicate-action-id",
+      action: { kind: "SYSTEM_RECOVERY", action: "RETRY_CHECK" },
+      relevance: "UNKNOWN",
+      recommendable: false,
+      actionReasonCode: "EFFECT_NOT_VERIFIED",
+      evidenceRefs: [],
+    };
+    const executionRule: RuleResult = {
+      ruleId: "P0-EXECUTION-001",
+      status: "UNKNOWN",
+      reasonCode: "RULE_CLASSIFICATION_NOT_VERIFIED",
+      evidenceRefs: [],
+      actionEvaluations: [duplicateAction],
+    };
+    const evidenceRule: RuleResult = {
+      ruleId: "P0-EVIDENCE-001",
+      status: "UNKNOWN",
+      reasonCode: "CRITICAL_EVIDENCE_MISSING",
+      evidenceRefs: [],
+      actionEvaluations: [{ ...duplicateAction }],
+    };
+
+    expect(
+      runResultSchema.safeParse({
+        ...completedResult,
+        scope: [
+          ...scopeWithUnknownExecution,
+          {
+            key: "P0-EVIDENCE-001" as const,
+            label: "Evidence result",
+            status: "unknown" as const,
+            reason: "REQUIRED_EVIDENCE_UNAVAILABLE" as const,
+          },
+        ],
+        ruleResults: [unavailableEconomicRule, executionRule, evidenceRule],
       }).success,
     ).toBe(false);
   });
@@ -992,6 +1114,7 @@ describe("completed Run Result contract", () => {
         ...completedResult,
         intent: availableIntent,
         evidence: [output, externalEvidence],
+        scope: scopeWithCheckedEconomic,
         ruleResults: [rule],
       }).success,
     ).toBe(true);
@@ -1018,6 +1141,7 @@ describe("completed Run Result contract", () => {
           },
         },
         evidence: [replayOutput],
+        scope: scopeWithCheckedEconomic,
         ruleResults: [
           {
             ruleId: "P0-ECONOMIC-001",
@@ -1088,11 +1212,50 @@ describe("completed Run Result contract", () => {
       runResultSchema.safeParse({
         ...completedResult,
         evidence: [simulationCoverageEvidence, actionVerificationEvidence],
+        scope: scopeWithUnknownExecution,
         ruleResults: [unavailableEconomicRule, executionRule],
         recommendedActions: [recommended],
         irrelevantActions: [irrelevant],
       }).success,
     ).toBe(true);
+
+    const mismatchedPublicProjection: ActionEvaluation = {
+      ...recommended,
+      proposedChange: {
+        field: "protocol",
+        before: "kuru",
+        after: "sushi",
+      },
+    };
+    expect(
+      runResultSchema.safeParse({
+        ...completedResult,
+        evidence: [simulationCoverageEvidence, actionVerificationEvidence],
+        scope: scopeWithUnknownExecution,
+        ruleResults: [unavailableEconomicRule, executionRule],
+        recommendedActions: [mismatchedPublicProjection],
+        irrelevantActions: [irrelevant],
+      }).success,
+    ).toBe(false);
+
+    const wrongBoundaryReason: ActionEvaluation = {
+      ...irrelevant,
+      actionReasonCode: "CANNOT_CREATE_MISSING_ROUTE",
+    };
+    const wrongBoundaryRule: RuleResult = {
+      ...executionRule,
+      actionEvaluations: [recommended, wrongBoundaryReason],
+    };
+    expect(
+      runResultSchema.safeParse({
+        ...completedResult,
+        evidence: [simulationCoverageEvidence, actionVerificationEvidence],
+        scope: scopeWithUnknownExecution,
+        ruleResults: [unavailableEconomicRule, wrongBoundaryRule],
+        recommendedActions: [recommended],
+        irrelevantActions: [wrongBoundaryReason],
+      }).success,
+    ).toBe(false);
 
     expect(
       runResultSchema.safeParse({
@@ -1152,6 +1315,41 @@ describe("completed Run Result contract", () => {
         ...completedResult,
         ruleResults: [unavailableEconomicRule, executionRule],
         recommendedActions: [recommended],
+      }).success,
+    ).toBe(false);
+  });
+
+  it("rejects a proposed change that disagrees with Action Verification Evidence", () => {
+    const reference = evidenceRef(simulationCoverageEvidence);
+    const verificationReference = evidenceRef(actionVerificationEvidence);
+    const mismatched: ActionEvaluation = {
+      id: "mismatched-protocol-recommendation",
+      action: { kind: "TRANSACTION_ADJUSTMENT", field: "protocol" },
+      relevance: "RELEVANT",
+      recommendable: true,
+      actionReasonCode: "ALTERNATIVE_PATH_VERIFIED",
+      evidenceRefs: [verificationReference, reference],
+      proposedChange: {
+        field: "protocol",
+        before: "kuru",
+        after: "sushi",
+      },
+    };
+    const executionRule: RuleResult = {
+      ruleId: "P0-EXECUTION-001",
+      status: "UNKNOWN",
+      reasonCode: "RULE_CLASSIFICATION_NOT_VERIFIED",
+      evidenceRefs: [reference],
+      actionEvaluations: [mismatched],
+    };
+
+    expect(
+      runResultSchema.safeParse({
+        ...completedResult,
+        evidence: [simulationCoverageEvidence, actionVerificationEvidence],
+        scope: scopeWithUnknownExecution,
+        ruleResults: [unavailableEconomicRule, executionRule],
+        recommendedActions: [mismatched],
       }).success,
     ).toBe(false);
   });
@@ -1216,6 +1414,7 @@ describe("completed Run Result contract", () => {
       runResultSchema.safeParse({
         ...completedResult,
         evidence: [simulationCoverageEvidence, actionVerificationEvidence],
+        scope: scopeWithUnknownExecution,
         ruleResults: [unavailableEconomicRule, executionRule],
         recommendedActions: [published],
       }).success,
@@ -1291,6 +1490,12 @@ describe("Integration Error Result contract", () => {
     evidence: [failedEvidence],
     scope: [
       {
+        key: "P0-EVIDENCE-001",
+        label: "Evidence result",
+        status: "unknown",
+        reason: "REQUIRED_EVIDENCE_UNAVAILABLE",
+      },
+      {
         key: "P0-EXECUTION-001",
         label: "Execution result",
         status: "unknown",
@@ -1306,6 +1511,32 @@ describe("Integration Error Result contract", () => {
       verdict: "UNKNOWN",
       error: { code: "MOSS_UNAVAILABLE", retryable: true },
     });
+  });
+
+  it("applies Economic Boundary consistency to the Integration Error branch", () => {
+    const unknownEconomicRule: RuleResult = {
+      ruleId: "P0-ECONOMIC-001",
+      status: "UNKNOWN",
+      reasonCode: "SIMULATED_OUTPUT_UNAVAILABLE",
+      evidenceRefs: [],
+      actionEvaluations: [],
+    };
+
+    expect(
+      runResultSchema.safeParse({
+        ...integrationErrorResult,
+        ruleResults: [evidenceRule, unknownEconomicRule],
+        scope: [
+          ...integrationErrorResult.scope,
+          {
+            key: "P0-ECONOMIC-001" as const,
+            label: "Economic result",
+            status: "unknown" as const,
+            reason: "REQUIRED_EVIDENCE_UNAVAILABLE" as const,
+          },
+        ],
+      }).success,
+    ).toBe(false);
   });
 
   it("rejects transaction actions and protocol PASS/FAIL", () => {
