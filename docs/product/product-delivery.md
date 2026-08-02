@@ -445,7 +445,7 @@ The merged PR #4 contract (`e4e6ea0fe0c795f4aae30cfa5e5c68b0d97693d9`) defines n
 - Rule `NOT_APPLICABLE` projects to Scope `not_checked`, never a second canonical Scope status;
 - the two Economic applicability-to-Scope pairs are exhaustive: `BOUNDARY_NOT_PROVIDED` with `PRECONDITION_ABSENT`, or `STAGE_NOT_ENTERED_AFTER_TERMINAL_RESULT` with the identically named Scope reason;
 - `source = mock` Evidence cannot support a completed user `PROCEED`, `ADJUST`, or `STOP`, a Rule `PASS`/`FAIL`, or a public transaction Action;
-- the Evidence Drawer consumes the discriminated `RAW`/`NORMALIZED`/`DERIVED` projection. `NORMALIZED` retains a raw Evidence locator, normalization kind, normalizer identity, and schema version; `DERIVED` retains non-empty input Evidence locators, derivation identity, and typed extractor identity/version. Every locator must resolve through the related Run index, obey the representation direction, and participate in an acyclic provenance graph. Missing projection metadata is a Contract/API error for authoritative Evidence and keeps the Evidence supplementary or the affected result `UNKNOWN`;
+- the Evidence Drawer consumes the discriminated `RAW`/`NORMALIZED`/`DERIVED` projection. `RAW` preserves the Contract payload descriptor (`locator`, `encoding`, and `sha256:` fingerprint) and has no Evidence parent. `NORMALIZED` retains a raw Evidence locator, normalization kind, normalizer identity, and schema version; `DERIVED` retains non-empty input Evidence locators, derivation identity, and typed extractor identity/version. Every Evidence locator uses the closed same-Run or related-Run relation below; missing projection metadata is a Contract/API error for authoritative Evidence and keeps the Evidence supplementary or the affected result `UNKNOWN`;
 - transaction Actions require a local `ActionGateAttestation` EvidenceRef and the complete child-Run lifecycle; and
 - recovery Actions use canonical support references, including same-Run `ReplayRef` for `USE_REPLAY`.
 
@@ -590,10 +590,39 @@ interface RunProvenanceView {
   runtimeRevision?: string;
 }
 
-interface EvidenceLocatorView {
+interface EvidenceNodeLocatorView {
   runId: string;
   evidenceId: string;
 }
+
+type Sha256Fingerprint = `sha256:${string}`;
+
+interface RawPayloadDescriptorView {
+  locator: string;
+  encoding: "json" | "text" | "bytes";
+  fingerprint: Sha256Fingerprint;
+}
+
+type EvidenceLocatorView =
+  | (EvidenceNodeLocatorView & {
+      relationKind: "SAME_RUN";
+    })
+  | {
+      relationKind: "ACTION_GATE_CHILD";
+      sourceRunId: string;
+      sourceEvidenceId: string;
+      relatedRunId: string;
+      relatedEvidenceId: string;
+      purpose: "ACTION_GATE_ATTESTATION";
+    }
+  | {
+      relationKind: "PREVIOUS_NEW_COMPARISON";
+      sourceRunId: string;
+      sourceEvidenceId: string;
+      relatedRunId: string;
+      relatedEvidenceId: string;
+      purpose: "PREVIOUS_NEW_DIFF";
+    };
 
 interface ImmutableRuntimeContextView {
   runtimeVersion: string;
@@ -652,7 +681,8 @@ type CoreEvidencePolicyAttestationView =
 type RealEvidenceProjectionView =
   | {
       kind: "RAW";
-      rawPayloadRef: EvidenceLocatorView;
+      // Maps the Contract payloadRef; it is not an Evidence parent locator.
+      rawPayload: RawPayloadDescriptorView;
     }
   | {
       kind: "NORMALIZED";
@@ -1238,7 +1268,9 @@ Product adapter invariants for this proposal:
   Every core attestation requires `reproducible = "yes"`, non-empty immutable `runtimeVersion` and `runtimeRevision`, a matching Rule/status policy, and a resolving `evidenceId`. External and unknown Evidence cannot enter core under the current closed map; without a future explicit Contract policy they remain supplementary or keep the affected result `UNKNOWN`.
 - Every `evidenceIds` value used to support a Rule `PASS`/`FAIL`, the completed Verdict, or a public transaction Action must resolve to eligible `coreEvidenceIds`; supplementary or mock Evidence may be displayed as context but can never be accepted as authoritative support.
 - The current merged PR #4 contract supplies normalized `recipient`, `recipientSource`, and `protocol`; Product/UI consumes those fields and does not infer them from display values. Normalized `IntentSummaryView.slippage` is optional until the Contract carries it. When present, it is an explicit present/absent snapshot supplied by the adapter; Product/UI must not infer it from display copy, Quote values, Route Evidence, or Action text. A public `slippage` transaction Action requires present baseline and child snapshots plus an exact attested diff; otherwise the candidate remains internal. Every `IntentChangeView` and Action change uses required `before` and `after` snapshots, and a transaction Action diff must resolve to fields present in both normalized baseline and child Intents, exactly equal the attested diff, and must not target identity/provenance or `minimumReceived`.
-- Every `RAW`, `NORMALIZED`, and `DERIVED` projection locator must resolve in the indexed Evidence store for its `runId`. `NORMALIZED.rawEvidenceRef` must point to a `RAW` representation; `DERIVED.inputEvidenceRefs` must point only to valid earlier `RAW` or `NORMALIZED` representations, never itself or a descendant. The adapter must reject dangling locators, wrong representation links, cycles, and unrelated Run ownership; an explicitly related child Run is allowed only inside the existing Action Gate or comparison boundary. Authoritative `NORMALIZED` and `DERIVED` Evidence must carry immutable runtime identity matching every resolved provenance input.
+- `RAW` has no Evidence parent: `rawPayload` is validated as the Contract payload descriptor (`encoding` is `json | text | bytes`, and `fingerprint` matches `^sha256:[a-f0-9]{64}$`), and any attempt to put an `EvidenceLocatorView` in that field is rejected. `NORMALIZED.rawEvidenceRef` must point to a `RAW` representation; `DERIVED.inputEvidenceRefs` must point only to valid earlier `RAW` or `NORMALIZED` representations, never itself or a descendant.
+- Evidence locators use a closed relation union. `SAME_RUN` resolves `runId + evidenceId` in the owning Run index. `ACTION_GATE_CHILD` and `PREVIOUS_NEW_COMPARISON` each carry both source and related Run/evidence identities and a fixed purpose (`ACTION_GATE_ATTESTATION` or `PREVIOUS_NEW_DIFF`); the adapter must resolve both sides before accepting the edge. Related-Run edges are permitted only inside the existing Action Gate attestation or Previous-vs-New comparison, never as a public Action support reference or a general Evidence shortcut.
+- The adapter builds the provenance graph from resolved `(runId, evidenceId)` nodes and validates it deterministically with DFS (or an equivalent visiting-set traversal): dangling nodes, wrong Run ownership, invalid representation direction, self-loops, and back-edges to a visiting node are rejected. Authoritative `NORMALIZED` and `DERIVED` Evidence must carry immutable runtime identity matching every resolved provenance input.
 - Every public Action has a non-empty support-ref tuple. A transaction adjustment's first support ref must be the baseline-Run `EVIDENCE_REF` for its local `ActionGateAttestation`; the adapter must reject generic Scope, Error, Replay, supplementary, or Mock-only support. The attestation ID and baseline Run ID must match the Action's `gate` and resolve in `evidenceById`.
 - `recommendedActions` require `gate.result = VERIFIED`, a local attestation EvidenceRef, a non-empty category-specific Intent diff, and `gate.exactIntentDiff` equal to the public Action `changes` field-for-field; the original Boundary must remain unchanged and the child Receipt must be terminal. Cross-Run locators remain nested in the attestation.
 - `recoveryActions` use non-empty, kind-specific support refs: `RETRY_CHECK` and `VIEW_MISSING_EVIDENCE` may use only applicable `ErrorRef`, `ScopeRef`, or `EvidenceRef`; `USE_REPLAY` uses only same-Run `REPLAY_FALLBACK` refs. Its `fallbackId` must match the selected descriptor, whose label is non-empty and whose recorded source Run differs from the current Run. Any unresolved, cross-Run, mismatched, or inapplicable reference keeps the candidate internal.
