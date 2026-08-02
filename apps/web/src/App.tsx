@@ -22,7 +22,7 @@ const DIMENSIONS = [
   [
     "Adjust",
     "可以改什么",
-    "给出与真实原因相关的调整：Route、Token Pair、Amount 或 Slippage。",
+    "通过 Action Recommendation Gate 后，才给出与真实原因相关的调整：Protocol 选项、Token Pair、Amount 或 Slippage。",
   ],
   [
     "Irrelevant",

@@ -20,8 +20,8 @@ const EXACT_TEXT: Record<string, string> = {
   "每个结论都追溯到归一化后的执行证据，并标注来源、区块与 Replay。":
     "Every conclusion traces back to normalized execution evidence, labelled with source, block, and replay.",
   可以改什么: "What you can change",
-  "给出与真实原因相关的调整：Route、Token Pair、Amount 或 Slippage。":
-    "Adjustments tied to the actual cause: route, token pair, amount, or slippage.",
+  "通过 Action Recommendation Gate 后，才给出与真实原因相关的调整：Protocol 选项、Token Pair、Amount 或 Slippage。":
+    "Only after the Action Recommendation Gate passes does Parallax surface adjustments tied to the actual cause: protocol option, token pair, amount, or slippage.",
   改了也无效: "What will not help",
   "与当前原因无关的修改会被标为无效，避免反复无效重试。":
     "Changes unrelated to the cause are marked irrelevant, so retries stop being guesswork.",
@@ -32,8 +32,8 @@ const EXACT_TEXT: Record<string, string> = {
   "需要修改一个交易条件，之后可以重新检查。":
     "A transaction condition needs to change, then the check can be re-run.",
   不应继续: "Do not continue",
-  "当前路径无法执行，请更换 Route／Token Pair 或停止。":
-    "This path cannot execute. Switch route or token pair, or stop here.",
+  "当前路径无法执行，请更换 Protocol／Token Pair 或停止。":
+    "This path cannot execute. Switch protocol or token pair, or stop here.",
   证据不足: "Evidence missing",
   "证据不足以作出可信结论；Unknown 不会被自动放行。":
     "Evidence is insufficient for a trustworthy conclusion, and unknown is never auto-passed.",
