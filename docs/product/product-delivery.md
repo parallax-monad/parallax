@@ -164,7 +164,7 @@ The following are Product/UI CTA values, not transaction Actions or `SYSTEM_RECO
 
 Reason codes are stable machine inputs to product copy. The UI maps codes to approved text; it must not parse natural-language messages to derive Rule status, Action applicability, or Verdict.
 
-The mappings below mirror the merged [P0 Rule and Reason-to-Action specification](https://github.com/parallax-monad/parallax/pull/3) at merge commit `afc3d3e637edd1f373457b57194b4b82e1f3d7fa` (PR #3 head `7d8d407ca9b897b3f3a5db09331c891d9a6474ad`) for frontend implementation. They are repeated here only to define Product copy and presentation. The [Shared Contract/API work](https://github.com/parallax-monad/parallax/pull/4) remains a separate, not-yet-frozen implementation source. Future Rule or Contract changes require a corresponding Product mapping review.
+The mappings below mirror the merged [P0 Rule and Reason-to-Action specification](https://github.com/parallax-monad/parallax/pull/3) at merge commit `afc3d3e637edd1f373457b57194b4b82e1f3d7fa` (PR #3 head `7d8d407ca9b897b3f3a5db09331c891d9a6474ad`) for frontend implementation. They are repeated here only to define Product copy and presentation. The latest reviewed [Shared Contract/API work](https://github.com/parallax-monad/parallax/pull/4) head is `64da65f95fe0f66f6caeeee0d19c8219f91297bd`; it remains open and not frozen. Future Rule or Contract changes require a corresponding Product mapping review.
 
 ### Rule reasons: `P0ReasonCode`
 
@@ -411,7 +411,7 @@ Parallax must never recommend lowering Minimum Received to manufacture `PROCEED`
 
 ## 11. Previous vs New
 
-Previous vs New is displayed only for actual related Runs with an explicit relationship. It may compare a Completed Receipt with an Integration Error Receipt, but never an in-flight result or fabricated local object.
+Previous vs New is displayed only for actual related Runs with an explicit relationship. It may compare a Completed Receipt with an Integration Error Receipt, but never an in-flight result or fabricated local object. Each side supplies its own indexed Evidence view so removed Evidence can render its label, source, stage, and provenance rather than only a raw identifier.
 
 A real comparison includes:
 
@@ -437,6 +437,8 @@ Use the heading **Previous Run vs New Run**. No comparison is shown for unrelate
 The following is a **Product View Model proposal** for frontend consumption. It avoids direct UI binding to raw Moss types. It is not the frozen Shared Contract, API response, or runtime implementation. Repeated types mirror merged PR #3 and must be re-reviewed whenever the Rule or Contract source changes.
 
 The adapter must preserve the following authority boundaries:
+
+The latest reviewed PR #4 contract (`64da65f95fe0f66f6caeeee0d19c8219f91297bd`) currently defines normalized `recipient`, `recipientSource`, and `protocol` on `NormalizedSwapIntent`, alongside discriminated native/ERC-20 asset references. It does not yet define normalized `slippage`; the optional Product field remains a proposal-only extension point until that Contract decision is frozen.
 
 - canonical Rule tuples and Scope subjects are validated before this view is constructed;
 - `P0-ECONOMIC-001` is the only Rule that can carry the legal terminal-stage `NOT_APPLICABLE` tuple;
@@ -536,10 +538,16 @@ interface OriginContextView {
   callerId?: string;
 }
 
-interface IntentAssetView {
-  symbol: string;
-  address: string;
-}
+type IntentAssetView =
+  | {
+      kind: "native";
+      symbol: string;
+    }
+  | {
+      kind: "erc20";
+      symbol: string;
+      address: string;
+    };
 
 type IntentValueSnapshot =
   | { availability: "PRESENT"; value: string }
@@ -565,8 +573,8 @@ interface IntentSummaryView {
   tokenOut: IntentAssetView;
   amountIn: string;
   protocol: string;
-  // Normalized by the adapter when supported; Product/UI must not infer it.
-  slippage: IntentValueSnapshot;
+  // Optional until the Shared Contract carries normalized slippage. Product/UI must not infer it.
+  slippage?: IntentValueSnapshot;
   minimumReceived: MinimumReceivedView;
   origin?: OriginContextView;
 }
@@ -972,6 +980,7 @@ type RunSideView =
       verdict: Verdict;
       mode: ProductRunMode;
       provenance: RunProvenanceView;
+      evidenceById: Record<string, RealEvidenceSummaryView>;
     }
   | {
       runId: string;
@@ -980,6 +989,7 @@ type RunSideView =
       verdict: "UNKNOWN";
       mode: ProductRunMode;
       provenance: RunProvenanceView;
+      evidenceById: Record<string, RealEvidenceSummaryView>;
     };
 
 interface EvidenceDiffView {
@@ -1129,13 +1139,13 @@ Product adapter invariants for this proposal:
 - Scope `status` is only `CHECKED`, `UNKNOWN`, or `NOT_CHECKED`; `presentationLabel = NOT_APPLICABLE` is not a fourth canonical state. Checked Rule `FAIL` items carry their closed Rule reason (`NO_ROUTE_FOUND` or `OUTPUT_BELOW_BOUNDARY`) and Product copy is selected from that code, never parsed from `summary`. Economic `NOT_APPLICABLE` Scope items accept only the two discriminated applicability/reason pairs declared above; no other Rule or Scope reason may be combined with them.
 - `coreEvidenceIds` must never include `source = mock` or unresolved/unknown critical Evidence. A completed `PROCEED`, `ADJUST`, or `STOP` and every public transaction Action must resolve only to eligible non-mock Evidence.
 - Every `evidenceIds` value used to support a Rule `PASS`/`FAIL`, the completed Verdict, or a public transaction Action must resolve to `coreEvidenceIds`; supplementary or mock Evidence may be displayed as context but can never be accepted as authoritative support.
-- Normalized `IntentSummaryView.slippage` is supplied by normalization as an explicit present/absent snapshot. Product/UI must not infer it from display copy, Quote values, Route Evidence, or Action text. Every `IntentChangeView` and Action change uses required `before` and `after` snapshots; a transaction Action diff must resolve to fields present in both the normalized baseline and child Intents, exactly equal the attested diff, and must not target identity/provenance or `minimumReceived`.
+- The current reviewed PR #4 contract supplies normalized `recipient`, `recipientSource`, and `protocol`; Product/UI consumes those fields and does not infer them from display values. Normalized `IntentSummaryView.slippage` is optional until the Contract carries it. When present, it is an explicit present/absent snapshot supplied by the adapter; Product/UI must not infer it from display copy, Quote values, Route Evidence, or Action text. A public `slippage` transaction Action requires present baseline and child snapshots plus an exact attested diff; otherwise the candidate remains internal. Every `IntentChangeView` and Action change uses required `before` and `after` snapshots, and a transaction Action diff must resolve to fields present in both normalized baseline and child Intents, exactly equal the attested diff, and must not target identity/provenance or `minimumReceived`.
 - Every public Action has a non-empty support-ref tuple. A transaction adjustment's first support ref must be the baseline-Run `EVIDENCE_REF` for its local `ActionGateAttestation`; the adapter must reject generic Scope, Error, Replay, supplementary, or Mock-only support. The attestation ID and baseline Run ID must match the Action's `gate` and resolve in `evidenceById`.
 - `recommendedActions` require `gate.result = VERIFIED`, a local attestation EvidenceRef, a non-empty category-specific Intent diff, and `gate.exactIntentDiff` equal to the public Action `changes` field-for-field; the original Boundary must remain unchanged and the child Receipt must be terminal. Cross-Run locators remain nested in the attestation.
 - `recoveryActions` use non-empty, kind-specific support refs: `RETRY_CHECK` and `VIEW_MISSING_EVIDENCE` may use only applicable `ErrorRef`, `ScopeRef`, or `EvidenceRef`; `USE_REPLAY` uses only same-Run `REPLAY_FALLBACK` refs. Its `fallbackId` must match the selected descriptor, whose label is non-empty and whose recorded source Run differs from the current Run. Any unresolved, cross-Run, mismatched, or inapplicable reference keeps the candidate internal.
 - Public transaction Action changes are limited to `amountIn`, `tokenPair`, `protocol`, and `slippage`; `minimumReceived` is only an `ACCEPTANCE_BOUNDARY_CHANGE`, and `sender`, `recipient`, and `recipientSource` are never Action targets.
 - `primaryCta` is the only source of CTA routing and is state-specific: `ADJUST` has exactly one `primaryActionId` that matches exactly one unique `recommendedActions[].actionId`; `STOP` uses `REVIEW_BLOCKING_EVIDENCE`; `PROCEED` uses `RETURN_TO_TRANSACTION` only with normalized `origin`, otherwise `REVIEW_CHECKED_SCOPE`; `UNKNOWN` never applies a transaction Action and uses `VIEW_MISSING_EVIDENCE` only when `scope.counts.unknown > 0` and its destination is non-empty; Integration Error uses `RETRY_CHECK` only when `error.retryable`, otherwise implementable `VIEW_DETAILS`. Recovery/navigation CTAs are not Action list entries.
-- `evidenceById` is the adapter's indexed lookup surface; components must not join flat Evidence arrays during rendering. `ScopeItemView.replayFallbackIds` resolve through the same Run-level `replayFallbacks` map, so a row never selects an arbitrary Evidence label. `RunDiffView.evidenceDiff` resolves IDs against the existing Previous/New `evidenceById` indexes supplied by the associated side projections; it creates no second Evidence store. Added, removed, and changed sets must be unique and disjoint, and Mock-only Evidence cannot be authoritative comparison support.
+- `evidenceById` is the adapter's indexed lookup surface; components must not join flat Evidence arrays during rendering. `ScopeItemView.replayFallbackIds` resolve through the same Run-level `replayFallbacks` map, so a row never selects an arbitrary Evidence label. Each `RunSideView.evidenceById` is the indexed lookup for that specific Previous or New Run; the top-level Product view may expose the current side's same index, but the adapter must not create a second independent Evidence store. `RunDiffView.evidenceDiff` resolves added IDs in `next.evidenceById`, removed IDs in `previous.evidenceById`, and changed IDs in both. Added, removed, and changed sets must be unique and disjoint, and Mock-only Evidence cannot be authoritative comparison support.
 - `MockRulePreviewView.kind = "MOCK_RULE_PREVIEW"` is the authoritative Mock discriminator. Its Evidence entries use `authority = "MOCK"`, `mode = "MOCK_PREVIEW"`, and `previewId`; they do not carry a real `runId` or `ProductRunMode`, and the preview is never a finalized user Run or source of a user Verdict. `MockScopeItemView` is also discriminated: `CHECKED` has no Scope reason, `UNKNOWN` requires an unknown reason, and `NOT_CHECKED` requires a not-checked reason; the adapter rejects every other pairing.
 - Completed and Integration Error projections may use only real Evidence provenance (`authority = CORE | SUPPLEMENTARY`); Mock Evidence is not an authoritative Scope, Rule, Verdict, or Action support source.
 - English normative copy is represented by `copyKey` values. Every emitted key must resolve through a reviewed `en` and `zh-CN` catalog before implementation; a missing locale mapping is an adapter/catalog error, not a reason to hardcode or silently reinterpret copy.
