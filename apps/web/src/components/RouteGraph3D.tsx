@@ -283,7 +283,8 @@ function createPlanets() {
     if (!points) continue;
 
     const group = new THREE.Group();
-    group.position.set(...config.position);
+    const [px, py, pz] = config.position;
+    group.position.set(px, py, pz);
     // Tilt gives the sphere depth instead of reading as a flat disc.
     group.rotation.z = 0.32;
     group.add(points);
