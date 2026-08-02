@@ -257,8 +257,20 @@ type Planet = { group: THREE.Group; points: THREE.Points; spin: number };
 
 /** Flanks the graph so both marks stay readable without crowding the centre. */
 const PLANET_LAYOUT = [
-  { draw: drawMonadLogo, radius: 34, position: [-208, 74, -120], spin: 0.0022, tint: 0x836ef9 },
-  { draw: drawUsdcLogo, radius: 28, position: [212, -66, -150], spin: -0.0018, tint: 0x2775ca },
+  {
+    draw: drawMonadLogo,
+    radius: 34,
+    position: [-208, 74, -120],
+    spin: 0.0022,
+    tint: 0x836ef9,
+  },
+  {
+    draw: drawUsdcLogo,
+    radius: 28,
+    position: [212, -66, -150],
+    spin: -0.0018,
+    tint: 0x2775ca,
+  },
 ] as const;
 
 function createPlanets() {

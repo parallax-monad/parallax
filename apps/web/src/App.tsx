@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState } from "react";
+import { RouteGraph } from "@/components/RouteGraph";
 import { SiteNav } from "@/components/SiteNav";
 import {
+  type Copy,
   getInitialLanguage,
+  type Language,
   pick,
   say,
-  type Copy,
-  type Language,
 } from "@/lib/i18n";
-import { RouteGraph } from "@/components/RouteGraph";
 
 type Dimension = { key: string; title: Copy; body: Copy };
 
@@ -123,7 +123,9 @@ function useScrollReveal(
     const reveal = revealRef.current;
     if (!hero || !shade || !reveal) return;
 
-    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const reduceMotion = window.matchMedia(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
 
     // Measured on resize only, so the animation loop never reads layout.
     let heroTop = 0;
@@ -306,7 +308,9 @@ function Home({ language }: { language: Language }) {
               <span className="text-[9px] font-extrabold uppercase tracking-[0.1em] text-accent">
                 {dimension.key}
               </span>
-              <h3 className="mb-2 mt-5 text-[15px]">{say(language, dimension.title)}</h3>
+              <h3 className="mb-2 mt-5 text-[15px]">
+                {say(language, dimension.title)}
+              </h3>
               <p className="m-0 min-h-[53px] text-[11px] text-dim">
                 {say(language, dimension.body)}
               </p>
@@ -369,7 +373,8 @@ function Home({ language }: { language: Language }) {
       </section>
 
       <footer className="pt-6 text-[9px] font-semibold tracking-[0.04em] text-faint">
-        Parallax · Pre-sign decision layer · Explanation and adjustment only; not investment advice.
+        Parallax · Pre-sign decision layer · Explanation and adjustment only; not
+        investment advice.
       </footer>
     </main>
   );
