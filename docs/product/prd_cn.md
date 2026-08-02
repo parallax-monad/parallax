@@ -537,6 +537,7 @@ Re-run 可继续调用 `/api/check`，并附带 `parentRunId`。
 type CheckSwapInput = {
   parentRunId?: string;
   sender?: string;
+  recipient?: string;
   protocol: "kuru" | "pancake";
   tokenIn: string;
   tokenOut: string;
