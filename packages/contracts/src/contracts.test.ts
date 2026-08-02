@@ -1718,10 +1718,52 @@ describe("completed Run Result contract", () => {
       }).success,
     ).toBe(true);
 
-    const parseReplayWithInput = (input: EvidenceItem) => {
+    const replayRouteWithoutFixture = {
+      ...replayRouteEvidence,
+      key: "replay-route-without-fixture",
+      fixtureId: undefined,
+    };
+    const replayRouteOutput = simulatedOutput("20000000", {
+      isReplay: true,
+    });
+    expect(
+      runResultSchema.safeParse({
+        ...completedResult,
+        replayMode: true,
+        intent: {
+          ...availableIntent,
+          economicBoundary: {
+            ...availableIntent.economicBoundary,
+            source: "demo_preset",
+          },
+        },
+        evidence: [
+          replayRouteWithoutFixture,
+          replaySimulationCoverageEvidence,
+          replaySimulationReceiptEvidence,
+          replayRouteOutput,
+        ],
+        route: {
+          ...completedResult.route,
+          evidenceRef: evidenceRef(replayRouteWithoutFixture),
+        },
+        scope: scopeWithCheckedEconomic,
+        ruleResults: [
+          {
+            ruleId: "P0-ECONOMIC-001",
+            status: "PASS",
+            evidenceRefs: [evidenceRef(replayRouteOutput)],
+            actionEvaluations: [],
+          },
+        ],
+      }).success,
+    ).toBe(false);
+
+    const parseReplayWithInput = (input: EvidenceItem | EvidenceItem[]) => {
+      const inputs = Array.isArray(input) ? input : [input];
       const output = simulatedOutput("20000000", {
         isReplay: true,
-        inputEvidenceRefs: [evidenceRef(input)],
+        inputEvidenceRefs: inputs.map(evidenceRef),
       });
       return runResultSchema.safeParse({
         ...completedResult,
@@ -1733,7 +1775,7 @@ describe("completed Run Result contract", () => {
             source: "demo_preset",
           },
         },
-        evidence: [replayRouteEvidence, input, output],
+        evidence: [replayRouteEvidence, ...inputs, output],
         route: {
           ...completedResult.route,
           evidenceRef: evidenceRef(replayRouteEvidence),
@@ -1763,6 +1805,25 @@ describe("completed Run Result contract", () => {
         key: "replay-input-with-different-fixture",
         fixtureId: "fixture-replay-other",
       }),
+    ).toBe(false);
+
+    expect(
+      parseReplayWithInput({
+        ...simulationReceiptEvidence,
+        key: "live-input-in-replay",
+      }),
+    ).toBe(false);
+
+    const replayInputWithDifferentFixture = {
+      ...replaySimulationReceiptEvidence,
+      key: "replay-input-with-different-fixture-2",
+      fixtureId: "fixture-replay-other",
+    };
+    expect(
+      parseReplayWithInput([
+        replaySimulationReceiptEvidence,
+        replayInputWithDifferentFixture,
+      ]),
     ).toBe(false);
 
     expect(
