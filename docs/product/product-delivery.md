@@ -20,7 +20,7 @@ The following remain outside this document:
 - API serialization; and
 - final frontend visual styling.
 
-The Product View Model in Section 12 is a product proposal. It is not the frozen Shared Contract and does not activate runtime behavior. The merged Evidence implementation and merged PR #3 Rule Methodology remain authoritative for their respective semantics; pending Shared Contract/API work remains a separate implementation source. Future Rule or Contract changes require a Product mapping review.
+The Product View Model in Section 12 is a product proposal. It is not the frozen Shared Contract/API shape and does not activate runtime behavior. The merged Evidence implementation, merged PR #3 Rule Methodology, and merged PR #4 Contract remain authoritative for their respective semantics. Future Rule or Contract changes require a Product mapping review.
 
 ## 2. Current product boundary
 
@@ -164,7 +164,7 @@ The following are Product/UI CTA values, not transaction Actions or `SYSTEM_RECO
 
 Reason codes are stable machine inputs to product copy. The UI maps codes to approved text; it must not parse natural-language messages to derive Rule status, Action applicability, or Verdict.
 
-The mappings below mirror the merged [P0 Rule and Reason-to-Action specification](https://github.com/parallax-monad/parallax/pull/3) at merge commit `afc3d3e637edd1f373457b57194b4b82e1f3d7fa` (PR #3 head `7d8d407ca9b897b3f3a5db09331c891d9a6474ad`) for frontend implementation. They are repeated here only to define Product copy and presentation. The latest reviewed [Shared Contract/API work](https://github.com/parallax-monad/parallax/pull/4) head is `b3513ee986f913d01162b4f269fe7d46b885f6e1`; it remains open and not frozen. Future Rule or Contract changes require a corresponding Product mapping review.
+The mappings below mirror the merged [P0 Rule and Reason-to-Action specification](https://github.com/parallax-monad/parallax/pull/3) at merge commit `afc3d3e637edd1f373457b57194b4b82e1f3d7fa` (PR #3 head `7d8d407ca9b897b3f3a5db09331c891d9a6474ad`) for frontend implementation. They are repeated here only to define Product copy and presentation. PR #4 is now merged at `e4e6ea0fe0c795f4aae30cfa5e5c68b0d97693d9`; its Contract types and validators are authoritative for normalized Intent, Evidence, and core-source boundaries. Future Rule or Contract changes require a corresponding Product mapping review.
 
 ### Rule reasons: `P0ReasonCode`
 
@@ -434,18 +434,18 @@ Use the heading **Previous Run vs New Run**. No comparison is shown for unrelate
 
 ## 12. Product delivery interface
 
-The following is a **Product View Model proposal** for frontend consumption. It avoids direct UI binding to raw Moss types. It is not the frozen Shared Contract, API response, or runtime implementation. Repeated types mirror merged PR #3 and must be re-reviewed whenever the Rule or Contract source changes.
+The following is a **Product View Model proposal** for frontend consumption. It avoids direct UI binding to raw Moss types. It is not the Shared Contract/API wire shape or runtime implementation. Repeated types mirror merged PR #3 and PR #4 and must be re-reviewed whenever the Rule or Contract source changes.
 
 The adapter must preserve the following authority boundaries:
 
-The latest reviewed PR #4 contract (`b3513ee986f913d01162b4f269fe7d46b885f6e1`) currently defines normalized `recipient`, `recipientSource`, and `protocol` on `NormalizedSwapIntent`, alongside discriminated native/ERC-20 asset references. It does not yet define normalized `slippage`; the optional Product field remains a proposal-only extension point until that Contract decision is frozen. The same PR #4 head does not yet freeze the Product Evidence projection or core-source policy fields below; those are explicit Contract/API dependencies.
+The merged PR #4 contract (`e4e6ea0fe0c795f4aae30cfa5e5c68b0d97693d9`) defines normalized `recipient`, `recipientSource`, and `protocol` on `NormalizedSwapIntent`, alongside discriminated native/ERC-20 asset references, and closes the initial P0 core-Evidence map in its validators. It does not define normalized `slippage`; the optional Product field remains a proposal-only extension point until a future Contract decision. The Product Evidence projection below remains a presentation proposal over those canonical Evidence records, not a replacement Contract.
 
 - canonical Rule tuples and Scope subjects are validated before this view is constructed;
 - `P0-ECONOMIC-001` is the only Rule that can carry the legal terminal-stage `NOT_APPLICABLE` tuple;
 - Rule `NOT_APPLICABLE` projects to Scope `not_checked`, never a second canonical Scope status;
 - the two Economic applicability-to-Scope pairs are exhaustive: `BOUNDARY_NOT_PROVIDED` with `PRECONDITION_ABSENT`, or `STAGE_NOT_ENTERED_AFTER_TERMINAL_RESULT` with the identically named Scope reason;
 - `source = mock` Evidence cannot support a completed user `PROCEED`, `ADJUST`, or `STOP`, a Rule `PASS`/`FAIL`, or a public transaction Action;
-- the Evidence Drawer consumes the discriminated `RAW`/`NORMALIZED`/`DERIVED` projection. `NORMALIZED` retains a raw Evidence locator, normalization kind, normalizer identity, and schema version; `DERIVED` retains non-empty input Evidence locators, derivation identity, and extractor version. Missing projection metadata is a Contract/API error for authoritative Evidence and keeps the Evidence supplementary or the affected result `UNKNOWN`;
+- the Evidence Drawer consumes the discriminated `RAW`/`NORMALIZED`/`DERIVED` projection. `NORMALIZED` retains a raw Evidence locator, normalization kind, normalizer identity, and schema version; `DERIVED` retains non-empty input Evidence locators, derivation identity, and typed extractor identity/version. Every locator must resolve through the related Run index, obey the representation direction, and participate in an acyclic provenance graph. Missing projection metadata is a Contract/API error for authoritative Evidence and keeps the Evidence supplementary or the affected result `UNKNOWN`;
 - transaction Actions require a local `ActionGateAttestation` EvidenceRef and the complete child-Run lifecycle; and
 - recovery Actions use canonical support references, including same-Run `ReplayRef` for `USE_REPLAY`.
 
@@ -595,14 +595,59 @@ interface EvidenceLocatorView {
   evidenceId: string;
 }
 
-interface CoreEvidencePolicyAttestationView {
-  attestationId: string;
-  policyId: string;
-  ruleId: P0RuleId;
-  sourceIdentity: string;
-  freshness: string;
-  provenance: string;
+interface ImmutableRuntimeContextView {
+  runtimeVersion: string;
+  runtimeRevision: string;
 }
+
+interface ExtractorIdentityView {
+  extractorId: string;
+  version: string;
+}
+
+interface NormalizerIdentityView {
+  normalizerId: string;
+  schemaVersion: string;
+}
+
+type P0CoreEvidencePolicyId =
+  | "P0-EVIDENCE-001:PASS"
+  | "P0-EXECUTION-001:PASS"
+  | "P0-EXECUTION-001:FAIL"
+  | "P0-ECONOMIC-001:PASS_OR_FAIL";
+
+interface CoreEvidencePolicyAttestationBase
+  extends ImmutableRuntimeContextView {
+  evidenceId: string;
+  reproducible: "yes";
+}
+
+type CoreEvidencePolicyAttestationView =
+  | (CoreEvidencePolicyAttestationBase & {
+      policyId: "P0-EVIDENCE-001:PASS";
+      ruleId: "P0-EVIDENCE-001";
+      source: "derived";
+      evidenceKind: "generic";
+      coreRole: "EVIDENCE_COMPLETENESS";
+    })
+  | (CoreEvidencePolicyAttestationBase & {
+      policyId: "P0-EXECUTION-001:PASS";
+      ruleId: "P0-EXECUTION-001";
+      source: "moss" | "quote" | "derived";
+      requiredRelation: "RESOLVING_ROUTE_EVIDENCE";
+    })
+  | (CoreEvidencePolicyAttestationBase & {
+      policyId: "P0-EXECUTION-001:FAIL";
+      ruleId: "P0-EXECUTION-001";
+      source: "derived";
+      evidenceKind: "no_route_classification";
+    })
+  | (CoreEvidencePolicyAttestationBase & {
+      policyId: "P0-ECONOMIC-001:PASS_OR_FAIL";
+      ruleId: "P0-ECONOMIC-001";
+      source: "moss" | "derived";
+      evidenceKind: "simulated_token_out";
+    });
 
 type RealEvidenceProjectionView =
   | {
@@ -613,26 +658,24 @@ type RealEvidenceProjectionView =
       kind: "NORMALIZED";
       rawEvidenceRef: EvidenceLocatorView;
       normalizationKind: "PRESERVED" | "DERIVED";
-      normalizerId: string;
-      schemaVersion: string;
+      normalizer: NormalizerIdentityView;
     }
   | {
       kind: "DERIVED";
       inputEvidenceRefs: NonEmpty<EvidenceLocatorView>;
       derivationId: string;
-      extractorVersion: string;
+      derivationVersion: string;
+      extractor: ExtractorIdentityView;
     };
 
-interface RealEvidenceSummaryView {
+interface RealEvidenceSummaryCommonView {
   evidenceId: string;
   label: string;
   source: Exclude<EvidenceSource, "mock">;
   stage: EvidenceStage;
   reproducible: "yes" | "no" | "unknown";
-  authority: "CORE" | "SUPPLEMENTARY";
   // Required Product/Contract provenance; no UI fallback may synthesize this.
   projection: RealEvidenceProjectionView;
-  corePolicyAttestation?: CoreEvidencePolicyAttestationView;
   runId: string;
   mode: ProductRunMode;
   fixtureId?: string;
@@ -641,6 +684,18 @@ interface RealEvidenceSummaryView {
   runtimeRevision?: string;
   summary: string;
 }
+
+type RealEvidenceSummaryView =
+  | (RealEvidenceSummaryCommonView & {
+      authority: "CORE";
+      corePolicyAttestation: CoreEvidencePolicyAttestationView;
+      runtimeVersion: string;
+      runtimeRevision: string;
+    })
+  | (RealEvidenceSummaryCommonView & {
+      authority: "SUPPLEMENTARY";
+      corePolicyAttestation?: never;
+    });
 
 interface MockEvidenceSummaryView {
   evidenceId: string;
@@ -1174,10 +1229,16 @@ Product adapter invariants for this proposal:
 - `RuleResultView` must be validated against the exhaustive Rule-specific table before mapping to Product/UI. Every Rule `PASS` and `FAIL` branch carries `evidenceIds: NonEmpty<string>`; `UNKNOWN` and `NOT_APPLICABLE` intentionally retain `string[]` because PR #3 permits wholly absent or inapplicable supporting Evidence.
 - `RunSideView` is a legal state union: `COMPLETED` requires `systemStatus = OK` and any centralized `Verdict`, while `INTEGRATION_ERROR` requires `systemStatus = INTEGRATION_ERROR` and `verdict = UNKNOWN`. `RunDiffView` may compare any two explicitly related valid sides, including Completed/Error in either direction; it never accepts an in-flight or Mock side.
 - Scope `status` is only `CHECKED`, `UNKNOWN`, or `NOT_CHECKED`; `presentationLabel = NOT_APPLICABLE` is not a fourth canonical state. Checked Rule `FAIL` items carry their closed Rule reason (`NO_ROUTE_FOUND` or `OUTPUT_BELOW_BOUNDARY`) and Product copy is selected from that code, never parsed from `summary`. Economic `NOT_APPLICABLE` Scope items accept only the two discriminated applicability/reason pairs declared above; no other Rule or Scope reason may be combined with them.
-- `coreEvidenceIds` must never include `source = mock`, missing-projection, unresolved, or unknown critical Evidence. A completed `PROCEED`, `ADJUST`, or `STOP` and every public transaction Action must resolve only to eligible non-mock Evidence.
-- Core Evidence eligibility is mechanically adapter-validated: `authority = CORE` requires `reproducible = "yes"`; `source = external` or `source = unknown` is rejected unless the Evidence carries a non-empty `corePolicyAttestation` whose `ruleId` matches the consuming Rule and whose policy, identity, freshness, and provenance fields are approved by the Contract. Non-reproducible, unknown, or external Evidence without that rule-specific attestation is `SUPPLEMENTARY` or keeps the affected result `UNKNOWN` until the Contract boundary exists.
+- `coreEvidenceIds` must never include `source = mock`, `source = external`, `source = unknown`, missing-projection, unresolved, non-reproducible, or missing-runtime Evidence. A completed `PROCEED`, `ADJUST`, or `STOP` and every public transaction Action must resolve only to eligible non-mock Evidence.
+- Core Evidence uses the closed PR #4 P0 policy map; Product does not accept an arbitrary source-policy string. The adapter must resolve a typed `CoreEvidencePolicyAttestationView` to the referenced Evidence and reject any policy/source/kind mismatch:
+  - `P0-EVIDENCE-001 PASS` → exactly one confirmed generic Evidence item with `source = derived` and `coreRole = EVIDENCE_COMPLETENESS`;
+  - `P0-EXECUTION-001 PASS` → the trusted, reproducible EvidenceRef resolving the available Route, with the Route source restricted to `moss`, `quote`, or `derived`;
+  - `P0-EXECUTION-001 FAIL` → exactly one confirmed derived `no_route_classification` Evidence item; and
+  - `P0-ECONOMIC-001 PASS`/`FAIL` → exactly one confirmed `simulated_token_out` Evidence item with source `moss` or `derived`.
+  Every core attestation requires `reproducible = "yes"`, non-empty immutable `runtimeVersion` and `runtimeRevision`, a matching Rule/status policy, and a resolving `evidenceId`. External and unknown Evidence cannot enter core under the current closed map; without a future explicit Contract policy they remain supplementary or keep the affected result `UNKNOWN`.
 - Every `evidenceIds` value used to support a Rule `PASS`/`FAIL`, the completed Verdict, or a public transaction Action must resolve to eligible `coreEvidenceIds`; supplementary or mock Evidence may be displayed as context but can never be accepted as authoritative support.
-- The current reviewed PR #4 contract supplies normalized `recipient`, `recipientSource`, and `protocol`; Product/UI consumes those fields and does not infer them from display values. Normalized `IntentSummaryView.slippage` is optional until the Contract carries it. When present, it is an explicit present/absent snapshot supplied by the adapter; Product/UI must not infer it from display copy, Quote values, Route Evidence, or Action text. A public `slippage` transaction Action requires present baseline and child snapshots plus an exact attested diff; otherwise the candidate remains internal. Every `IntentChangeView` and Action change uses required `before` and `after` snapshots, and a transaction Action diff must resolve to fields present in both normalized baseline and child Intents, exactly equal the attested diff, and must not target identity/provenance or `minimumReceived`.
+- The current merged PR #4 contract supplies normalized `recipient`, `recipientSource`, and `protocol`; Product/UI consumes those fields and does not infer them from display values. Normalized `IntentSummaryView.slippage` is optional until the Contract carries it. When present, it is an explicit present/absent snapshot supplied by the adapter; Product/UI must not infer it from display copy, Quote values, Route Evidence, or Action text. A public `slippage` transaction Action requires present baseline and child snapshots plus an exact attested diff; otherwise the candidate remains internal. Every `IntentChangeView` and Action change uses required `before` and `after` snapshots, and a transaction Action diff must resolve to fields present in both normalized baseline and child Intents, exactly equal the attested diff, and must not target identity/provenance or `minimumReceived`.
+- Every `RAW`, `NORMALIZED`, and `DERIVED` projection locator must resolve in the indexed Evidence store for its `runId`. `NORMALIZED.rawEvidenceRef` must point to a `RAW` representation; `DERIVED.inputEvidenceRefs` must point only to valid earlier `RAW` or `NORMALIZED` representations, never itself or a descendant. The adapter must reject dangling locators, wrong representation links, cycles, and unrelated Run ownership; an explicitly related child Run is allowed only inside the existing Action Gate or comparison boundary. Authoritative `NORMALIZED` and `DERIVED` Evidence must carry immutable runtime identity matching every resolved provenance input.
 - Every public Action has a non-empty support-ref tuple. A transaction adjustment's first support ref must be the baseline-Run `EVIDENCE_REF` for its local `ActionGateAttestation`; the adapter must reject generic Scope, Error, Replay, supplementary, or Mock-only support. The attestation ID and baseline Run ID must match the Action's `gate` and resolve in `evidenceById`.
 - `recommendedActions` require `gate.result = VERIFIED`, a local attestation EvidenceRef, a non-empty category-specific Intent diff, and `gate.exactIntentDiff` equal to the public Action `changes` field-for-field; the original Boundary must remain unchanged and the child Receipt must be terminal. Cross-Run locators remain nested in the attestation.
 - `recoveryActions` use non-empty, kind-specific support refs: `RETRY_CHECK` and `VIEW_MISSING_EVIDENCE` may use only applicable `ErrorRef`, `ScopeRef`, or `EvidenceRef`; `USE_REPLAY` uses only same-Run `REPLAY_FALLBACK` refs. Its `fallbackId` must match the selected descriptor, whose label is non-empty and whose recorded source Run differs from the current Run. Any unresolved, cross-Run, mismatched, or inapplicable reference keeps the candidate internal.
@@ -1201,4 +1262,4 @@ Contract and API owners must confirm field names, versioning, serialization, err
 
 All stakeholders may review in parallel. Semantic or Evidence-boundary findings from Rei and Jie take precedence over frontend refinements, while Clare's Contract/API compatibility findings govern adapter assumptions. Antony may review at any time; no reviewer is prohibited from parallel review.
 
-The document deliberately leaves the following gates open: real `NO_ROUTE` classification, Action Recommendation and causal rerun proof, simulated-output economic evaluation, Warning classification, critical asset-change classification, external Evidence policy, structured Rule/Action Contract implementation, and final API mapping. Until the relevant gate passes, Product/UI must disclose `UNKNOWN`, omit speculative public Actions, or show an explicitly labeled Mock preview.
+The document deliberately leaves the following gates open: real `NO_ROUTE` classification, Action Recommendation and causal rerun proof, simulated-output economic evaluation, Warning classification, critical asset-change classification, any future external Evidence allowlist policy, and final API mapping over the merged Contract. Until the relevant gate passes, Product/UI must disclose `UNKNOWN`, omit speculative public Actions, or show an explicitly labeled Mock preview.
