@@ -1513,6 +1513,19 @@ describe("Integration Error Result contract", () => {
     });
   });
 
+  it("rejects a RuleResult for an interrupted Scope subject", () => {
+    expect(
+      runResultSchema.safeParse({
+        ...integrationErrorResult,
+        scope: integrationErrorResult.scope.map((item) =>
+          item.key === "P0-EVIDENCE-001"
+            ? { ...item, reason: "REQUIRED_CHECK_INTERRUPTED" as const }
+            : item,
+        ),
+      }).success,
+    ).toBe(false);
+  });
+
   it("applies Economic Boundary consistency to the Integration Error branch", () => {
     const unknownEconomicRule: RuleResult = {
       ruleId: "P0-ECONOMIC-001",

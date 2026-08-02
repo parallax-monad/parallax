@@ -451,6 +451,19 @@ function validateRuleScopeConsistency(
       return;
     }
 
+    if (
+      runStatus === "integration_error" &&
+      scopeItem.status === "unknown" &&
+      scopeItem.reason === "REQUIRED_CHECK_INTERRUPTED"
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          "An interrupted Scope item must not have a corresponding RuleResult",
+        path: ["ruleResults", ruleIndex, "ruleId"],
+      });
+    }
+
     const expectedStatus =
       ruleResult.status === "PASS" || ruleResult.status === "FAIL"
         ? "checked"
