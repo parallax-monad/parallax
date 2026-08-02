@@ -37,7 +37,7 @@ const LINKS: Graph3DLink[] = [
 ];
 
 const LABEL_FONT = "700 30px Inter, sans-serif";
-const PARTICLE_COUNT = 520;
+const PARTICLE_COUNT = 2800;
 /** Half-extents of the drifting particle field, wide enough to fill the frame. */
 const PARTICLE_BOUND_XZ = 460;
 const PARTICLE_BOUND_Y = 300;
@@ -119,7 +119,7 @@ function createParticleSystem() {
 
   const material = new THREE.PointsMaterial({
     color: 0xccff00,
-    size: 1.4,
+    size: 1.05,
     transparent: true,
     opacity: 0.45,
     blending: THREE.AdditiveBlending,
@@ -128,6 +128,181 @@ function createParticleSystem() {
 
   const points = new THREE.Points(geometry, material);
   return { points, positions, velocities };
+}
+
+/** 2:1 canvas so equirectangular sampling wraps the mark once around a sphere. */
+const LOGO_W = 512;
+const LOGO_H = 256;
+
+function createLogoCanvas() {
+  const canvas = document.createElement("canvas");
+  canvas.width = LOGO_W;
+  canvas.height = LOGO_H;
+  return canvas;
+}
+
+function drawMonadLogo() {
+  const canvas = createLogoCanvas();
+  const context = canvas.getContext("2d");
+  if (!context) return null;
+
+  context.fillStyle = "#836ef9";
+  context.fillRect(0, 0, LOGO_W, LOGO_H);
+
+  const size = LOGO_H * 0.52;
+  context.save();
+  context.translate(LOGO_W / 2, LOGO_H / 2);
+  context.rotate(Math.PI / 4);
+  context.fillStyle = "#ffffff";
+  context.beginPath();
+  context.roundRect(-size / 2, -size / 2, size, size, size * 0.3);
+  context.fill();
+  const inner = size * 0.52;
+  context.fillStyle = "#836ef9";
+  context.beginPath();
+  context.roundRect(-inner / 2, -inner / 2, inner, inner, inner * 0.34);
+  context.fill();
+  context.restore();
+
+  return canvas;
+}
+
+function drawUsdcLogo() {
+  const canvas = createLogoCanvas();
+  const context = canvas.getContext("2d");
+  if (!context) return null;
+
+  context.fillStyle = "#2775ca";
+  context.fillRect(0, 0, LOGO_W, LOGO_H);
+
+  const cx = LOGO_W / 2;
+  const cy = LOGO_H / 2;
+  const radius = LOGO_H * 0.3;
+
+  context.strokeStyle = "#ffffff";
+  context.lineWidth = radius * 0.16;
+  context.lineCap = "round";
+
+  // Two arcs leaving gaps at top and bottom, as on the USDC mark.
+  for (const offset of [0, Math.PI]) {
+    context.beginPath();
+    context.arc(cx, cy, radius, offset + 0.36, offset + Math.PI - 0.36);
+    context.stroke();
+  }
+
+  context.fillStyle = "#ffffff";
+  context.font = `700 ${Math.round(radius * 1.55)}px Inter, sans-serif`;
+  context.textAlign = "center";
+  context.textBaseline = "middle";
+  context.fillText("$", cx, cy);
+
+  return canvas;
+}
+
+const PLANET_POINTS = 9000;
+
+/**
+ * Wraps a 2:1 logo canvas onto a sphere of points. Uses a Fibonacci spiral so
+ * the samples stay evenly spaced instead of bunching at the poles, then reads
+ * each point's colour from the canvas via equirectangular lookup.
+ */
+function createPlanet(canvas: HTMLCanvasElement, radius: number) {
+  const context = canvas.getContext("2d");
+  if (!context) return null;
+  const pixels = context.getImageData(0, 0, LOGO_W, LOGO_H).data;
+
+  const positions = new Float32Array(PLANET_POINTS * 3);
+  const colors = new Float32Array(PLANET_POINTS * 3);
+  const golden = Math.PI * (3 - Math.sqrt(5));
+
+  for (let i = 0; i < PLANET_POINTS; i++) {
+    const y = 1 - (i / (PLANET_POINTS - 1)) * 2;
+    const ring = Math.sqrt(Math.max(1 - y * y, 0));
+    const theta = golden * i;
+    const x = Math.cos(theta) * ring;
+    const z = Math.sin(theta) * ring;
+
+    positions[i * 3] = x * radius;
+    positions[i * 3 + 1] = y * radius;
+    positions[i * 3 + 2] = z * radius;
+
+    const u = (Math.atan2(z, x) / (Math.PI * 2) + 0.5) % 1;
+    const v = Math.acos(Math.min(Math.max(y, -1), 1)) / Math.PI;
+    const px = Math.min(LOGO_W - 1, Math.floor(u * LOGO_W));
+    const py = Math.min(LOGO_H - 1, Math.floor(v * LOGO_H));
+    const at = (py * LOGO_W + px) * 4;
+
+    colors[i * 3] = pixels[at] / 255;
+    colors[i * 3 + 1] = pixels[at + 1] / 255;
+    colors[i * 3 + 2] = pixels[at + 2] / 255;
+  }
+
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+  geometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+
+  const material = new THREE.PointsMaterial({
+    size: 1.5,
+    vertexColors: true,
+    transparent: true,
+    opacity: 0.95,
+    depthWrite: false,
+    sizeAttenuation: true,
+  });
+
+  return new THREE.Points(geometry, material);
+}
+
+type Planet = { group: THREE.Group; points: THREE.Points; spin: number };
+
+/** Flanks the graph so both marks stay readable without crowding the centre. */
+const PLANET_LAYOUT = [
+  { draw: drawMonadLogo, radius: 34, position: [-208, 74, -120], spin: 0.0022, tint: 0x836ef9 },
+  { draw: drawUsdcLogo, radius: 28, position: [212, -66, -150], spin: -0.0018, tint: 0x2775ca },
+] as const;
+
+function createPlanets() {
+  const planets: Planet[] = [];
+
+  for (const config of PLANET_LAYOUT) {
+    const canvas = config.draw();
+    if (!canvas) continue;
+    const points = createPlanet(canvas, config.radius);
+    if (!points) continue;
+
+    const group = new THREE.Group();
+    group.position.set(...config.position);
+    // Tilt gives the sphere depth instead of reading as a flat disc.
+    group.rotation.z = 0.32;
+    group.add(points);
+
+    const halo = new THREE.Mesh(
+      new THREE.SphereGeometry(config.radius * 1.16, 24, 24),
+      new THREE.MeshBasicMaterial({
+        color: new THREE.Color(config.tint),
+        transparent: true,
+        opacity: 0.05,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      }),
+    );
+    group.add(halo);
+
+    planets.push({ group, points, spin: config.spin });
+  }
+
+  return planets;
+}
+
+function disposePlanet(planet: Planet) {
+  planet.points.geometry.dispose();
+  (planet.points.material as THREE.PointsMaterial).dispose();
+  for (const child of planet.group.children) {
+    if (child instanceof THREE.Mesh) {
+      child.geometry.dispose();
+      (child.material as THREE.Material).dispose();
+    }
+  }
 }
 
 export function RouteGraph3D({ language }: { language: Language }) {
@@ -195,6 +370,9 @@ export function RouteGraph3D({ language }: { language: Language }) {
     const { points, positions, velocities } = createParticleSystem();
     graph.scene().add(points);
 
+    const planets = createPlanets();
+    for (const planet of planets) graph.scene().add(planet.group);
+
     let animFrame = 0;
     const animate = () => {
       for (let i = 0; i < PARTICLE_COUNT; i++) {
@@ -210,6 +388,7 @@ export function RouteGraph3D({ language }: { language: Language }) {
         }
       }
       points.geometry.attributes.position.needsUpdate = true;
+      for (const planet of planets) planet.group.rotation.y += planet.spin;
       animFrame = requestAnimationFrame(animate);
     };
     animFrame = requestAnimationFrame(animate);
@@ -217,6 +396,10 @@ export function RouteGraph3D({ language }: { language: Language }) {
     return () => {
       cancelAnimationFrame(animFrame);
       graph.scene().remove(points);
+      for (const planet of planets) {
+        graph.scene().remove(planet.group);
+        disposePlanet(planet);
+      }
       points.geometry.dispose();
       (points.material as THREE.PointsMaterial).dispose();
     };
