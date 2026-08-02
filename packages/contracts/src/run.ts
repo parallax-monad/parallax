@@ -117,6 +117,7 @@ const evidenceRefFields = [
   "runtimeVersion",
   "runtimeRevision",
   "fixtureId",
+  "reproducibility",
   "isReplay",
   "isMock",
 ] as const;
@@ -169,9 +170,20 @@ function evidenceRefIdentity(reference: EvidenceRef) {
     reference.runtimeVersion,
     reference.runtimeRevision,
     reference.fixtureId,
+    reference.reproducibility,
     reference.isReplay,
     reference.isMock,
   ]);
+}
+
+function isTrustedEvidence(evidence: EvidenceItem) {
+  return (
+    evidence.status === "confirmed" &&
+    !evidence.isMock &&
+    evidence.source !== "mock" &&
+    evidence.source !== "unknown" &&
+    evidence.source !== "external"
+  );
 }
 
 function actionEvaluationIdentity(evaluation: ActionEvaluation) {
@@ -287,10 +299,9 @@ function validateActionEvaluationEvidence(
     resultEvidence.source !== "unknown" &&
     resultEvidence.source !== "external" &&
     resultEvidence.isReplay === verification.isReplay &&
-    (verification.runtimeVersion === undefined ||
-      resultEvidence.runtimeVersion === verification.runtimeVersion) &&
-    (verification.runtimeRevision === undefined ||
-      resultEvidence.runtimeRevision === verification.runtimeRevision);
+    resultEvidence.reproducibility === verification.reproducibility &&
+    resultEvidence.runtimeVersion === verification.runtimeVersion &&
+    resultEvidence.runtimeRevision === verification.runtimeRevision;
   const resultMatchesReason =
     verification.actionReasonCode !== "OUTPUT_IMPROVEMENT_VERIFIED" ||
     resultEvidence?.kind === "simulated_token_out";
@@ -642,6 +653,146 @@ function sameAsset(
   );
 }
 
+function validateAvailableRoute(
+  result: {
+    intent: z.infer<typeof normalizedSwapIntentSchema>;
+    route: z.infer<typeof routeSchema>;
+  },
+  evidenceByKey: Map<string, EvidenceItem>,
+  context: z.RefinementCtx,
+) {
+  if (result.route.availability !== "available") {
+    return;
+  }
+
+  const routeEvidence = evidenceByKey.get(result.route.evidenceRef.key);
+  resolveEvidenceRefs([result.route.evidenceRef], evidenceByKey, context, [
+    "route",
+    "evidenceRef",
+  ]);
+
+  if (
+    result.route.source !== result.route.evidenceRef.source ||
+    routeEvidence === undefined ||
+    routeEvidence.source !== result.route.source ||
+    !isTrustedEvidence(routeEvidence)
+  ) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message:
+        "Available Routes require a trusted same-Run Evidence reference with matching source",
+      path: ["route", "evidenceRef"],
+    });
+  }
+
+  if (
+    result.route.evidenceRef.stage !== "QUOTE" &&
+    result.route.evidenceRef.stage !== "ACTION"
+  ) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Available Route Evidence must come from QUOTE or ACTION",
+      path: ["route", "evidenceRef", "stage"],
+    });
+  }
+
+  if (
+    routeEvidence?.runtimeVersion === undefined ||
+    routeEvidence.runtimeRevision === undefined ||
+    routeEvidence.reproducibility !== "REPRODUCIBLE"
+  ) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message:
+        "Available Routes require reproducible Evidence with immutable Runtime identity",
+      path: ["route", "evidenceRef"],
+    });
+  }
+
+  if (routeEvidence?.isReplay && routeEvidence.fixtureId === undefined) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Replay Route Evidence requires a Fixture ID",
+      path: ["route", "evidenceRef", "fixtureId"],
+    });
+  }
+
+  if (
+    result.route.blockNumber !== undefined &&
+    result.route.blockNumber !== routeEvidence?.blockNumber
+  ) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Route blockNumber must match its resolving Evidence",
+      path: ["route", "blockNumber"],
+    });
+  }
+
+  if (result.route.protocol !== result.intent.protocol) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Route protocol must match the checked Intent",
+      path: ["route", "protocol"],
+    });
+  }
+
+  const firstAsset = result.route.path[0];
+  const lastAsset = result.route.path[result.route.path.length - 1];
+  if (
+    firstAsset === undefined ||
+    !sameAsset(result.intent.chainId, firstAsset, result.intent.tokenIn)
+  ) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Route path must start at the checked Intent tokenIn",
+      path: ["route", "path", 0],
+    });
+  }
+  if (
+    lastAsset === undefined ||
+    !sameAsset(result.intent.chainId, lastAsset, result.intent.tokenOut)
+  ) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Route path must end at the checked Intent tokenOut",
+      path: ["route", "path", result.route.path.length - 1],
+    });
+  }
+
+  if (result.route.source === "derived") {
+    if (result.route.inputEvidenceRefs === undefined) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Derived Routes require resolving input Evidence",
+        path: ["route", "inputEvidenceRefs"],
+      });
+      return;
+    }
+
+    const inputEvidence = resolveEvidenceRefs(
+      result.route.inputEvidenceRefs,
+      evidenceByKey,
+      context,
+      ["route", "inputEvidenceRefs"],
+    );
+    const routeEvidenceKey = result.route.evidenceRef.key;
+    if (
+      result.route.inputEvidenceRefs.some(
+        (reference) => reference.key === routeEvidenceKey,
+      ) ||
+      inputEvidence.length === 0 ||
+      !inputEvidence.every(isTrustedEvidence)
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          "Derived Routes require trusted resolving input Evidence distinct from the Route Evidence",
+        path: ["route", "inputEvidenceRefs"],
+      });
+    }
+  }
+}
+
 function validateNoRouteClassification(
   result: {
     intent: z.infer<typeof normalizedSwapIntentSchema>;
@@ -686,16 +837,22 @@ function validateNoRouteClassification(
   );
   const rawRuntimeMatches =
     rawEvidence !== undefined &&
-    (classification.runtimeVersion === undefined ||
-      rawEvidence.runtimeVersion === classification.runtimeVersion) &&
-    (classification.runtimeRevision === undefined ||
-      rawEvidence.runtimeRevision === classification.runtimeRevision);
+    classification.runtimeVersion !== undefined &&
+    classification.runtimeRevision !== undefined &&
+    rawEvidence.runtimeVersion === classification.runtimeVersion &&
+    rawEvidence.runtimeRevision === classification.runtimeRevision;
   const rawScopeMatches =
     rawEvidence !== undefined &&
-    (classification.blockNumber === undefined ||
-      rawEvidence.blockNumber === classification.blockNumber) &&
-    (classification.fixtureId === undefined ||
-      rawEvidence.fixtureId === classification.fixtureId);
+    ((classification.fixtureId !== undefined &&
+      rawEvidence.fixtureId === classification.fixtureId) ||
+      (classification.isReplay === false &&
+        classification.blockNumber !== undefined &&
+        rawEvidence.blockNumber === classification.blockNumber));
+  const rawProvenanceMatches =
+    rawEvidence !== undefined &&
+    rawEvidence.reproducibility === classification.reproducibility &&
+    rawEvidence.isReplay === classification.isReplay &&
+    rawEvidence.isMock === classification.isMock;
   const identityMatches =
     classification.protocol === result.intent.protocol &&
     classification.chainId === result.intent.chainId &&
@@ -721,7 +878,8 @@ function validateNoRouteClassification(
     (rawEvidence.source === "moss" ||
       (classification.stage === "QUOTE" && rawEvidence.source === "quote")) &&
     rawEvidence.stage === classification.stage &&
-    rawEvidence.isReplay === classification.isReplay &&
+    rawProvenanceMatches &&
+    classification.normalizedSource === rawEvidence.source &&
     !rawEvidence.isMock &&
     rawRuntimeMatches &&
     rawScopeMatches;
@@ -847,6 +1005,34 @@ function validateEconomicBoundary(
   }
 
   const simulatedOutput = simulationEvidence[0];
+  const simulationInputs = resolveEvidenceRefs(
+    simulatedOutput.inputEvidenceRefs,
+    evidenceByKey,
+    context,
+    ["evidence", simulatedOutput.key, "inputEvidenceRefs"],
+  );
+  if (
+    simulatedOutput.inputEvidenceRefs.some(
+      (reference) => reference.key === simulatedOutput.key,
+    ) ||
+    simulationInputs.length === 0 ||
+    !simulationInputs.every(
+      (input) =>
+        isTrustedEvidence(input) &&
+        input.isReplay === simulatedOutput.isReplay &&
+        input.reproducibility === simulatedOutput.reproducibility &&
+        input.runtimeVersion === simulatedOutput.runtimeVersion &&
+        input.runtimeRevision === simulatedOutput.runtimeRevision,
+    )
+  ) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message:
+        "Economic PASS/FAIL requires trusted resolving Simulation input Evidence",
+      path: ["evidence", simulatedOutput.key, "inputEvidenceRefs"],
+    });
+  }
+
   if (
     !sameAsset(
       result.intent.chainId,
@@ -927,6 +1113,7 @@ export const completedRunResultSchema = runIdentitySchema
       "completed",
       context,
     );
+    validateAvailableRoute(result, evidenceByKey, context);
     const hasTrustedNoRoute = validateNoRouteClassification(
       result,
       evidenceByKey,

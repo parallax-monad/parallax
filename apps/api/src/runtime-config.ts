@@ -16,12 +16,14 @@ const rpcUrlSchema = z
 export const backendEnvironmentSchema = z.object({
   MONAD_RPC_URL: rpcUrlSchema,
   MOSS_RUNTIME_VERSION: z.string().trim().min(1),
+  MOSS_RUNTIME_REVISION: z.string().trim().min(1),
 });
 
 export const mossIntegrationConfigSchema = z
   .object({
     rpcUrl: rpcUrlSchema,
     runtimeVersion: z.string().trim().min(1),
+    runtimeRevision: z.string().trim().min(1),
   })
   .strict();
 
@@ -46,8 +48,9 @@ export type BackendRuntime = {
 };
 
 // TODO(moss-integration, owner: Jie + Backend): Inject the confirmed P0 chain,
-// MON/USDC metadata, verification block, RPC, and Moss runtime version through
-// this bootstrap path. Recorded fixtures must never become live defaults.
+// MON/USDC metadata, verification block, RPC, Moss runtime version, and
+// immutable Moss runtime revision through this bootstrap path. Recorded
+// fixtures must never become live defaults.
 /**
  * Loads backend configuration from the deployment environment and validates it
  * before constructing runtime dependencies. The API server must bootstrap
@@ -62,6 +65,7 @@ export function bootstrapBackendRuntime(
     moss: {
       rpcUrl: environment.MONAD_RPC_URL,
       runtimeVersion: environment.MOSS_RUNTIME_VERSION,
+      runtimeRevision: environment.MOSS_RUNTIME_REVISION,
     },
   });
 

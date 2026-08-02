@@ -27,12 +27,19 @@ export const evidenceStageSchema = z.enum([
   "SIMULATE",
 ]);
 
+export const evidenceReproducibilitySchema = z.enum([
+  "REPRODUCIBLE",
+  "NOT_REPRODUCIBLE",
+  "UNKNOWN",
+]);
+
 const evidenceProvenanceShape = {
   key: z.string().trim().min(1),
   blockNumber: z.string().regex(/^\d+$/).optional(),
   runtimeVersion: z.string().trim().min(1).optional(),
   runtimeRevision: z.string().trim().min(1).optional(),
   fixtureId: z.string().trim().min(1).optional(),
+  reproducibility: evidenceReproducibilitySchema,
   isReplay: z.boolean(),
   isMock: z.boolean(),
 };
@@ -93,6 +100,8 @@ const simulatedTokenOutEvidenceObjectSchema = z
     recipient: addressSchema,
     amountReceivedAtomic: uint256AmountSchema,
     derivation: z.enum(["recipient_balance_delta", "asset_change"]),
+    derivationVersion: z.string().trim().min(1),
+    inputEvidenceRefs: z.array(evidenceRefSchema).min(1),
   })
   .strict();
 
@@ -113,6 +122,10 @@ const noRouteClassificationEvidenceObjectSchema = z
     amountInAtomic: atomicAmountSchema,
     rawEvidenceKey: z.string().trim().min(1),
     normalizedCode: z.literal("NO_ROUTE"),
+    normalizedMessage: z.string().trim().min(1),
+    normalizedSource: z.enum(["moss", "rpc", "quote", "unknown"]),
+    normalizationKind: z.enum(["PRESERVED", "DERIVED"]),
+    normalizerVersion: z.string().trim().min(1),
     integrationStatus: z.literal("OK"),
   })
   .strict();
@@ -125,9 +138,18 @@ const noRouteRawEvidenceObjectSchema = z
     summary: z.string().trim().min(1),
     source: z.enum(["moss", "quote"]),
     stage: z.enum(["QUOTE", "ACTION"]),
-    payloadFingerprint: z
-      .string()
-      .regex(/^sha256:[a-f0-9]{64}$/, "Expected a SHA-256 payload fingerprint"),
+    payloadRef: z
+      .object({
+        locator: z.string().trim().min(1),
+        encoding: z.enum(["json", "text", "bytes"]),
+        fingerprint: z
+          .string()
+          .regex(
+            /^sha256:[a-f0-9]{64}$/,
+            "Expected a SHA-256 payload fingerprint",
+          ),
+      })
+      .strict(),
   })
   .strict();
 
@@ -167,6 +189,48 @@ function validateSimulatedTokenOutProvenance(
       path: ["isMock"],
     });
   }
+
+  if (
+    evidence.runtimeVersion === undefined ||
+    evidence.runtimeRevision === undefined
+  ) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message:
+        "Simulated tokenOut Evidence requires Runtime Version and immutable Revision",
+      path: ["runtimeRevision"],
+    });
+  }
+
+  if (evidence.reproducibility !== "REPRODUCIBLE") {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message:
+        "Simulated tokenOut Evidence must be marked REPRODUCIBLE for Economic PASS/FAIL",
+      path: ["reproducibility"],
+    });
+  }
+
+  if (
+    !evidence.isReplay &&
+    evidence.blockNumber === undefined &&
+    evidence.fixtureId === undefined
+  ) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message:
+        "Live simulated tokenOut Evidence requires a block or Fixture identity",
+      path: ["blockNumber"],
+    });
+  }
+
+  if (evidence.isReplay && evidence.fixtureId === undefined) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Replay simulated tokenOut Evidence requires a Fixture ID",
+      path: ["fixtureId"],
+    });
+  }
 }
 
 function validateGateEvidenceProvenance(
@@ -179,13 +243,34 @@ function validateGateEvidenceProvenance(
   validateMockProvenance(evidence, context);
 
   if (
-    evidence.runtimeVersion === undefined &&
+    evidence.runtimeVersion === undefined ||
     evidence.runtimeRevision === undefined
   ) {
     context.addIssue({
       code: z.ZodIssueCode.custom,
-      message: "Gate Evidence requires a Runtime Version or Revision",
-      path: ["runtimeVersion"],
+      message:
+        "Gate Evidence requires a Runtime Version and immutable Revision",
+      path: ["runtimeRevision"],
+    });
+  }
+
+  if (evidence.reproducibility !== "REPRODUCIBLE") {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Gate Evidence must be marked REPRODUCIBLE",
+      path: ["reproducibility"],
+    });
+  }
+
+  if (
+    !evidence.isReplay &&
+    evidence.blockNumber === undefined &&
+    evidence.fixtureId === undefined
+  ) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Live Gate Evidence requires a block or Fixture identity",
+      path: ["blockNumber"],
     });
   }
 
@@ -393,6 +478,9 @@ export const scopeDisclosureSchema = z
 
 export type EvidenceSource = z.infer<typeof evidenceSourceSchema>;
 export type EvidenceStage = z.infer<typeof evidenceStageSchema>;
+export type EvidenceReproducibility = z.infer<
+  typeof evidenceReproducibilitySchema
+>;
 export type EvidenceRef = z.infer<typeof evidenceRefSchema>;
 export type EvidenceStatus = z.infer<typeof evidenceStatusSchema>;
 export type GenericEvidenceItem = z.infer<typeof genericEvidenceItemSchema>;

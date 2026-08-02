@@ -21,6 +21,7 @@ const tokenRegistryConfig = {
 const environment = {
   MONAD_RPC_URL: "https://rpc.example.test",
   MOSS_RUNTIME_VERSION: "confirmed-portable-baseline",
+  MOSS_RUNTIME_REVISION: "moss-commit-123",
 };
 
 describe("backend runtime config", () => {
@@ -43,6 +44,27 @@ describe("backend runtime config", () => {
     expect(() =>
       bootstrapBackendRuntime({
         environment: {},
+        tokenRegistry: tokenRegistryConfig,
+      }),
+    ).toThrow();
+  });
+
+  it("requires an immutable Moss runtime revision", () => {
+    expect(
+      backendRuntimeConfigSchema.safeParse({
+        tokenRegistry: tokenRegistryConfig,
+        moss: {
+          rpcUrl: environment.MONAD_RPC_URL,
+          runtimeVersion: environment.MOSS_RUNTIME_VERSION,
+        },
+      }).success,
+    ).toBe(false);
+    expect(() =>
+      bootstrapBackendRuntime({
+        environment: {
+          ...environment,
+          MOSS_RUNTIME_REVISION: undefined,
+        },
         tokenRegistry: tokenRegistryConfig,
       }),
     ).toThrow();
@@ -79,6 +101,7 @@ describe("backend runtime config", () => {
         moss: {
           rpcUrl: environment.MONAD_RPC_URL,
           runtimeVersion: environment.MOSS_RUNTIME_VERSION,
+          runtimeRevision: environment.MOSS_RUNTIME_REVISION,
         },
       }).success,
     ).toBe(true);

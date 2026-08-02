@@ -80,8 +80,31 @@ const simulationCoverageEvidence = {
   runtimeVersion: "moss-v1",
   runtimeRevision: "revision-1",
   fixtureId: "fixture-live-1",
+  reproducibility: "REPRODUCIBLE" as const,
   isReplay: false,
   isMock: false,
+};
+
+const replaySimulationCoverageEvidence = {
+  ...simulationCoverageEvidence,
+  key: "simulation-coverage-replay",
+  fixtureId: "fixture-replay-1",
+  isReplay: true,
+};
+
+const routeEvidence = {
+  ...simulationCoverageEvidence,
+  key: "route-quote",
+  stage: "QUOTE" as const,
+  source: "quote" as const,
+  summary: "Moss returned a route for the checked Intent",
+};
+
+const replayRouteEvidence = {
+  ...routeEvidence,
+  key: "route-quote-replay",
+  fixtureId: "fixture-replay-1",
+  isReplay: true,
 };
 
 const actionVerificationEvidence = {
@@ -94,6 +117,7 @@ const actionVerificationEvidence = {
   runtimeVersion: "moss-v1",
   runtimeRevision: "revision-1",
   fixtureId: "fixture-live-1",
+  reproducibility: "REPRODUCIBLE" as const,
   isReplay: false,
   isMock: false,
   field: "protocol" as const,
@@ -119,13 +143,23 @@ function simulatedOutput(
     blockNumber: "12345",
     runtimeVersion: "moss-v1",
     runtimeRevision: "revision-1",
-    fixtureId: "fixture-live-1",
+    fixtureId:
+      overrides.isReplay === true ? "fixture-replay-1" : "fixture-live-1",
+    reproducibility: "REPRODUCIBLE" as const,
     isReplay: false,
     isMock: false,
     tokenOut: usdc,
     recipient: sender,
     amountReceivedAtomic,
     derivation: "recipient_balance_delta" as const,
+    derivationVersion: "recipient-balance-delta/v1",
+    inputEvidenceRefs: [
+      evidenceRef(
+        overrides.isReplay === true
+          ? replaySimulationCoverageEvidence
+          : simulationCoverageEvidence,
+      ),
+    ],
     ...overrides,
   };
 }
@@ -139,6 +173,7 @@ function evidenceRef(evidence: EvidenceItem): EvidenceRef {
     runtimeVersion: evidence.runtimeVersion,
     runtimeRevision: evidence.runtimeRevision,
     fixtureId: evidence.fixtureId,
+    reproducibility: evidence.reproducibility,
     isReplay: evidence.isReplay,
     isMock: evidence.isMock,
   };
@@ -163,7 +198,7 @@ const completedResult = {
   ruleResults: [unavailableEconomicRule],
   recommendedActions: [],
   irrelevantActions: [],
-  evidence: [simulationCoverageEvidence],
+  evidence: [routeEvidence, simulationCoverageEvidence],
   scope: [
     {
       key: "P0-ECONOMIC-001",
@@ -184,6 +219,7 @@ const completedResult = {
     path: [mon, usdc],
     source: "quote",
     blockNumber: "12345",
+    evidenceRef: evidenceRef(routeEvidence),
   },
 };
 
@@ -212,7 +248,7 @@ function economicRun(
   return {
     ...completedResult,
     intent: availableIntent,
-    evidence: [simulationCoverageEvidence, output],
+    evidence: [routeEvidence, simulationCoverageEvidence, output],
     ruleResults: [rule],
     scope: scopeWithCheckedEconomic,
     ...overrides,
@@ -389,6 +425,28 @@ describe("Evidence provenance contracts", () => {
       evidenceItemSchema.safeParse(
         simulatedOutput("20000000", { isMock: true }),
       ).success,
+    ).toBe(false);
+  });
+
+  it("requires reproducible simulation provenance and resolving inputs", () => {
+    const output = simulatedOutput("20000000");
+    expect(
+      simulatedTokenOutEvidenceSchema.safeParse({
+        ...output,
+        inputEvidenceRefs: [],
+      }).success,
+    ).toBe(false);
+    expect(
+      simulatedTokenOutEvidenceSchema.safeParse({
+        ...output,
+        reproducibility: "UNKNOWN",
+      }).success,
+    ).toBe(false);
+    expect(
+      simulatedTokenOutEvidenceSchema.safeParse({
+        ...output,
+        runtimeRevision: undefined,
+      }).success,
     ).toBe(false);
   });
 
@@ -624,6 +682,45 @@ describe("completed Run Result contract", () => {
     expect(result.ruleResults[0]?.status).toBe("NOT_APPLICABLE");
   });
 
+  it("binds an available Route to trusted Evidence and the checked Intent", () => {
+    expect(
+      runResultSchema.safeParse({
+        ...completedResult,
+        route: {
+          ...completedResult.route,
+          protocol: "pancake",
+        },
+      }).success,
+    ).toBe(false);
+
+    expect(
+      runResultSchema.safeParse({
+        ...completedResult,
+        route: {
+          ...completedResult.route,
+          path: [otherToken, usdc],
+        },
+      }).success,
+    ).toBe(false);
+
+    const externalRouteEvidence: EvidenceItem = {
+      ...routeEvidence,
+      key: "external-route",
+      source: "external",
+    };
+    expect(
+      runResultSchema.safeParse({
+        ...completedResult,
+        evidence: [externalRouteEvidence, simulationCoverageEvidence],
+        route: {
+          ...completedResult.route,
+          source: "external",
+          evidenceRef: evidenceRef(externalRouteEvidence),
+        },
+      }).success,
+    ).toBe(false);
+  });
+
   it("requires RuleResult and Rule-bound Scope to agree in both directions", () => {
     const mismatchedScope = completedResult.scope.map((item) =>
       item.key === "P0-ECONOMIC-001"
@@ -795,7 +892,11 @@ describe("completed Run Result contract", () => {
       key: "raw-no-route",
       stage: "QUOTE" as const,
       summary: "Raw Moss quote returned no route",
-      payloadFingerprint: `sha256:${"a".repeat(64)}`,
+      payloadRef: {
+        locator: "moss://run-1/quote/raw-no-route",
+        encoding: "json" as const,
+        fingerprint: `sha256:${"a".repeat(64)}`,
+      },
     };
     const classificationEvidence = {
       kind: "no_route_classification" as const,
@@ -807,6 +908,8 @@ describe("completed Run Result contract", () => {
       runtimeVersion: "moss-v1",
       runtimeRevision: "revision-1",
       fixtureId: "fixture-live-1",
+      blockNumber: "12345",
+      reproducibility: "REPRODUCIBLE" as const,
       isReplay: false,
       isMock: false,
       protocol: "kuru" as const,
@@ -818,6 +921,10 @@ describe("completed Run Result contract", () => {
       amountInAtomic: availableIntent.amountInAtomic,
       rawEvidenceKey: rawEvidence.key,
       normalizedCode: "NO_ROUTE" as const,
+      normalizedMessage: "No route was returned for the checked Intent",
+      normalizedSource: "moss" as const,
+      normalizationKind: "DERIVED" as const,
+      normalizerVersion: "no-route-normalizer/v1",
       integrationStatus: "OK" as const,
     };
     const terminalExecutionRule: RuleResult = {
@@ -868,6 +975,50 @@ describe("completed Run Result contract", () => {
         ],
       }).success,
     ).toBe(true);
+
+    expect(
+      runResultSchema.safeParse({
+        ...completedResult,
+        intent: availableIntent,
+        evidence: [
+          classificationEvidence,
+          {
+            ...rawEvidence,
+            reproducibility: "UNKNOWN" as const,
+          },
+        ],
+        route: {
+          availability: "unavailable",
+          reason: "No route is available for this intent",
+        },
+        scope: [
+          {
+            key: "P0-ECONOMIC-001",
+            label: "Economic result",
+            status: "not_checked",
+            reason: "STAGE_NOT_ENTERED_AFTER_TERMINAL_RESULT",
+          },
+          {
+            key: "P0-EXECUTION-001",
+            label: "Execution result",
+            status: "checked",
+          },
+          {
+            key: "OUTSIDE_P0_SCOPE",
+            label: "Complete protocol security",
+            status: "not_checked",
+            reason: "OUTSIDE_P0_SCOPE",
+          },
+        ],
+        ruleResults: [
+          {
+            ...unavailableEconomicRule,
+            applicabilityReasonCode: "STAGE_NOT_ENTERED_AFTER_TERMINAL_RESULT",
+          },
+          terminalExecutionRule,
+        ],
+      }).success,
+    ).toBe(false);
 
     const warningRawEvidence = {
       ...rawEvidence,
@@ -955,7 +1106,7 @@ describe("completed Run Result contract", () => {
           recipient: otherRecipient,
           recipientSource: "explicit",
         },
-        evidence: [output],
+        evidence: [routeEvidence, simulationCoverageEvidence, output],
         scope: scopeWithCheckedEconomic,
         ruleResults: [rule],
       }).success,
@@ -1113,7 +1264,12 @@ describe("completed Run Result contract", () => {
       runResultSchema.safeParse({
         ...completedResult,
         intent: availableIntent,
-        evidence: [output, externalEvidence],
+        evidence: [
+          routeEvidence,
+          simulationCoverageEvidence,
+          output,
+          externalEvidence,
+        ],
         scope: scopeWithCheckedEconomic,
         ruleResults: [rule],
       }).success,
@@ -1140,7 +1296,15 @@ describe("completed Run Result contract", () => {
             source: "demo_preset",
           },
         },
-        evidence: [replayOutput],
+        evidence: [
+          replayRouteEvidence,
+          replaySimulationCoverageEvidence,
+          replayOutput,
+        ],
+        route: {
+          ...completedResult.route,
+          evidenceRef: evidenceRef(replayRouteEvidence),
+        },
         scope: scopeWithCheckedEconomic,
         ruleResults: [
           {
@@ -1211,7 +1375,11 @@ describe("completed Run Result contract", () => {
     expect(
       runResultSchema.safeParse({
         ...completedResult,
-        evidence: [simulationCoverageEvidence, actionVerificationEvidence],
+        evidence: [
+          routeEvidence,
+          simulationCoverageEvidence,
+          actionVerificationEvidence,
+        ],
         scope: scopeWithUnknownExecution,
         ruleResults: [unavailableEconomicRule, executionRule],
         recommendedActions: [recommended],
@@ -1230,7 +1398,11 @@ describe("completed Run Result contract", () => {
     expect(
       runResultSchema.safeParse({
         ...completedResult,
-        evidence: [simulationCoverageEvidence, actionVerificationEvidence],
+        evidence: [
+          routeEvidence,
+          simulationCoverageEvidence,
+          actionVerificationEvidence,
+        ],
         scope: scopeWithUnknownExecution,
         ruleResults: [unavailableEconomicRule, executionRule],
         recommendedActions: [mismatchedPublicProjection],
@@ -1249,7 +1421,11 @@ describe("completed Run Result contract", () => {
     expect(
       runResultSchema.safeParse({
         ...completedResult,
-        evidence: [simulationCoverageEvidence, actionVerificationEvidence],
+        evidence: [
+          routeEvidence,
+          simulationCoverageEvidence,
+          actionVerificationEvidence,
+        ],
         scope: scopeWithUnknownExecution,
         ruleResults: [unavailableEconomicRule, wrongBoundaryRule],
         recommendedActions: [recommended],
@@ -1346,7 +1522,11 @@ describe("completed Run Result contract", () => {
     expect(
       runResultSchema.safeParse({
         ...completedResult,
-        evidence: [simulationCoverageEvidence, actionVerificationEvidence],
+        evidence: [
+          routeEvidence,
+          simulationCoverageEvidence,
+          actionVerificationEvidence,
+        ],
         scope: scopeWithUnknownExecution,
         ruleResults: [unavailableEconomicRule, executionRule],
         recommendedActions: [mismatched],
@@ -1413,7 +1593,11 @@ describe("completed Run Result contract", () => {
     expect(
       runResultSchema.safeParse({
         ...completedResult,
-        evidence: [simulationCoverageEvidence, actionVerificationEvidence],
+        evidence: [
+          routeEvidence,
+          simulationCoverageEvidence,
+          actionVerificationEvidence,
+        ],
         scope: scopeWithUnknownExecution,
         ruleResults: [unavailableEconomicRule, executionRule],
         recommendedActions: [published],
