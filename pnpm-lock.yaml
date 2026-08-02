@@ -21,7 +21,14 @@ importers:
         specifier: ^4.1.10
         version: 4.1.10(@types/node@22.13.14)(vite@8.1.5(@types/node@22.13.14)(jiti@1.21.7)(yaml@2.9.0))
 
-  apps/api: {}
+  apps/api:
+    dependencies:
+      '@parallax/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
+      zod:
+        specifier: 3.25.76
+        version: 3.25.76
 
   apps/web:
     dependencies:
@@ -69,7 +76,11 @@ importers:
         specifier: 5.4.2
         version: 5.4.2(@types/node@20.14.10)(lightningcss@1.33.0)
 
-  packages/contracts: {}
+  packages/contracts:
+    dependencies:
+      zod:
+        specifier: 3.25.76
+        version: 3.25.76
 
   packages/moss-bridge: {}
 
@@ -1696,6 +1707,8 @@ packages:
     resolution: {integrity: sha512-2AvhNX3mb8zd6Zy7INTtSpl1F15HW6Wnqj0srWlkKLcpYl/gMIMJiyuGq2KeI2YFxUPjdlB+3Lc10seMLtL4cA==}
     engines: {node: '>= 14.6'}
     hasBin: true
+  zod@3.25.76:
+    resolution: {integrity: sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==}
 
 snapshots:
 
@@ -3048,3 +3061,4 @@ snapshots:
   yallist@3.1.1: {}
 
   yaml@2.9.0: {}
+  zod@3.25.76: {}

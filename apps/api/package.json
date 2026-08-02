@@ -2,5 +2,13 @@
   "name": "@parallax/api",
   "version": "0.0.0",
   "private": true,
-  "type": "module"
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@parallax/contracts": "workspace:*",
+    "zod": "3.25.76"
+  }
 }
