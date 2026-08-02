@@ -626,7 +626,7 @@ type EvidenceRuleResultView =
       status: "PASS";
       reasonCode?: never;
       applicabilityReasonCode?: never;
-      evidenceIds: string[];
+      evidenceIds: NonEmpty<string>;
     }
   | {
       ruleId: "P0-EVIDENCE-001";
@@ -650,14 +650,14 @@ type ExecutionRuleResultView =
       status: "PASS";
       reasonCode?: never;
       applicabilityReasonCode?: never;
-      evidenceIds: string[];
+      evidenceIds: NonEmpty<string>;
     }
   | {
       ruleId: "P0-EXECUTION-001";
       status: "FAIL";
       reasonCode: "NO_ROUTE_FOUND";
       applicabilityReasonCode?: never;
-      evidenceIds: string[];
+      evidenceIds: NonEmpty<string>;
     }
   | {
       ruleId: "P0-EXECUTION-001";
@@ -673,14 +673,14 @@ type EconomicRuleResultView =
       status: "PASS";
       reasonCode?: never;
       applicabilityReasonCode?: never;
-      evidenceIds: string[];
+      evidenceIds: NonEmpty<string>;
     }
   | {
       ruleId: "P0-ECONOMIC-001";
       status: "FAIL";
       reasonCode: "OUTPUT_BELOW_BOUNDARY";
       applicabilityReasonCode?: never;
-      evidenceIds: string[];
+      evidenceIds: NonEmpty<string>;
     }
   | {
       ruleId: "P0-ECONOMIC-001";
@@ -1134,7 +1134,7 @@ type ProductDeliveryView =
 
 Product adapter invariants for this proposal:
 
-- `RuleResultView` must be validated against the exhaustive Rule-specific table before mapping to Product/UI.
+- `RuleResultView` must be validated against the exhaustive Rule-specific table before mapping to Product/UI. Every Rule `PASS` and `FAIL` branch carries `evidenceIds: NonEmpty<string>`; `UNKNOWN` and `NOT_APPLICABLE` intentionally retain `string[]` because PR #3 permits wholly absent or inapplicable supporting Evidence.
 - `RunSideView` is a legal state union: `COMPLETED` requires `systemStatus = OK` and any centralized `Verdict`, while `INTEGRATION_ERROR` requires `systemStatus = INTEGRATION_ERROR` and `verdict = UNKNOWN`. `RunDiffView` may compare any two explicitly related valid sides, including Completed/Error in either direction; it never accepts an in-flight or Mock side.
 - Scope `status` is only `CHECKED`, `UNKNOWN`, or `NOT_CHECKED`; `presentationLabel = NOT_APPLICABLE` is not a fourth canonical state. Checked Rule `FAIL` items carry their closed Rule reason (`NO_ROUTE_FOUND` or `OUTPUT_BELOW_BOUNDARY`) and Product copy is selected from that code, never parsed from `summary`. Economic `NOT_APPLICABLE` Scope items accept only the two discriminated applicability/reason pairs declared above; no other Rule or Scope reason may be combined with them.
 - `coreEvidenceIds` must never include `source = mock` or unresolved/unknown critical Evidence. A completed `PROCEED`, `ADJUST`, or `STOP` and every public transaction Action must resolve only to eligible non-mock Evidence.
