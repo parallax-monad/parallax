@@ -373,8 +373,8 @@ function Home({ language }: { language: Language }) {
       </section>
 
       <footer className="pt-6 text-[9px] font-semibold tracking-[0.04em] text-faint">
-        Parallax · Pre-sign decision layer · Explanation and adjustment only; not
-        investment advice.
+        Parallax · Pre-sign decision layer · Explanation and adjustment only;
+        not investment advice.
       </footer>
     </main>
   );
