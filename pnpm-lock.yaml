@@ -26,6 +26,12 @@ importers:
       '@parallax/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@parallax/orchestrator':
+        specifier: workspace:*
+        version: link:../../packages/orchestrator
+      hono:
+        specifier: 4.12.33
+        version: 4.12.33
       zod:
         specifier: 3.25.76
         version: 3.25.76
@@ -84,7 +90,11 @@ importers:
 
   packages/moss-bridge: {}
 
-  packages/orchestrator: {}
+  packages/orchestrator:
+    dependencies:
+      '@parallax/contracts':
+        specifier: workspace:*
+        version: link:../contracts
 
   packages/risk:
     dependencies:
@@ -1118,6 +1128,10 @@ packages:
     resolution: {integrity: sha512-T2UbfbBEF32wiepXIsMlTW9+dDYC6wMh/t/vYA4tuOMKqWz/n3vr1NFSxQiyP+zk2mXsoMA/i/7qV6LKut1t1A==}
     engines: {node: '>= 0.4'}
 
+  hono@4.12.33:
+    resolution: {integrity: sha512-+SwvkaiJtxsiPjhy9LivY/1m7UsNqCJetM1BrZl9A5DkQhlbHQDU730mMiDPWjnoCYOM8Chf3WrCJw27kNTPFQ==}
+    engines: {node: '>=16.9.0'}
+
   internmap@2.0.3:
     resolution: {integrity: sha512-5Hh7Y1wQbvY5ooGgPbDaL5iYLAPzMTUrjMulskHLH6wnv/A+1q5rgEaiuqEjB+oxGXIVZs1FF+R/KPN3ZSQYYg==}
     engines: {node: '>=12'}
@@ -1707,6 +1721,7 @@ packages:
     resolution: {integrity: sha512-2AvhNX3mb8zd6Zy7INTtSpl1F15HW6Wnqj0srWlkKLcpYl/gMIMJiyuGq2KeI2YFxUPjdlB+3Lc10seMLtL4cA==}
     engines: {node: '>= 14.6'}
     hasBin: true
+
   zod@3.25.76:
     resolution: {integrity: sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==}
 
@@ -2535,6 +2550,8 @@ snapshots:
     dependencies:
       function-bind: 1.1.2
 
+  hono@4.12.33: {}
+
   internmap@2.0.3: {}
 
   is-binary-path@2.1.0:
@@ -3061,4 +3078,5 @@ snapshots:
   yallist@3.1.1: {}
 
   yaml@2.9.0: {}
+
   zod@3.25.76: {}

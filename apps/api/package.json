@@ -9,6 +9,8 @@
   },
   "dependencies": {
     "@parallax/contracts": "workspace:*",
+    "@parallax/orchestrator": "workspace:*",
+    "hono": "4.12.33",
     "zod": "3.25.76"
   }
 }
