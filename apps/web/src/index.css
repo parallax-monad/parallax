@@ -188,6 +188,26 @@
   }
 }
 
+html[lang="zh-CN"] [data-hero-title] {
+  font-size: clamp(50px, 11vw, 112px);
+  letter-spacing: -0.02em;
+  line-height: 1.02;
+}
+
+html[lang="zh-CN"] [data-section-heading] {
+  letter-spacing: -0.025em;
+  line-height: 1;
+}
+
+html[lang="zh-CN"] .eyebrow,
+html[lang="zh-CN"] .question-card-key {
+  letter-spacing: 0.08em;
+}
+
+html[lang="zh-CN"] .verdict-grade {
+  letter-spacing: -0.02em;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .question-card,
   .question-card-title,

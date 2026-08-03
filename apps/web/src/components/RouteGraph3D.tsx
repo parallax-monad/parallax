@@ -4,28 +4,79 @@ import type { Language } from "@/lib/i18n";
 import { pick } from "@/lib/i18n";
 
 type HeroProgressRef = { current: number };
-type MarkerConfig = {
+type MarkerBaseConfig = {
   label: string;
   color: string;
-  role: "protocol" | "signal";
   size: number;
   phase: number;
   compact: readonly [number, number, number];
   dispersed: readonly [number, number, number];
 };
-type Marker = {
-  config: MarkerConfig;
+
+type ProtocolMarkerConfig = MarkerBaseConfig & {
+  role: "protocol";
+  intro: readonly [number, number, number];
+  introControl: readonly [number, number, number];
+  planetSeed: number;
+};
+
+type SignalMarkerConfig = MarkerBaseConfig & {
+  role: "signal";
+};
+
+type MarkerConfig = ProtocolMarkerConfig | SignalMarkerConfig;
+
+type PlanetUniforms = {
+  uTime: { value: number };
+  uFocus: { value: number };
+  uIntroEmphasis: { value: number };
+  uPixelRatio: { value: number };
+  uMotion: { value: number };
+  uLayerOpacity: { value: number };
+  uPointTexture: { value: THREE.Texture };
+};
+
+type ProtocolPlanet = {
   group: THREE.Group;
-  core: THREE.Sprite;
+  shell: THREE.Points<THREE.BufferGeometry, THREE.ShaderMaterial>;
+  interior: THREE.Points<THREE.BufferGeometry, THREE.ShaderMaterial>;
   halo: THREE.Sprite;
-  introHalo?: THREE.Sprite;
-  satellites?: THREE.Points<THREE.BufferGeometry, THREE.PointsMaterial>;
+  satellites: THREE.Points<THREE.BufferGeometry, THREE.PointsMaterial>;
+  uniforms: readonly [PlanetUniforms, PlanetUniforms];
+  focus: number;
+  focusTarget: number;
+  screenDistance: number;
+};
+
+type MarkerBase = {
+  group: THREE.Group;
   label: THREE.Sprite;
   labelTexture: THREE.CanvasTexture;
 };
 
+type ProtocolMarker = MarkerBase & {
+  kind: "protocol";
+  config: ProtocolMarkerConfig;
+  planet: ProtocolPlanet;
+};
+
+type SignalMarker = MarkerBase & {
+  kind: "signal";
+  config: SignalMarkerConfig;
+  core: THREE.Sprite;
+  halo: THREE.Sprite;
+};
+
+type Marker = ProtocolMarker | SignalMarker;
+
 const INTRO_END_PROGRESS = 0.22;
 const PROTOCOL_SATELLITE_COUNT = 144;
+const PROTOCOL_SHELL_COUNT = 768;
+const PROTOCOL_INTERIOR_COUNT = 256;
+const PROTOCOL_FOCUS_NEAR = 0.1;
+const PROTOCOL_FOCUS_FAR = 0.46;
+const PROTOCOL_FOCUS_SCALE = 0.22;
+const PROTOCOL_FOCUS_Z_OFFSET = 6;
 
 const MARKERS: MarkerConfig[] = [
   {
@@ -34,6 +85,9 @@ const MARKERS: MarkerConfig[] = [
     role: "protocol",
     size: 8.4,
     phase: 0.2,
+    intro: [-47, 9, 34],
+    introControl: [-39, 27, 20],
+    planetSeed: 0x4b555255,
     compact: [-21, 12, 5],
     dispersed: [-82, 30, 8],
   },
@@ -43,6 +97,9 @@ const MARKERS: MarkerConfig[] = [
     role: "protocol",
     size: 7.8,
     phase: 2.4,
+    intro: [49, -8, -36],
+    introControl: [39, -27, -17],
+    planetSeed: 0x50414e43,
     compact: [22, -11, -7],
     dispersed: [88, -34, -4],
   },
@@ -163,6 +220,61 @@ const FRAGMENT_SHADER = `
   }
 `;
 
+const PLANET_VERTEX_SHADER = `
+  uniform float uTime;
+  uniform float uFocus;
+  uniform float uIntroEmphasis;
+  uniform float uPixelRatio;
+  uniform float uMotion;
+  uniform float uLayerOpacity;
+  attribute vec3 aColor;
+  attribute float aSize;
+  attribute float aPhase;
+  attribute float aLayer;
+  varying vec3 vColor;
+  varying float vAlpha;
+
+  void main() {
+    vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+    vec3 localNormal = normalize(position);
+    vec3 viewNormal = normalize(normalMatrix * localNormal);
+    vec3 viewDirection = normalize(-mvPosition.xyz);
+    float facing = abs(dot(viewNormal, viewDirection));
+    float rim = pow(1.0 - facing, 2.0);
+    float directional = max(
+      dot(localNormal, normalize(vec3(0.35, 0.55, 0.76))),
+      0.0
+    );
+    float twinkle = 1.0 + sin(uTime * (0.58 + aPhase) + aPhase * 29.0)
+      * uMotion * mix(0.025, 0.075, aLayer);
+    float focusScale = 1.0 + uFocus * 0.16;
+    gl_PointSize = clamp(
+      aSize * focusScale * uPixelRatio * (126.0 / -mvPosition.z) * twinkle,
+      0.7,
+      6.6
+    );
+    gl_Position = projectionMatrix * mvPosition;
+    float surfaceLight = 0.7 + directional * 0.24 + rim * 0.2;
+    float introLight = 1.0 + uIntroEmphasis * mix(0.05, 0.14, aLayer);
+    vColor = aColor * surfaceLight * introLight * (1.0 + uFocus * 0.26);
+    vAlpha = uLayerOpacity * mix(0.72, 1.0, aLayer)
+      * (0.88 + rim * 0.12 + uFocus * 0.12);
+  }
+`;
+
+const PLANET_FRAGMENT_SHADER = `
+  uniform sampler2D uPointTexture;
+  varying vec3 vColor;
+  varying float vAlpha;
+
+  void main() {
+    vec4 point = texture2D(uPointTexture, gl_PointCoord);
+    float alpha = point.a * vAlpha;
+    if (alpha < 0.015) discard;
+    gl_FragColor = vec4(vColor * point.rgb, alpha);
+  }
+`;
+
 function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);
 }
@@ -174,6 +286,24 @@ function smoothstep(edge0: number, edge1: number, value: number) {
 
 function lerp(from: number, to: number, amount: number) {
   return from + (to - from) * amount;
+}
+
+function setQuadraticBezier3(
+  target: THREE.Vector3,
+  start: readonly [number, number, number],
+  control: readonly [number, number, number],
+  end: readonly [number, number, number],
+  amount: number,
+) {
+  const inverse = 1 - amount;
+  const startWeight = inverse * inverse;
+  const controlWeight = 2 * inverse * amount;
+  const endWeight = amount * amount;
+  target.set(
+    start[0] * startWeight + control[0] * controlWeight + end[0] * endWeight,
+    start[1] * startWeight + control[1] * controlWeight + end[1] * endWeight,
+    start[2] * startWeight + control[2] * controlWeight + end[2] * endWeight,
+  );
 }
 
 function createSeededRandom(seed: number) {
@@ -393,14 +523,105 @@ function createLabelTexture(config: MarkerConfig) {
   return texture;
 }
 
+function createPlanetGeometry({
+  count,
+  radius,
+  shell,
+  color,
+  seed,
+}: {
+  count: number;
+  radius: number;
+  shell: boolean;
+  color: string;
+  seed: number;
+}) {
+  const positions = new Float32Array(count * 3);
+  const colors = new Float32Array(count * 3);
+  const sizes = new Float32Array(count);
+  const phases = new Float32Array(count);
+  const layers = new Float32Array(count);
+  const random = createSeededRandom(seed);
+  const baseColor = new THREE.Color(color);
+  const goldenAngle = Math.PI * (3 - Math.sqrt(5));
+
+  for (let index = 0; index < count; index += 1) {
+    const offset = index * 3;
+    let x: number;
+    let y: number;
+    let z: number;
+    if (shell) {
+      y = 1 - (2 * (index + 0.5)) / count;
+      const radial = Math.sqrt(Math.max(0, 1 - y * y));
+      const angle = goldenAngle * index + (random() - 0.5) * 0.045;
+      x = Math.cos(angle) * radial;
+      z = Math.sin(angle) * radial;
+      const shellRadius = radius * (0.975 + random() * 0.05);
+      x *= shellRadius;
+      y *= shellRadius;
+      z *= shellRadius;
+    } else {
+      const vertical = random() * 2 - 1;
+      const angle = random() * Math.PI * 2;
+      const radial = Math.sqrt(Math.max(0, 1 - vertical * vertical));
+      const interiorRadius = Math.cbrt(random()) * radius * 0.82;
+      x = Math.cos(angle) * radial * interiorRadius;
+      y = vertical * interiorRadius;
+      z = Math.sin(angle) * radial * interiorRadius;
+    }
+    positions[offset] = x;
+    positions[offset + 1] = y;
+    positions[offset + 2] = z;
+
+    const brightness = shell ? 0.78 + random() * 0.28 : 0.52 + random() * 0.3;
+    colors[offset] = baseColor.r * brightness;
+    colors[offset + 1] = baseColor.g * brightness;
+    colors[offset + 2] = baseColor.b * brightness;
+    sizes[index] = shell ? 0.78 + random() * 0.48 : 0.56 + random() * 0.38;
+    phases[index] = random();
+    layers[index] = shell ? 1 : 0;
+  }
+
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+  geometry.setAttribute("aColor", new THREE.BufferAttribute(colors, 3));
+  geometry.setAttribute("aSize", new THREE.BufferAttribute(sizes, 1));
+  geometry.setAttribute("aPhase", new THREE.BufferAttribute(phases, 1));
+  geometry.setAttribute("aLayer", new THREE.BufferAttribute(layers, 1));
+  return geometry;
+}
+
+function createPlanetMaterial(
+  pointTexture: THREE.Texture,
+  layerOpacity: number,
+) {
+  const uniforms: PlanetUniforms = {
+    uTime: { value: 0 },
+    uFocus: { value: 0 },
+    uIntroEmphasis: { value: 1 },
+    uPixelRatio: { value: 1 },
+    uMotion: { value: 1 },
+    uLayerOpacity: { value: layerOpacity },
+    uPointTexture: { value: pointTexture },
+  };
+  const material = new THREE.ShaderMaterial({
+    uniforms,
+    vertexShader: PLANET_VERTEX_SHADER,
+    fragmentShader: PLANET_FRAGMENT_SHADER,
+    transparent: true,
+    depthWrite: false,
+    depthTest: true,
+    blending: THREE.AdditiveBlending,
+  });
+  return { material, uniforms };
+}
+
 function createProtocolSatellites(
-  config: MarkerConfig,
+  config: ProtocolMarkerConfig,
   pointTexture: THREE.Texture,
 ) {
   const positions = new Float32Array(PROTOCOL_SATELLITE_COUNT * 3);
-  const random = createSeededRandom(
-    config.label === "Kuru" ? 0x4b555255 : 0x50414e43,
-  );
+  const random = createSeededRandom(config.planetSeed ^ 0x53415445);
   for (let index = 0; index < PROTOCOL_SATELLITE_COUNT; index += 1) {
     const offset = index * 3;
     const angle = random() * Math.PI * 2;
@@ -434,48 +655,61 @@ function createProtocolSatellites(
   return points;
 }
 
-function createMarker(
-  config: MarkerConfig,
+function createProtocolPlanet(
+  config: ProtocolMarkerConfig,
   pointTexture: THREE.Texture,
-): Marker {
-  const group = new THREE.Group();
-  const core = new THREE.Sprite(
-    new THREE.SpriteMaterial({
-      map: pointTexture,
-      color: config.color,
-      transparent: true,
-      opacity: config.role === "protocol" ? 0.98 : 0.64,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false,
-    }),
-  );
+): ProtocolPlanet {
+  const radius = config.size * 0.58;
+  const shellGeometry = createPlanetGeometry({
+    count: PROTOCOL_SHELL_COUNT,
+    radius,
+    shell: true,
+    color: config.color,
+    seed: config.planetSeed,
+  });
+  const interiorGeometry = createPlanetGeometry({
+    count: PROTOCOL_INTERIOR_COUNT,
+    radius,
+    shell: false,
+    color: config.color,
+    seed: config.planetSeed ^ 0x494e5445,
+  });
+  const shellLayer = createPlanetMaterial(pointTexture, 0.92);
+  const interiorLayer = createPlanetMaterial(pointTexture, 0.54);
+  const shell = new THREE.Points(shellGeometry, shellLayer.material);
+  const interior = new THREE.Points(interiorGeometry, interiorLayer.material);
   const halo = new THREE.Sprite(
     new THREE.SpriteMaterial({
       map: pointTexture,
       color: config.color,
       transparent: true,
-      opacity: config.role === "protocol" ? 0.24 : 0.08,
+      opacity: 0.18,
       blending: THREE.AdditiveBlending,
       depthWrite: false,
     }),
   );
-  const introHalo =
-    config.role === "protocol"
-      ? new THREE.Sprite(
-          new THREE.SpriteMaterial({
-            map: pointTexture,
-            color: config.color,
-            transparent: true,
-            opacity: 0,
-            blending: THREE.AdditiveBlending,
-            depthWrite: false,
-          }),
-        )
-      : undefined;
-  const satellites =
-    config.role === "protocol"
-      ? createProtocolSatellites(config, pointTexture)
-      : undefined;
+  halo.scale.set(config.size * 3.4, config.size * 3.4, 1);
+  const satellites = createProtocolSatellites(config, pointTexture);
+  const group = new THREE.Group();
+  group.add(halo, interior, shell, satellites);
+  return {
+    group,
+    shell,
+    interior,
+    halo,
+    satellites,
+    uniforms: [shellLayer.uniforms, interiorLayer.uniforms],
+    focus: 0,
+    focusTarget: 0,
+    screenDistance: Number.POSITIVE_INFINITY,
+  };
+}
+
+function createMarker(
+  config: MarkerConfig,
+  pointTexture: THREE.Texture,
+): Marker {
+  const group = new THREE.Group();
   const labelTexture = createLabelTexture(config);
   const label = new THREE.Sprite(
     new THREE.SpriteMaterial({
@@ -485,39 +719,71 @@ function createMarker(
       depthWrite: false,
     }),
   );
-  core.scale.set(config.size, config.size, 1);
-  halo.scale.set(config.size * 3.5, config.size * 3.5, 1);
-  introHalo?.scale.set(config.size * 5.4, config.size * 5.4, 1);
   label.scale.set(
     labelTexture.image.width / 7,
     labelTexture.image.height / 7,
     1,
   );
   label.position.set(0, config.size * 1.15, 0);
-  if (introHalo) group.add(introHalo);
-  if (satellites) group.add(satellites);
+  if (config.role === "protocol") {
+    const planet = createProtocolPlanet(config, pointTexture);
+    group.add(planet.group, label);
+    return {
+      kind: "protocol",
+      config,
+      group,
+      planet,
+      label,
+      labelTexture,
+    };
+  }
+
+  const core = new THREE.Sprite(
+    new THREE.SpriteMaterial({
+      map: pointTexture,
+      color: config.color,
+      transparent: true,
+      opacity: 0.64,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    }),
+  );
+  const halo = new THREE.Sprite(
+    new THREE.SpriteMaterial({
+      map: pointTexture,
+      color: config.color,
+      transparent: true,
+      opacity: 0.08,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    }),
+  );
+  core.scale.set(config.size, config.size, 1);
+  halo.scale.set(config.size * 3.5, config.size * 3.5, 1);
   group.add(halo, core, label);
   return {
+    kind: "signal",
     config,
     group,
     core,
     halo,
-    introHalo,
-    satellites,
     label,
     labelTexture,
   };
 }
 
 function disposeMarker(marker: Marker) {
-  (marker.core.material as THREE.SpriteMaterial).dispose();
-  (marker.halo.material as THREE.SpriteMaterial).dispose();
-  if (marker.introHalo) {
-    (marker.introHalo.material as THREE.SpriteMaterial).dispose();
-  }
-  if (marker.satellites) {
-    marker.satellites.geometry.dispose();
-    marker.satellites.material.dispose();
+  if (marker.kind === "protocol") {
+    marker.planet.shell.geometry.dispose();
+    marker.planet.shell.material.dispose();
+    marker.planet.interior.geometry.dispose();
+    marker.planet.interior.material.dispose();
+    (marker.planet.halo.material as THREE.SpriteMaterial).dispose();
+    marker.planet.satellites.geometry.dispose();
+    marker.planet.satellites.material.dispose();
+  } else {
+    (marker.core.material as THREE.SpriteMaterial).dispose();
+    (marker.halo.material as THREE.SpriteMaterial).dispose();
   }
   (marker.label.material as THREE.SpriteMaterial).dispose();
   marker.labelTexture.dispose();
@@ -569,6 +835,9 @@ export function RouteGraph3D({
     );
     constellation.add(particleField.points);
     const markers = MARKERS.map((config) => createMarker(config, pointTexture));
+    const protocolMarkers = markers.filter(
+      (marker): marker is ProtocolMarker => marker.kind === "protocol",
+    );
     for (const marker of markers) constellation.add(marker.group);
 
     let frame = 0;
@@ -579,10 +848,14 @@ export function RouteGraph3D({
     let pointerX = 0;
     let pointerY = 0;
     let pointerDistance = 0;
+    let focusPointerX = 0;
+    let focusPointerY = 0;
+    let hasPointer = false;
     let disturbance = 0;
     let lastPointerX = 0;
     let lastPointerY = 0;
     let lastPointerAt = 0;
+    const projectedPosition = new THREE.Vector3();
 
     const resize = () => {
       const width = Math.max(container.clientWidth, 1);
@@ -593,10 +866,18 @@ export function RouteGraph3D({
       camera.aspect = width / height;
       camera.updateProjectionMatrix();
       particleField.uniforms.uPixelRatio.value = pixelRatio;
+      for (const marker of protocolMarkers) {
+        for (const uniforms of marker.planet.uniforms) {
+          uniforms.uPixelRatio.value = pixelRatio;
+        }
+      }
     };
 
     const onPointerMove = (event: PointerEvent) => {
-      if (event.pointerType === "touch") return;
+      if (event.pointerType === "touch") {
+        hasPointer = false;
+        return;
+      }
       const bounds = container.getBoundingClientRect();
       if (
         event.clientX < bounds.left ||
@@ -604,6 +885,7 @@ export function RouteGraph3D({
         event.clientY < bounds.top ||
         event.clientY > bounds.bottom
       ) {
+        hasPointer = false;
         return;
       }
       const normalizedX = clamp(
@@ -631,12 +913,16 @@ export function RouteGraph3D({
       pointerTargetX = normalizedX;
       pointerTargetY = normalizedY;
       pointerTargetDistance = clamp(Math.hypot(normalizedX, normalizedY), 0, 1);
+      focusPointerX = normalizedX;
+      focusPointerY = normalizedY;
+      hasPointer = true;
     };
 
     const resetPointer = () => {
       pointerTargetX = 0;
       pointerTargetY = 0;
       pointerTargetDistance = 0;
+      hasPointer = false;
     };
     const requestRender = () => {
       if (frame === 0 && isVisible && !document.hidden) {
@@ -687,55 +973,146 @@ export function RouteGraph3D({
       camera.rotation.x = pointerY * 0.022;
       camera.rotation.y = -pointerX * 0.018;
 
+      const markerExpansion = smoothstep(0.12, 0.9, expansion);
+      const introPathAmount = 1 - introEmphasis;
       for (const marker of markers) {
         const { config, group } = marker;
-        const markerExpansion = smoothstep(0.12, 0.9, expansion);
-        group.position.set(
-          lerp(config.compact[0], config.dispersed[0], markerExpansion),
-          lerp(config.compact[1], config.dispersed[1], markerExpansion),
-          lerp(config.compact[2], config.dispersed[2], markerExpansion),
-        );
-        const breathe = reduceMotion
-          ? 1
-          : 1 +
-            Math.sin(time * 0.00072 + config.phase) *
-              (config.role === "protocol" ? 0.075 : 0.025);
-        const protocolIntroBoost =
-          config.role === "protocol" ? introEmphasis : 0;
-        const introScale = 1 + protocolIntroBoost * 0.11;
-        marker.core.scale.set(
-          config.size * breathe * introScale,
-          config.size * breathe * introScale,
-          1,
-        );
-        marker.halo.scale.set(
-          config.size * (3.5 + protocolIntroBoost * 0.55) * breathe,
-          config.size * (3.5 + protocolIntroBoost * 0.55) * breathe,
-          1,
-        );
-        if (marker.introHalo) {
-          marker.introHalo.scale.set(
-            config.size * 5.4 * breathe,
-            config.size * 5.4 * breathe,
+        if (marker.kind === "protocol" && introEmphasis > 0) {
+          setQuadraticBezier3(
+            group.position,
+            marker.config.intro,
+            marker.config.introControl,
+            marker.config.compact,
+            introPathAmount,
+          );
+          const introHorizontalScale =
+            container.clientWidth < 640
+              ? 0.48
+              : container.clientWidth < 1100
+                ? 0.76
+                : 1;
+          group.position.x = lerp(
+            group.position.x,
+            group.position.x * introHorizontalScale,
+            introEmphasis,
+          );
+        } else {
+          group.position.set(
+            lerp(config.compact[0], config.dispersed[0], markerExpansion),
+            lerp(config.compact[1], config.dispersed[1], markerExpansion),
+            lerp(config.compact[2], config.dispersed[2], markerExpansion),
+          );
+        }
+
+        if (marker.kind === "protocol") {
+          if (!reduceMotion) {
+            const depthResponse = clamp(
+              (group.position.z + 45) / 90,
+              0.55,
+              1.2,
+            );
+            group.position.x += pointerX * (0.85 + depthResponse * 0.55);
+            group.position.y += pointerY * (0.45 + depthResponse * 0.35);
+          }
+        } else {
+          const breathe = reduceMotion
+            ? 1
+            : 1 + Math.sin(time * 0.00072 + config.phase) * 0.025;
+          marker.core.scale.set(
+            config.size * breathe,
+            config.size * breathe,
             1,
           );
-          (marker.introHalo.material as THREE.SpriteMaterial).opacity =
-            introEmphasis * 0.13;
+          marker.halo.scale.set(
+            config.size * 3.5 * breathe,
+            config.size * 3.5 * breathe,
+            1,
+          );
+          (marker.label.material as THREE.SpriteMaterial).opacity =
+            (0.3 - progress * 0.2) * (container.clientWidth < 640 ? 0 : 1);
         }
-        if (marker.satellites) {
-          marker.satellites.visible = introEmphasis > 0.001;
-          marker.satellites.rotation.y = reduceMotion
-            ? config.phase * 0.08
-            : time * 0.000055 + config.phase * 0.08;
-          marker.satellites.rotation.z =
-            -0.24 + config.phase * 0.03 + (reduceMotion ? 0 : time * 0.000018);
-          marker.satellites.material.opacity = introEmphasis * 0.42;
-          marker.satellites.material.size = 0.72 + introEmphasis * 0.2;
+      }
+
+      camera.updateMatrixWorld();
+      scene.updateMatrixWorld(true);
+      let nearestProtocol: ProtocolMarker | undefined;
+      let nearestDistance = Number.POSITIVE_INFINITY;
+      for (const marker of protocolMarkers) {
+        marker.group.getWorldPosition(projectedPosition);
+        projectedPosition.project(camera);
+        marker.planet.screenDistance = Math.hypot(
+          projectedPosition.x - focusPointerX,
+          projectedPosition.y - focusPointerY,
+        );
+        if (marker.planet.screenDistance < nearestDistance) {
+          nearestProtocol = marker;
+          nearestDistance = marker.planet.screenDistance;
         }
-        (marker.label.material as THREE.SpriteMaterial).opacity =
-          config.role === "protocol"
-            ? 0.76 - progress * 0.22
-            : (0.3 - progress * 0.2) * (container.clientWidth < 640 ? 0 : 1);
+      }
+
+      for (const marker of protocolMarkers) {
+        const { config, group, planet } = marker;
+        let focusTarget =
+          hasPointer && !reduceMotion
+            ? 1 -
+              smoothstep(
+                PROTOCOL_FOCUS_NEAR,
+                PROTOCOL_FOCUS_FAR,
+                planet.screenDistance,
+              )
+            : 0;
+        if (
+          nearestProtocol !== marker &&
+          nearestDistance < PROTOCOL_FOCUS_FAR
+        ) {
+          focusTarget *= 0.36;
+        }
+        planet.focusTarget = focusTarget;
+        planet.focus = reduceMotion
+          ? 0
+          : lerp(planet.focus, planet.focusTarget, 0.08);
+
+        group.position.z += planet.focus * PROTOCOL_FOCUS_Z_OFFSET;
+        const breathe = reduceMotion
+          ? 1
+          : 1 + Math.sin(time * 0.00056 + config.phase) * 0.025;
+        const mobileScale = container.clientWidth < 640 ? 0.88 : 1;
+        planet.group.scale.setScalar(
+          mobileScale * breathe * (1 + planet.focus * PROTOCOL_FOCUS_SCALE),
+        );
+        planet.group.rotation.x =
+          config.phase * 0.08 + (reduceMotion ? 0 : pointerY * 0.08);
+        planet.group.rotation.y = reduceMotion
+          ? config.phase * 0.14
+          : time * 0.000085 + config.phase * 0.14 + pointerX * 0.14;
+        planet.group.rotation.z = config.phase * 0.035;
+
+        for (const uniforms of planet.uniforms) {
+          uniforms.uTime.value = time * 0.001;
+          uniforms.uFocus.value = planet.focus;
+          uniforms.uIntroEmphasis.value = introEmphasis;
+          uniforms.uMotion.value = reduceMotion ? 0 : 1;
+        }
+        planet.halo.scale.set(
+          config.size * (3.35 + introEmphasis * 0.35 + planet.focus * 0.42),
+          config.size * (3.35 + introEmphasis * 0.35 + planet.focus * 0.42),
+          1,
+        );
+        (planet.halo.material as THREE.SpriteMaterial).opacity =
+          0.15 + introEmphasis * 0.1 + planet.focus * 0.12;
+        planet.satellites.rotation.y = reduceMotion
+          ? config.phase * 0.08
+          : time * (0.000055 + planet.focus * 0.000035) + config.phase * 0.08;
+        planet.satellites.rotation.z =
+          -0.24 + config.phase * 0.03 + (reduceMotion ? 0 : time * 0.000018);
+        planet.satellites.material.opacity =
+          0.08 + introEmphasis * 0.3 + planet.focus * 0.16;
+        planet.satellites.material.size =
+          0.72 + introEmphasis * 0.18 + planet.focus * 0.12;
+        (marker.label.material as THREE.SpriteMaterial).opacity = Math.min(
+          1,
+          0.76 - progress * 0.22 + planet.focus * 0.24,
+        );
       }
       renderer.render(scene, camera);
       frame = window.requestAnimationFrame(render);
