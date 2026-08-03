@@ -437,7 +437,7 @@ function Home({ language }: { language: Language }) {
             </div>
           </section>
 
-          <section className="border border-line bg-gradient-to-br from-ink-elev via-ink-elev to-accent/[0.12] px-7 py-16">
+          <section className="decision-receipt border border-line px-7 py-16">
             <span className="eyebrow">
               {pick(language, "Decision receipt", "决策回执")}
             </span>

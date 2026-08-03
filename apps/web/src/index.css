@@ -171,6 +171,45 @@
         transparent 27%
       );
   }
+  .decision-receipt {
+    position: relative;
+    overflow: hidden;
+    background:
+      radial-gradient(
+        ellipse at 12% 18%,
+        rgba(155, 124, 255, 0.11),
+        transparent 38%
+      ),
+      radial-gradient(
+        ellipse at 88% 28%,
+        rgba(105, 215, 255, 0.08),
+        transparent 36%
+      ),
+      radial-gradient(
+        ellipse at 72% 92%,
+        rgba(204, 255, 0, 0.028),
+        transparent 34%
+      ),
+      linear-gradient(145deg, rgba(20, 20, 25, 0.98), rgba(10, 11, 16, 0.98));
+  }
+  .decision-receipt::before {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    content: "";
+    pointer-events: none;
+    background: linear-gradient(
+      90deg,
+      rgba(155, 124, 255, 0.12),
+      rgba(105, 215, 255, 0.06),
+      transparent 65%
+    );
+    opacity: 0.3;
+  }
+  .decision-receipt > * {
+    position: relative;
+    z-index: 1;
+  }
   .question-card {
     --pointer-x: 50%;
     --pointer-y: 50%;
