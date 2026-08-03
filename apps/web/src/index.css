@@ -37,6 +37,81 @@
   .card {
     @apply border border-line bg-ink-elev p-5 transition-colors hover:border-line-strong;
   }
+  .hero-webgl-fallback {
+    background:
+      radial-gradient(
+        circle at 28% 34%,
+        rgba(111, 85, 255, 0.2),
+        transparent 26%
+      ),
+      radial-gradient(
+        circle at 72% 58%,
+        rgba(73, 188, 255, 0.14),
+        transparent 24%
+      ),
+      radial-gradient(
+        circle at 50% 48%,
+        rgba(204, 255, 0, 0.07),
+        transparent 18%
+      ),
+      radial-gradient(
+        circle at 16% 72%,
+        rgba(255, 255, 255, 0.34) 0 1px,
+        transparent 1.5px
+      ),
+      radial-gradient(
+        circle at 80% 22%,
+        rgba(255, 255, 255, 0.28) 0 1px,
+        transparent 1.5px
+      ),
+      linear-gradient(145deg, #02030a, #040611 48%, #010205);
+  }
+  .question-card {
+    --pointer-x: 50%;
+    --pointer-y: 50%;
+    --surface-accent: #ccff00;
+    position: relative;
+    overflow: hidden;
+    background:
+      radial-gradient(
+        320px circle at var(--pointer-x) var(--pointer-y),
+        color-mix(in srgb, var(--surface-accent) 0%, transparent),
+        transparent 68%
+      ),
+      linear-gradient(145deg, rgba(20, 20, 25, 0.98), rgba(10, 11, 16, 0.98));
+    transition:
+      transform 240ms ease,
+      border-color 240ms ease,
+      background-color 240ms ease;
+  }
+  .question-card-title,
+  .question-card-key {
+    transition:
+      color 220ms ease,
+      filter 220ms ease;
+  }
+  .verdict-row {
+    --pointer-x: 50%;
+    --pointer-y: 50%;
+    --surface-accent: #ffffff;
+    background: radial-gradient(
+      420px circle at var(--pointer-x) var(--pointer-y),
+      color-mix(in srgb, var(--surface-accent) 0%, transparent),
+      transparent 72%
+    );
+    transition:
+      background-color 240ms ease,
+      border-color 240ms ease;
+  }
+  .verdict-grade,
+  .verdict-badge,
+  .verdict-row-content {
+    transition:
+      transform 220ms ease,
+      filter 220ms ease,
+      background-color 220ms ease,
+      border-color 220ms ease;
+  }
   .card-head {
     @apply mb-1 flex items-baseline justify-between gap-3 border-b border-line pb-3;
   }
@@ -70,5 +145,57 @@
   }
   .mono {
     @apply break-all font-mono text-[11px];
+  }
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .question-card:hover {
+    transform: translateY(-3px);
+    border-color: color-mix(in srgb, var(--surface-accent) 68%, #2a2a2a);
+    background:
+      radial-gradient(
+        320px circle at var(--pointer-x) var(--pointer-y),
+        color-mix(in srgb, var(--surface-accent) 16%, transparent),
+        transparent 68%
+      ),
+      linear-gradient(145deg, rgba(22, 23, 29, 0.98), rgba(11, 12, 17, 0.98));
+  }
+  .question-card:hover .question-card-title,
+  .question-card:hover .question-card-key {
+    filter: brightness(1.18);
+  }
+  .verdict-row:hover {
+    border-color: color-mix(in srgb, var(--surface-accent) 42%, #1e1e1e);
+    background: radial-gradient(
+      420px circle at var(--pointer-x) var(--pointer-y),
+      color-mix(in srgb, var(--surface-accent) 11%, transparent),
+      transparent 72%
+    );
+  }
+  .verdict-row:hover .verdict-grade {
+    filter: brightness(1.18);
+  }
+  .verdict-row:hover .verdict-badge {
+    background-color: color-mix(
+      in srgb,
+      var(--surface-accent) 10%,
+      transparent
+    );
+    border-color: color-mix(in srgb, var(--surface-accent) 76%, transparent);
+  }
+  .verdict-row:hover .verdict-row-content {
+    transform: translateX(3px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .question-card,
+  .question-card-title,
+  .question-card-key,
+  .verdict-row,
+  .verdict-grade,
+  .verdict-badge,
+  .verdict-row-content {
+    transition-duration: 1ms;
   }
 }
