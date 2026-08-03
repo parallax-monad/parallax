@@ -1,0 +1,185 @@
+{
+  "runId": "recorded-kuru-mon-to-usdc-91383505",
+  "replayMode": true,
+  "intent": {
+    "chainId": 143,
+    "protocol": "kuru",
+    "sender": "0xcccccccccccccccccccccccccccccccccccccccc",
+    "recipient": "0xcccccccccccccccccccccccccccccccccccccccc",
+    "recipientSource": "defaulted_from_sender",
+    "tokenIn": { "kind": "native" },
+    "tokenOut": {
+      "kind": "erc20",
+      "address": "0x754704Bc059F8C67012fEd69BC8A327a5aafb603"
+    },
+    "amountInAtomic": "10000000000000000",
+    "economicBoundary": {
+      "availability": "unavailable",
+      "source": "unavailable"
+    }
+  },
+  "status": "completed",
+  "systemStatus": "OK",
+  "verdict": "UNKNOWN",
+  "summary": "Recorded Kuru replay: MON to USDC. The recorded result remains UNKNOWN within its checked scope.",
+  "ruleResults": [
+    {
+      "ruleId": "P0-EVIDENCE-001",
+      "evidenceRefs": [
+        {
+          "key": "mon-to-usdc:simulation",
+          "blockNumber": "91383505",
+          "runtimeVersion": "workspace @themoss/protocol-kuru@0.1.0",
+          "runtimeRevision": "d09b38cbc44ee7f5722c5d09e7224f7750187762",
+          "fixtureId": "mon-to-usdc",
+          "reproducibility": "REPRODUCIBLE",
+          "isReplay": true,
+          "isMock": false,
+          "source": "derived",
+          "stage": "SIMULATE"
+        }
+      ],
+      "actionEvaluations": [],
+      "status": "UNKNOWN",
+      "reasonCode": "CRITICAL_EVIDENCE_MISSING"
+    },
+    {
+      "ruleId": "P0-EXECUTION-001",
+      "evidenceRefs": [
+        {
+          "key": "mon-to-usdc:simulation",
+          "blockNumber": "91383505",
+          "runtimeVersion": "workspace @themoss/protocol-kuru@0.1.0",
+          "runtimeRevision": "d09b38cbc44ee7f5722c5d09e7224f7750187762",
+          "fixtureId": "mon-to-usdc",
+          "reproducibility": "REPRODUCIBLE",
+          "isReplay": true,
+          "isMock": false,
+          "source": "derived",
+          "stage": "SIMULATE"
+        }
+      ],
+      "actionEvaluations": [],
+      "status": "UNKNOWN",
+      "reasonCode": "RULE_CLASSIFICATION_NOT_VERIFIED"
+    },
+    {
+      "ruleId": "P0-ECONOMIC-001",
+      "evidenceRefs": [],
+      "actionEvaluations": [],
+      "status": "NOT_APPLICABLE",
+      "applicabilityReasonCode": "BOUNDARY_NOT_PROVIDED"
+    }
+  ],
+  "recommendedActions": [],
+  "irrelevantActions": [],
+  "evidence": [
+    {
+      "key": "mon-to-usdc:quote",
+      "blockNumber": "91383505",
+      "runtimeVersion": "workspace @themoss/protocol-kuru@0.1.0",
+      "runtimeRevision": "d09b38cbc44ee7f5722c5d09e7224f7750187762",
+      "fixtureId": "mon-to-usdc",
+      "reproducibility": "REPRODUCIBLE",
+      "isReplay": true,
+      "isMock": false,
+      "kind": "generic",
+      "status": "confirmed",
+      "summary": "Recorded Quote Evidence",
+      "source": "quote",
+      "stage": "QUOTE",
+      "routeInputRole": "ROUTE_QUOTE"
+    },
+    {
+      "key": "mon-to-usdc:action",
+      "blockNumber": "91383505",
+      "runtimeVersion": "workspace @themoss/protocol-kuru@0.1.0",
+      "runtimeRevision": "d09b38cbc44ee7f5722c5d09e7224f7750187762",
+      "fixtureId": "mon-to-usdc",
+      "reproducibility": "REPRODUCIBLE",
+      "isReplay": true,
+      "isMock": false,
+      "kind": "generic",
+      "status": "confirmed",
+      "summary": "Recorded Action Evidence",
+      "source": "moss",
+      "stage": "ACTION",
+      "routeInputRole": "ROUTE_ACTION"
+    },
+    {
+      "key": "mon-to-usdc:simulation",
+      "blockNumber": "91383505",
+      "runtimeVersion": "workspace @themoss/protocol-kuru@0.1.0",
+      "runtimeRevision": "d09b38cbc44ee7f5722c5d09e7224f7750187762",
+      "fixtureId": "mon-to-usdc",
+      "reproducibility": "REPRODUCIBLE",
+      "isReplay": true,
+      "isMock": false,
+      "kind": "generic",
+      "status": "warning",
+      "summary": "Recorded simulation Evidence is incomplete or requires conservative review",
+      "source": "derived",
+      "stage": "SIMULATE"
+    },
+    {
+      "key": "mon-to-usdc:completeness",
+      "blockNumber": "91383505",
+      "runtimeVersion": "workspace @themoss/protocol-kuru@0.1.0",
+      "runtimeRevision": "d09b38cbc44ee7f5722c5d09e7224f7750187762",
+      "fixtureId": "mon-to-usdc",
+      "reproducibility": "REPRODUCIBLE",
+      "isReplay": true,
+      "isMock": false,
+      "kind": "generic",
+      "status": "unknown",
+      "summary": "Replay preserves recorded Run recorded-kuru-mon-to-usdc-91383505 Evidence but does not upgrade incomplete coverage",
+      "source": "derived",
+      "coreRole": "EVIDENCE_COMPLETENESS"
+    }
+  ],
+  "scope": [
+    {
+      "key": "P0-EVIDENCE-001",
+      "label": "Evidence completeness",
+      "status": "unknown",
+      "reason": "REQUIRED_EVIDENCE_UNAVAILABLE"
+    },
+    {
+      "key": "P0-EXECUTION-001",
+      "label": "Execution result",
+      "status": "unknown",
+      "reason": "REQUIRED_EVIDENCE_UNAVAILABLE"
+    },
+    {
+      "key": "P0-ECONOMIC-001",
+      "label": "Economic boundary",
+      "status": "not_checked",
+      "reason": "PRECONDITION_ABSENT"
+    }
+  ],
+  "route": {
+    "availability": "available",
+    "protocol": "kuru",
+    "path": [
+      { "kind": "native" },
+      {
+        "kind": "erc20",
+        "address": "0x754704Bc059F8C67012fEd69BC8A327a5aafb603"
+      }
+    ],
+    "source": "quote",
+    "blockNumber": "91383505",
+    "evidenceRef": {
+      "key": "mon-to-usdc:quote",
+      "blockNumber": "91383505",
+      "runtimeVersion": "workspace @themoss/protocol-kuru@0.1.0",
+      "runtimeRevision": "d09b38cbc44ee7f5722c5d09e7224f7750187762",
+      "fixtureId": "mon-to-usdc",
+      "reproducibility": "REPRODUCIBLE",
+      "isReplay": true,
+      "isMock": false,
+      "source": "quote",
+      "stage": "QUOTE"
+    }
+  }
+}
