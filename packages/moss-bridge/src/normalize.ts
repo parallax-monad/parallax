@@ -132,6 +132,170 @@ export function replayKuruEvidence(
   return replay;
 }
 
+/**
+ * Normalize a live Moss run into the shared evidence shape. Live evidence is
+ * never a replay and never a mock; reproducibility is driven by the immutable
+ * runtime revision plus per-stage block provenance.
+ */
+export function normalizeLiveKuruEvidence(input: {
+  intent: NormalizedKuruSwapIntent;
+  raw: RawKuruEvidence;
+  runtime: import("./types.js").RuntimeIdentity;
+  fetchedAt: string;
+  stages: import("./types.js").StageRecord[];
+  initialBlock?: string;
+}): NormalizedKuruEvidence {
+  const errors = normalizedErrors(input.raw.errors);
+  const integrationStatus = aggregateIntegrationStatus("OK", errors);
+  const quote = queryData(input.raw.quote);
+  const transactions = transactionNodes(input.raw.action);
+  const action = transactions.length === 0 ? null : transactions.map(summary);
+  const simulation = simulationSummary(input.raw.simulation, transactions);
+  const approval = approvalStatus(input.raw.action, input.intent.tokenIn);
+  const assetChangeAssessment = assessAssetChanges(simulation.assetChanges);
+  const blockNumber = liveBlockNumber(input.stages, input.initialBlock);
+  const live: {
+    blockNumber: string | null;
+    fetchedAt: string;
+    mossCommit?: string;
+  } = {
+    blockNumber,
+    fetchedAt: input.fetchedAt,
+    mossCommit: input.runtime.runtimeRevision,
+  };
+  const limitations = [
+    "Moss trace simulation synthetic-prefunds native MON only and does not prove ERC-20 affordability.",
+    "No signing, broadcast, custody, or wallet mutation occurred; the action stage only constructed unsigned calldata.",
+  ];
+  if (simulation.unsupportedReceipt) {
+    limitations.push(
+      "Kuru receipt evidence is unsupported for FlipOrderUpdated on the pinned Moss runtime; execution is UNKNOWN, not success.",
+    );
+  }
+  if (simulation.reverted && !simulation.revertReason) {
+    limitations.push(
+      "Simulation reverted without an attributable wallet-state cause.",
+    );
+  }
+  return {
+    protocol: "kuru",
+    intent: input.intent,
+    integrationStatus,
+    executionStatus: executionStatus(integrationStatus, errors, simulation),
+    quote: sourced(
+      quote,
+      quote ? "quote" : "unknown",
+      live,
+      "Quote returned by the live Moss query.",
+      "REPRODUCIBLE",
+    ),
+    action: sourced(
+      action,
+      action ? "moss" : "unknown",
+      live,
+      undefined,
+      "REPRODUCIBLE",
+    ),
+    receipt: sourced(
+      simulation.receipt,
+      simulation.receipt ? "moss" : "unknown",
+      live,
+      undefined,
+      "REPRODUCIBLE",
+    ),
+    outcome: sourced(
+      simulation.outcome,
+      simulation.outcome ? "moss" : "unknown",
+      live,
+      undefined,
+      "REPRODUCIBLE",
+    ),
+    assetChanges: sourced(
+      simulation.assetChanges,
+      input.raw.simulation ? "moss" : "unknown",
+      live,
+      undefined,
+      "REPRODUCIBLE",
+    ),
+    assetChangeAssessment,
+    warnings: sourced(
+      simulation.warnings,
+      input.raw.simulation ? "moss" : "unknown",
+      live,
+      undefined,
+      "REPRODUCIBLE",
+    ),
+    revertReason: sourced(
+      simulation.revertReason,
+      simulation.revertReason ? "moss" : "unknown",
+      live,
+      undefined,
+      "REPRODUCIBLE",
+    ),
+    gas: sourced(
+      simulation.gas,
+      input.raw.simulation ? "moss" : "unknown",
+      live,
+      undefined,
+      "REPRODUCIBLE",
+    ),
+    simulationCoverage: sourced(
+      simulation.coverage,
+      input.raw.action ? "derived" : "unknown",
+      live,
+      "Expected transactions are derived from the action capability tree; observed results are derived from the simulator result list.",
+      "REPRODUCIBLE",
+    ),
+    errors: sourced(
+      errors,
+      input.raw.errors ? "moss" : "unknown",
+      live,
+      "Structured errors are normalized from live stage errors.",
+      "REPRODUCIBLE",
+    ),
+    blockNumber: sourced(
+      blockNumber,
+      blockNumber ? "rpc" : "unknown",
+      live,
+      "Latest block read across live stages; the simulator pins its own block internally (Moss ADR 0002) that the runtime API does not expose.",
+      "REPRODUCIBLE",
+    ),
+    mossVersion: `@themoss/protocol-kuru@${
+      input.runtime.packageVersions["@themoss/protocol-kuru"] ??
+      input.runtime.runtimeVersion
+    }`,
+    mossCommit: input.runtime.runtimeRevision,
+    runtimeVersion: input.runtime.runtimeVersion,
+    runtimeRevision: input.runtime.runtimeRevision,
+    fetchedAt: input.fetchedAt,
+    isReplay: false,
+    isMock: false,
+    source: "moss",
+    replayMode: false,
+    approval: sourced(
+      approval,
+      action ? "derived" : "unknown",
+      live,
+      approvalFormula(approval),
+      "REPRODUCIBLE",
+    ),
+    walletAffordabilityChecked: false,
+    limitations,
+  };
+}
+
+function liveBlockNumber(
+  stages: import("./types.js").StageRecord[],
+  initialBlock?: string,
+): string | null {
+  const simulate = [...stages]
+    .reverse()
+    .find((stage) => stage.stage === "SIMULATE");
+  if (simulate?.blockNumber) return simulate.blockNumber;
+  const last = [...stages].reverse().find((stage) => stage.blockNumber);
+  return last?.blockNumber ?? initialBlock ?? null;
+}
+
 function sourced<T>(
   value: T | null,
   source: EvidenceSource,
@@ -141,11 +305,13 @@ function sourced<T>(
     mossCommit?: string;
   },
   formula?: string,
+  reproducibilityOverride?: EvidenceReproducibility,
 ): Sourced<T> {
   return {
     value,
     source,
-    reproducibility: reproducibilityOf(source, input),
+    reproducibility:
+      reproducibilityOverride ?? reproducibilityOf(source, input),
     ...(input.blockNumber ? { blockNumber: input.blockNumber } : {}),
     ...(input.fetchedAt ? { fetchedAt: input.fetchedAt } : {}),
     ...(formula ? { formula } : {}),

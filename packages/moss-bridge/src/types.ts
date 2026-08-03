@@ -92,6 +92,8 @@ export type NormalizedMossError = {
   integrationStatus: IntegrationStatus;
   source: "moss" | "rpc" | "quote" | "unknown";
   normalization: "PRESERVED" | "DERIVED";
+  /** Whether a retry against the same runtime may resolve the error. */
+  retryable?: boolean;
 };
 
 export type NormalizedKuruEvidence = {
@@ -118,6 +120,16 @@ export type NormalizedKuruEvidence = {
   approval: Sourced<"REQUIRED" | "NOT_APPLICABLE" | "UNKNOWN">;
   walletAffordabilityChecked: false;
   limitations: string[];
+  /**
+   * Live-only runtime provenance (absent on recorded fixtures). `runtimeRevision`
+   * must be an immutable identity: a Moss git commit or a verifiable package
+   * integrity/version identity - never "latest", "main", or "workspace baseline".
+   */
+  runtimeVersion?: string;
+  runtimeRevision?: string;
+  fetchedAt?: string;
+  isReplay?: boolean;
+  isMock?: boolean;
 };
 
 export type RawKuruEvidence = {
@@ -127,4 +139,45 @@ export type RawKuruEvidence = {
   action: JsonValue | null;
   simulation: JsonValue | null;
   errors?: Record<string, JsonValue>;
+};
+
+export type StageName = "DISCOVER" | "LOAD" | "QUOTE" | "ACTION" | "SIMULATE";
+
+/** Exact version identity of every Moss workspace package used by a run. */
+export type RuntimeIdentity = {
+  runtimeVersion: string;
+  runtimeRevision: string;
+  packageVersions: Record<string, string>;
+};
+
+/** Per-stage execution record with raw output, timing, and block provenance. */
+export type StageRecord = {
+  stage: StageName;
+  startedAt: string;
+  finishedAt: string;
+  success: boolean;
+  error?: NormalizedMossError;
+  raw: JsonValue | null;
+  runtime: RuntimeIdentity;
+  /** Block read for this stage (quote/simulation may pin different blocks). */
+  blockNumber?: string;
+};
+
+export type LiveKuruAdapterInput = {
+  runId: string;
+  intent: NormalizedKuruSwapIntent;
+  rpcUrl: string;
+  /** Exact Moss checkout path containing the built workspace packages. */
+  runtimePath: string;
+  runtimeVersion: string;
+  runtimeRevision: string;
+  fetchedAt?: string;
+};
+
+export type LiveKuruResult = {
+  runId: string;
+  evidence: NormalizedKuruEvidence;
+  raw: RawKuruEvidence;
+  stages: StageRecord[];
+  runtime: RuntimeIdentity;
 };

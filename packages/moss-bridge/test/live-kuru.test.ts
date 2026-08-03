@@ -1,0 +1,608 @@
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { describe, expect, it } from "vitest";
+import {
+  type LiveKuruAdapterInput,
+  loadMossRuntime,
+  type MossRuntimeBundle,
+  normalizeLiveKuruEvidence,
+  redact,
+  runKuruLiveSwapWithBundle,
+} from "../src/index.js";
+
+const SENDER = "0xcccccccccccccccccccccccccccccccccccccccc";
+const TOKEN_OUT = "0x754704Bc059F8C67012fEd69BC8A327a5aafb603";
+const ROUTER = "0xd651346d7c789536ebf06dc72aE3C8502cd695CC";
+
+const INTENT: LiveKuruAdapterInput["intent"] = {
+  chainId: "143",
+  sender: SENDER,
+  tokenIn: "MON",
+  tokenOut: TOKEN_OUT,
+  amountIn: "0.01",
+  minimumReceivedSource: "unavailable",
+};
+
+const TRANSACTION = {
+  from: SENDER,
+  to: ROUTER,
+  data: "0xdeadbeef",
+  value: "0x2386f26fc10000",
+};
+
+const CAPABILITY = {
+  kind: "capability",
+  protocol: "kuru",
+  method: "swap",
+  params: {
+    tokenIn: "native",
+    tokenOut: TOKEN_OUT,
+    amountIn: "0.01",
+    slippage: 50,
+  },
+  children: [{ kind: "transaction", transaction: TRANSACTION }],
+};
+
+const QUOTE = {
+  kind: "query",
+  protocol: "kuru",
+  method: "quote",
+  data: {
+    amountSide: "amountIn",
+    amountIn: "0.01",
+    estimatedAmountOut: "0.000223",
+    minimumAmountOut: "0.000221",
+    path: ["native", TOKEN_OUT],
+  },
+};
+
+function fakeBundle(
+  overrides: {
+    discoverError?: Error;
+    loadError?: Error;
+    quoteError?: Error;
+    actionError?: Error;
+    simulateError?: Error;
+    simulate?: unknown;
+    coreVersion?: string;
+    blockNumber?: bigint;
+  } = {},
+): MossRuntimeBundle {
+  const { createRuntime, Registry } = fakeCore(overrides);
+  return {
+    core: {
+      version: overrides.coreVersion ?? "0.1.0",
+      createRuntime,
+      Registry,
+    },
+    erc: { version: "0.1.0" },
+    kuru: { version: "0.1.0" },
+    simulator: {
+      version: "0.1.0",
+      createTraceSimulator: () => ({
+        simulate: async () => {
+          if (overrides.simulateError) throw overrides.simulateError;
+          return (
+            overrides.simulate ?? {
+              results: [
+                {
+                  protocol: "kuru",
+                  method: "swap",
+                  transaction: TRANSACTION,
+                  reverted: false,
+                  receipt: {
+                    kind: "receipt",
+                    outcome: {
+                      operation: "swap",
+                      protocol: "kuru",
+                      sender: SENDER,
+                      tokenIn: "native",
+                      tokenOut: TOKEN_OUT,
+                      amountIn: "10000000000000000",
+                      amountOut: "223000000000000",
+                    },
+                    text: "Kuru Swap verified",
+                    changes: [],
+                  },
+                  changes: [],
+                  warnings: [],
+                  gas: "1",
+                },
+              ],
+            }
+          );
+        },
+      }),
+    },
+    system: { version: "0.1.0" },
+    packageVersions: {
+      "@themoss/core": "0.1.0",
+      "@themoss/erc": "0.1.0",
+      "@themoss/protocol-kuru": "0.1.0",
+      "@themoss/simulator": "0.1.0",
+      "@themoss/system": "0.1.0",
+    },
+  };
+}
+
+function fakeCore(overrides: {
+  discoverError?: Error;
+  loadError?: Error;
+  quoteError?: Error;
+  actionError?: Error;
+  blockNumber?: bigint;
+}) {
+  return {
+    createRuntime: async () => ({
+      rpcUrl: "https://rpc.example.invalid",
+      client: {
+        getBlockNumber: async () => overrides.blockNumber ?? 100n,
+      },
+    }),
+    Registry: class FakeRegistry {
+      use() {
+        return this;
+      }
+      discover() {
+        if (overrides.discoverError) throw overrides.discoverError;
+        return [
+          {
+            protocol: "kuru",
+            method: "quote",
+            kind: "query",
+            category: "dex",
+            tags: ["clob"],
+            summary: "Quote",
+          },
+          {
+            protocol: "kuru",
+            method: "swap",
+            kind: "capability",
+            verb: "swap",
+            category: "dex",
+            tags: ["clob"],
+            summary: "Swap",
+          },
+        ];
+      }
+      load() {
+        if (overrides.loadError) throw overrides.loadError;
+        return [
+          {
+            protocol: "kuru",
+            method: "swap",
+            kind: "capability",
+            intent: "Swap",
+            params: {},
+          },
+        ];
+      }
+      async action(_protocol: string, method: string) {
+        if (method === "quote" && overrides.quoteError)
+          throw overrides.quoteError;
+        if (method === "swap" && overrides.actionError)
+          throw overrides.actionError;
+        if (method === "quote") return QUOTE;
+        return CAPABILITY;
+      }
+      parseReceipt() {
+        return { kind: "receipt", outcome: null, text: "", changes: [] };
+      }
+    },
+  };
+}
+
+function input(
+  overrides: Partial<LiveKuruAdapterInput> = {},
+): LiveKuruAdapterInput {
+  return {
+    runId: "run-1",
+    intent: INTENT,
+    rpcUrl: "https://rpc.example.invalid",
+    runtimePath: "/nonexistent",
+    runtimeVersion: "0.1.0",
+    runtimeRevision: "d09b38cbc44ee7f5722c5d09e7224f7750187762",
+    fetchedAt: "2026-08-03T00:00:00.000Z",
+    ...overrides,
+  };
+}
+
+const NO_SIGNING_KEYWORDS = [
+  "sendTransaction",
+  "sendRawTransaction",
+  "signTransaction",
+  "signMessage",
+  "privateKey",
+  "walletClient",
+  "eth_sendTransaction",
+];
+
+describe("kuru live adapter", () => {
+  it("runs discover -> load -> quote -> action -> simulate in order", async () => {
+    const result = await runKuruLiveSwapWithBundle(input(), fakeBundle());
+    expect(result.stages.map((stage) => stage.stage)).toEqual([
+      "DISCOVER",
+      "LOAD",
+      "QUOTE",
+      "ACTION",
+      "SIMULATE",
+    ]);
+    expect(result.stages.every((stage) => stage.success)).toBe(true);
+    expect(
+      result.stages.every((stage) => stage.startedAt <= stage.finishedAt),
+    ).toBe(true);
+    expect(result.stages.every((stage) => stage.raw !== null)).toBe(true);
+    expect(result.stages.every((stage) => stage.blockNumber === "100")).toBe(
+      true,
+    );
+  });
+
+  it("never signs or broadcasts: adapter source has no signing/wallet surface", () => {
+    const source = readFileSync(
+      new URL("../src/live-kuru.ts", import.meta.url),
+      "utf8",
+    );
+    for (const keyword of NO_SIGNING_KEYWORDS) {
+      expect(source).not.toContain(keyword);
+    }
+  });
+
+  it("carries full runtime and block provenance with isReplay=false isMock=false", async () => {
+    const result = await runKuruLiveSwapWithBundle(input(), fakeBundle());
+    const evidence = result.evidence;
+    expect(evidence.runtimeVersion).toBe("0.1.0");
+    expect(evidence.runtimeRevision).toBe(
+      "d09b38cbc44ee7f5722c5d09e7224f7750187762",
+    );
+    expect(evidence.isReplay).toBe(false);
+    expect(evidence.isMock).toBe(false);
+    expect(evidence.replayMode).toBe(false);
+    expect(evidence.fetchedAt).toBe("2026-08-03T00:00:00.000Z");
+    expect(evidence.blockNumber.value).toBe("100");
+    expect(evidence.source).toBe("moss");
+    expect(evidence.integrationStatus).toBe("OK");
+    expect(evidence.executionStatus).toBe("SUCCESS");
+    expect(evidence.simulationCoverage.value?.complete).toBe(true);
+    expect(evidence.simulationCoverage.value?.expectedTransactions).toBe(1);
+  });
+
+  it("fails closed on runtime version mismatch", async () => {
+    const bundle = fakeBundle({ coreVersion: "0.1.0" });
+    await expect(
+      runKuruLiveSwapWithBundle(input({ runtimeVersion: "9.9.9" }), bundle),
+    ).rejects.toThrow(/MOSS runtime mismatch/);
+  });
+
+  it("keeps FlipOrderUpdated warnings and returns UNKNOWN, not success", async () => {
+    const bundle = fakeBundle({
+      simulate: {
+        results: [
+          {
+            protocol: "kuru",
+            method: "swap",
+            transaction: TRANSACTION,
+            reverted: false,
+            warnings: [
+              {
+                code: "RECEIPT_FAILED",
+                message:
+                  "Unexpected Change: Kuru market emitted FlipOrderUpdated",
+              },
+            ],
+            gas: null,
+          },
+        ],
+        halted: {
+          transactionIndex: 0,
+          reason: "Unexpected Change: Kuru market emitted FlipOrderUpdated",
+        },
+      },
+    });
+    const result = await runKuruLiveSwapWithBundle(input(), bundle);
+    expect(result.evidence.integrationStatus).toBe("OK");
+    expect(result.evidence.executionStatus).toBe("UNKNOWN");
+    expect(result.evidence.warnings.value?.length).toBe(1);
+    expect(JSON.stringify(result.evidence.warnings.value)).toContain(
+      "FlipOrderUpdated",
+    );
+    expect(result.evidence.simulationCoverage.value?.complete).toBe(false);
+    expect(result.evidence.simulationCoverage.value?.halted).toBe(true);
+    expect(
+      result.evidence.limitations.some((limitation) =>
+        limitation.includes("FlipOrderUpdated"),
+      ),
+    ).toBe(true);
+  });
+
+  it("maps a structured revert to OK/REVERTED", async () => {
+    const bundle = fakeBundle({
+      simulate: {
+        results: [
+          {
+            protocol: "kuru",
+            method: "swap",
+            transaction: TRANSACTION,
+            reverted: true,
+            revertReason: "execution reverted: insufficient balance",
+            warnings: [],
+            gas: "1",
+          },
+        ],
+      },
+    });
+    const result = await runKuruLiveSwapWithBundle(input(), bundle);
+    expect(result.evidence.integrationStatus).toBe("OK");
+    expect(result.evidence.executionStatus).toBe("REVERTED");
+    expect(result.evidence.revertReason.value).toContain(
+      "insufficient balance",
+    );
+  });
+
+  it("maps a timeout to TIMEOUT with UNKNOWN verdict", async () => {
+    const bundle = fakeBundle({
+      quoteError: new Error("request timed out after 10s"),
+    });
+    const result = await runKuruLiveSwapWithBundle(input(), bundle);
+    expect(result.evidence.integrationStatus).toBe("TIMEOUT");
+    expect(result.evidence.executionStatus).toBe("UNKNOWN");
+    const error = result.stages.find((stage) => stage.stage === "QUOTE")?.error;
+    expect(error?.code).toBe("TIMEOUT");
+    expect(error?.retryable).toBe(true);
+    expect(error?.normalization).toBe("DERIVED");
+  });
+
+  it("maps structured SimulatorUnavailableError to UNAVAILABLE (PRESERVED)", async () => {
+    const unavailable = new Error(
+      "debug_traceCall is not supported by this RPC",
+    );
+    unavailable.name = "SimulatorUnavailableError";
+    const bundle = fakeBundle({ simulateError: unavailable });
+    const result = await runKuruLiveSwapWithBundle(input(), bundle);
+    expect(result.evidence.integrationStatus).toBe("UNAVAILABLE");
+    expect(result.evidence.executionStatus).toBe("UNKNOWN");
+    const error = result.stages.find(
+      (stage) => stage.stage === "SIMULATE",
+    )?.error;
+    expect(error?.code).toBe("UNAVAILABLE");
+    expect(error?.normalization).toBe("PRESERVED");
+  });
+
+  it("maps a completed no-route quote to OK/NO_ROUTE", async () => {
+    const bundle = fakeBundle({
+      quoteError: new Error("no verified Kuru market path for this token pair"),
+    });
+    const result = await runKuruLiveSwapWithBundle(input(), bundle);
+    expect(result.evidence.integrationStatus).toBe("OK");
+    expect(result.evidence.executionStatus).toBe("NO_ROUTE");
+    const error = result.stages.find((stage) => stage.stage === "QUOTE")?.error;
+    expect(error?.code).toBe("NO_ROUTE");
+  });
+
+  it("maps an integration error and stops before later stages", async () => {
+    const bundle = fakeBundle({
+      discoverError: new Error("registry failed to initialize"),
+    });
+    const result = await runKuruLiveSwapWithBundle(input(), bundle);
+    expect(result.stages.map((stage) => stage.stage)).toEqual(["DISCOVER"]);
+    expect(result.stages[0].success).toBe(false);
+    expect(result.stages[0].error?.code).toBe("INTEGRATION_ERROR");
+    expect(result.evidence.integrationStatus).toBe("INTEGRATION_ERROR");
+    expect(result.evidence.executionStatus).toBe("UNKNOWN");
+  });
+
+  it("reports incomplete coverage when no result matches the action transaction", async () => {
+    const bundle = fakeBundle({
+      simulate: { results: [] },
+    });
+    const result = await runKuruLiveSwapWithBundle(input(), bundle);
+    const coverage = result.evidence.simulationCoverage.value;
+    expect(coverage?.complete).toBe(false);
+    expect(coverage?.expectedTransactions).toBe(1);
+    expect(coverage?.missingTransactionIndexes).toEqual([0]);
+    expect(result.evidence.executionStatus).toBe("UNKNOWN");
+  });
+
+  it("reads per-stage block provenance", async () => {
+    const bundle = fakeBundle({ blockNumber: 91383505n });
+    const result = await runKuruLiveSwapWithBundle(input(), bundle);
+    for (const stage of result.stages) {
+      expect(stage.blockNumber).toBe("91383505");
+    }
+    expect(result.evidence.blockNumber.value).toBe("91383505");
+  });
+});
+
+describe("loadMossRuntime", () => {
+  it("reads exact package versions from a pinned Moss checkout", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "moss-runtime-"));
+    const { mkdirSync } = await import("node:fs");
+    writeFileSync(
+      join(dir, "package.json"),
+      JSON.stringify({ name: "moss", version: "0.0.0" }),
+    );
+    const packages = [
+      { rel: "packages/core", name: "@themoss/core", version: "0.1.0" },
+      { rel: "packages/erc", name: "@themoss/erc", version: "0.1.0" },
+      {
+        rel: "packages/protocols/kuru",
+        name: "@themoss/protocol-kuru",
+        version: "0.1.0",
+      },
+      {
+        rel: "packages/simulator",
+        name: "@themoss/simulator",
+        version: "0.1.0",
+      },
+      { rel: "packages/system", name: "@themoss/system", version: "0.1.0" },
+    ];
+    for (const { rel, name, version } of packages) {
+      const distDir = join(dir, rel, "dist");
+      mkdirSync(distDir, { recursive: true });
+      writeFileSync(
+        join(dir, rel, "package.json"),
+        JSON.stringify({ name, version }),
+      );
+      writeFileSync(
+        join(distDir, "index.js"),
+        "export const marker = 'stub';\n",
+      );
+    }
+    const bundle = await loadMossRuntime(dir);
+    expect(bundle.packageVersions["@themoss/core"]).toBe("0.1.0");
+    expect(bundle.packageVersions["@themoss/erc"]).toBe("0.1.0");
+    expect(bundle.packageVersions["@themoss/protocol-kuru"]).toBe("0.1.0");
+    expect(bundle.packageVersions["@themoss/simulator"]).toBe("0.1.0");
+    expect(bundle.packageVersions["@themoss/system"]).toBe("0.1.0");
+    expect(bundle.core.marker).toBe("stub");
+    expect(bundle.kuru.marker).toBe("stub");
+  });
+
+  it("rejects a path that is not a Moss checkout", async () => {
+    await expect(
+      loadMossRuntime(join(tmpdir(), "definitely-not-moss")),
+    ).rejects.toThrow(/does not contain a Moss checkout/);
+  });
+});
+
+describe("live normalization over the recorded fixture", () => {
+  it("replays the recorded MON->USDC raw evidence as live UNKNOWN with FlipOrderUpdated preserved", () => {
+    const raw = JSON.parse(
+      readFileSync(
+        new URL(
+          "../../../fixtures/chain-evidence/kuru/mon-to-usdc/raw.json",
+          import.meta.url,
+        ),
+        "utf8",
+      ),
+    ) as import("../src/index.js").RawKuruEvidence;
+    const evidence = normalizeLiveKuruEvidence({
+      intent: INTENT,
+      raw,
+      runtime: {
+        runtimeVersion: "0.1.0",
+        runtimeRevision: "d09b38cbc44ee7f5722c5d09e7224f7750187762",
+        packageVersions: {
+          "@themoss/core": "0.1.0",
+          "@themoss/erc": "0.1.0",
+          "@themoss/protocol-kuru": "0.1.0",
+          "@themoss/simulator": "0.1.0",
+          "@themoss/system": "0.1.0",
+        },
+      },
+      fetchedAt: "2026-08-03T00:00:00.000Z",
+      stages: [
+        {
+          stage: "DISCOVER",
+          startedAt: "2026-08-03T00:00:00.000Z",
+          finishedAt: "2026-08-03T00:00:00.100Z",
+          success: true,
+          raw: null,
+          runtime: {
+            runtimeVersion: "0.1.0",
+            runtimeRevision: "d09b38cbc44ee7f5722c5d09e7224f7750187762",
+            packageVersions: {},
+          },
+          blockNumber: "91383505",
+        },
+        {
+          stage: "SIMULATE",
+          startedAt: "2026-08-03T00:00:00.000Z",
+          finishedAt: "2026-08-03T00:00:00.100Z",
+          success: true,
+          raw: null,
+          runtime: {
+            runtimeVersion: "0.1.0",
+            runtimeRevision: "d09b38cbc44ee7f5722c5d09e7224f7750187762",
+            packageVersions: {},
+          },
+          blockNumber: "91383505",
+        },
+      ],
+      initialBlock: "91383505",
+    });
+    expect(evidence.executionStatus).toBe("UNKNOWN");
+    expect(evidence.integrationStatus).toBe("OK");
+    expect(evidence.isReplay).toBe(false);
+    expect(evidence.isMock).toBe(false);
+    expect(evidence.runtimeRevision).toBe(
+      "d09b38cbc44ee7f5722c5d09e7224f7750187762",
+    );
+    expect(evidence.blockNumber.value).toBe("91383505");
+    expect(JSON.stringify(evidence.warnings.value)).toContain(
+      "FlipOrderUpdated",
+    );
+    expect(evidence.simulationCoverage.value?.complete).toBe(false);
+    expect(
+      evidence.limitations.some((limitation) =>
+        limitation.includes("FlipOrderUpdated"),
+      ),
+    ).toBe(true);
+  });
+
+  it("does not create a live success fixture from the halted recorded raw", () => {
+    const raw = JSON.parse(
+      readFileSync(
+        new URL(
+          "../../../fixtures/chain-evidence/kuru/mon-to-usdc/raw.json",
+          import.meta.url,
+        ),
+        "utf8",
+      ),
+    ) as import("../src/index.js").RawKuruEvidence;
+    const evidence = normalizeLiveKuruEvidence({
+      intent: INTENT,
+      raw,
+      runtime: {
+        runtimeVersion: "0.1.0",
+        runtimeRevision: "d09b38cbc44ee7f5722c5d09e7224f7750187762",
+        packageVersions: {},
+      },
+      fetchedAt: "2026-08-03T00:00:00.000Z",
+      stages: [],
+    });
+    expect(evidence.executionStatus).not.toBe("SUCCESS");
+    expect(evidence.receipt.value).toBeNull();
+  });
+});
+
+describe("secret redaction", () => {
+  it("redacts RPC userinfo and query secrets", () => {
+    const redacted = redact(
+      "https://user:supersecret@rpc.example.invalid/api?token=abc123&api_key=xyz",
+    );
+    expect(redacted).not.toContain("supersecret");
+    expect(redacted).not.toContain("abc123");
+    expect(redacted).not.toContain("xyz");
+    expect(redacted).toContain("***");
+  });
+});
+
+describe.skipIf(!process.env.MOSS_RUNTIME_PATH)(
+  "pinned real Moss runtime",
+  () => {
+    const runtimePath = process.env.MOSS_RUNTIME_PATH as string;
+
+    it("loads the exact recorded baseline package versions", async () => {
+      const bundle = await loadMossRuntime(runtimePath);
+      expect(bundle.packageVersions["@themoss/core"]).toBe("0.1.0");
+      expect(bundle.packageVersions["@themoss/erc"]).toBe("0.1.0");
+      expect(bundle.packageVersions["@themoss/protocol-kuru"]).toBe("0.1.0");
+      expect(bundle.packageVersions["@themoss/simulator"]).toBe("0.1.0");
+      expect(bundle.packageVersions["@themoss/system"]).toBe("0.1.0");
+      expect(typeof bundle.core.createRuntime).toBe("function");
+      expect(typeof bundle.core.Registry).toBe("function");
+      expect(typeof bundle.kuru.Kuru).toBe("function");
+      expect(typeof bundle.simulator.createTraceSimulator).toBe("function");
+    });
+
+    it("resolves the recorded runtimeRevision identity to the pinned checkout", async () => {
+      const { execFileSync } = await import("node:child_process");
+      const head = execFileSync("git", ["rev-parse", "HEAD"], {
+        cwd: runtimePath,
+        encoding: "utf8",
+      }).trim();
+      expect(head).toBe("d09b38cbc44ee7f5722c5d09e7224f7750187762");
+    });
+  },
+);
