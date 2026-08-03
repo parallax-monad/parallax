@@ -302,7 +302,7 @@ function Home({ language }: { language: Language }) {
                   "基于 Moss 的 Monad 兑换交易签名前解释与调整层。签名前看清交易会如何执行、哪些地方可能产生重大损耗或风险暴露，以及可以调整哪些条件。",
                 )}
               </p>
-              <div className="mt-9 flex flex-wrap justify-center gap-3 sm:mt-10">
+              <div className="pointer-events-auto mt-9 flex flex-wrap justify-center gap-3 sm:mt-10">
                 <a href="#/analyze" className="btn btn-primary">
                   {pick(language, "Analyze transaction", "分析交易")}
                 </a>
@@ -315,144 +315,154 @@ function Home({ language }: { language: Language }) {
         </section>
       </div>
 
-      <section className="flex flex-col justify-between gap-4 border-y border-line py-3.5 text-[9px] font-bold tracking-[0.08em] text-faint sm:flex-row">
-        <span>{pick(language, "READ-ONLY WALLET ACCESS", "只读钱包访问")}</span>
-        <span>
-          {pick(
-            language,
-            "REPLAY FIXTURES CLEARLY LABELLED",
-            "回放样本均有明确标注",
-          )}
-        </span>
-        <span>
-          {pick(language, "NO SIGNING · NO BROADCASTING", "不签名 · 不广播")}
-        </span>
-      </section>
+      <div className="landing-space">
+        <div aria-hidden="true" className="landing-space-background" />
+        <div className="landing-space-content relative z-[1]">
+          <section className="flex flex-col justify-between gap-4 border-y border-line py-3.5 text-[9px] font-bold tracking-[0.08em] text-faint sm:flex-row">
+            <span>
+              {pick(language, "READ-ONLY WALLET ACCESS", "只读钱包访问")}
+            </span>
+            <span>
+              {pick(
+                language,
+                "REPLAY FIXTURES CLEARLY LABELLED",
+                "回放样本均有明确标注",
+              )}
+            </span>
+            <span>
+              {pick(
+                language,
+                "NO SIGNING · NO BROADCASTING",
+                "不签名 · 不广播",
+              )}
+            </span>
+          </section>
 
-      <section
-        className="landing-atmosphere landing-atmosphere-framework mt-20 sm:mt-28"
-        id="framework"
-      >
-        <span className="eyebrow">
-          {pick(language, "Decision framework", "决策框架")}
-        </span>
-        <h2
-          data-section-heading=""
-          className="m-0 mb-5 max-w-[980px] text-[clamp(34px,4.5vw,64px)] font-extrabold uppercase leading-[0.95] tracking-[-0.045em] sm:mb-7"
-        >
-          {pick(
-            language,
-            "Four questions. One decision.",
-            "四个问题，一个决定。",
-          )}
-        </h2>
-        <p className="mb-9 max-w-[700px] text-[14px] leading-[1.7] text-faint sm:mb-11 sm:text-[16px]">
-          {pick(
-            language,
-            "Every result answers the same four questions, so a failed swap turns into one concrete next step instead of another blind retry.",
-            "每个结果都回答同样的四个问题，让一次失败的兑换交易转化为一个明确的下一步，而不是再次盲目重试。",
-          )}
-        </p>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          {DIMENSIONS.map((dimension) => (
-            <article
-              className="question-card card flex min-h-[230px] flex-col p-6 sm:min-h-[250px] sm:p-7"
-              key={dimension.key}
-              onPointerMove={moveSurfaceGlow}
-              style={{ "--surface-accent": dimension.accent } as CSSProperties}
+          <section className="mt-20 sm:mt-28" id="framework">
+            <span className="eyebrow">
+              {pick(language, "Decision framework", "决策框架")}
+            </span>
+            <h2
+              data-section-heading=""
+              className="m-0 mb-5 max-w-[980px] text-[clamp(34px,4.5vw,64px)] font-extrabold uppercase leading-[0.95] tracking-[-0.045em] sm:mb-7"
             >
-              <span className="question-card-key relative z-[1] text-[10px] font-extrabold uppercase tracking-[0.12em] text-accent">
-                {say(language, dimension.displayKey)}
-              </span>
-              <h3 className="question-card-title relative z-[1] mb-3 mt-7 text-[19px] leading-tight sm:text-[21px]">
-                {say(language, dimension.title)}
-              </h3>
-              <p className="relative z-[1] m-0 text-[13px] leading-[1.7] text-dim sm:text-[14px]">
-                {say(language, dimension.body)}
-              </p>
-              <b className="relative z-[1] mt-auto pt-8 text-[9px] tracking-[0.1em]">
-                {pick(language, "OPEN EVIDENCE →", "查看证据 →")}
-              </b>
-            </article>
-          ))}
-        </div>
-      </section>
+              {pick(
+                language,
+                "Four questions. One decision.",
+                "四个问题，一个决定。",
+              )}
+            </h2>
+            <p className="mb-9 max-w-[700px] text-[14px] leading-[1.7] text-faint sm:mb-11 sm:text-[16px]">
+              {pick(
+                language,
+                "Every result answers the same four questions, so a failed swap turns into one concrete next step instead of another blind retry.",
+                "每个结果都回答同样的四个问题，让一次失败的兑换交易转化为一个明确的下一步，而不是再次盲目重试。",
+              )}
+            </p>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              {DIMENSIONS.map((dimension) => (
+                <article
+                  className="question-card card flex min-h-[230px] flex-col p-6 sm:min-h-[250px] sm:p-7"
+                  key={dimension.key}
+                  onPointerMove={moveSurfaceGlow}
+                  style={
+                    { "--surface-accent": dimension.accent } as CSSProperties
+                  }
+                >
+                  <span className="question-card-key relative z-[1] text-[10px] font-extrabold uppercase tracking-[0.12em] text-accent">
+                    {say(language, dimension.displayKey)}
+                  </span>
+                  <h3 className="question-card-title relative z-[1] mb-3 mt-7 text-[19px] leading-tight sm:text-[21px]">
+                    {say(language, dimension.title)}
+                  </h3>
+                  <p className="relative z-[1] m-0 text-[13px] leading-[1.7] text-dim sm:text-[14px]">
+                    {say(language, dimension.body)}
+                  </p>
+                  <b className="relative z-[1] mt-auto pt-8 text-[9px] tracking-[0.1em]">
+                    {pick(language, "OPEN EVIDENCE →", "查看证据 →")}
+                  </b>
+                </article>
+              ))}
+            </div>
+          </section>
 
-      <section className="landing-atmosphere landing-atmosphere-verdict mt-24 grid grid-cols-1 gap-12 border-t border-line py-20 sm:mt-32 sm:py-28 lg:grid-cols-[minmax(360px,0.95fr)_minmax(0,1.05fr)] lg:gap-20 xl:gap-28">
-        <div>
-          <span className="eyebrow">
-            {pick(language, "Verdict language", "结论用语")}
-          </span>
-          <h2
-            data-section-heading=""
-            className="m-0 max-w-[620px] text-[clamp(40px,5.5vw,76px)] font-extrabold uppercase leading-[0.92] tracking-[-0.05em]"
-          >
-            {pick(language, "Read the verdict.", "读懂结论。")}
-          </h2>
-          <p className="mt-6 max-w-[520px] text-[15px] leading-[1.75] text-faint sm:text-[16px]">
+          <section className="mt-24 grid grid-cols-1 gap-12 border-t border-line py-20 sm:mt-32 sm:py-28 lg:grid-cols-[minmax(360px,0.95fr)_minmax(0,1.05fr)] lg:gap-20 xl:gap-28">
+            <div>
+              <span className="eyebrow">
+                {pick(language, "Verdict language", "结论用语")}
+              </span>
+              <h2
+                data-section-heading=""
+                className="m-0 max-w-[620px] text-[clamp(40px,5.5vw,76px)] font-extrabold uppercase leading-[0.92] tracking-[-0.05em]"
+              >
+                {pick(language, "Read the verdict.", "读懂结论。")}
+              </h2>
+              <p className="mt-6 max-w-[520px] text-[15px] leading-[1.75] text-faint sm:text-[16px]">
+                {pick(
+                  language,
+                  "Four verdicts, each stated in words. Proceed never means safe, and unknown is never treated as a pass.",
+                  "四种结论，均以文字清楚说明。“继续”不代表安全，“未知”也绝不会被视为通过。",
+                )}
+              </p>
+            </div>
+            <div className="border-t border-line">
+              {SCALE.map((verdict) => (
+                <div
+                  className="verdict-row grid grid-cols-1 gap-4 border-b border-line py-7 sm:grid-cols-[minmax(0,210px)_1fr] sm:items-baseline sm:gap-8 sm:py-9"
+                  key={verdict.grade}
+                  onPointerMove={moveSurfaceGlow}
+                  style={
+                    {
+                      "--surface-accent": SCALE_HEX[verdict.level],
+                    } as CSSProperties
+                  }
+                >
+                  <strong
+                    className={`verdict-grade block whitespace-nowrap text-[clamp(30px,3vw,46px)] leading-none tracking-[-0.05em] ${SCALE_COLOR[verdict.level]}`}
+                  >
+                    {say(language, verdict.displayGrade)}
+                  </strong>
+                  <div className="verdict-row-content">
+                    <span
+                      className={`verdict-badge inline-flex items-center rounded-full border px-3 py-1.5 text-[11px] font-bold uppercase ${SCALE_BADGE[verdict.level]}`}
+                    >
+                      {say(language, verdict.title)}
+                    </span>
+                    <p className="mt-3 text-[14px] leading-[1.7] text-faint sm:text-[15px]">
+                      {say(language, verdict.body)}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          <section className="border border-line bg-gradient-to-br from-ink-elev via-ink-elev to-accent/[0.12] px-7 py-16">
+            <span className="eyebrow">
+              {pick(language, "Decision receipt", "决策回执")}
+            </span>
+            <h2
+              data-section-heading=""
+              className="m-0 mb-6 text-[clamp(28px,4vw,48px)] font-extrabold uppercase leading-[0.95] tracking-[-0.07em]"
+            >
+              {pick(language, "Know what to do", "签署之前")}
+              <br />
+              {pick(language, "before you sign.", "明确该怎么做。")}
+            </h2>
+            <a href="#/analyze" className="btn btn-primary">
+              {pick(language, "Start analysis", "开始分析")}
+            </a>
+          </section>
+
+          <footer className="pt-6 text-[9px] font-semibold tracking-[0.04em] text-faint">
             {pick(
               language,
-              "Four verdicts, each stated in words. Proceed never means safe, and unknown is never treated as a pass.",
-              "四种结论，均以文字清楚说明。“继续”不代表安全，“未知”也绝不会被视为通过。",
+              "Parallax · Pre-sign decision layer · Explanation and adjustment only; not investment advice.",
+              "Parallax · 签名前决策层 · 仅提供解释与调整建议；不构成投资建议。",
             )}
-          </p>
+          </footer>
         </div>
-        <div className="border-t border-line">
-          {SCALE.map((verdict) => (
-            <div
-              className="verdict-row grid grid-cols-1 gap-4 border-b border-line py-7 sm:grid-cols-[minmax(0,210px)_1fr] sm:items-baseline sm:gap-8 sm:py-9"
-              key={verdict.grade}
-              onPointerMove={moveSurfaceGlow}
-              style={
-                {
-                  "--surface-accent": SCALE_HEX[verdict.level],
-                } as CSSProperties
-              }
-            >
-              <strong
-                className={`verdict-grade block whitespace-nowrap text-[clamp(30px,3vw,46px)] leading-none tracking-[-0.05em] ${SCALE_COLOR[verdict.level]}`}
-              >
-                {say(language, verdict.displayGrade)}
-              </strong>
-              <div className="verdict-row-content">
-                <span
-                  className={`verdict-badge inline-flex items-center rounded-full border px-3 py-1.5 text-[11px] font-bold uppercase ${SCALE_BADGE[verdict.level]}`}
-                >
-                  {say(language, verdict.title)}
-                </span>
-                <p className="mt-3 text-[14px] leading-[1.7] text-faint sm:text-[15px]">
-                  {say(language, verdict.body)}
-                </p>
-              </div>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      <section className="landing-atmosphere landing-atmosphere-receipt border border-line bg-gradient-to-br from-ink-elev via-ink-elev to-accent/[0.12] px-7 py-16">
-        <span className="eyebrow">
-          {pick(language, "Decision receipt", "决策回执")}
-        </span>
-        <h2
-          data-section-heading=""
-          className="m-0 mb-6 text-[clamp(28px,4vw,48px)] font-extrabold uppercase leading-[0.95] tracking-[-0.07em]"
-        >
-          {pick(language, "Know what to do", "签署之前")}
-          <br />
-          {pick(language, "before you sign.", "明确该怎么做。")}
-        </h2>
-        <a href="#/analyze" className="btn btn-primary">
-          {pick(language, "Start analysis", "开始分析")}
-        </a>
-      </section>
-
-      <footer className="landing-atmosphere landing-atmosphere-footer pt-6 text-[9px] font-semibold tracking-[0.04em] text-faint">
-        {pick(
-          language,
-          "Parallax · Pre-sign decision layer · Explanation and adjustment only; not investment advice.",
-          "Parallax · 签名前决策层 · 仅提供解释与调整建议；不构成投资建议。",
-        )}
-      </footer>
+      </div>
     </main>
   );
 }

@@ -59,15 +59,15 @@ type ProtocolPlanet = {
   halo: THREE.Sprite;
   satellites: THREE.Points<THREE.BufferGeometry, THREE.PointsMaterial>;
   uniforms: readonly [PlanetUniforms, PlanetUniforms];
-  focus: number;
-  focusTarget: number;
-  screenDistance: number;
 };
 
 type MarkerBase = {
   group: THREE.Group;
   label: THREE.Sprite;
   labelTexture: THREE.CanvasTexture;
+  focus: number;
+  focusTarget: number;
+  screenDistance: number;
 };
 
 type ProtocolMarker = MarkerBase & {
@@ -101,6 +101,13 @@ const PROTOCOL_FOCUS_NEAR = 0.1;
 const PROTOCOL_FOCUS_FAR = 0.46;
 const PROTOCOL_FOCUS_SCALE = 0.3;
 const PROTOCOL_FOCUS_Z_OFFSET = 8;
+const SIGNAL_FOCUS_NEAR = 0.07;
+const SIGNAL_FOCUS_FAR = 0.3;
+const SIGNAL_FOCUS_SCALE = 0.12;
+const SIGNAL_FOCUS_Z_OFFSET = 3;
+const DRAG_YAW_SENSITIVITY = 0.0052;
+const DRAG_PITCH_SENSITIVITY = 0.0042;
+const DRAG_PITCH_LIMIT = 0.65;
 
 const MARKERS: MarkerConfig[] = [
   {
@@ -352,6 +359,46 @@ const CORE_FRAGMENT_SHADER = `
   }
 `;
 
+const AMBIENT_VERTEX_SHADER = `
+  uniform float uPixelRatio;
+  uniform float uScrollProgress;
+  attribute vec3 aColor;
+  attribute float aSize;
+  attribute float aAlpha;
+  attribute float aDepthLayer;
+  varying vec3 vColor;
+  varying float vAlpha;
+
+  void main() {
+    vec4 viewPosition = modelViewMatrix * vec4(position, 1.0);
+    gl_PointSize = clamp(
+      aSize * uPixelRatio * (160.0 / -viewPosition.z),
+      0.45,
+      4.2
+    );
+    gl_Position = projectionMatrix * viewPosition;
+    float titleStage = smoothstep(0.42, 0.82, uScrollProgress);
+    float openedCenter = smoothstep(24.0, 62.0, length(position.xy));
+    float depthFade = mix(1.0, 0.42, aDepthLayer * titleStage);
+    vColor = aColor;
+    vAlpha = aAlpha * depthFade * mix(1.0, openedCenter, titleStage);
+  }
+`;
+
+const AMBIENT_FRAGMENT_SHADER = `
+  uniform sampler2D uPointTexture;
+  uniform float uOpacity;
+  varying vec3 vColor;
+  varying float vAlpha;
+
+  void main() {
+    vec4 point = texture2D(uPointTexture, gl_PointCoord);
+    float alpha = point.a * vAlpha * uOpacity;
+    if (alpha < 0.01) discard;
+    gl_FragColor = vec4(vColor * point.rgb, alpha);
+  }
+`;
+
 function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);
 }
@@ -434,51 +481,111 @@ function particleCountFor(width: number) {
 }
 
 function ambientParticleCountFor(width: number) {
-  if (width < 640) return 1200;
-  if (width < 1100) return 2500;
-  return 4200;
+  if (width < 640) return 2200;
+  if (width < 1100) return 4600;
+  return 7800;
 }
 
-function createAmbientMicroStars(count: number, pointTexture: THREE.Texture) {
+function createAmbientMicroStars(
+  count: number,
+  pointTexture: THREE.Texture,
+  aspect: number,
+) {
   const positions = new Float32Array(count * 3);
   const colors = new Float32Array(count * 3);
+  const sizes = new Float32Array(count);
+  const alphas = new Float32Array(count);
+  const depthLayers = new Float32Array(count);
   const random = createSeededRandom(0x414d4249);
   const palette = [
     new THREE.Color("#eef8ff"),
     new THREE.Color("#a8dcff"),
     new THREE.Color("#9d8cff"),
     new THREE.Color("#81f3ff"),
+    new THREE.Color("#ccff00"),
   ];
+  const boundedAspect = clamp(aspect, 0.6, 2.2);
+  const halfFovTangent = Math.tan(THREE.MathUtils.degToRad(54 * 0.5));
   for (let index = 0; index < count; index += 1) {
     const offset = index * 3;
-    const band = Math.floor(random() * 4);
-    const x = (random() * 2 - 1) * (135 + random() * 24);
-    positions[offset] = x;
-    positions[offset + 1] =
-      (random() * 2 - 1) * 82 + Math.sin(x * 0.028 + band * 1.8) * 9;
-    positions[offset + 2] = -48 - random() * 145;
-    const color = palette[Math.floor(random() * palette.length)] ?? palette[0];
-    const brightness = 0.38 + random() * 0.42;
+    const layerSelector = random();
+    const depthLayer =
+      layerSelector < 0.72 ? 0 : layerSelector < 0.96 ? 0.5 : 1;
+    const z =
+      depthLayer === 0
+        ? -100 - random() * 160
+        : depthLayer === 0.5
+          ? -15 - random() * 100
+          : 45 + random() * 35;
+    const distanceFromCamera = 132 - z;
+    const halfHeight = halfFovTangent * distanceFromCamera * 0.94;
+    const halfWidth = halfHeight * boundedAspect;
+    let normalizedX = random() * 2 - 1;
+    let normalizedY = random() * 2 - 1;
+    const coverageSelector = random();
+    if (coverageSelector < 0.08) {
+      normalizedX = (random() < 0.5 ? -1 : 1) * (0.78 + random() * 0.22);
+      normalizedY = (random() < 0.5 ? -1 : 1) * (0.78 + random() * 0.22);
+    } else if (coverageSelector < 0.34) {
+      if (random() < 0.5) {
+        normalizedX = (random() < 0.5 ? -1 : 1) * (0.8 + random() * 0.2);
+      } else {
+        normalizedY = (random() < 0.5 ? -1 : 1) * (0.8 + random() * 0.2);
+      }
+    }
+    positions[offset] = normalizedX * halfWidth;
+    positions[offset + 1] = normalizedY * halfHeight;
+    positions[offset + 2] = z;
+
+    const hierarchy = random();
+    const paletteLimit =
+      hierarchy > 0.997 ? palette.length : palette.length - 1;
+    const color = palette[Math.floor(random() * paletteLimit)] ?? palette[0];
+    const brightness = 0.52 + random() * 0.44;
     colors[offset] = color.r * brightness;
     colors[offset + 1] = color.g * brightness;
     colors[offset + 2] = color.b * brightness;
+    if (hierarchy < 0.84) {
+      sizes[index] = 0.5 + random() * 0.34;
+      alphas[index] = 0.3 + random() * 0.2;
+    } else if (hierarchy < 0.97) {
+      sizes[index] = 0.9 + random() * 0.42;
+      alphas[index] = 0.48 + random() * 0.2;
+    } else if (hierarchy < 0.997) {
+      sizes[index] = 1.45 + random() * 0.62;
+      alphas[index] = 0.68 + random() * 0.2;
+    } else {
+      sizes[index] = 2.2 + random() * 0.65;
+      alphas[index] = 0.88 + random() * 0.12;
+    }
+    depthLayers[index] = depthLayer;
   }
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
-  geometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
-  const material = new THREE.PointsMaterial({
-    map: pointTexture,
-    vertexColors: true,
-    size: 0.72,
-    sizeAttenuation: true,
+  geometry.setAttribute("aColor", new THREE.BufferAttribute(colors, 3));
+  geometry.setAttribute("aSize", new THREE.BufferAttribute(sizes, 1));
+  geometry.setAttribute("aAlpha", new THREE.BufferAttribute(alphas, 1));
+  geometry.setAttribute(
+    "aDepthLayer",
+    new THREE.BufferAttribute(depthLayers, 1),
+  );
+  const uniforms = {
+    uPixelRatio: { value: 1 },
+    uScrollProgress: { value: 0 },
+    uOpacity: { value: 0.72 },
+    uPointTexture: { value: pointTexture },
+  };
+  const material = new THREE.ShaderMaterial({
+    uniforms,
+    vertexShader: AMBIENT_VERTEX_SHADER,
+    fragmentShader: AMBIENT_FRAGMENT_SHADER,
     transparent: true,
-    opacity: 0.54,
     depthWrite: false,
     blending: THREE.AdditiveBlending,
   });
   const points = new THREE.Points(geometry, material);
   points.frustumCulled = false;
-  return { points, geometry, material };
+  return { points, geometry, material, uniforms };
 }
 
 function createParticleField(count: number, pointTexture: THREE.Texture) {
@@ -959,9 +1066,6 @@ function createProtocolPlanet(
     halo,
     satellites,
     uniforms: [shellLayer.uniforms, interiorLayer.uniforms],
-    focus: 0,
-    focusTarget: 0,
-    screenDistance: Number.POSITIVE_INFINITY,
   };
 }
 
@@ -1002,6 +1106,9 @@ function createMarker(
       planet,
       label,
       labelTexture,
+      focus: 0,
+      focusTarget: 0,
+      screenDistance: Number.POSITIVE_INFINITY,
     };
   }
 
@@ -1014,6 +1121,9 @@ function createMarker(
     node,
     label,
     labelTexture,
+    focus: 0,
+    focusTarget: 0,
+    screenDistance: Number.POSITIVE_INFINITY,
   };
 }
 
@@ -1072,21 +1182,28 @@ export function RouteGraph3D({
     renderer.setClearColor(0x02030a, 0);
     renderer.domElement.setAttribute("aria-hidden", "true");
     renderer.domElement.className = "block h-full w-full";
+    renderer.domElement.style.cursor = "grab";
+    renderer.domElement.style.touchAction = "pan-y";
+    renderer.domElement.style.userSelect = "none";
     container.appendChild(renderer.domElement);
     const scene = new THREE.Scene();
     scene.fog = new THREE.FogExp2(0x03040b, 0.0062);
     const camera = new THREE.PerspectiveCamera(54, 1, 0.1, 700);
     camera.position.set(0, 0, 132);
+    const explorationRig = new THREE.Group();
+    scene.add(explorationRig);
     const constellation = new THREE.Group();
     constellation.rotation.z = -0.055;
-    scene.add(constellation);
+    const initialWidth = container.clientWidth || window.innerWidth;
+    const initialHeight = container.clientHeight || window.innerHeight;
     const ambientStars = createAmbientMicroStars(
-      ambientParticleCountFor(container.clientWidth || window.innerWidth),
+      ambientParticleCountFor(initialWidth),
       pointTexture,
+      initialWidth / Math.max(initialHeight, 1),
     );
     const ambientGroup = new THREE.Group();
     ambientGroup.add(ambientStars.points);
-    scene.add(ambientGroup);
+    explorationRig.add(ambientGroup, constellation);
     const particleField = createParticleField(
       particleCountFor(container.clientWidth || window.innerWidth),
       pointTexture,
@@ -1116,7 +1233,18 @@ export function RouteGraph3D({
     let lastPointerX = 0;
     let lastPointerY = 0;
     let lastPointerAt = 0;
+    let dragYaw = 0;
+    let dragPitch = 0;
+    let dragYawTarget = 0;
+    let dragPitchTarget = 0;
+    let dragPointerId = -1;
+    let dragLastX = 0;
+    let dragLastY = 0;
+    let isDragging = false;
     const projectedPosition = new THREE.Vector3();
+    const finePointerQuery = window.matchMedia(
+      "(hover: hover) and (pointer: fine)",
+    );
 
     const resize = () => {
       const width = Math.max(container.clientWidth, 1);
@@ -1127,6 +1255,7 @@ export function RouteGraph3D({
       camera.aspect = width / height;
       camera.updateProjectionMatrix();
       particleField.uniforms.uPixelRatio.value = pixelRatio;
+      ambientStars.uniforms.uPixelRatio.value = pixelRatio;
       for (const marker of protocolMarkers) {
         for (const uniforms of marker.planet.uniforms) {
           uniforms.uPixelRatio.value = pixelRatio;
@@ -1185,6 +1314,62 @@ export function RouteGraph3D({
       pointerTargetDistance = 0;
       hasPointer = false;
     };
+    const endDrag = () => {
+      const capturedPointerId = dragPointerId;
+      isDragging = false;
+      dragPointerId = -1;
+      renderer.domElement.style.cursor = "grab";
+      if (
+        capturedPointerId >= 0 &&
+        renderer.domElement.hasPointerCapture(capturedPointerId)
+      ) {
+        renderer.domElement.releasePointerCapture(capturedPointerId);
+      }
+    };
+    const onDragPointerDown = (event: PointerEvent) => {
+      if (
+        event.button !== 0 ||
+        event.pointerType === "touch" ||
+        reduceMotion ||
+        !finePointerQuery.matches
+      ) {
+        return;
+      }
+      event.preventDefault();
+      dragPointerId = event.pointerId;
+      dragLastX = event.clientX;
+      dragLastY = event.clientY;
+      isDragging = true;
+      renderer.domElement.setPointerCapture(event.pointerId);
+      renderer.domElement.style.cursor = "grabbing";
+    };
+    const onDragPointerMove = (event: PointerEvent) => {
+      if (!isDragging || event.pointerId !== dragPointerId) return;
+      event.preventDefault();
+      const deltaX = event.clientX - dragLastX;
+      const deltaY = event.clientY - dragLastY;
+      dragLastX = event.clientX;
+      dragLastY = event.clientY;
+      dragYawTarget += deltaX * DRAG_YAW_SENSITIVITY;
+      dragPitchTarget = clamp(
+        dragPitchTarget + deltaY * DRAG_PITCH_SENSITIVITY,
+        -DRAG_PITCH_LIMIT,
+        DRAG_PITCH_LIMIT,
+      );
+      if (Math.abs(dragYawTarget) > Math.PI * 4) {
+        const wrappedTurns =
+          Math.trunc(dragYawTarget / (Math.PI * 2)) * Math.PI * 2;
+        dragYawTarget -= wrappedTurns;
+        dragYaw -= wrappedTurns;
+      }
+    };
+    const onDragPointerEnd = (event: PointerEvent) => {
+      if (event.pointerId === dragPointerId) endDrag();
+    };
+    const onWindowBlur = () => {
+      resetPointer();
+      endDrag();
+    };
     const requestRender = () => {
       if (frame === 0 && isVisible && !document.hidden) {
         frame = window.requestAnimationFrame(render);
@@ -1208,6 +1393,13 @@ export function RouteGraph3D({
         : clamp(progressRef.current, 0, 1);
       const rawProgress = clamp(progressRef.current, 0, 1);
       const introEmphasis = 1 - smoothstep(0, INTRO_END_PROGRESS, rawProgress);
+      dragYaw = lerp(dragYaw, dragYawTarget, isDragging ? 0.18 : 0.09);
+      dragPitch = lerp(dragPitch, dragPitchTarget, isDragging ? 0.18 : 0.09);
+      const explorationVisibility = reduceMotion
+        ? 0
+        : 1 - smoothstep(0.3, 0.48, rawProgress);
+      explorationRig.rotation.x = dragPitch * explorationVisibility;
+      explorationRig.rotation.y = dragYaw * explorationVisibility;
       const scrollExpansion = smoothstep(0.18, 0.78, progress);
       const expansion = clamp(
         scrollExpansion + (pointerDistance - 0.28) * 0.075,
@@ -1222,23 +1414,31 @@ export function RouteGraph3D({
         ? 0
         : disturbance;
       particleField.uniforms.uMotion.value = reduceMotion ? 0 : 1;
+      ambientStars.uniforms.uScrollProgress.value = progress;
+      ambientStars.uniforms.uOpacity.value =
+        0.72 * (1 - smoothstep(0.4, 0.82, progress) * 0.7);
 
       const ambientYaw = reduceMotion ? 0 : Math.sin(time * 0.000055) * 0.032;
-      constellation.rotation.y = ambientYaw + pointerX * 0.155;
-      constellation.rotation.x = -pointerY * 0.065;
-      constellation.position.x = pointerX * 4.8;
-      constellation.position.y = pointerY * 3.1;
-      ambientGroup.rotation.y = ambientYaw * 0.3 + pointerX * 0.024;
-      ambientGroup.rotation.x = -pointerY * 0.012;
-      ambientGroup.position.x = pointerX * 0.65;
-      ambientGroup.position.y = pointerY * 0.42;
-      ambientStars.material.opacity =
-        0.54 * (1 - smoothstep(0.42, 0.82, progress) * 0.74);
-      camera.position.x = pointerX * 2.6;
-      camera.position.y = -pointerY * 1.9;
+      const passiveStrength = isDragging ? 0.14 : 1;
+      const passivePointerX = pointerX * passiveStrength;
+      const passivePointerY = pointerY * passiveStrength;
+      constellation.rotation.y = ambientYaw + passivePointerX * 0.155;
+      constellation.rotation.x = -passivePointerY * 0.065;
+      constellation.position.x = passivePointerX * 4.8;
+      constellation.position.y = passivePointerY * 3.1;
+      ambientGroup.rotation.y =
+        ambientYaw * 0.3 +
+        passivePointerX * 0.024 -
+        dragYaw * explorationVisibility * 0.72;
+      ambientGroup.rotation.x =
+        -passivePointerY * 0.012 - dragPitch * explorationVisibility * 0.58;
+      ambientGroup.position.x = passivePointerX * 0.65;
+      ambientGroup.position.y = passivePointerY * 0.42;
+      camera.position.x = passivePointerX * 2.6;
+      camera.position.y = -passivePointerY * 1.9;
       camera.position.z = 132 - progress * 9;
-      camera.rotation.x = pointerY * 0.022;
-      camera.rotation.y = -pointerX * 0.018;
+      camera.rotation.x = passivePointerY * 0.022;
+      camera.rotation.y = -passivePointerX * 0.018;
 
       const markerExpansion = smoothstep(0.12, 0.9, expansion);
       const introPathAmount = 1 - introEmphasis;
@@ -1278,14 +1478,10 @@ export function RouteGraph3D({
               0.55,
               1.2,
             );
-            group.position.x += pointerX * (0.85 + depthResponse * 0.55);
-            group.position.y += pointerY * (0.45 + depthResponse * 0.35);
+            group.position.x += passivePointerX * (0.85 + depthResponse * 0.55);
+            group.position.y += passivePointerY * (0.45 + depthResponse * 0.35);
           }
         } else {
-          const breathe = reduceMotion
-            ? 1
-            : 1 + Math.sin(time * 0.00072 + config.phase) * 0.025;
-          marker.node.group.scale.setScalar(breathe);
           marker.node.group.rotation.y = reduceMotion
             ? config.phase * 0.08
             : time * 0.000052 + config.phase * 0.08;
@@ -1297,63 +1493,61 @@ export function RouteGraph3D({
             : -time * 0.000029 + config.phase * 0.06;
           marker.node.coreUniforms.uTime.value = time * 0.001;
           marker.node.coreUniforms.uMotion.value = reduceMotion ? 0 : 1;
-          (marker.label.material as THREE.SpriteMaterial).opacity =
-            (0.34 - progress * 0.22) * (container.clientWidth < 640 ? 0 : 1);
         }
       }
 
       camera.updateMatrixWorld();
       scene.updateMatrixWorld(true);
-      let nearestProtocol: ProtocolMarker | undefined;
+      let nearestMarker: Marker | undefined;
       let nearestDistance = Number.POSITIVE_INFINITY;
-      for (const marker of protocolMarkers) {
+      for (const marker of markers) {
         marker.group.getWorldPosition(projectedPosition);
         projectedPosition.project(camera);
-        marker.planet.screenDistance = Math.hypot(
+        marker.screenDistance = Math.hypot(
           projectedPosition.x - focusPointerX,
           projectedPosition.y - focusPointerY,
         );
-        if (marker.planet.screenDistance < nearestDistance) {
-          nearestProtocol = marker;
-          nearestDistance = marker.planet.screenDistance;
+        if (marker.screenDistance < nearestDistance) {
+          nearestMarker = marker;
+          nearestDistance = marker.screenDistance;
         }
       }
 
-      for (const marker of protocolMarkers) {
-        const { config, group, planet } = marker;
+      for (const marker of markers) {
+        const focusNear =
+          marker.kind === "protocol" ? PROTOCOL_FOCUS_NEAR : SIGNAL_FOCUS_NEAR;
+        const focusFar =
+          marker.kind === "protocol" ? PROTOCOL_FOCUS_FAR : SIGNAL_FOCUS_FAR;
         let focusTarget =
           hasPointer && !reduceMotion
-            ? 1 -
-              smoothstep(
-                PROTOCOL_FOCUS_NEAR,
-                PROTOCOL_FOCUS_FAR,
-                planet.screenDistance,
-              )
+            ? 1 - smoothstep(focusNear, focusFar, marker.screenDistance)
             : 0;
-        if (
-          nearestProtocol !== marker &&
-          nearestDistance < PROTOCOL_FOCUS_FAR
-        ) {
-          focusTarget *= 0.36;
+        if (nearestMarker !== marker && nearestDistance < focusFar) {
+          focusTarget *= marker.kind === "protocol" ? 0.32 : 0.2;
         }
-        planet.focusTarget = focusTarget;
-        planet.focus = reduceMotion
+        if (isDragging) focusTarget *= 0.18;
+        marker.focusTarget = focusTarget;
+        marker.focus = reduceMotion
           ? 0
-          : lerp(planet.focus, planet.focusTarget, 0.08);
+          : lerp(marker.focus, marker.focusTarget, 0.08);
+      }
 
-        group.position.z += planet.focus * PROTOCOL_FOCUS_Z_OFFSET;
+      for (const marker of protocolMarkers) {
+        const { config, group, planet, focus } = marker;
+
+        group.position.z += focus * PROTOCOL_FOCUS_Z_OFFSET;
         const breathe = reduceMotion
           ? 1
           : 1 + Math.sin(time * 0.00056 + config.phase) * 0.025;
         const mobileScale = container.clientWidth < 640 ? 0.88 : 1;
         planet.group.scale.setScalar(
-          mobileScale * breathe * (1 + planet.focus * PROTOCOL_FOCUS_SCALE),
+          mobileScale * breathe * (1 + focus * PROTOCOL_FOCUS_SCALE),
         );
         planet.group.rotation.x =
-          config.phase * 0.08 + (reduceMotion ? 0 : pointerY * 0.08);
+          config.phase * 0.08 + (reduceMotion ? 0 : passivePointerY * 0.08);
         planet.group.rotation.y = reduceMotion
           ? config.phase * 0.14
-          : time * 0.000085 + config.phase * 0.14 + pointerX * 0.14;
+          : time * 0.000085 + config.phase * 0.14 + passivePointerX * 0.14;
         planet.group.rotation.z = config.phase * 0.035;
         planet.shell.rotation.y = reduceMotion
           ? config.phase * 0.06
@@ -1367,35 +1561,55 @@ export function RouteGraph3D({
 
         for (const uniforms of planet.uniforms) {
           uniforms.uTime.value = time * 0.001;
-          uniforms.uFocus.value = planet.focus;
+          uniforms.uFocus.value = focus;
           uniforms.uIntroEmphasis.value = introEmphasis;
           uniforms.uMotion.value = reduceMotion ? 0 : 1;
         }
         planet.coreUniforms.uTime.value = time * 0.001;
-        planet.coreUniforms.uFocus.value = planet.focus;
+        planet.coreUniforms.uFocus.value = focus;
         planet.coreUniforms.uMotion.value = reduceMotion ? 0 : 1;
-        planet.coreUniforms.uBrightness.value = 1.12 + planet.focus * 0.03;
+        planet.coreUniforms.uBrightness.value = 1.12 + focus * 0.03;
         planet.halo.scale.set(
-          config.size * (3.35 + introEmphasis * 0.35 + planet.focus * 0.42),
-          config.size * (3.35 + introEmphasis * 0.35 + planet.focus * 0.42),
+          config.size * (3.35 + introEmphasis * 0.35 + focus * 0.42),
+          config.size * (3.35 + introEmphasis * 0.35 + focus * 0.42),
           1,
         );
         (planet.halo.material as THREE.SpriteMaterial).opacity =
-          0.24 + introEmphasis * 0.1 + planet.focus * 0.15;
+          0.24 + introEmphasis * 0.1 + focus * 0.15;
         (planet.backdrop.material as THREE.SpriteMaterial).opacity =
-          0.14 + introEmphasis * 0.035 + planet.focus * 0.025;
+          0.14 + introEmphasis * 0.035 + focus * 0.025;
         planet.satellites.rotation.y = reduceMotion
           ? config.phase * 0.08
-          : time * (0.000055 + planet.focus * 0.000035) + config.phase * 0.08;
+          : time * (0.000055 + focus * 0.000035) + config.phase * 0.08;
         planet.satellites.rotation.z =
           -0.24 + config.phase * 0.03 + (reduceMotion ? 0 : time * 0.000018);
         planet.satellites.material.opacity =
-          0.15 + introEmphasis * 0.34 + planet.focus * 0.2;
+          0.15 + introEmphasis * 0.34 + focus * 0.2;
         planet.satellites.material.size =
-          0.72 + introEmphasis * 0.18 + planet.focus * 0.12;
+          0.72 + introEmphasis * 0.18 + focus * 0.12;
         (marker.label.material as THREE.SpriteMaterial).opacity = Math.min(
           1,
-          0.84 - progress * 0.22 + planet.focus * 0.28,
+          0.84 - progress * 0.22 + focus * 0.28,
+        );
+      }
+
+      for (const marker of markers) {
+        if (marker.kind !== "signal") continue;
+        const { config, group, node, focus } = marker;
+        group.position.z += focus * SIGNAL_FOCUS_Z_OFFSET;
+        const breathe = reduceMotion
+          ? 1
+          : 1 + Math.sin(time * 0.00072 + config.phase) * 0.025;
+        node.group.scale.setScalar(breathe * (1 + focus * SIGNAL_FOCUS_SCALE));
+        node.coreUniforms.uFocus.value = focus;
+        node.coreUniforms.uBrightness.value = 0.72 + focus * 0.06;
+        node.shell.material.opacity = 0.58 + focus * 0.16;
+        (node.halo.material as THREE.SpriteMaterial).opacity =
+          0.075 + focus * 0.065;
+        (marker.label.material as THREE.SpriteMaterial).opacity = Math.min(
+          0.88,
+          (0.34 - progress * 0.22 + focus * 0.54) *
+            (container.clientWidth < 640 ? 0 : 1),
         );
       }
       renderer.render(scene, camera);
@@ -1420,12 +1634,18 @@ export function RouteGraph3D({
     const onVisibilityChange = () => requestRender();
     const onMotionChange = (event: MediaQueryListEvent) => {
       reduceMotion = event.matches;
+      if (reduceMotion) endDrag();
       requestRender();
     };
     resizeObserver.observe(container);
     intersectionObserver.observe(container);
+    renderer.domElement.addEventListener("pointerdown", onDragPointerDown);
+    renderer.domElement.addEventListener("pointermove", onDragPointerMove);
+    renderer.domElement.addEventListener("pointerup", onDragPointerEnd);
+    renderer.domElement.addEventListener("pointercancel", onDragPointerEnd);
+    renderer.domElement.addEventListener("lostpointercapture", endDrag);
     window.addEventListener("pointermove", onPointerMove, { passive: true });
-    window.addEventListener("blur", resetPointer);
+    window.addEventListener("blur", onWindowBlur);
     document.documentElement.addEventListener("pointerleave", resetPointer);
     document.addEventListener("visibilitychange", onVisibilityChange);
     motionQuery.addEventListener("change", onMotionChange);
@@ -1434,10 +1654,19 @@ export function RouteGraph3D({
 
     return () => {
       if (frame !== 0) window.cancelAnimationFrame(frame);
+      endDrag();
       resizeObserver.disconnect();
       intersectionObserver.disconnect();
+      renderer.domElement.removeEventListener("pointerdown", onDragPointerDown);
+      renderer.domElement.removeEventListener("pointermove", onDragPointerMove);
+      renderer.domElement.removeEventListener("pointerup", onDragPointerEnd);
+      renderer.domElement.removeEventListener(
+        "pointercancel",
+        onDragPointerEnd,
+      );
+      renderer.domElement.removeEventListener("lostpointercapture", endDrag);
       window.removeEventListener("pointermove", onPointerMove);
-      window.removeEventListener("blur", resetPointer);
+      window.removeEventListener("blur", onWindowBlur);
       document.documentElement.removeEventListener(
         "pointerleave",
         resetPointer,

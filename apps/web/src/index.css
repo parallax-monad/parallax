@@ -66,134 +66,110 @@
       ),
       linear-gradient(145deg, #02030a, #040611 48%, #010205);
   }
-  .landing-atmosphere {
+  .landing-space {
     position: relative;
     isolation: isolate;
   }
-  .landing-atmosphere::before {
+  .landing-space-background {
     position: absolute;
-    inset: -5rem -7vw;
+    inset: -3rem auto -7rem 50%;
+    width: 100vw;
     z-index: 0;
+    overflow: hidden;
+    pointer-events: none;
+    transform: translateX(-50%);
+    background: linear-gradient(
+      180deg,
+      rgba(3, 4, 12, 0.54),
+      rgba(1, 2, 8, 0.18) 42%,
+      rgba(4, 3, 13, 0.46)
+    );
+  }
+  .landing-space-background::before,
+  .landing-space-background::after {
+    position: absolute;
+    inset: 0;
     content: "";
     pointer-events: none;
-    background:
+  }
+  .landing-space-background::before {
+    background-image:
       radial-gradient(
-        circle at 9% 22%,
-        rgba(226, 240, 255, 0.22) 0 1px,
-        transparent 1.4px
+        circle,
+        rgba(235, 247, 255, 0.62) 0 0.8px,
+        transparent 1.35px
       ),
       radial-gradient(
-        circle at 84% 29%,
-        rgba(138, 216, 255, 0.2) 0 1px,
-        transparent 1.5px
+        circle,
+        rgba(139, 218, 255, 0.52) 0 1px,
+        transparent 1.55px
       ),
       radial-gradient(
-        circle at 19% 78%,
-        rgba(182, 151, 255, 0.18) 0 1.2px,
+        circle,
+        rgba(178, 145, 255, 0.48) 0 1.15px,
         transparent 1.7px
       ),
       radial-gradient(
-        circle at 92% 73%,
-        rgba(204, 255, 0, 0.12) 0 1px,
+        circle,
+        rgba(204, 255, 0, 0.34) 0 0.85px,
         transparent 1.5px
       ),
       radial-gradient(
-        circle at 72% 12%,
-        rgba(255, 255, 255, 0.16) 0 0.8px,
-        transparent 1.3px
+        circle,
+        rgba(248, 251, 255, 0.44) 0 0.65px,
+        transparent 1.2px
       );
     background-size:
-      181px 197px,
-      257px 239px,
-      311px 287px,
-      389px 337px,
-      149px 173px;
-    opacity: 0.14;
-  }
-  .landing-atmosphere > * {
-    position: relative;
-    z-index: 1;
-  }
-  .landing-atmosphere-framework::before {
-    background-color: transparent;
-    background-image:
-      radial-gradient(
-        ellipse at 8% 46%,
-        rgba(101, 76, 255, 0.13),
-        transparent 42%
-      ),
-      radial-gradient(
-        ellipse at 92% 35%,
-        rgba(49, 182, 255, 0.09),
-        transparent 38%
-      ),
-      radial-gradient(
-        circle at 11% 19%,
-        rgba(235, 244, 255, 0.26) 0 1px,
-        transparent 1.5px
-      ),
-      radial-gradient(
-        circle at 88% 75%,
-        rgba(157, 129, 255, 0.22) 0 1px,
-        transparent 1.6px
-      );
-    background-size:
-      auto,
-      auto,
       173px 191px,
-      269px 251px;
-    opacity: 0.17;
+      263px 241px,
+      337px 293px,
+      421px 367px,
+      139px 157px;
+    background-position:
+      11px 23px,
+      89px 137px,
+      193px 71px,
+      37px 211px,
+      73px 19px;
+    opacity: 0.34;
+    -webkit-mask-image: radial-gradient(
+      ellipse at center,
+      rgba(0, 0, 0, 0.56),
+      #000 72%
+    );
+    mask-image: radial-gradient(
+      ellipse at center,
+      rgba(0, 0, 0, 0.56),
+      #000 72%
+    );
   }
-  .landing-atmosphere-verdict::before {
+  .landing-space-background::after {
     background-image:
       radial-gradient(
-        ellipse at 96% 48%,
-        rgba(87, 113, 255, 0.07),
-        transparent 36%
+        ellipse at 13% 20%,
+        rgba(103, 76, 255, 0.11),
+        transparent 32%
       ),
       radial-gradient(
-        circle at 5% 24%,
-        rgba(226, 241, 255, 0.2) 0 1px,
-        transparent 1.45px
+        ellipse at 90% 31%,
+        rgba(52, 182, 255, 0.075),
+        transparent 29%
       ),
       radial-gradient(
-        circle at 94% 76%,
-        rgba(154, 212, 255, 0.17) 0 1px,
-        transparent 1.5px
+        ellipse at 7% 58%,
+        rgba(62, 88, 211, 0.052),
+        transparent 30%
+      ),
+      radial-gradient(
+        ellipse at 82% 88%,
+        rgba(135, 79, 255, 0.09),
+        transparent 34%
+      ),
+      radial-gradient(
+        ellipse at 18% 94%,
+        rgba(49, 184, 219, 0.055),
+        transparent 27%
       );
-    background-size:
-      auto,
-      223px 251px,
-      307px 283px;
-    opacity: 0.1;
-  }
-  .landing-atmosphere-receipt::before {
-    inset: -4rem -7vw;
-    background-image:
-      radial-gradient(
-        ellipse at 78% 70%,
-        rgba(77, 119, 255, 0.1),
-        transparent 42%
-      ),
-      radial-gradient(
-        ellipse at 18% 22%,
-        rgba(140, 86, 255, 0.09),
-        transparent 38%
-      ),
-      radial-gradient(
-        circle at 91% 18%,
-        rgba(235, 249, 255, 0.2) 0 1px,
-        transparent 1.5px
-      );
-    background-size:
-      auto,
-      auto,
-      211px 197px;
-    opacity: 0.16;
-  }
-  .landing-atmosphere-footer::before {
-    inset: -2rem -7vw -5rem;
-    opacity: 0.11;
   }
   .question-card {
     --pointer-x: 50%;
