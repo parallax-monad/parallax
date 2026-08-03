@@ -321,6 +321,12 @@ describe("checkSwapRequestSchema", () => {
     expect(checkSwapRequestSchema.parse(request)).toEqual(request);
   });
 
+  it("accepts an optional parent Run for a Re-run", () => {
+    const request = { ...baseRequest, parentRunId: "run-1" };
+
+    expect(checkSwapRequestSchema.parse(request)).toEqual(request);
+  });
+
   it.each(["original_swap", "demo_preset"])(
     "rejects trusted-only source %s at the public boundary",
     (source) => {
@@ -759,6 +765,62 @@ describe("completed Run Result contract", () => {
     const result = runResultSchema.parse(completedResult);
     expect(result.status).toBe("completed");
     expect(result.ruleResults[0]?.status).toBe("NOT_APPLICABLE");
+  });
+
+  it("preserves an optional parent Run on a Re-run result", () => {
+    const result = runResultSchema.parse({
+      ...completedResult,
+      parentRunId: "run-0",
+      diff: {
+        previousRunId: "run-0",
+        previousVerdict: "UNKNOWN",
+        changedFields: [
+          {
+            field: "amountInAtomic",
+            before: "1000000000000000000",
+            after: "1500000000000000000",
+          },
+        ],
+      },
+    });
+
+    expect(result.parentRunId).toBe("run-0");
+  });
+
+  it("rejects a Run that names itself as its parent", () => {
+    expect(
+      runResultSchema.safeParse({
+        ...completedResult,
+        parentRunId: completedResult.runId,
+      }).success,
+    ).toBe(false);
+  });
+
+  it("rejects an incomplete or mismatched Re-run link", () => {
+    expect(
+      runResultSchema.safeParse({
+        ...completedResult,
+        parentRunId: "run-0",
+      }).success,
+    ).toBe(false);
+
+    expect(
+      runResultSchema.safeParse({
+        ...completedResult,
+        parentRunId: "run-0",
+        diff: {
+          previousRunId: "run-1",
+          previousVerdict: "UNKNOWN",
+          changedFields: [
+            {
+              field: "amountInAtomic",
+              before: "1000000000000000000",
+              after: "1500000000000000000",
+            },
+          ],
+        },
+      }).success,
+    ).toBe(false);
   });
 
   it("binds an available Route to trusted Evidence and the checked Intent", () => {
@@ -2203,6 +2265,30 @@ describe("Integration Error Result contract", () => {
       systemStatus: "INTEGRATION_ERROR",
       verdict: "UNKNOWN",
       error: { code: "MOSS_UNAVAILABLE", retryable: true },
+    });
+  });
+
+  it("preserves a parent and Diff on an Integration Error Re-run", () => {
+    const result = runResultSchema.parse({
+      ...integrationErrorResult,
+      parentRunId: "run-1",
+      diff: {
+        previousRunId: "run-1",
+        previousVerdict: "STOP",
+        changedFields: [
+          {
+            field: "protocol",
+            before: "kuru",
+            after: "pancake",
+          },
+        ],
+      },
+    });
+
+    expect(result).toMatchObject({
+      status: "integration_error",
+      parentRunId: "run-1",
+      diff: { previousRunId: "run-1" },
     });
   });
 

@@ -10,6 +10,8 @@ export const chainIdSchema = z.number().int().positive();
 
 export const protocolSchema = z.enum(["kuru", "pancake"]);
 
+export const runIdSchema = z.string().trim().min(1);
+
 export const transactionAdjustmentFieldSchema = z.enum([
   "amountIn",
   "tokenPair",

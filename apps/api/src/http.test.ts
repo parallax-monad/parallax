@@ -123,9 +123,12 @@ describe("POST /api/check transport", () => {
         };
       },
     };
-    const response = await dispatch(request('{"amountIn":"1"}'), service);
+    const response = await dispatch(
+      request('{"amountIn":"1","parentRunId":"run-1"}'),
+      service,
+    );
 
-    expect(received).toEqual({ amountIn: "1" });
+    expect(received).toEqual({ amountIn: "1", parentRunId: "run-1" });
     expect(response.status).toBe(400);
     await expect(response.json()).resolves.toMatchObject({
       error: { code: "INVALID_REQUEST" },

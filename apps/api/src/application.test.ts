@@ -1,4 +1,5 @@
 import type {
+  CheckSwapRequest,
   EvidenceItem,
   EvidenceRef,
   NormalizedSwapIntent,
@@ -6,6 +7,7 @@ import type {
 } from "@parallax/contracts";
 import { describe, expect, it } from "vitest";
 import { CheckApplicationService } from "./application.js";
+import { normalizeCheckSwapRequest } from "./normalization.js";
 import type { AgentFlowPort } from "./ports.js";
 import type { BackendRuntime } from "./runtime-config.js";
 import { InMemoryRunStore, type RunStore } from "./store.js";
@@ -44,7 +46,9 @@ const runtime: BackendRuntime = {
 
 type CompletedRunResult = Extract<RunResult, { status: "completed" }>;
 
-function publicRequest(overrides: Record<string, unknown> = {}) {
+function publicRequest(
+  overrides: Partial<CheckSwapRequest> = {},
+): CheckSwapRequest {
   return {
     chainId: 143,
     protocol: "kuru",
@@ -329,12 +333,13 @@ function completedEconomicResult(
 function createService(
   agentFlow: AgentFlowPort,
   store: RunStore = new InMemoryRunStore(),
+  createRunId: () => string = () => "run-1",
 ) {
   return new CheckApplicationService({
     runtime,
     agentFlow,
     store,
-    createRunId: () => "run-1",
+    createRunId,
   });
 }
 
@@ -369,6 +374,256 @@ describe("CheckApplicationService", () => {
       status: "completed",
       intent: receivedIntent,
       result: response.body,
+    });
+  });
+
+  it("creates an immutable child Run and Diff for a Re-run", async () => {
+    const store = new InMemoryRunStore();
+    const baseline = createService(
+      {
+        async check(input) {
+          return completedRouteResult(input.runId, input.intent);
+        },
+      },
+      store,
+    );
+    const baselineResponse = await baseline.check(publicRequest());
+    expect(baselineResponse.status).toBe(200);
+
+    const rerun = createService(
+      {
+        async check(input) {
+          return completedRouteResult(input.runId, input.intent);
+        },
+      },
+      store,
+      () => "run-2",
+    );
+
+    const response = await rerun.check(
+      publicRequest({ parentRunId: "run-1", amountIn: "2" }),
+    );
+
+    expect(response).toMatchObject({
+      status: 200,
+      body: {
+        runId: "run-2",
+        parentRunId: "run-1",
+        diff: {
+          previousRunId: "run-1",
+          previousVerdict: "UNKNOWN",
+          changedFields: [
+            {
+              field: "amountInAtomic",
+              before: "1500000000000000000",
+              after: "2000000000000000000",
+            },
+          ],
+        },
+      },
+    });
+    expect(store.get("run-1")).toMatchObject({
+      status: "completed",
+      parentRunId: undefined,
+      result: baselineResponse.body,
+    });
+    expect(store.get("run-2")).toMatchObject({
+      status: "completed",
+      parentRunId: "run-1",
+      result: response.body,
+    });
+  });
+
+  it("rejects a Re-run without a completed baseline or a changed Intent", async () => {
+    const store = new InMemoryRunStore();
+    const service = createService(
+      {
+        async check() {
+          throw new Error("must not run");
+        },
+      },
+      store,
+    );
+
+    await expect(
+      service.check(publicRequest({ parentRunId: "missing" })),
+    ).resolves.toMatchObject({
+      status: 400,
+      body: { error: { code: "INVALID_RERUN" } },
+    });
+
+    const baseline = createService(
+      {
+        async check(input) {
+          return completedRouteResult(input.runId, input.intent);
+        },
+      },
+      store,
+    );
+    await baseline.check(publicRequest());
+
+    const unchangedRerun = createService(
+      {
+        async check() {
+          throw new Error("must not run");
+        },
+      },
+      store,
+      () => "run-2",
+    );
+    await expect(
+      unchangedRerun.check(publicRequest({ parentRunId: "run-1" })),
+    ).resolves.toMatchObject({
+      status: 400,
+      body: { error: { code: "INVALID_RERUN" } },
+    });
+    expect(store.get("run-2")).toBeUndefined();
+  });
+
+  it("preserves baseline ownership and Economic Boundary during a Re-run", async () => {
+    const store = new InMemoryRunStore();
+    const baseline = createService(
+      {
+        async check(input) {
+          return completedRouteResult(input.runId, input.intent);
+        },
+      },
+      store,
+    );
+    await baseline.check(publicRequest());
+
+    const rerun = createService(
+      {
+        async check() {
+          throw new Error("must not run");
+        },
+      },
+      store,
+      () => "run-2",
+    );
+
+    await expect(
+      rerun.check(
+        publicRequest({
+          parentRunId: "run-1",
+          sender: "0x2222222222222222222222222222222222222222",
+          amountIn: "2",
+        }),
+      ),
+    ).resolves.toMatchObject({
+      status: 400,
+      body: { error: { code: "INVALID_RERUN" } },
+    });
+
+    await expect(
+      rerun.check(
+        publicRequest({
+          parentRunId: "run-1",
+          amountIn: "2",
+          economicBoundary: {
+            availability: "available",
+            minimumReceived: "0.01",
+            source: "user_declared",
+          },
+        }),
+      ),
+    ).resolves.toMatchObject({
+      status: 400,
+      body: { error: { code: "INVALID_RERUN" } },
+    });
+
+    expect(store.get("run-2")).toBeUndefined();
+  });
+
+  it("preserves the Diff on a failed child and rejects nested Re-runs", async () => {
+    const store = new InMemoryRunStore();
+    const baseline = createService(
+      {
+        async check(input) {
+          return completedRouteResult(input.runId, input.intent);
+        },
+      },
+      store,
+    );
+    await baseline.check(publicRequest());
+
+    const child = createService(
+      {
+        async check(input) {
+          return integrationErrorResult(input.runId, input.intent);
+        },
+      },
+      store,
+      () => "run-2",
+    );
+    const childResponse = await child.check(
+      publicRequest({ parentRunId: "run-1", amountIn: "2" }),
+    );
+
+    expect(childResponse).toMatchObject({
+      status: 200,
+      body: {
+        status: "integration_error",
+        parentRunId: "run-1",
+        diff: {
+          previousRunId: "run-1",
+          changedFields: [{ field: "amountInAtomic" }],
+        },
+      },
+    });
+
+    const nested = createService(
+      {
+        async check() {
+          throw new Error("must not run");
+        },
+      },
+      store,
+      () => "run-3",
+    );
+    await expect(
+      nested.check(publicRequest({ parentRunId: "run-2", amountIn: "3" })),
+    ).resolves.toMatchObject({
+      status: 400,
+      body: { error: { code: "INVALID_RERUN" } },
+    });
+    expect(store.get("run-3")).toBeUndefined();
+  });
+
+  it("does not allow a Recorded Replay Run to become a Re-run baseline", async () => {
+    const store = new InMemoryRunStore();
+    const replayIntent = runtime.tokenRegistry
+      ? normalizeCheckSwapRequest(publicRequest(), runtime.tokenRegistry)
+      : undefined;
+    if (!replayIntent?.success) {
+      throw new Error("missing normalized replay intent");
+    }
+    await store.start("run-1", replayIntent.intent);
+    await store.complete({
+      ...completedRouteResult("run-1", replayIntent.intent),
+      replayMode: true,
+      evidence: completedRouteResult("run-1", replayIntent.intent).evidence.map(
+        (evidence) => ({
+          ...evidence,
+          isReplay: true,
+        }),
+      ),
+    });
+
+    const rerun = createService(
+      {
+        async check() {
+          throw new Error("must not run");
+        },
+      },
+      store,
+      () => "run-2",
+    );
+    await expect(
+      rerun.check(publicRequest({ parentRunId: "run-1", amountIn: "2" })),
+    ).resolves.toMatchObject({
+      status: 400,
+      body: { error: { code: "INVALID_RERUN" } },
     });
   });
 
@@ -659,6 +914,9 @@ describe("CheckApplicationService", () => {
           throw new Error("database connection details");
         },
         async fail() {},
+        get() {
+          return undefined;
+        },
       },
     );
 

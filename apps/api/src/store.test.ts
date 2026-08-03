@@ -36,6 +36,38 @@ describe("InMemoryRunStore", () => {
     expect(store.get("missing")).toBeUndefined();
   });
 
+  it("preserves a parent Run link across a child lifecycle", async () => {
+    const store = new InMemoryRunStore();
+    const result = {
+      runId: "run-2",
+      parentRunId: "run-1",
+      intent,
+    } as RunResult;
+
+    await store.start("run-2", intent, "run-1");
+    await store.complete(result);
+
+    expect(store.get("run-2")).toMatchObject({
+      runId: "run-2",
+      parentRunId: "run-1",
+      status: "completed",
+      result,
+    });
+  });
+
+  it("rejects a completed result whose parent differs from the started Run", async () => {
+    const store = new InMemoryRunStore();
+    await store.start("run-2", intent, "run-1");
+
+    await expect(
+      store.complete({
+        runId: "run-2",
+        parentRunId: "other-parent",
+        intent,
+      } as RunResult),
+    ).rejects.toThrow("parent does not match");
+  });
+
   it("records failures and rejects duplicate or terminal transitions", async () => {
     const store = new InMemoryRunStore();
     await store.start("run-1", intent);

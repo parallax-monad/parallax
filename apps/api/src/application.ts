@@ -3,7 +3,10 @@ import { isDeepStrictEqual } from "node:util";
 import {
   checkSwapRequestSchema,
   type EvidenceRef,
+  type NormalizedSwapIntent,
+  type RunDiff,
   type RunResult,
+  runDiffSchema,
   runResultSchema,
 } from "@parallax/contracts";
 import { normalizeCheckSwapRequest } from "./normalization.js";
@@ -14,6 +17,7 @@ import type { CheckRunFailureCode, RunStore } from "./store.js";
 export type CheckApiErrorCode =
   | "INVALID_REQUEST"
   | "NORMALIZATION_FAILED"
+  | "INVALID_RERUN"
   | "AGENT_FLOW_ERROR"
   | "INVALID_AGENT_FLOW_RESPONSE"
   | "RUN_STORE_ERROR";
@@ -69,9 +73,25 @@ export class CheckApplicationService {
       });
     }
 
+    const rerun = resolveRerun(
+      parsedRequest.data.parentRunId,
+      normalized.intent,
+      this.dependencies.store,
+    );
+    if (!rerun.success) {
+      return errorResponse(400, {
+        code: "INVALID_RERUN",
+        message: rerun.message,
+      });
+    }
+
     const runId = this.createRunId();
     try {
-      await this.dependencies.store.start(runId, normalized.intent);
+      await this.dependencies.store.start(
+        runId,
+        normalized.intent,
+        rerun.parentRunId,
+      );
     } catch {
       return storeErrorResponse();
     }
@@ -109,7 +129,9 @@ export class CheckApplicationService {
     if (
       result.runId !== runId ||
       result.replayMode ||
-      !isDeepStrictEqual(result.intent, normalized.intent)
+      !isDeepStrictEqual(result.intent, normalized.intent) ||
+      result.parentRunId !== undefined ||
+      result.diff !== undefined
     ) {
       const storeFailure = await this.recordFailure(
         runId,
@@ -140,13 +162,23 @@ export class CheckApplicationService {
       });
     }
 
+    const resultWithRerun = runResultSchema.parse({
+      ...result,
+      ...(rerun.parentRunId === undefined
+        ? {}
+        : {
+            parentRunId: rerun.parentRunId,
+            diff: rerun.diff,
+          }),
+    });
+
     try {
-      await this.dependencies.store.complete(result);
+      await this.dependencies.store.complete(resultWithRerun);
     } catch {
       return storeErrorResponse();
     }
 
-    return { status: 200, body: result };
+    return { status: 200, body: resultWithRerun };
   }
 
   private async recordFailure(
@@ -160,6 +192,147 @@ export class CheckApplicationService {
       return storeErrorResponse();
     }
   }
+}
+
+type RerunResolution =
+  | { success: true; parentRunId?: string; diff?: RunDiff }
+  | { success: false; message: string };
+
+function resolveRerun(
+  parentRunId: string | undefined,
+  intent: NormalizedSwapIntent,
+  store: RunStore,
+): RerunResolution {
+  if (parentRunId === undefined) {
+    return { success: true };
+  }
+
+  const parent = store.get(parentRunId);
+  if (parent?.status !== "completed" || parent.result.status !== "completed") {
+    return {
+      success: false,
+      message: "The parent Run does not exist or is not completed",
+    };
+  }
+
+  if (parent.result.replayMode) {
+    return {
+      success: false,
+      message: "Recorded Replay Runs cannot be re-run",
+    };
+  }
+
+  if (parent.result.parentRunId !== undefined) {
+    return {
+      success: false,
+      message: "Only one Re-run is supported for a baseline Run",
+    };
+  }
+
+  if (
+    parent.result.intent.chainId !== intent.chainId ||
+    parent.result.intent.sender.toLowerCase() !== intent.sender.toLowerCase()
+  ) {
+    return {
+      success: false,
+      message: "A Re-run must preserve the baseline chain and sender",
+    };
+  }
+
+  if (
+    !isDeepStrictEqual(
+      parent.result.intent.economicBoundary,
+      intent.economicBoundary,
+    )
+  ) {
+    return {
+      success: false,
+      message:
+        "A verification Re-run must preserve the baseline Economic Boundary",
+    };
+  }
+
+  const diff = buildRunDiff(parent.result, intent);
+  if (diff === undefined) {
+    return {
+      success: false,
+      message: "A Re-run must change at least one supported Intent field",
+    };
+  }
+
+  return { success: true, parentRunId, diff };
+}
+
+function buildRunDiff(
+  previous: RunResult,
+  nextIntent: NormalizedSwapIntent,
+): RunDiff | undefined {
+  const changedFields: RunDiff["changedFields"] = [];
+  const addChange = (
+    field: RunDiff["changedFields"][number]["field"],
+    before: string,
+    after: string,
+  ) => {
+    if (before !== after) {
+      changedFields.push({ field, before, after });
+    }
+  };
+
+  addChange(
+    "amountInAtomic",
+    previous.intent.amountInAtomic,
+    nextIntent.amountInAtomic,
+  );
+  addChange("protocol", previous.intent.protocol, nextIntent.protocol);
+  addChange(
+    "recipient",
+    previous.intent.recipient.toLowerCase(),
+    nextIntent.recipient.toLowerCase(),
+  );
+  addChange(
+    "recipientSource",
+    previous.intent.recipientSource,
+    nextIntent.recipientSource,
+  );
+  addChange(
+    "tokenIn",
+    assetDiffValue(previous.intent.tokenIn),
+    assetDiffValue(nextIntent.tokenIn),
+  );
+  addChange(
+    "tokenOut",
+    assetDiffValue(previous.intent.tokenOut),
+    assetDiffValue(nextIntent.tokenOut),
+  );
+  addChange(
+    "economicBoundary",
+    boundaryDiffValue(previous.intent.economicBoundary),
+    boundaryDiffValue(nextIntent.economicBoundary),
+  );
+
+  if (changedFields.length === 0) {
+    return undefined;
+  }
+
+  return runDiffSchema.parse({
+    previousRunId: previous.runId,
+    previousVerdict: previous.verdict,
+    changedFields,
+  });
+}
+
+function assetDiffValue(asset: NormalizedSwapIntent["tokenIn"]): string {
+  return asset.kind === "native"
+    ? "native"
+    : `erc20:${asset.address.toLowerCase()}`;
+}
+
+function boundaryDiffValue(
+  boundary: NormalizedSwapIntent["economicBoundary"],
+): string {
+  return boundary.availability === "available"
+    ? `available:${boundary.source}:${boundary.minimumReceivedAtomic}`
+    : "unavailable";
 }
 
 /**
