@@ -14,6 +14,22 @@ export type ClassifyContext = {
   source?: NormalizedMossError["source"];
 };
 
+/**
+ * Structured timeout raised when a stage or the whole live chain exceeds its
+ * deadline. Moss APIs do not support AbortSignal, so the timeout is produced by
+ * `Promise.race`; the underlying request may still be terminating in the
+ * background. A timeout is never mapped to STOP or to a protocol verdict.
+ */
+export class StageTimeoutError extends Error {
+  readonly stage: string;
+
+  constructor(stage: string, ms: number) {
+    super(`stage ${stage} timed out after ${ms}ms`);
+    this.name = "StageTimeoutError";
+    this.stage = stage;
+  }
+}
+
 export function structuredError(input: {
   stage?: StageName;
   code: NormalizedMossError["code"];
@@ -44,6 +60,18 @@ export function classifyLiveError(
 ): NormalizedMossError {
   const message = error instanceof Error ? error.message : String(error);
   const name = error instanceof Error ? error.name : undefined;
+
+  if (error instanceof StageTimeoutError) {
+    return {
+      ...(error.stage ? { stage: error.stage as StageName } : {}),
+      code: "TIMEOUT",
+      message,
+      integrationStatus: "TIMEOUT",
+      source: "rpc",
+      normalization: "PRESERVED",
+      retryable: true,
+    };
+  }
 
   if (name === "SimulatorUnavailableError") {
     return {

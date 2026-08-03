@@ -1,6 +1,7 @@
 export {
   classifyLiveError,
   normalizeMossError,
+  StageTimeoutError,
   structuredError,
 } from "./errors.js";
 export {

@@ -67,6 +67,7 @@ function fakeBundle(
     simulate?: unknown;
     coreVersion?: string;
     blockNumber?: bigint;
+    quoteHang?: boolean;
   } = {},
 ): MossRuntimeBundle {
   const { createRuntime, Registry } = fakeCore(overrides);
@@ -132,11 +133,13 @@ function fakeCore(overrides: {
   quoteError?: Error;
   actionError?: Error;
   blockNumber?: bigint;
+  quoteHang?: boolean;
 }) {
   return {
     createRuntime: async () => ({
       rpcUrl: "https://rpc.example.invalid",
       client: {
+        getChainId: async () => 143,
         getBlockNumber: async () => overrides.blockNumber ?? 100n,
       },
     }),
@@ -179,6 +182,9 @@ function fakeCore(overrides: {
         ];
       }
       async action(_protocol: string, method: string) {
+        if (method === "quote" && overrides.quoteHang) {
+          return new Promise(() => {});
+        }
         if (method === "quote" && overrides.quoteError)
           throw overrides.quoteError;
         if (method === "swap" && overrides.actionError)
@@ -410,6 +416,43 @@ describe("kuru live adapter", () => {
       expect(stage.blockNumber).toBe("91383505");
     }
     expect(result.evidence.blockNumber.value).toBe("91383505");
+  });
+
+  it("maps a hanging stage to TIMEOUT and keeps structured evidence", async () => {
+    const bundle = fakeBundle({ quoteHang: true });
+    const result = await runKuruLiveSwapWithBundle(
+      input({ stageTimeoutMs: 50 }),
+      bundle,
+    );
+    expect(result.evidence.integrationStatus).toBe("TIMEOUT");
+    expect(result.evidence.executionStatus).toBe("UNKNOWN");
+    expect(result.stages.map((stage) => stage.stage)).toEqual([
+      "DISCOVER",
+      "LOAD",
+      "QUOTE",
+    ]);
+    const quote = result.stages.find((stage) => stage.stage === "QUOTE");
+    expect(quote?.success).toBe(false);
+    expect(quote?.error?.code).toBe("TIMEOUT");
+    expect(quote?.error?.integrationStatus).toBe("TIMEOUT");
+    expect(quote?.error?.normalization).toBe("PRESERVED");
+    expect(quote?.error?.retryable).toBe(true);
+  });
+
+  it("emits redacted stage start and finish logs", async () => {
+    const lines: string[] = [];
+    const result = await runKuruLiveSwapWithBundle(
+      input({ logger: (line) => lines.push(line) }),
+      fakeBundle(),
+    );
+    expect(lines[0]).toContain("[INIT] chainId=143");
+    expect(lines).toContain("[DISCOVER] START");
+    expect(lines.some((line) => line.startsWith("[SIMULATE] OK"))).toBe(true);
+    for (const line of lines) {
+      expect(line).not.toMatch(/https?:\/\//);
+      expect(line).not.toMatch(/rpc\.example/);
+    }
+    expect(result.stages.length).toBe(5);
   });
 });
 

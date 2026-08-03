@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   classifyLiveError,
   normalizeMossError,
+  StageTimeoutError,
   structuredError,
 } from "../src/index.js";
 
@@ -95,5 +96,17 @@ describe("error semantics", () => {
     const error = normalizeMossError("timeout");
     expect(error.code).toBe("TIMEOUT");
     expect(error.integrationStatus).toBe("TIMEOUT");
+  });
+
+  it("maps a structured StageTimeoutError to PRESERVED TIMEOUT", () => {
+    const normalized = classifyLiveError(
+      new StageTimeoutError("QUOTE", 30_000),
+      { source: "rpc" },
+    );
+    expect(normalized.code).toBe("TIMEOUT");
+    expect(normalized.integrationStatus).toBe("TIMEOUT");
+    expect(normalized.normalization).toBe("PRESERVED");
+    expect(normalized.retryable).toBe(true);
+    expect(normalized.message).toContain("timed out after 30000ms");
   });
 });

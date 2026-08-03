@@ -172,6 +172,15 @@ export type LiveKuruAdapterInput = {
   runtimeVersion: string;
   runtimeRevision: string;
   fetchedAt?: string;
+  /**
+   * Per-stage deadline in ms (default 30000). Applied with Promise.race; the
+   * underlying request may still be terminating after the race resolves.
+   */
+  stageTimeoutMs?: number;
+  /** Whole-chain deadline in ms (default 90000). Must stay below the Vitest testTimeout. */
+  overallTimeoutMs?: number;
+  /** Structured, redacted stage logging. Defaults to no-op. */
+  logger?: (line: string) => void;
 };
 
 export type LiveKuruResult = {
