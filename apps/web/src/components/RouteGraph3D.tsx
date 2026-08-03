@@ -18,9 +18,14 @@ type Marker = {
   group: THREE.Group;
   core: THREE.Sprite;
   halo: THREE.Sprite;
+  introHalo?: THREE.Sprite;
+  satellites?: THREE.Points<THREE.BufferGeometry, THREE.PointsMaterial>;
   label: THREE.Sprite;
   labelTexture: THREE.CanvasTexture;
 };
+
+const INTRO_END_PROGRESS = 0.22;
+const PROTOCOL_SATELLITE_COUNT = 144;
 
 const MARKERS: MarkerConfig[] = [
   {
@@ -91,35 +96,55 @@ const VERTEX_SHADER = `
   uniform float uTime;
   uniform float uExpansion;
   uniform float uScrollProgress;
+  uniform float uIntroEmphasis;
   uniform float uDisturbance;
   uniform float uPixelRatio;
   uniform float uMotion;
   attribute vec3 aDispersed;
+  attribute vec3 aIntroPosition;
   attribute vec3 aColor;
   attribute float aSize;
   attribute float aPhase;
+  attribute float aDepthLayer;
+  attribute float aIntroSizeBoost;
+  attribute float aIntroBrightness;
   varying vec3 vColor;
   varying float vAlpha;
   varying float vCenterFade;
+  varying float vNavigationMask;
 
   void main() {
     float expansion = smoothstep(0.0, 1.0, uExpansion);
-    vec3 transformed = mix(position, aDispersed, expansion);
+    vec3 introPosition = mix(position, aIntroPosition, uIntroEmphasis);
+    vec3 transformed = mix(introPosition, aDispersed, expansion);
     float drift = sin(uTime * 0.24 + aPhase * 7.0) * uMotion;
     float ripple = sin(uTime * 1.8 + aPhase * 19.0) * uDisturbance;
+    float introDrift = sin(uTime * (0.12 + aPhase * 0.08) + aPhase * 23.0)
+      * uMotion * uIntroEmphasis * mix(0.12, 0.42, aDepthLayer);
     transformed += vec3(
-      drift * 0.42 + ripple * 1.8,
-      cos(uTime * 0.19 + aPhase * 11.0) * uMotion * 0.34 + ripple,
+      drift * 0.42 + ripple * 1.8 + introDrift,
+      cos(uTime * 0.19 + aPhase * 11.0) * uMotion * 0.34 + ripple + introDrift * 0.5,
       sin(uTime * 0.16 + aPhase * 5.0) * uMotion * 0.58 + ripple * 2.8
     );
     vec4 mvPosition = modelViewMatrix * vec4(transformed, 1.0);
     float twinkle = 0.88 + 0.12 * sin(uTime * (0.75 + aPhase) + aPhase * 31.0) * uMotion;
-    gl_PointSize = clamp(aSize * uPixelRatio * (150.0 / -mvPosition.z) * twinkle, 0.75, 8.5);
+    float introTwinkle = 1.0 + sin(uTime * (0.55 + aPhase * 1.5) + aPhase * 41.0)
+      * uMotion * uIntroEmphasis * aIntroBrightness * 0.12;
+    float introScale = mix(1.0, aIntroSizeBoost, uIntroEmphasis);
+    gl_PointSize = clamp(
+      aSize * introScale * uPixelRatio * (150.0 / -mvPosition.z) * twinkle * introTwinkle,
+      0.75,
+      mix(8.5, 9.5, uIntroEmphasis)
+    );
     gl_Position = projectionMatrix * mvPosition;
-    vColor = aColor;
-    vAlpha = mix(0.42, 0.74, smoothstep(0.5, 3.4, aSize));
+    vColor = aColor * (1.0 + uIntroEmphasis * aIntroBrightness * 0.42);
+    vAlpha = mix(0.42, 0.74, smoothstep(0.5, 3.4, aSize))
+      + uIntroEmphasis * mix(0.08, 0.22, aIntroBrightness);
     float openedCenter = smoothstep(13.0, 43.0, length(transformed.xy));
     vCenterFade = mix(1.0, openedCenter, smoothstep(0.56, 0.86, uScrollProgress));
+    float normalizedY = gl_Position.y / max(gl_Position.w, 0.0001);
+    float topSafeArea = 1.0 - smoothstep(0.68, 0.98, normalizedY) * 0.62;
+    vNavigationMask = mix(1.0, topSafeArea, uIntroEmphasis);
   }
 `;
 
@@ -128,10 +153,11 @@ const FRAGMENT_SHADER = `
   varying vec3 vColor;
   varying float vAlpha;
   varying float vCenterFade;
+  varying float vNavigationMask;
 
   void main() {
     vec4 point = texture2D(uPointTexture, gl_PointCoord);
-    float alpha = point.a * vAlpha * vCenterFade;
+    float alpha = point.a * vAlpha * vCenterFade * vNavigationMask;
     if (alpha < 0.012) discard;
     gl_FragColor = vec4(vColor * point.rgb, alpha);
   }
@@ -188,10 +214,15 @@ function particleCountFor(width: number) {
 function createParticleField(count: number, pointTexture: THREE.Texture) {
   const compact = new Float32Array(count * 3);
   const dispersed = new Float32Array(count * 3);
+  const introPositions = new Float32Array(count * 3);
   const colors = new Float32Array(count * 3);
   const sizes = new Float32Array(count);
   const phases = new Float32Array(count);
+  const depthLayers = new Float32Array(count);
+  const introSizeBoosts = new Float32Array(count);
+  const introBrightness = new Float32Array(count);
   const random = createSeededRandom(0x50415241);
+  const introRandom = createSeededRandom(0x494e5452);
 
   for (let index = 0; index < count; index += 1) {
     const offset = index * 3;
@@ -209,6 +240,48 @@ function createParticleField(count: number, pointTexture: THREE.Texture) {
     compact[offset] = x;
     compact[offset + 1] = y;
     compact[offset + 2] = z;
+
+    const layerSelector = introRandom();
+    let introX: number;
+    let introY: number;
+    let introZ: number;
+    let depthLayer: number;
+    if (layerSelector < 0.56) {
+      // Distant micro-stars deliberately cover the complete camera frustum.
+      const band = Math.floor(introRandom() * 3);
+      introX = (introRandom() * 2 - 1) * (104 + introRandom() * 28);
+      introY =
+        (introRandom() * 2 - 1) * 66 +
+        Math.sin(introX * 0.036 + band * 1.7) * (7 + band * 2) -
+        introX * 0.075;
+      introZ = -34 - introRandom() * 82;
+      depthLayer = 0;
+    } else if (layerSelector < 0.9) {
+      // The midground forms an asymmetric diagonal protocol constellation.
+      const diagonal = (introRandom() * 2 - 1) * 88;
+      introX = diagonal + (introRandom() + introRandom() - 1) * 25 + 7;
+      introY =
+        diagonal * -0.28 +
+        Math.sin(diagonal * 0.075) * 10 +
+        (introRandom() + introRandom() + introRandom() - 1.5) * 24 -
+        2;
+      introZ = (introRandom() + introRandom() - 1) * 46;
+      depthLayer = 0.5;
+    } else {
+      // Sparse near-camera stars provide edge parallax without becoming a veil.
+      const edgeBias =
+        introRandom() < 0.58 ? (introRandom() < 0.5 ? -1 : 1) : 0;
+      introX =
+        edgeBias === 0
+          ? (introRandom() * 2 - 1) * 66
+          : edgeBias * (44 + introRandom() * 34);
+      introY = (introRandom() * 2 - 1) * 49 - introX * 0.1;
+      introZ = 38 + introRandom() * 42;
+      depthLayer = 1;
+    }
+    introPositions[offset] = introX;
+    introPositions[offset + 1] = introY;
+    introPositions[offset + 2] = introZ;
 
     const spread = 1.9 + random() * 1.35;
     let dispersedX = x * spread + (random() - 0.5) * 74;
@@ -236,18 +309,52 @@ function createParticleField(count: number, pointTexture: THREE.Texture) {
     colors[offset + 2] = color.b * brightness;
     sizes[index] = 0.72 + random() ** 4 * 3.7;
     phases[index] = random();
+    depthLayers[index] = depthLayer;
+
+    const hierarchy = introRandom();
+    if (hierarchy < 0.76) {
+      introSizeBoosts[index] =
+        depthLayer === 1 ? 1.28 : 0.82 + introRandom() * 0.28;
+      introBrightness[index] = 0.08 + introRandom() * 0.2;
+    } else if (hierarchy < 0.965) {
+      introSizeBoosts[index] = 1.12 + introRandom() * 0.42 + depthLayer * 0.18;
+      introBrightness[index] = 0.34 + introRandom() * 0.24;
+    } else if (hierarchy < 0.995) {
+      introSizeBoosts[index] = 1.52 + introRandom() * 0.5;
+      introBrightness[index] = 0.62 + introRandom() * 0.24;
+    } else {
+      introSizeBoosts[index] = 2.05 + introRandom() * 0.55;
+      introBrightness[index] = 0.9 + introRandom() * 0.1;
+    }
   }
 
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute("position", new THREE.BufferAttribute(compact, 3));
   geometry.setAttribute("aDispersed", new THREE.BufferAttribute(dispersed, 3));
+  geometry.setAttribute(
+    "aIntroPosition",
+    new THREE.BufferAttribute(introPositions, 3),
+  );
   geometry.setAttribute("aColor", new THREE.BufferAttribute(colors, 3));
   geometry.setAttribute("aSize", new THREE.BufferAttribute(sizes, 1));
   geometry.setAttribute("aPhase", new THREE.BufferAttribute(phases, 1));
+  geometry.setAttribute(
+    "aDepthLayer",
+    new THREE.BufferAttribute(depthLayers, 1),
+  );
+  geometry.setAttribute(
+    "aIntroSizeBoost",
+    new THREE.BufferAttribute(introSizeBoosts, 1),
+  );
+  geometry.setAttribute(
+    "aIntroBrightness",
+    new THREE.BufferAttribute(introBrightness, 1),
+  );
   const uniforms = {
     uTime: { value: 0 },
     uExpansion: { value: 0 },
     uScrollProgress: { value: 0 },
+    uIntroEmphasis: { value: 1 },
     uDisturbance: { value: 0 },
     uPixelRatio: { value: 1 },
     uMotion: { value: 1 },
@@ -286,6 +393,47 @@ function createLabelTexture(config: MarkerConfig) {
   return texture;
 }
 
+function createProtocolSatellites(
+  config: MarkerConfig,
+  pointTexture: THREE.Texture,
+) {
+  const positions = new Float32Array(PROTOCOL_SATELLITE_COUNT * 3);
+  const random = createSeededRandom(
+    config.label === "Kuru" ? 0x4b555255 : 0x50414e43,
+  );
+  for (let index = 0; index < PROTOCOL_SATELLITE_COUNT; index += 1) {
+    const offset = index * 3;
+    const angle = random() * Math.PI * 2;
+    const isWideCloud = index >= PROTOCOL_SATELLITE_COUNT * 0.7;
+    const radius = isWideCloud
+      ? config.size * (1.7 + random() * 1.5)
+      : config.size * (0.9 + random() * 1.15);
+    positions[offset] = Math.cos(angle) * radius;
+    positions[offset + 1] =
+      Math.sin(angle) * radius * (isWideCloud ? 0.65 : 0.3) +
+      (random() - 0.5) * config.size * 0.38;
+    positions[offset + 2] =
+      Math.sin(angle * 1.7) * config.size * 0.22 +
+      (random() - 0.5) * config.size * 0.55;
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+  const material = new THREE.PointsMaterial({
+    map: pointTexture,
+    color: config.color,
+    size: 0.82,
+    sizeAttenuation: true,
+    transparent: true,
+    opacity: 0,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+  });
+  const points = new THREE.Points(geometry, material);
+  points.rotation.x = config.phase * 0.12;
+  points.rotation.z = -0.24 + config.phase * 0.03;
+  return points;
+}
+
 function createMarker(
   config: MarkerConfig,
   pointTexture: THREE.Texture,
@@ -311,6 +459,23 @@ function createMarker(
       depthWrite: false,
     }),
   );
+  const introHalo =
+    config.role === "protocol"
+      ? new THREE.Sprite(
+          new THREE.SpriteMaterial({
+            map: pointTexture,
+            color: config.color,
+            transparent: true,
+            opacity: 0,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false,
+          }),
+        )
+      : undefined;
+  const satellites =
+    config.role === "protocol"
+      ? createProtocolSatellites(config, pointTexture)
+      : undefined;
   const labelTexture = createLabelTexture(config);
   const label = new THREE.Sprite(
     new THREE.SpriteMaterial({
@@ -322,19 +487,38 @@ function createMarker(
   );
   core.scale.set(config.size, config.size, 1);
   halo.scale.set(config.size * 3.5, config.size * 3.5, 1);
+  introHalo?.scale.set(config.size * 5.4, config.size * 5.4, 1);
   label.scale.set(
     labelTexture.image.width / 7,
     labelTexture.image.height / 7,
     1,
   );
   label.position.set(0, config.size * 1.15, 0);
+  if (introHalo) group.add(introHalo);
+  if (satellites) group.add(satellites);
   group.add(halo, core, label);
-  return { config, group, core, halo, label, labelTexture };
+  return {
+    config,
+    group,
+    core,
+    halo,
+    introHalo,
+    satellites,
+    label,
+    labelTexture,
+  };
 }
 
 function disposeMarker(marker: Marker) {
   (marker.core.material as THREE.SpriteMaterial).dispose();
   (marker.halo.material as THREE.SpriteMaterial).dispose();
+  if (marker.introHalo) {
+    (marker.introHalo.material as THREE.SpriteMaterial).dispose();
+  }
+  if (marker.satellites) {
+    marker.satellites.geometry.dispose();
+    marker.satellites.material.dispose();
+  }
   (marker.label.material as THREE.SpriteMaterial).dispose();
   marker.labelTexture.dispose();
 }
@@ -475,6 +659,8 @@ export function RouteGraph3D({
       const progress = reduceMotion
         ? Math.max(progressRef.current, 0.78)
         : clamp(progressRef.current, 0, 1);
+      const rawProgress = clamp(progressRef.current, 0, 1);
+      const introEmphasis = 1 - smoothstep(0, INTRO_END_PROGRESS, rawProgress);
       const scrollExpansion = smoothstep(0.18, 0.78, progress);
       const expansion = clamp(
         scrollExpansion + (pointerDistance - 0.28) * 0.075,
@@ -484,6 +670,7 @@ export function RouteGraph3D({
       particleField.uniforms.uTime.value = time * 0.001;
       particleField.uniforms.uExpansion.value = expansion;
       particleField.uniforms.uScrollProgress.value = progress;
+      particleField.uniforms.uIntroEmphasis.value = introEmphasis;
       particleField.uniforms.uDisturbance.value = reduceMotion
         ? 0
         : disturbance;
@@ -513,12 +700,38 @@ export function RouteGraph3D({
           : 1 +
             Math.sin(time * 0.00072 + config.phase) *
               (config.role === "protocol" ? 0.075 : 0.025);
-        marker.core.scale.set(config.size * breathe, config.size * breathe, 1);
-        marker.halo.scale.set(
-          config.size * 3.5 * breathe,
-          config.size * 3.5 * breathe,
+        const protocolIntroBoost =
+          config.role === "protocol" ? introEmphasis : 0;
+        const introScale = 1 + protocolIntroBoost * 0.11;
+        marker.core.scale.set(
+          config.size * breathe * introScale,
+          config.size * breathe * introScale,
           1,
         );
+        marker.halo.scale.set(
+          config.size * (3.5 + protocolIntroBoost * 0.55) * breathe,
+          config.size * (3.5 + protocolIntroBoost * 0.55) * breathe,
+          1,
+        );
+        if (marker.introHalo) {
+          marker.introHalo.scale.set(
+            config.size * 5.4 * breathe,
+            config.size * 5.4 * breathe,
+            1,
+          );
+          (marker.introHalo.material as THREE.SpriteMaterial).opacity =
+            introEmphasis * 0.13;
+        }
+        if (marker.satellites) {
+          marker.satellites.visible = introEmphasis > 0.001;
+          marker.satellites.rotation.y = reduceMotion
+            ? config.phase * 0.08
+            : time * 0.000055 + config.phase * 0.08;
+          marker.satellites.rotation.z =
+            -0.24 + config.phase * 0.03 + (reduceMotion ? 0 : time * 0.000018);
+          marker.satellites.material.opacity = introEmphasis * 0.42;
+          marker.satellites.material.size = 0.72 + introEmphasis * 0.2;
+        }
         (marker.label.material as THREE.SpriteMaterial).opacity =
           config.role === "protocol"
             ? 0.76 - progress * 0.22
