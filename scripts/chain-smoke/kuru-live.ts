@@ -44,7 +44,8 @@ const runtimeRevision = process.env.MOSS_RUNTIME_REVISION;
 const sender =
   process.env.MOSS_SENDER ?? "0xcccccccccccccccccccccccccccccccccccccccc";
 
-const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
+// scripts/chain-smoke/kuru-live.ts -> repo root needs two levels up.
+const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const smokeOutDir = join(repoRoot, ".smoke-live");
 const fixtureDir = join(
   repoRoot,
@@ -112,24 +113,19 @@ function p0Candidate(
   evidence: Awaited<ReturnType<typeof runKuruLiveSwap>>["evidence"],
   stages: Awaited<ReturnType<typeof runKuruLiveSwap>>["stages"],
 ): string {
-  const failedStage = stages.find((stage) => !stage.success);
-  const stage = failedStage?.stage;
-  const code = failedStage?.error?.code;
-  if (
-    evidence.executionStatus === "SUCCESS" &&
-    evidence.simulationCoverage.value?.complete === true
-  ) {
+  const coverage = evidence.simulationCoverage.value;
+  if (evidence.executionStatus === "SUCCESS" && coverage?.complete === true) {
     return "P0_LIVE_READY";
   }
-  if (
-    code === "UNAVAILABLE" ||
-    code === "INTEGRATION_ERROR" ||
-    stage === undefined
-  ) {
+  const failedStage = stages.find((stage) => !stage.success);
+  const code = failedStage?.error?.code;
+  if (code === "UNAVAILABLE" || code === "INTEGRATION_ERROR") {
     return "P0_LIVE_BLOCKED_PORTABLE_RUNTIME";
   }
-  // Timeout, NO_ROUTE, REVERTED, halted, or incomplete coverage all mean the
-  // live chain did not complete simulation -> simulation-blocked.
+  // Every other failure mode - TIMEOUT, NO_ROUTE, REVERTED, a halted or
+  // incomplete simulation, or an execution that did not reach SUCCESS - means
+  // the live simulation boundary was not crossed on a runtime that loaded
+  // fine, so the decision is simulation-blocked, not portable-runtime.
   return "P0_LIVE_BLOCKED_SIMULATION";
 }
 
