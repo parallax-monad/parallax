@@ -1,4 +1,9 @@
-import type { NormalizedSwapIntent, RunResult } from "@parallax/contracts";
+import type {
+  EvidenceItem,
+  EvidenceRef,
+  NormalizedSwapIntent,
+  RunResult,
+} from "@parallax/contracts";
 import { describe, expect, it } from "vitest";
 import { CheckApplicationService } from "./application.js";
 import type { AgentFlowPort } from "./ports.js";
@@ -36,6 +41,8 @@ const runtime: BackendRuntime = {
   },
   tokenRegistry: createTrustedTokenRegistry(tokenRegistryConfig),
 };
+
+type CompletedRunResult = Extract<RunResult, { status: "completed" }>;
 
 function publicRequest(overrides: Record<string, unknown> = {}) {
   return {
@@ -87,6 +94,43 @@ function integrationErrorResult(
   };
 }
 
+function evidenceRef(evidence: EvidenceItem): EvidenceRef {
+  return {
+    key: evidence.key,
+    source: evidence.source,
+    stage: evidence.stage,
+    blockNumber: evidence.blockNumber,
+    runtimeVersion: evidence.runtimeVersion,
+    runtimeRevision: evidence.runtimeRevision,
+    fixtureId: evidence.fixtureId,
+    reproducibility: evidence.reproducibility,
+    isReplay: evidence.isReplay,
+    isMock: evidence.isMock,
+  };
+}
+
+function completedRunResult(
+  runId: string,
+  intent: NormalizedSwapIntent,
+  overrides: Pick<
+    CompletedRunResult,
+    "ruleResults" | "evidence" | "scope" | "route"
+  >,
+): CompletedRunResult {
+  return {
+    runId,
+    replayMode: false,
+    intent,
+    status: "completed",
+    systemStatus: "OK",
+    verdict: "UNKNOWN",
+    summary: "The test completed without a blocking verdict.",
+    recommendedActions: [],
+    irrelevantActions: [],
+    ...overrides,
+  };
+}
+
 function completedRouteResult(
   runId: string,
   intent: NormalizedSwapIntent,
@@ -109,26 +153,7 @@ function completedRouteResult(
     routeInputRole: "ROUTE_QUOTE" as const,
   };
 
-  const routeEvidenceRef = {
-    key: routeEvidence.key,
-    source: routeEvidence.source,
-    stage: routeEvidence.stage,
-    blockNumber: routeEvidence.blockNumber,
-    runtimeVersion: routeEvidence.runtimeVersion,
-    runtimeRevision: routeEvidence.runtimeRevision,
-    reproducibility: routeEvidence.reproducibility,
-    isReplay: routeEvidence.isReplay,
-    isMock: routeEvidence.isMock,
-  };
-
-  return {
-    runId,
-    replayMode: false,
-    intent,
-    status: "completed",
-    systemStatus: "OK",
-    verdict: "UNKNOWN",
-    summary: "The economic boundary was not provided.",
+  return completedRunResult(runId, intent, {
     ruleResults: [
       {
         ruleId: "P0-ECONOMIC-001",
@@ -138,8 +163,6 @@ function completedRouteResult(
         actionEvaluations: [],
       },
     ],
-    recommendedActions: [],
-    irrelevantActions: [],
     evidence: [routeEvidence],
     scope: [
       {
@@ -161,9 +184,146 @@ function completedRouteResult(
       path: [mon, usdc],
       source: "quote",
       blockNumber: "12345",
-      evidenceRef: routeEvidenceRef,
+      evidenceRef: evidenceRef(routeEvidence),
     },
+  });
+}
+
+function completedEvidenceResult(
+  runId: string,
+  intent: NormalizedSwapIntent,
+  runtimeVersion: string,
+  runtimeRevision: string,
+): CompletedRunResult {
+  const evidence = {
+    kind: "generic" as const,
+    key: "evidence-completeness",
+    status: "confirmed" as const,
+    summary: "P0 Evidence completeness is verified",
+    source: "derived" as const,
+    stage: "SIMULATE" as const,
+    blockNumber: "12345",
+    runtimeVersion,
+    runtimeRevision,
+    coreRole: "EVIDENCE_COMPLETENESS" as const,
+    reproducibility: "REPRODUCIBLE" as const,
+    isReplay: false,
+    isMock: false,
   };
+
+  return completedRunResult(runId, intent, {
+    ruleResults: [
+      {
+        ruleId: "P0-EVIDENCE-001",
+        status: "PASS",
+        evidenceRefs: [evidenceRef(evidence)],
+        actionEvaluations: [],
+      },
+      {
+        ruleId: "P0-ECONOMIC-001",
+        status: "NOT_APPLICABLE",
+        applicabilityReasonCode: "BOUNDARY_NOT_PROVIDED",
+        evidenceRefs: [],
+        actionEvaluations: [],
+      },
+    ],
+    evidence: [evidence],
+    scope: [
+      {
+        key: "P0-EVIDENCE-001",
+        label: "Evidence result",
+        status: "checked",
+      },
+      {
+        key: "P0-ECONOMIC-001",
+        label: "Economic result",
+        status: "not_checked",
+        reason: "PRECONDITION_ABSENT",
+      },
+      {
+        key: "OUTSIDE_P0_SCOPE",
+        label: "Complete protocol security",
+        status: "not_checked",
+        reason: "OUTSIDE_P0_SCOPE",
+      },
+    ],
+    route: {
+      availability: "unavailable",
+      reason: "No route in test fixture",
+    },
+  });
+}
+
+function completedEconomicResult(
+  runId: string,
+  intent: NormalizedSwapIntent,
+  runtimeVersion: string,
+  runtimeRevision: string,
+): CompletedRunResult {
+  const simulationInput = {
+    kind: "generic" as const,
+    key: "simulation-receipt",
+    status: "confirmed" as const,
+    summary: "Simulation receipt is available",
+    source: "moss" as const,
+    stage: "SIMULATE" as const,
+    blockNumber: "12345",
+    runtimeVersion,
+    runtimeRevision,
+    simulationInputRole: "SIMULATION_RECEIPT" as const,
+    reproducibility: "REPRODUCIBLE" as const,
+    isReplay: false,
+    isMock: false,
+  };
+  const simulationOutput = {
+    kind: "simulated_token_out" as const,
+    key: "simulated-token-out",
+    status: "confirmed" as const,
+    summary: "Recipient tokenOut balance delta",
+    source: "derived" as const,
+    stage: "SIMULATE" as const,
+    blockNumber: "12345",
+    runtimeVersion,
+    runtimeRevision,
+    reproducibility: "REPRODUCIBLE" as const,
+    isReplay: false,
+    isMock: false,
+    tokenOut: usdc,
+    recipient: sender,
+    amountReceivedAtomic: "20000",
+    derivation: "recipient_balance_delta" as const,
+    derivationVersion: "recipient-balance-delta/v1",
+    inputEvidenceRefs: [evidenceRef(simulationInput)],
+  };
+
+  return completedRunResult(runId, intent, {
+    ruleResults: [
+      {
+        ruleId: "P0-ECONOMIC-001",
+        status: "PASS",
+        evidenceRefs: [evidenceRef(simulationOutput)],
+        actionEvaluations: [],
+      },
+    ],
+    evidence: [simulationInput, simulationOutput],
+    scope: [
+      {
+        key: "P0-ECONOMIC-001",
+        label: "Economic result",
+        status: "checked",
+      },
+      {
+        key: "OUTSIDE_P0_SCOPE",
+        label: "Complete protocol security",
+        status: "not_checked",
+        reason: "OUTSIDE_P0_SCOPE",
+      },
+    ],
+    route: {
+      availability: "unavailable",
+      reason: "No route in test fixture",
+    },
+  });
 }
 
 function createService(
@@ -271,6 +431,70 @@ describe("CheckApplicationService", () => {
     expect(store.get("run-1")).toMatchObject({
       status: "completed",
       result: response.body,
+    });
+  });
+
+  it("rejects stale runtime identity on core Rule Evidence", async () => {
+    const store = new InMemoryRunStore();
+    const service = createService(
+      {
+        async check(input) {
+          return completedEvidenceResult(
+            input.runId,
+            input.intent,
+            runtime.config.moss.runtimeVersion,
+            "revision-stale",
+          );
+        },
+      },
+      store,
+    );
+
+    const response = await service.check(publicRequest());
+
+    expect(response).toMatchObject({
+      status: 502,
+      body: { error: { code: "INVALID_AGENT_FLOW_RESPONSE" } },
+    });
+    expect(store.get("run-1")).toMatchObject({
+      status: "failed",
+      failure: "INVALID_AGENT_FLOW_RESPONSE",
+    });
+  });
+
+  it("rejects stale runtime identity on Economic simulation Evidence", async () => {
+    const store = new InMemoryRunStore();
+    const service = createService(
+      {
+        async check(input) {
+          return completedEconomicResult(
+            input.runId,
+            input.intent,
+            "moss-stale",
+            runtime.config.moss.runtimeRevision,
+          );
+        },
+      },
+      store,
+    );
+
+    const response = await service.check(
+      publicRequest({
+        economicBoundary: {
+          availability: "available",
+          minimumReceived: "0.01",
+          source: "user_declared",
+        },
+      }),
+    );
+
+    expect(response).toMatchObject({
+      status: 502,
+      body: { error: { code: "INVALID_AGENT_FLOW_RESPONSE" } },
+    });
+    expect(store.get("run-1")).toMatchObject({
+      status: "failed",
+      failure: "INVALID_AGENT_FLOW_RESPONSE",
     });
   });
 
