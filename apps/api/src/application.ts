@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import {
   checkSwapRequestSchema,
+  type EvidenceRef,
   type RunResult,
   runResultSchema,
 } from "@parallax/contracts";
@@ -122,6 +123,23 @@ export class CheckApplicationService {
       });
     }
 
+    if (
+      hasMismatchedAuthoritativeRuntime(
+        result,
+        this.dependencies.runtime.config.moss,
+      )
+    ) {
+      const storeFailure = await this.recordFailure(
+        runId,
+        "INVALID_AGENT_FLOW_RESPONSE",
+      );
+      if (storeFailure !== undefined) return storeFailure;
+      return errorResponse(502, {
+        code: "INVALID_AGENT_FLOW_RESPONSE",
+        message: "Agent Flow returned Evidence from a different Moss runtime",
+      });
+    }
+
     try {
       await this.dependencies.store.complete(result);
     } catch {
@@ -142,6 +160,58 @@ export class CheckApplicationService {
       return storeErrorResponse();
     }
   }
+}
+
+/**
+ * Checks the Evidence that can establish a live core outcome against the
+ * immutable runtime identity used for this request. Action-only and
+ * supplementary Evidence remain outside this boundary until their ownership
+ * is explicitly settled.
+ */
+function hasMismatchedAuthoritativeRuntime(
+  result: RunResult,
+  runtime: BackendRuntime["config"]["moss"],
+): boolean {
+  const evidenceByKey = new Map(
+    result.evidence.map((evidence) => [evidence.key, evidence]),
+  );
+  const authoritativeKeys = new Set<string>();
+
+  const addReference = (reference: Pick<EvidenceRef, "key" | "source">) => {
+    if (reference.source !== "external") {
+      authoritativeKeys.add(reference.key);
+    }
+  };
+
+  result.ruleResults.forEach((ruleResult) => {
+    if (ruleResult.status === "PASS" || ruleResult.status === "FAIL") {
+      ruleResult.evidenceRefs.forEach(addReference);
+    }
+  });
+
+  if (
+    result.status === "completed" &&
+    result.route.availability === "available"
+  ) {
+    addReference(result.route.evidenceRef);
+    result.route.inputEvidenceRefs?.forEach(addReference);
+  }
+
+  for (const key of authoritativeKeys) {
+    const evidence = evidenceByKey.get(key);
+    if (evidence?.kind === "simulated_token_out") {
+      evidence.inputEvidenceRefs.forEach(addReference);
+    }
+  }
+
+  return [...authoritativeKeys].some((key) => {
+    const evidence = evidenceByKey.get(key);
+    return (
+      evidence === undefined ||
+      evidence.runtimeVersion !== runtime.runtimeVersion ||
+      evidence.runtimeRevision !== runtime.runtimeRevision
+    );
+  });
 }
 
 function storeErrorResponse(): CheckApplicationResponse {

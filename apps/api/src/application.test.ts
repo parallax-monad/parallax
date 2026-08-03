@@ -87,6 +87,85 @@ function integrationErrorResult(
   };
 }
 
+function completedRouteResult(
+  runId: string,
+  intent: NormalizedSwapIntent,
+  runtimeVersion = runtime.config.moss.runtimeVersion,
+  runtimeRevision = runtime.config.moss.runtimeRevision,
+): RunResult {
+  const routeEvidence = {
+    kind: "generic" as const,
+    key: "route-quote",
+    status: "confirmed" as const,
+    summary: "Moss returned a route for the checked Intent",
+    source: "quote" as const,
+    stage: "QUOTE" as const,
+    blockNumber: "12345",
+    runtimeVersion,
+    runtimeRevision,
+    reproducibility: "REPRODUCIBLE" as const,
+    isReplay: false,
+    isMock: false,
+    routeInputRole: "ROUTE_QUOTE" as const,
+  };
+
+  const routeEvidenceRef = {
+    key: routeEvidence.key,
+    source: routeEvidence.source,
+    stage: routeEvidence.stage,
+    blockNumber: routeEvidence.blockNumber,
+    runtimeVersion: routeEvidence.runtimeVersion,
+    runtimeRevision: routeEvidence.runtimeRevision,
+    reproducibility: routeEvidence.reproducibility,
+    isReplay: routeEvidence.isReplay,
+    isMock: routeEvidence.isMock,
+  };
+
+  return {
+    runId,
+    replayMode: false,
+    intent,
+    status: "completed",
+    systemStatus: "OK",
+    verdict: "UNKNOWN",
+    summary: "The economic boundary was not provided.",
+    ruleResults: [
+      {
+        ruleId: "P0-ECONOMIC-001",
+        status: "NOT_APPLICABLE",
+        applicabilityReasonCode: "BOUNDARY_NOT_PROVIDED",
+        evidenceRefs: [],
+        actionEvaluations: [],
+      },
+    ],
+    recommendedActions: [],
+    irrelevantActions: [],
+    evidence: [routeEvidence],
+    scope: [
+      {
+        key: "P0-ECONOMIC-001",
+        label: "Economic result",
+        status: "not_checked",
+        reason: "PRECONDITION_ABSENT",
+      },
+      {
+        key: "OUTSIDE_P0_SCOPE",
+        label: "Complete protocol security",
+        status: "not_checked",
+        reason: "OUTSIDE_P0_SCOPE",
+      },
+    ],
+    route: {
+      availability: "available",
+      protocol: "kuru",
+      path: [mon, usdc],
+      source: "quote",
+      blockNumber: "12345",
+      evidenceRef: routeEvidenceRef,
+    },
+  };
+}
+
 function createService(
   agentFlow: AgentFlowPort,
   store: RunStore = new InMemoryRunStore(),
@@ -129,6 +208,68 @@ describe("CheckApplicationService", () => {
       runId: "run-1",
       status: "completed",
       intent: receivedIntent,
+      result: response.body,
+    });
+  });
+
+  it.each([
+    {
+      name: "runtime version",
+      runtimeVersion: "moss-0.0.9",
+      runtimeRevision: runtime.config.moss.runtimeRevision,
+    },
+    {
+      name: "runtime revision",
+      runtimeVersion: runtime.config.moss.runtimeVersion,
+      runtimeRevision: "revision-0",
+    },
+  ])(
+    "rejects a schema-valid result with mismatched $name",
+    async (testCase) => {
+      const store = new InMemoryRunStore();
+      const service = createService(
+        {
+          async check(input) {
+            return completedRouteResult(
+              input.runId,
+              input.intent,
+              testCase.runtimeVersion,
+              testCase.runtimeRevision,
+            );
+          },
+        },
+        store,
+      );
+
+      const response = await service.check(publicRequest());
+
+      expect(response).toMatchObject({
+        status: 502,
+        body: { error: { code: "INVALID_AGENT_FLOW_RESPONSE" } },
+      });
+      expect(store.get("run-1")).toMatchObject({
+        status: "failed",
+        failure: "INVALID_AGENT_FLOW_RESPONSE",
+      });
+    },
+  );
+
+  it("accepts a schema-valid result with the current Moss runtime identity", async () => {
+    const store = new InMemoryRunStore();
+    const service = createService(
+      {
+        async check(input) {
+          return completedRouteResult(input.runId, input.intent);
+        },
+      },
+      store,
+    );
+
+    const response = await service.check(publicRequest());
+
+    expect(response.status).toBe(200);
+    expect(store.get("run-1")).toMatchObject({
+      status: "completed",
       result: response.body,
     });
   });
