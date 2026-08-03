@@ -329,7 +329,10 @@ function Home({ language }: { language: Language }) {
         </span>
       </section>
 
-      <section className="mt-20 sm:mt-28" id="framework">
+      <section
+        className="landing-atmosphere landing-atmosphere-framework mt-20 sm:mt-28"
+        id="framework"
+      >
         <span className="eyebrow">
           {pick(language, "Decision framework", "决策框架")}
         </span>
@@ -375,7 +378,7 @@ function Home({ language }: { language: Language }) {
         </div>
       </section>
 
-      <section className="mt-24 grid grid-cols-1 gap-12 border-t border-line py-20 sm:mt-32 sm:py-28 lg:grid-cols-[minmax(360px,0.95fr)_minmax(0,1.05fr)] lg:gap-20 xl:gap-28">
+      <section className="landing-atmosphere landing-atmosphere-verdict mt-24 grid grid-cols-1 gap-12 border-t border-line py-20 sm:mt-32 sm:py-28 lg:grid-cols-[minmax(360px,0.95fr)_minmax(0,1.05fr)] lg:gap-20 xl:gap-28">
         <div>
           <span className="eyebrow">
             {pick(language, "Verdict language", "结论用语")}
@@ -426,7 +429,7 @@ function Home({ language }: { language: Language }) {
         </div>
       </section>
 
-      <section className="border border-line bg-gradient-to-br from-ink-elev via-ink-elev to-accent/[0.12] px-7 py-16">
+      <section className="landing-atmosphere landing-atmosphere-receipt border border-line bg-gradient-to-br from-ink-elev via-ink-elev to-accent/[0.12] px-7 py-16">
         <span className="eyebrow">
           {pick(language, "Decision receipt", "决策回执")}
         </span>
@@ -443,7 +446,7 @@ function Home({ language }: { language: Language }) {
         </a>
       </section>
 
-      <footer className="pt-6 text-[9px] font-semibold tracking-[0.04em] text-faint">
+      <footer className="landing-atmosphere landing-atmosphere-footer pt-6 text-[9px] font-semibold tracking-[0.04em] text-faint">
         {pick(
           language,
           "Parallax · Pre-sign decision layer · Explanation and adjustment only; not investment advice.",
