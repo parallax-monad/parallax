@@ -3,9 +3,11 @@ import { LANGUAGE_STORAGE_KEY, type Language, pick } from "@/lib/i18n";
 
 export function SiteNav({
   language,
+  active = "home",
   onLanguageChange,
 }: {
   language: Language;
+  active?: "home" | "analyze";
   onLanguageChange: (language: Language) => void;
 }) {
   useEffect(() => {
@@ -25,6 +27,15 @@ export function SiteNav({
         PARAL<span className="text-white">LAX</span>
       </a>
       <div className="ml-auto flex items-center gap-4 sm:gap-[30px]">
+        <a
+          href="#/analyze"
+          aria-current={active === "analyze" ? "page" : undefined}
+          className={`text-[13px] font-bold uppercase tracking-[0.08em] no-underline transition-colors hover:text-accent sm:text-[15px] ${
+            active === "analyze" ? "text-accent" : "text-dim"
+          }`}
+        >
+          {pick(language, "Analyze", "分析")}
+        </a>
         <div className="flex items-center border-l border-line-strong pl-4 sm:pl-[30px]">
           <button
             type="button"
@@ -35,8 +46,8 @@ export function SiteNav({
               "Switch to Simplified Chinese",
               "切换为简体中文",
             )}
-            className={`px-2 py-2 text-[10px] font-bold uppercase tracking-[0.08em] transition-colors hover:text-accent ${
-              language === "zh-CN" ? "text-accent" : "text-faint"
+            className={`px-2 py-2 text-[13px] font-bold uppercase tracking-[0.08em] transition-colors hover:text-accent ${
+              language === "zh-CN" ? "text-accent" : "text-dim"
             }`}
           >
             简中
@@ -49,8 +60,8 @@ export function SiteNav({
             onClick={() => onLanguageChange("en")}
             aria-pressed={language === "en"}
             aria-label={pick(language, "Switch to English", "切换为英文")}
-            className={`px-2 py-2 text-[10px] font-bold uppercase tracking-[0.08em] transition-colors hover:text-accent ${
-              language === "en" ? "text-accent" : "text-faint"
+            className={`px-2 py-2 text-[13px] font-bold uppercase tracking-[0.08em] transition-colors hover:text-accent ${
+              language === "en" ? "text-accent" : "text-dim"
             }`}
           >
             EN

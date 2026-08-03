@@ -12,7 +12,7 @@
     background: #000;
   }
   body {
-    @apply min-w-[320px] overflow-x-clip bg-ink text-white font-sans text-sm leading-relaxed antialiased;
+    @apply min-w-[320px] overflow-x-clip bg-ink text-white font-sans text-[15px] leading-relaxed antialiased;
   }
   button,
   input,
@@ -32,7 +32,7 @@
     @apply mx-auto w-[min(90vw,1500px)] px-4 pb-28 pt-16;
   }
   .eyebrow {
-    @apply mb-2 block text-[10px] font-bold uppercase tracking-[0.13em] text-accent;
+    @apply mb-2 block text-[12px] font-bold uppercase tracking-[0.13em] text-accent;
   }
   .card {
     @apply border border-line bg-ink-elev p-5 transition-colors hover:border-line-strong;
@@ -44,31 +44,43 @@
     @apply text-xs font-bold uppercase tracking-[0.06em];
   }
   .btn {
-    @apply inline-flex cursor-pointer items-center justify-center border border-neutral-600 bg-transparent px-4 py-2.5 text-[10px] font-extrabold uppercase tracking-[0.08em] text-white transition-colors hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:border-neutral-600 disabled:hover:text-white;
+    @apply inline-flex cursor-pointer items-center justify-center border border-neutral-600 bg-transparent px-5 py-3 text-[13px] font-extrabold uppercase tracking-[0.08em] text-white transition-colors hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:border-neutral-600 disabled:hover:text-white;
   }
   .btn-primary {
     @apply border-accent bg-accent text-accent-ink hover:bg-accent-bright hover:text-black hover:border-accent-bright;
   }
   .pill {
-    @apply inline-flex items-center gap-1.5 rounded-full border border-line-strong bg-ink-rail px-2 py-[3px] text-[9px] font-bold uppercase leading-tight tracking-[0.05em] text-dim;
+    @apply inline-flex items-center gap-1.5 rounded-full border border-line-strong bg-ink-rail px-2.5 py-[4px] text-[11px] font-bold uppercase leading-tight tracking-[0.05em] text-dim;
   }
-  .field label {
-    @apply mb-1.5 block text-[9px] font-bold uppercase tracking-[0.1em] text-faint;
+  /**
+   * Label text carries the gap, not the wrapper. Putting the margin on the
+   * <label> pushed the whole block down instead of separating caption from
+   * control, so editable and locked fields started their inputs at different
+   * heights and the grid rows looked ragged.
+   */
+  .field label,
+  .field .field-row {
+    @apply block;
+  }
+  .field label > span:first-child,
+  .field .field-caption {
+    @apply mb-2 block text-[12px] font-bold uppercase tracking-[0.08em] text-dim;
   }
   .field input,
-  .field select {
-    @apply w-full border border-line-strong bg-ink-rail px-3 py-2.5 text-xs text-white outline-none hover:border-neutral-500;
+  .field select,
+  .field .field-control {
+    @apply flex h-[46px] w-full items-center border border-line-strong bg-ink-rail px-3 text-[15px] text-white outline-none hover:border-neutral-500;
   }
   .kv {
     @apply grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-t border-line py-2.5;
   }
   .kv-label {
-    @apply text-[11.5px] text-dim;
+    @apply text-[14px] text-dim;
   }
   .kv-note {
-    @apply text-[10px] text-faint;
+    @apply text-[12px] text-dim;
   }
   .mono {
-    @apply break-all font-mono text-[11px];
+    @apply break-all font-mono text-[13px];
   }
 }

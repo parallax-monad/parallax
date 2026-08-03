@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { AnalyzePage } from "@/components/analyze/AnalyzePage";
 import { RouteGraph } from "@/components/RouteGraph";
 import { SiteNav } from "@/components/SiteNav";
 import {
@@ -101,13 +102,32 @@ const SCALE_BADGE: Record<string, string> = {
   high: "border-risk-high/50 text-risk-high",
 };
 
+function readRoute() {
+  return window.location.hash === "#/analyze" ? "analyze" : "home";
+}
+
 export default function App() {
   const [language, setLanguage] = useState<Language>(getInitialLanguage);
+  const [route, setRoute] = useState(readRoute);
+
+  useEffect(() => {
+    const sync = () => setRoute(readRoute());
+    window.addEventListener("hashchange", sync);
+    return () => window.removeEventListener("hashchange", sync);
+  }, []);
 
   return (
     <div className="min-h-[calc(100vh-65px)]">
-      <SiteNav language={language} onLanguageChange={setLanguage} />
-      <Home language={language} />
+      <SiteNav
+        active={route === "analyze" ? "analyze" : "home"}
+        language={language}
+        onLanguageChange={setLanguage}
+      />
+      {route === "analyze" ? (
+        <AnalyzePage language={language} />
+      ) : (
+        <Home language={language} />
+      )}
     </div>
   );
 }
@@ -281,7 +301,7 @@ function Home({ language }: { language: Language }) {
         </section>
       </div>
 
-      <section className="flex flex-col justify-between gap-4 border-y border-line py-3.5 text-[9px] font-bold tracking-[0.08em] text-faint sm:flex-row">
+      <section className="flex flex-col justify-between gap-4 border-y border-line py-3.5 text-[12px] font-bold tracking-[0.08em] text-dim sm:flex-row">
         <span>READ-ONLY WALLET ACCESS</span>
         <span>REPLAY FIXTURES CLEARLY LABELLED</span>
         <span>NO SIGNING · NO BROADCASTING</span>
@@ -292,7 +312,7 @@ function Home({ language }: { language: Language }) {
         <h2 className="m-0 mb-1.5 text-[clamp(24px,3vw,40px)] font-extrabold uppercase tracking-[-0.05em]">
           Four questions. One decision.
         </h2>
-        <p className="mb-5 text-xs text-faint">
+        <p className="mb-5 max-w-[720px] text-[15px] leading-[1.7] text-dim">
           {pick(
             language,
             "Every result answers the same four questions, so a failed swap turns into one concrete next step instead of another blind retry.",
@@ -305,16 +325,16 @@ function Home({ language }: { language: Language }) {
               className="card min-h-[180px] transition-transform hover:-translate-y-1 hover:border-accent"
               key={dimension.key}
             >
-              <span className="text-[9px] font-extrabold uppercase tracking-[0.1em] text-accent">
+              <span className="text-[12px] font-extrabold uppercase tracking-[0.1em] text-accent">
                 {dimension.key}
               </span>
-              <h3 className="mb-2 mt-5 text-[15px]">
+              <h3 className="mb-2 mt-5 text-[17px]">
                 {say(language, dimension.title)}
               </h3>
-              <p className="m-0 min-h-[53px] text-[11px] text-dim">
+              <p className="m-0 min-h-[53px] text-[14px] leading-[1.6] text-dim">
                 {say(language, dimension.body)}
               </p>
-              <b className="text-[8.5px] tracking-[0.08em]">OPEN EVIDENCE →</b>
+              <b className="text-[11px] tracking-[0.08em]">OPEN EVIDENCE →</b>
             </article>
           ))}
         </div>
@@ -326,7 +346,7 @@ function Home({ language }: { language: Language }) {
           <h2 className="m-0 text-[clamp(28px,3.4vw,52px)] font-extrabold uppercase leading-[0.95] tracking-[-0.06em]">
             Read the verdict.
           </h2>
-          <p className="mt-3 max-w-[410px] text-[15px] leading-[1.75] text-faint">
+          <p className="mt-3 max-w-[410px] text-[16px] leading-[1.75] text-dim">
             {pick(
               language,
               "Four verdicts, each stated in words. Proceed never means safe, and unknown is never treated as a pass.",
@@ -351,7 +371,7 @@ function Home({ language }: { language: Language }) {
                 >
                   {say(language, verdict.title)}
                 </span>
-                <p className="mt-2 text-sm leading-[1.65] text-faint">
+                <p className="mt-2 text-[15px] leading-[1.65] text-dim">
                   {say(language, verdict.body)}
                 </p>
               </div>
@@ -372,7 +392,7 @@ function Home({ language }: { language: Language }) {
         </a>
       </section>
 
-      <footer className="pt-6 text-[9px] font-semibold tracking-[0.04em] text-faint">
+      <footer className="pt-6 text-[12px] font-semibold tracking-[0.04em] text-dim">
         Parallax · Pre-sign decision layer · Explanation and adjustment only;
         not investment advice.
       </footer>
