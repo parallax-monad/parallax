@@ -1,4 +1,9 @@
-import type { NormalizedSwapIntent, RunResult } from "@parallax/contracts";
+import { isDeepStrictEqual } from "node:util";
+import type {
+  FailedRunResult,
+  NormalizedSwapIntent,
+  RunResult,
+} from "@parallax/contracts";
 
 export type CheckRunFailureCode =
   | "AGENT_FLOW_ERROR"
@@ -17,6 +22,7 @@ export type CheckRunRecord =
       parentRunId?: string;
       status: "failed";
       failure: CheckRunFailureCode;
+      result: FailedRunResult;
     }
   | {
       runId: string;
@@ -33,7 +39,11 @@ export interface RunStore {
     parentRunId?: string,
   ): Promise<void>;
   complete(result: RunResult): Promise<void>;
-  fail(runId: string, failure: CheckRunFailureCode): Promise<void>;
+  fail(
+    runId: string,
+    failure: CheckRunFailureCode,
+    result: FailedRunResult,
+  ): Promise<void>;
   get(runId: string): CheckRunRecord | undefined;
 }
 
@@ -77,8 +87,17 @@ export class InMemoryRunStore implements RunStore {
   public async fail(
     runId: string,
     failure: CheckRunFailureCode,
+    result: FailedRunResult,
   ): Promise<void> {
     const current = this.requireStarted(runId);
+    if (
+      result.runId !== runId ||
+      result.parentRunId !== current.parentRunId ||
+      !isDeepStrictEqual(result.intent, current.intent)
+    ) {
+      throw new Error(`Run ${runId} failure result does not match its start`);
+    }
+
     this.runs.set(
       runId,
       clone({
@@ -87,6 +106,7 @@ export class InMemoryRunStore implements RunStore {
         parentRunId: current.parentRunId,
         status: "failed",
         failure,
+        result,
       }),
     );
   }

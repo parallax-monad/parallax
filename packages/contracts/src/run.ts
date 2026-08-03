@@ -23,11 +23,7 @@ export const runDiffFieldSchema = z.enum([
   "amountInAtomic",
   "protocol",
   "recipient",
-  "recipientSource",
-  "tokenIn",
-  "tokenOut",
-  "route",
-  "economicBoundary",
+  "tokenPair",
 ]);
 
 export const changedFieldSchema = z
@@ -36,13 +32,17 @@ export const changedFieldSchema = z
     before: z.string(),
     after: z.string(),
   })
-  .strict();
+  .strict()
+  .refine(({ before, after }) => before !== after, {
+    message: "A Diff field must describe an actual change",
+    path: ["after"],
+  });
 
 export const runDiffSchema = z
   .object({
     previousRunId: runIdSchema,
     previousVerdict: verdictSchema,
-    changedFields: z.array(changedFieldSchema).min(1),
+    changedFields: z.array(changedFieldSchema).min(1).max(1),
   })
   .strict();
 

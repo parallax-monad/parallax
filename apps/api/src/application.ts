@@ -3,12 +3,15 @@ import { isDeepStrictEqual } from "node:util";
 import {
   checkSwapRequestSchema,
   type EvidenceRef,
-  type NormalizedSwapIntent,
-  type RunDiff,
+  type FailedRunResult,
+  failedRunResultSchema,
   type RunResult,
-  runDiffSchema,
   runResultSchema,
 } from "@parallax/contracts";
+import {
+  type RerunContext,
+  resolveRerun,
+} from "@parallax/orchestrator/application";
 import { normalizeCheckSwapRequest } from "./normalization.js";
 import type { AgentFlowPort } from "./ports.js";
 import type { BackendRuntime } from "./runtime-config.js";
@@ -28,6 +31,7 @@ export type CheckApiErrorBody = {
     message: string;
     issues?: unknown;
   };
+  run?: FailedRunResult;
 };
 
 export type CheckApplicationResponse =
@@ -85,12 +89,14 @@ export class CheckApplicationService {
       });
     }
 
+    const childFields = childRunFields(rerun.context);
+
     const runId = this.createRunId();
     try {
       await this.dependencies.store.start(
         runId,
         normalized.intent,
-        rerun.parentRunId,
+        childFields?.parentRunId,
       );
     } catch {
       return storeErrorResponse();
@@ -103,26 +109,32 @@ export class CheckApplicationService {
         intent: normalized.intent,
         moss: this.dependencies.runtime.config.moss,
       });
-    } catch {
-      const storeFailure = await this.recordFailure(runId, "AGENT_FLOW_ERROR");
-      if (storeFailure !== undefined) return storeFailure;
-      return errorResponse(502, {
-        code: "AGENT_FLOW_ERROR",
-        message: "Agent Flow could not complete the check",
-      });
+    } catch (error) {
+      return this.recordFailure(
+        runId,
+        "AGENT_FLOW_ERROR",
+        normalized.intent,
+        childFields,
+        {
+          code: "AGENT_FLOW_ERROR",
+          message: "Agent Flow could not complete the check",
+        },
+        error,
+      );
     }
 
     const parsedResult = runResultSchema.safeParse(candidate);
     if (!parsedResult.success) {
-      const storeFailure = await this.recordFailure(
+      return this.recordFailure(
         runId,
         "INVALID_AGENT_FLOW_RESPONSE",
+        normalized.intent,
+        childFields,
+        {
+          code: "INVALID_AGENT_FLOW_RESPONSE",
+          message: "Agent Flow returned an invalid RunResult",
+        },
       );
-      if (storeFailure !== undefined) return storeFailure;
-      return errorResponse(502, {
-        code: "INVALID_AGENT_FLOW_RESPONSE",
-        message: "Agent Flow returned an invalid RunResult",
-      });
     }
 
     const result = parsedResult.data;
@@ -133,16 +145,17 @@ export class CheckApplicationService {
       result.parentRunId !== undefined ||
       result.diff !== undefined
     ) {
-      const storeFailure = await this.recordFailure(
+      return this.recordFailure(
         runId,
         "INVALID_AGENT_FLOW_RESPONSE",
+        normalized.intent,
+        childFields,
+        {
+          code: "INVALID_AGENT_FLOW_RESPONSE",
+          message:
+            "Agent Flow returned a result for the wrong run ID, mode, or intent",
+        },
       );
-      if (storeFailure !== undefined) return storeFailure;
-      return errorResponse(502, {
-        code: "INVALID_AGENT_FLOW_RESPONSE",
-        message:
-          "Agent Flow returned a result for the wrong run ID, mode, or intent",
-      });
     }
 
     if (
@@ -151,25 +164,21 @@ export class CheckApplicationService {
         this.dependencies.runtime.config.moss,
       )
     ) {
-      const storeFailure = await this.recordFailure(
+      return this.recordFailure(
         runId,
         "INVALID_AGENT_FLOW_RESPONSE",
+        normalized.intent,
+        childFields,
+        {
+          code: "INVALID_AGENT_FLOW_RESPONSE",
+          message: "Agent Flow returned Evidence from a different Moss runtime",
+        },
       );
-      if (storeFailure !== undefined) return storeFailure;
-      return errorResponse(502, {
-        code: "INVALID_AGENT_FLOW_RESPONSE",
-        message: "Agent Flow returned Evidence from a different Moss runtime",
-      });
     }
 
     const resultWithRerun = runResultSchema.parse({
       ...result,
-      ...(rerun.parentRunId === undefined
-        ? {}
-        : {
-            parentRunId: rerun.parentRunId,
-            diff: rerun.diff,
-          }),
+      ...childFields,
     });
 
     try {
@@ -184,155 +193,166 @@ export class CheckApplicationService {
   private async recordFailure(
     runId: string,
     failure: CheckRunFailureCode,
-  ): Promise<CheckApplicationResponse | undefined> {
+    intent: Parameters<AgentFlowPort["check"]>[0]["intent"],
+    childFields: ChildRunFields | undefined,
+    apiError: CheckApiErrorBody["error"],
+    cause?: unknown,
+  ): Promise<CheckApplicationResponse> {
+    const result = createIntegrationErrorResult(
+      runId,
+      intent,
+      failure,
+      childFields,
+      cause,
+    );
     try {
-      await this.dependencies.store.fail(runId, failure);
-      return undefined;
+      await this.dependencies.store.fail(runId, failure, result);
     } catch {
       return storeErrorResponse();
     }
+
+    return {
+      status: 502,
+      body: { error: apiError, run: result },
+    };
   }
 }
 
-type RerunResolution =
-  | { success: true; parentRunId?: string; diff?: RunDiff }
-  | { success: false; message: string };
+type ChildRunFields = {
+  parentRunId: string;
+  diff: Extract<RerunContext, { kind: "child" }>["diff"];
+};
 
-function resolveRerun(
-  parentRunId: string | undefined,
-  intent: NormalizedSwapIntent,
-  store: RunStore,
-): RerunResolution {
-  if (parentRunId === undefined) {
-    return { success: true };
-  }
-
-  const parent = store.get(parentRunId);
-  if (parent?.status !== "completed" || parent.result.status !== "completed") {
-    return {
-      success: false,
-      message: "The parent Run does not exist or is not completed",
-    };
-  }
-
-  if (parent.result.replayMode) {
-    return {
-      success: false,
-      message: "Recorded Replay Runs cannot be re-run",
-    };
-  }
-
-  if (parent.result.parentRunId !== undefined) {
-    return {
-      success: false,
-      message: "Only one Re-run is supported for a baseline Run",
-    };
-  }
-
-  if (
-    parent.result.intent.chainId !== intent.chainId ||
-    parent.result.intent.sender.toLowerCase() !== intent.sender.toLowerCase()
-  ) {
-    return {
-      success: false,
-      message: "A Re-run must preserve the baseline chain and sender",
-    };
-  }
-
-  if (
-    !isDeepStrictEqual(
-      parent.result.intent.economicBoundary,
-      intent.economicBoundary,
-    )
-  ) {
-    return {
-      success: false,
-      message:
-        "A verification Re-run must preserve the baseline Economic Boundary",
-    };
-  }
-
-  const diff = buildRunDiff(parent.result, intent);
-  if (diff === undefined) {
-    return {
-      success: false,
-      message: "A Re-run must change at least one supported Intent field",
-    };
-  }
-
-  return { success: true, parentRunId, diff };
+function childRunFields(context: RerunContext): ChildRunFields | undefined {
+  return context.kind === "child"
+    ? { parentRunId: context.parentRunId, diff: context.diff }
+    : undefined;
 }
 
-function buildRunDiff(
-  previous: RunResult,
-  nextIntent: NormalizedSwapIntent,
-): RunDiff | undefined {
-  const changedFields: RunDiff["changedFields"] = [];
-  const addChange = (
-    field: RunDiff["changedFields"][number]["field"],
-    before: string,
-    after: string,
-  ) => {
-    if (before !== after) {
-      changedFields.push({ field, before, after });
-    }
-  };
-
-  addChange(
-    "amountInAtomic",
-    previous.intent.amountInAtomic,
-    nextIntent.amountInAtomic,
-  );
-  addChange("protocol", previous.intent.protocol, nextIntent.protocol);
-  addChange(
-    "recipient",
-    previous.intent.recipient.toLowerCase(),
-    nextIntent.recipient.toLowerCase(),
-  );
-  addChange(
-    "recipientSource",
-    previous.intent.recipientSource,
-    nextIntent.recipientSource,
-  );
-  addChange(
-    "tokenIn",
-    assetDiffValue(previous.intent.tokenIn),
-    assetDiffValue(nextIntent.tokenIn),
-  );
-  addChange(
-    "tokenOut",
-    assetDiffValue(previous.intent.tokenOut),
-    assetDiffValue(nextIntent.tokenOut),
-  );
-  addChange(
-    "economicBoundary",
-    boundaryDiffValue(previous.intent.economicBoundary),
-    boundaryDiffValue(nextIntent.economicBoundary),
-  );
-
-  if (changedFields.length === 0) {
-    return undefined;
-  }
-
-  return runDiffSchema.parse({
-    previousRunId: previous.runId,
-    previousVerdict: previous.verdict,
-    changedFields,
+function createIntegrationErrorResult(
+  runId: string,
+  intent: Parameters<AgentFlowPort["check"]>[0]["intent"],
+  failure: CheckRunFailureCode,
+  childFields: ChildRunFields | undefined,
+  cause?: unknown,
+): FailedRunResult {
+  return failedRunResultSchema.parse({
+    runId,
+    replayMode: false,
+    intent,
+    ...(childFields ?? {}),
+    status: "integration_error",
+    systemStatus: "INTEGRATION_ERROR",
+    verdict: "UNKNOWN",
+    summary: "The check could not be completed",
+    error: integrationErrorForFailure(failure, cause),
+    ruleResults: [],
+    recommendedActions: [],
+    irrelevantActions: [],
+    evidence: [],
+    scope: [
+      {
+        key: "P0-CHECK-SIMULATION-001",
+        label: "Moss simulation",
+        status: "unknown",
+        reason: "REQUIRED_CHECK_INTERRUPTED",
+      },
+    ],
   });
 }
 
-function assetDiffValue(asset: NormalizedSwapIntent["tokenIn"]): string {
-  return asset.kind === "native"
-    ? "native"
-    : `erc20:${asset.address.toLowerCase()}`;
+type IntegrationError = FailedRunResult["error"];
+
+function integrationErrorForFailure(
+  failure: CheckRunFailureCode,
+  cause: unknown,
+): IntegrationError {
+  if (failure === "INVALID_AGENT_FLOW_RESPONSE") {
+    return {
+      code: "INVALID_RESPONSE",
+      stage: "unknown",
+      message: "Agent Flow returned an invalid RunResult",
+      retryable: false,
+    };
+  }
+
+  const fields = asRecord(cause);
+  const rawCode = stringField(fields, "code");
+  const rawStatus = stringField(fields, "integrationStatus");
+  const source = stringField(fields, "source");
+  const stage = integrationErrorStage(stringField(fields, "stage"));
+
+  if (rawCode === "TIMEOUT" || rawStatus === "TIMEOUT") {
+    return {
+      code: "TIMEOUT",
+      stage,
+      message: "Agent Flow timed out",
+      retryable: true,
+    };
+  }
+
+  if (
+    rawCode === "RPC_UNAVAILABLE" ||
+    (rawStatus === "UNAVAILABLE" && source === "rpc")
+  ) {
+    return {
+      code: "RPC_UNAVAILABLE",
+      stage,
+      message: "The RPC dependency was unavailable",
+      retryable: true,
+    };
+  }
+
+  if (
+    rawCode === "MOSS_UNAVAILABLE" ||
+    (rawStatus === "UNAVAILABLE" && source === "moss")
+  ) {
+    return {
+      code: "MOSS_UNAVAILABLE",
+      stage,
+      message: "The Moss runtime was unavailable",
+      retryable: true,
+    };
+  }
+
+  return {
+    code: "INTERNAL_ERROR",
+    stage,
+    message: "Agent Flow failed internally",
+    retryable: false,
+  };
 }
 
-function boundaryDiffValue(
-  boundary: NormalizedSwapIntent["economicBoundary"],
-): string {
-  return boundary.availability === "available"
-    ? `available:${boundary.source}:${boundary.minimumReceivedAtomic}`
-    : "unavailable";
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  return typeof value === "object" && value !== null
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
+function stringField(
+  value: Record<string, unknown> | undefined,
+  field: string,
+): string | undefined {
+  const candidate = value?.[field];
+  return typeof candidate === "string" ? candidate : undefined;
+}
+
+function integrationErrorStage(
+  value: string | undefined,
+): IntegrationError["stage"] {
+  switch (value?.toUpperCase()) {
+    case "QUOTE":
+      return "quote";
+    case "ACTION":
+      return "action";
+    case "SIMULATE":
+    case "SIMULATION":
+      return "simulation";
+    case "NORMALIZATION":
+      return "normalization";
+    default:
+      return "unknown";
+  }
 }
 
 /**

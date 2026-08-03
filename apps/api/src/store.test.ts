@@ -1,4 +1,8 @@
-import type { NormalizedSwapIntent, RunResult } from "@parallax/contracts";
+import type {
+  FailedRunResult,
+  NormalizedSwapIntent,
+  RunResult,
+} from "@parallax/contracts";
 import { describe, expect, it } from "vitest";
 import { InMemoryRunStore } from "./store.js";
 
@@ -75,15 +79,81 @@ describe("InMemoryRunStore", () => {
     await expect(store.start("run-1", intent)).rejects.toThrow(
       "already exists",
     );
-    await store.fail("run-1", "AGENT_FLOW_ERROR");
+    const failureResult: FailedRunResult = {
+      runId: "run-1",
+      replayMode: false,
+      intent,
+      status: "integration_error",
+      systemStatus: "INTEGRATION_ERROR",
+      verdict: "UNKNOWN",
+      summary: "Agent Flow failed",
+      error: {
+        code: "MOSS_UNAVAILABLE",
+        stage: "unknown",
+        message: "Agent Flow failed",
+        retryable: true,
+      },
+      ruleResults: [],
+      recommendedActions: [],
+      irrelevantActions: [],
+      evidence: [],
+      scope: [
+        {
+          key: "P0-CHECK-SIMULATION-001",
+          label: "Moss simulation",
+          status: "unknown",
+          reason: "REQUIRED_CHECK_INTERRUPTED",
+        },
+      ],
+    };
+    await store.fail("run-1", "AGENT_FLOW_ERROR", failureResult);
 
     expect(store.get("run-1")).toMatchObject({
       status: "failed",
       failure: "AGENT_FLOW_ERROR",
+      result: { status: "integration_error", verdict: "UNKNOWN" },
     });
     await expect(
-      store.fail("run-1", "INVALID_AGENT_FLOW_RESPONSE"),
+      store.fail("run-1", "INVALID_AGENT_FLOW_RESPONSE", failureResult),
     ).rejects.toThrow("not in the started state");
+  });
+
+  it("rejects a failure result whose parent or intent differs from the started Run", async () => {
+    const store = new InMemoryRunStore();
+    await store.start("run-2", intent, "run-1");
+
+    const failureResult: FailedRunResult = {
+      runId: "run-2",
+      parentRunId: "other-parent",
+      replayMode: false,
+      intent,
+      status: "integration_error",
+      systemStatus: "INTEGRATION_ERROR",
+      verdict: "UNKNOWN",
+      summary: "Agent Flow failed",
+      error: {
+        code: "MOSS_UNAVAILABLE",
+        stage: "unknown",
+        message: "Agent Flow failed",
+        retryable: true,
+      },
+      ruleResults: [],
+      recommendedActions: [],
+      irrelevantActions: [],
+      evidence: [],
+      scope: [
+        {
+          key: "P0-CHECK-SIMULATION-001",
+          label: "Moss simulation",
+          status: "unknown",
+          reason: "REQUIRED_CHECK_INTERRUPTED",
+        },
+      ],
+    };
+
+    await expect(
+      store.fail("run-2", "AGENT_FLOW_ERROR", failureResult),
+    ).rejects.toThrow("failure result does not match");
   });
 
   it("does not expose mutable references to stored records", async () => {

@@ -2383,6 +2383,62 @@ describe("run diff, scope, and serialization", () => {
     expect(result.changedFields[0]?.field).toBe("amountInAtomic");
   });
 
+  it("accepts a token-pair diff as one Intent condition", () => {
+    expect(
+      runDiffSchema.safeParse({
+        previousRunId: "run-1",
+        previousVerdict: "STOP",
+        changedFields: [
+          {
+            field: "tokenPair",
+            before: "native->erc20:0xabcdefabcdefabcdefabcdefabcdefabcdefabcd",
+            after: "erc20:0xabcdefabcdefabcdefabcdefabcdefabcdefabcd->native",
+          },
+        ],
+      }).success,
+    ).toBe(true);
+  });
+
+  it("rejects a Diff that contains multiple Intent conditions", () => {
+    expect(
+      runDiffSchema.safeParse({
+        previousRunId: "run-1",
+        previousVerdict: "ADJUST",
+        changedFields: [
+          {
+            field: "amountInAtomic",
+            before: "1000000000000000000",
+            after: "2000000000000000000",
+          },
+          { field: "protocol", before: "kuru", after: "pancake" },
+        ],
+      }).success,
+    ).toBe(false);
+  });
+
+  it("rejects a no-op Diff field", () => {
+    expect(
+      runDiffSchema.safeParse({
+        previousRunId: "run-1",
+        previousVerdict: "UNKNOWN",
+        changedFields: [{ field: "amountInAtomic", before: "1", after: "1" }],
+      }).success,
+    ).toBe(false);
+  });
+
+  it.each(["route", "economicBoundary"])(
+    "rejects unsupported Re-run Diff field %s",
+    (field) => {
+      expect(
+        runDiffSchema.safeParse({
+          previousRunId: "run-1",
+          previousVerdict: "ADJUST",
+          changedFields: [{ field, before: "before", after: "after" }],
+        }).success,
+      ).toBe(false);
+    },
+  );
+
   it("represents recipient-only reruns in the structured diff", () => {
     expect(
       runDiffSchema.safeParse({
@@ -2399,7 +2455,7 @@ describe("run diff, scope, and serialization", () => {
     ).toBe(true);
   });
 
-  it("preserves recipient provenance in a rerun diff", () => {
+  it("rejects recipient provenance as an independent rerun diff", () => {
     expect(
       runDiffSchema.safeParse({
         previousRunId: "run-1",
@@ -2412,7 +2468,7 @@ describe("run diff, scope, and serialization", () => {
           },
         ],
       }).success,
-    ).toBe(true);
+    ).toBe(false);
   });
 
   it("rejects duplicate scope keys", () => {
