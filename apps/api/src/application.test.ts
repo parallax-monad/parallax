@@ -8,7 +8,7 @@ import type {
 import { describe, expect, it } from "vitest";
 import { CheckApplicationService } from "./application.js";
 import { normalizeCheckSwapRequest } from "./normalization.js";
-import type { AgentFlowPort } from "./ports.js";
+import { type AgentFlowPort, UnsupportedAgentFlowError } from "./ports.js";
 import type { BackendRuntime } from "./runtime-config.js";
 import { InMemoryRunStore, type RunStore } from "./store.js";
 import { createTrustedTokenRegistry } from "./trusted-token-registry.js";
@@ -1127,6 +1127,43 @@ describe("CheckApplicationService", () => {
     expect(response).toMatchObject({
       status: 502,
       body: { run: { error: testCase.expected } },
+    });
+  });
+
+  it("returns UNSUPPORTED when Live Agent Flow is not wired", async () => {
+    const store = new InMemoryRunStore();
+    const service = createService(
+      {
+        async check() {
+          throw new UnsupportedAgentFlowError();
+        },
+      },
+      store,
+    );
+
+    const response = await service.check(publicRequest());
+
+    expect(response).toMatchObject({
+      status: 502,
+      body: {
+        error: {
+          code: "UNSUPPORTED",
+          message: "Live Agent Flow is not available in this runtime",
+        },
+        run: {
+          status: "integration_error",
+          verdict: "UNKNOWN",
+          error: {
+            code: "UNSUPPORTED",
+            stage: "unknown",
+            retryable: false,
+          },
+        },
+      },
+    });
+    expect(store.get("run-1")).toMatchObject({
+      status: "failed",
+      failure: "UNSUPPORTED",
     });
   });
 

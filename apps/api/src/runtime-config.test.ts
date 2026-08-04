@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   backendRuntimeConfigSchema,
   bootstrapBackendRuntime,
+  parseTokenRegistryEnvironment,
 } from "./runtime-config.js";
 
 const tokenRegistryConfig = {
@@ -25,6 +26,23 @@ const environment = {
 };
 
 describe("backend runtime config", () => {
+  it("parses verified token metadata from the launcher environment", () => {
+    expect(
+      parseTokenRegistryEnvironment({
+        PARALLAX_TOKEN_REGISTRY_JSON: JSON.stringify(tokenRegistryConfig),
+      }),
+    ).toEqual(tokenRegistryConfig);
+  });
+
+  it("reports a missing or malformed token registry environment value", () => {
+    expect(() => parseTokenRegistryEnvironment({})).toThrow(
+      "PARALLAX_TOKEN_REGISTRY_JSON is required",
+    );
+    expect(() =>
+      parseTokenRegistryEnvironment({ PARALLAX_TOKEN_REGISTRY_JSON: "{" }),
+    ).toThrow(/PARALLAX_TOKEN_REGISTRY_JSON must be valid JSON/);
+  });
+
   it("bootstraps from environment and backend-owned token metadata", () => {
     const runtime = bootstrapBackendRuntime({
       environment,

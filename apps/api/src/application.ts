@@ -14,7 +14,7 @@ import {
   resolveRerun,
 } from "@parallax/orchestrator/application";
 import { normalizeCheckSwapRequest } from "./normalization.js";
-import type { AgentFlowPort } from "./ports.js";
+import { type AgentFlowPort, isUnsupportedAgentFlowError } from "./ports.js";
 import type { BackendRuntime } from "./runtime-config.js";
 import type { CheckRunFailureCode, RunStore } from "./store.js";
 
@@ -22,6 +22,7 @@ export type CheckApiErrorCode =
   | "INVALID_REQUEST"
   | "NORMALIZATION_FAILED"
   | "INVALID_RERUN"
+  | "UNSUPPORTED"
   | "AGENT_FLOW_ERROR"
   | "INVALID_AGENT_FLOW_RESPONSE"
   | "RUN_STORE_ERROR";
@@ -121,14 +122,17 @@ export class CheckApplicationService {
         moss: this.dependencies.runtime.config.moss,
       });
     } catch (error) {
+      const unsupported = isUnsupportedAgentFlowError(error);
       return this.recordFailure(
         runId,
-        "AGENT_FLOW_ERROR",
+        unsupported ? "UNSUPPORTED" : "AGENT_FLOW_ERROR",
         normalized.intent,
         childFields,
         {
-          code: "AGENT_FLOW_ERROR",
-          message: "Agent Flow could not complete the check",
+          code: unsupported ? "UNSUPPORTED" : "AGENT_FLOW_ERROR",
+          message: unsupported
+            ? "Live Agent Flow is not available in this runtime"
+            : "Agent Flow could not complete the check",
         },
         error,
       );
@@ -278,6 +282,15 @@ function integrationErrorForFailure(
   failure: CheckRunFailureCode,
   cause: unknown,
 ): IntegrationError {
+  if (failure === "UNSUPPORTED") {
+    return {
+      code: "UNSUPPORTED",
+      stage: "unknown",
+      message: "Live Agent Flow is not available in this runtime",
+      retryable: false,
+    };
+  }
+
   if (failure === "INVALID_AGENT_FLOW_RESPONSE") {
     return {
       code: "INVALID_RESPONSE",

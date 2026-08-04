@@ -6,6 +6,7 @@ import type {
 } from "@parallax/contracts";
 
 export type CheckRunFailureCode =
+  | "UNSUPPORTED"
   | "AGENT_FLOW_ERROR"
   | "INVALID_AGENT_FLOW_RESPONSE";
 
