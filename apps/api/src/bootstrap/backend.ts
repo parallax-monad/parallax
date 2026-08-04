@@ -3,10 +3,11 @@ import { serializeJson } from "@parallax/contracts";
 import type { ReplayFixtureRepository } from "@parallax/orchestrator/application";
 import { ReplayApplicationService } from "@parallax/orchestrator/application";
 import { Hono } from "hono";
+import { cors } from "hono/cors";
 import { z } from "zod";
 import { CheckApplicationService } from "../application.js";
 import { createCheckApp } from "../http.js";
-import type { AgentFlowPort } from "../ports.js";
+import { type AgentFlowPort, UnsupportedAgentFlowError } from "../ports.js";
 import { createReplayApp } from "../routes/replay.js";
 import {
   type BackendRuntime,
@@ -16,6 +17,11 @@ import { FileReplayFixtureRepository } from "../storage/replay-fixture-repositor
 import { InMemoryRunStore, type RunStore } from "../store.js";
 
 const serverEnvironmentSchema = z.object({
+  CORS_ORIGIN: z.preprocess(
+    (value) =>
+      typeof value === "string" && value.trim() === "" ? undefined : value,
+    z.string().trim().url().optional(),
+  ),
   HOST: z.string().trim().min(1).optional(),
   PORT: z.preprocess(
     (value) =>
@@ -24,19 +30,25 @@ const serverEnvironmentSchema = z.object({
   ),
 });
 
+const defaultCorsOrigin = "http://localhost:5173";
+
 const listenerConfigSchema = z.object({
   HOST: z.preprocess(
     (value) => value ?? "",
     z.string().trim().min(1, "HOST is required"),
   ),
-  PORT: z.preprocess(
-    (value) => value ?? -1,
-    z
-      .number()
-      .int()
-      .min(0, "PORT must be between 0 and 65535")
-      .max(65_535, "PORT must be between 0 and 65535"),
-  ),
+  PORT: z
+    .preprocess(
+      (value) =>
+        typeof value === "string" && value.trim() === "" ? undefined : value,
+      z
+        .number()
+        .int()
+        .min(0, "PORT must be between 0 and 65535")
+        .max(65_535, "PORT must be between 0 and 65535")
+        .optional(),
+    )
+    .refine((port) => port !== undefined, "PORT is required"),
 });
 
 /**
@@ -46,12 +58,13 @@ const listenerConfigSchema = z.object({
  */
 export class UnavailableAgentFlow implements AgentFlowPort {
   public async check(): Promise<never> {
-    throw new Error("The live Agent Flow is not configured");
+    throw new UnsupportedAgentFlowError();
   }
 }
 
 export type BackendAppDependencies = {
   runtime: BackendRuntime;
+  corsOrigin?: string;
   agentFlow?: AgentFlowPort;
   store?: RunStore;
   replayRepository?: ReplayFixtureRepository;
@@ -70,6 +83,14 @@ export function createBackendApp(dependencies: BackendAppDependencies): Hono {
   });
 
   const app = new Hono();
+  app.use(
+    "/api/*",
+    cors({
+      origin: dependencies.corsOrigin ?? defaultCorsOrigin,
+      allowMethods: ["GET", "POST", "OPTIONS"],
+      allowHeaders: ["Content-Type"],
+    }),
+  );
   app.route("/", createCheckApp(checkService));
   app.route("/", createReplayApp(replayService));
   app.notFound(() => jsonError(404, "NOT_FOUND", "Route not found"));
@@ -87,6 +108,7 @@ export function createBackendApp(dependencies: BackendAppDependencies): Hono {
 export type BootstrapBackendAppOptions = {
   environment?: unknown;
   tokenRegistry: unknown;
+  corsOrigin?: string;
   agentFlow?: AgentFlowPort;
   store?: RunStore;
   replayRepository?: ReplayFixtureRepository;
@@ -94,13 +116,16 @@ export type BootstrapBackendAppOptions = {
 
 /** Validates production configuration before composing the backend app. */
 export function bootstrapBackendApp(options: BootstrapBackendAppOptions): Hono {
+  const environment = options.environment ?? process.env;
+  const serverEnvironment = serverEnvironmentSchema.parse(environment);
   const runtime = bootstrapBackendRuntime({
-    environment: options.environment ?? process.env,
+    environment,
     tokenRegistry: options.tokenRegistry,
   });
 
   return createBackendApp({
     runtime,
+    corsOrigin: options.corsOrigin ?? serverEnvironment.CORS_ORIGIN,
     agentFlow: options.agentFlow,
     store: options.store,
     replayRepository: options.replayRepository,

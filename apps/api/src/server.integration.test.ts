@@ -1,7 +1,7 @@
 import type { AddressInfo } from "node:net";
 import type { ServerType } from "@hono/node-server";
 import { describe, expect, it } from "vitest";
-import { startBackendServer } from "./bootstrap/backend.js";
+import { startConfiguredBackendServer } from "./server.js";
 
 const sender = "0x1111111111111111111111111111111111111111";
 const usdcAddress = "0xabcdefabcdefabcdefabcdefabcdefabcdefabcd";
@@ -22,6 +22,10 @@ const environment = {
   MONAD_RPC_URL: "https://rpc.example.test",
   MOSS_RUNTIME_VERSION: "confirmed-portable-baseline",
   MOSS_RUNTIME_REVISION: "moss-commit-123",
+  PARALLAX_TOKEN_REGISTRY_JSON: JSON.stringify(tokenRegistry),
+  CORS_ORIGIN: "http://localhost:5173",
+  HOST: "127.0.0.1",
+  PORT: "0",
 };
 
 function checkRequest() {
@@ -43,11 +47,8 @@ describe("real Node backend listener", () => {
   it("serves composed Replay and Check routes over HTTP", async () => {
     let server: ServerType | undefined;
     const address = await new Promise<AddressInfo>((resolve, reject) => {
-      server = startBackendServer({
+      server = startConfiguredBackendServer({
         environment,
-        tokenRegistry,
-        hostname: "127.0.0.1",
-        port: 0,
         onListening: resolve,
       });
       server.once("error", reject);
@@ -55,6 +56,19 @@ describe("real Node backend listener", () => {
 
     try {
       const baseUrl = `http://127.0.0.1:${address.port}`;
+      const preflight = await fetch(`${baseUrl}/api/check`, {
+        method: "OPTIONS",
+        headers: {
+          Origin: "http://localhost:5173",
+          "Access-Control-Request-Method": "POST",
+          "Access-Control-Request-Headers": "content-type",
+        },
+      });
+      expect(preflight.status).toBe(204);
+      expect(preflight.headers.get("access-control-allow-origin")).toBe(
+        "http://localhost:5173",
+      );
+
       const replay = await fetch(`${baseUrl}/api/replay/mon-to-usdc`);
       expect(replay.status).toBe(200);
       expect(replay.headers.get("content-type")).toBe(
@@ -68,7 +82,7 @@ describe("real Node backend listener", () => {
       });
       expect(check.status).toBe(502);
       await expect(check.json()).resolves.toMatchObject({
-        error: { code: "AGENT_FLOW_ERROR" },
+        error: { code: "UNSUPPORTED" },
       });
     } finally {
       await new Promise<void>((resolve, reject) => {

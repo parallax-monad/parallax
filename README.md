@@ -54,10 +54,17 @@ Target MVP completion date: August 5, 2026.
 ## Backend runtime
 
 The Node runtime is composed through `bootstrapBackendApp()` and can be
-started directly with `pnpm --filter @parallax/api start`. The launcher
+started directly with `pnpm --filter @parallax/api start` after copying
+`.env.example` to `.env` and filling in the required values. The launcher
 requires `MONAD_RPC_URL`, `MOSS_RUNTIME_VERSION`, `MOSS_RUNTIME_REVISION`,
-`PARALLAX_TOKEN_REGISTRY_JSON`, `HOST`, and `PORT`, and reports configuration
-errors before opening the listener.
+`PARALLAX_TOKEN_REGISTRY_JSON`, `HOST`, and `PORT`, and optionally accepts
+`CORS_ORIGIN` for the browser origin allowed to call the API. It reports
+configuration errors before opening the listener.
+
+```bash
+cp .env.example .env
+pnpm --filter @parallax/api start
+```
 
 P2 does not include the live Agent Flow implementation; until it is injected,
 `POST /api/check` returns a diagnostic integration error rather than a fake

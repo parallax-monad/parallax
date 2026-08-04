@@ -63,8 +63,8 @@ describe("backend Node runtime", () => {
     expect(checkResponse.status).toBe(502);
     await expect(checkResponse.json()).resolves.toMatchObject({
       error: {
-        code: "AGENT_FLOW_ERROR",
-        message: "Agent Flow could not complete the check",
+        code: "UNSUPPORTED",
+        message: "Live Agent Flow is not available in this runtime",
       },
     });
   });
@@ -134,7 +134,7 @@ describe("backend Node runtime", () => {
           tokenRegistry,
           serverFactory: () => ({ close: () => undefined }) as never,
         }),
-      ).toThrow(/PORT must be between 0 and 65535/);
+      ).toThrow(/PORT is required/);
     },
   );
 

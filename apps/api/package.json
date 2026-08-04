@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "tsx src/server.ts",
+    "start": "node --env-file=../../.env --import=tsx src/server.ts",
     "test": "vitest run --exclude src/server.integration.test.ts",
     "test:integration": "vitest run --config vitest.integration.config.ts src/server.integration.test.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json"
