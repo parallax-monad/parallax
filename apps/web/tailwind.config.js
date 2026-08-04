@@ -5,33 +5,33 @@ export default {
     extend: {
       colors: {
         ink: {
-          DEFAULT: "#000000",
-          elev: "#111111",
-          elev2: "#141414",
-          rail: "#0a0a0a",
+          DEFAULT: "#fafafa",
+          elev: "#ffffff",
+          elev2: "#f4f4f5",
+          rail: "#f0f0f2",
         },
         line: {
-          DEFAULT: "#1e1e1e",
-          strong: "#2a2a2a",
+          DEFAULT: "#c8c8cf",
+          strong: "#a8a8b0",
         },
-        dim: "#a2a2a2",
-        faint: "#777777",
+        dim: "#3f3f46",
+        faint: "#6b6b75",
         accent: {
-          DEFAULT: "#ccff00",
-          ink: "#080a00",
-          bright: "#e0ff4d",
+          DEFAULT: "#5840ff",
+          ink: "#ffffff",
+          bright: "#6e54ff",
         },
         risk: {
-          low: "#22c55e",
-          moderate: "#eab308",
-          elevated: "#f97316",
-          high: "#ef4444",
-          info: "#888888",
+          low: "#15803d",
+          moderate: "#b45309",
+          elevated: "#0e7490",
+          high: "#dc2626",
+          info: "#6b6b75",
         },
       },
       fontFamily: {
-        sans: ["Inter", "PingFang TC", "Microsoft JhengHei", "sans-serif"],
-        mono: ["SFMono-Regular", "Consolas", "monospace"],
+        sans: ["Archivo", "PingFang SC", "Microsoft YaHei", "sans-serif"],
+        mono: ["IBM Plex Mono", "SFMono-Regular", "Consolas", "monospace"],
       },
       keyframes: {
         "flow-reveal": {

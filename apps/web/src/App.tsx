@@ -5,8 +5,10 @@ import {
   useRef,
   useState,
 } from "react";
+import { HeroEvidenceReceipt } from "@/components/HeroEvidenceReceipt";
 import { RouteGraph } from "@/components/RouteGraph";
 import { SiteNav } from "@/components/SiteNav";
+import { VerdictActions } from "@/components/VerdictActions";
 import {
   type Copy,
   getInitialLanguage,
@@ -27,7 +29,7 @@ const DIMENSIONS: Dimension[] = [
   {
     key: "Cause",
     displayKey: { en: "Cause", zh: "原因" },
-    accent: "#9b7cff",
+    accent: "#5840ff",
     title: { en: "What happened", zh: "发生了什么" },
     body: {
       en: "Moss runs quote, action, and simulation to show the real execution result of this intent.",
@@ -37,7 +39,7 @@ const DIMENSIONS: Dimension[] = [
   {
     key: "Evidence",
     displayKey: { en: "Evidence", zh: "证据" },
-    accent: "#69d7ff",
+    accent: "#6e54ff",
     title: { en: "What proves it", zh: "证据是什么" },
     body: {
       en: "Every conclusion traces back to normalized execution evidence, labelled with source, block, and replay.",
@@ -47,7 +49,7 @@ const DIMENSIONS: Dimension[] = [
   {
     key: "Adjust",
     displayKey: { en: "Adjust", zh: "调整" },
-    accent: "#ccff00",
+    accent: "#836ef9",
     title: { en: "What you can change", zh: "可以改什么" },
     body: {
       en: "Adjustments tied to the actual cause: route, token pair, amount, or slippage.",
@@ -57,7 +59,7 @@ const DIMENSIONS: Dimension[] = [
   {
     key: "Irrelevant",
     displayKey: { en: "Irrelevant", zh: "无关项" },
-    accent: "#7e8cff",
+    accent: "#a8a8b0",
     title: { en: "What will not help", zh: "改了也无效" },
     body: {
       en: "Changes unrelated to the cause are marked irrelevant, so retries stop being guesswork.",
@@ -65,78 +67,6 @@ const DIMENSIONS: Dimension[] = [
     },
   },
 ];
-
-type Verdict = {
-  grade: string;
-  displayGrade: Copy;
-  level: string;
-  title: Copy;
-  body: Copy;
-};
-
-const SCALE: Verdict[] = [
-  {
-    grade: "PROCEED",
-    displayGrade: { en: "PROCEED", zh: "继续" },
-    level: "low",
-    title: { en: "No blocking evidence", zh: "未发现阻断证据" },
-    body: {
-      en: "No blocking evidence was found in the checked scope. This is not a safety guarantee.",
-      zh: "在本次已检查范围内未发现阻断证据。这不代表交易绝对安全。",
-    },
-  },
-  {
-    grade: "ADJUST",
-    displayGrade: { en: "ADJUST", zh: "调整" },
-    level: "moderate",
-    title: { en: "Change one condition", zh: "修改一个条件" },
-    body: {
-      en: "A transaction condition needs to change, then the check can be re-run.",
-      zh: "需要修改一个交易条件，之后可以重新执行检查。",
-    },
-  },
-  {
-    grade: "STOP",
-    displayGrade: { en: "STOP", zh: "停止" },
-    level: "high",
-    title: { en: "Do not continue", zh: "不应继续" },
-    body: {
-      en: "This path cannot execute. Switch route or token pair, or stop here.",
-      zh: "当前路径无法执行，请更换路由或代币对，或在此停止。",
-    },
-  },
-  {
-    grade: "UNKNOWN",
-    displayGrade: { en: "UNKNOWN", zh: "未知" },
-    level: "elevated",
-    title: { en: "Evidence missing", zh: "证据不足" },
-    body: {
-      en: "Evidence is insufficient for a trustworthy conclusion, and unknown is never auto-passed.",
-      zh: "证据不足以得出可信结论；“未知”绝不会被自动视为通过。",
-    },
-  },
-];
-
-const SCALE_COLOR: Record<string, string> = {
-  low: "text-risk-low",
-  moderate: "text-risk-moderate",
-  elevated: "text-risk-elevated",
-  high: "text-risk-high",
-};
-
-const SCALE_BADGE: Record<string, string> = {
-  low: "border-risk-low/50 text-risk-low",
-  moderate: "border-risk-moderate/50 text-risk-moderate",
-  elevated: "border-risk-elevated/50 text-risk-elevated",
-  high: "border-risk-high/50 text-risk-high",
-};
-
-const SCALE_HEX: Record<string, string> = {
-  low: "#22c55e",
-  moderate: "#eab308",
-  elevated: "#f97316",
-  high: "#ef4444",
-};
 
 function moveSurfaceGlow(event: ReactPointerEvent<HTMLElement>) {
   if (event.pointerType === "touch") return;
@@ -255,61 +185,64 @@ function Home({ language }: { language: Language }) {
         <section className="sticky top-0 h-screen overflow-hidden">
           <div
             aria-hidden="true"
-            className="pointer-events-none absolute inset-0 z-0 bg-[#02030a]"
+            className="hero-monad-light pointer-events-none absolute inset-0 z-0"
           />
-          <div className="absolute inset-0 z-[1]">
+          <div className="hero-route-trace absolute inset-0 z-[1]">
             <RouteGraph language={language} progressRef={heroProgressRef} />
           </div>
           <div
             ref={shadeRef}
             aria-hidden="true"
-            className="pointer-events-none absolute inset-0 z-[2] opacity-0 [background:radial-gradient(ellipse_at_center,rgba(0,0,0,0.88)_0%,rgba(0,0,0,0.62)_36%,rgba(0,0,0,0.2)_72%,rgba(0,0,0,0.36)_100%)]"
+            className="pointer-events-none absolute inset-0 z-[2] opacity-0 [background:radial-gradient(ellipse_at_center,rgba(250,250,250,0.96)_0%,rgba(250,250,250,0.82)_38%,rgba(250,250,250,0.24)_72%,rgba(248,247,255,0.46)_100%)]"
           />
-          <div className="pointer-events-none absolute inset-0 z-[3] flex items-center justify-center px-5 pt-[6vh] sm:px-10">
+          <div className="pointer-events-none absolute inset-0 z-[3] flex items-center justify-center px-5 pt-[7vh] sm:px-10">
             <div
               ref={revealRef}
               data-hero-copy=""
-              className="w-full max-w-[1180px] text-center opacity-0 will-change-[opacity,transform]"
+              className="hero-reveal-grid w-full max-w-[1260px] opacity-0 will-change-[opacity,transform]"
             >
-              <h1
-                data-hero-title=""
-                className="m-0 text-[clamp(50px,14vw,78px)] font-extrabold uppercase leading-[0.9] tracking-[-0.045em] sm:text-[clamp(64px,8.5vw,140px)]"
-              >
-                {language === "zh-CN" ? (
-                  <>
-                    <span className="block">签署之前</span>
-                    <em className="mt-[0.08em] block whitespace-nowrap not-italic text-accent">
-                      先看清楚。
-                    </em>
-                  </>
-                ) : (
-                  <>
-                    <span className="block">SEE IT</span>
-                    <em className="mt-[0.08em] hidden whitespace-nowrap not-italic text-accent sm:block">
-                      BEFORE YOU SIGN.
-                    </em>
-                    <em className="mt-[0.08em] block not-italic text-accent sm:hidden">
-                      <span className="block">BEFORE YOU</span>
-                      <span className="block">SIGN.</span>
-                    </em>
-                  </>
-                )}
-              </h1>
-              <p className="m-0 mx-auto mt-9 max-w-[680px] text-[15px] leading-[1.85] text-white/70 sm:mt-11 sm:text-[16px]">
-                {pick(
-                  language,
-                  "A pre-sign explanation and adjustment layer for Monad swaps powered by Moss. Understand what will happen, where material loss or exposure may occur, and what you can adjust before signing.",
-                  "基于 Moss 的 Monad 兑换交易签名前解释与调整层。签名前看清交易会如何执行、哪些地方可能产生重大损耗或风险暴露，以及可以调整哪些条件。",
-                )}
-              </p>
-              <div className="pointer-events-auto mt-9 flex flex-wrap justify-center gap-3 sm:mt-10">
-                <a href="#/analyze" className="btn btn-primary">
-                  {pick(language, "Analyze transaction", "分析交易")}
-                </a>
-                <a href="#framework" className="btn">
-                  {pick(language, "How it works", "运作方式")}
-                </a>
+              <div className="hero-copy-column">
+                <span className="hero-copy-kicker">
+                  PARALLAX / PRE-SIGN EVIDENCE
+                </span>
+                <h1
+                  data-hero-title=""
+                  className="m-0 text-[clamp(46px,10vw,74px)] font-extrabold uppercase leading-[0.9] tracking-[-0.05em] sm:text-[clamp(54px,6.2vw,92px)]"
+                >
+                  {language === "zh-CN" ? (
+                    <>
+                      <span className="block">先看证据</span>
+                      <em className="mt-[0.08em] block not-italic text-accent">
+                        再决定是否签署
+                      </em>
+                    </>
+                  ) : (
+                    <>
+                      <span className="block">READ THE</span>
+                      <span className="block">EVIDENCE.</span>
+                      <em className="mt-[0.08em] block not-italic text-accent">
+                        BEFORE YOU SIGN.
+                      </em>
+                    </>
+                  )}
+                </h1>
+                <p className="m-0 mt-7 max-w-[620px] text-[14px] leading-[1.75] text-[#3f3f46] sm:mt-9 sm:text-[16px]">
+                  {pick(
+                    language,
+                    "Parallax turns one Moss replay into a traceable receipt—showing the intent, route, prepared action, simulation, boundary, and provenance before anything is signed.",
+                    "Parallax 将一次 Moss 回放整理为可追溯的证据回执，在签署前呈现交易意图、路径、已生成操作、模拟结果、经济边界与证据来源。",
+                  )}
+                </p>
+                <div className="pointer-events-auto mt-8 flex flex-wrap gap-3 sm:mt-10">
+                  <a href="#/analyze" className="btn btn-primary">
+                    {pick(language, "Analyze transaction", "分析交易")}
+                  </a>
+                  <a href="#framework" className="btn">
+                    {pick(language, "How it works", "运作方式")}
+                  </a>
+                </div>
               </div>
+              <HeroEvidenceReceipt language={language} />
             </div>
           </div>
         </section>
@@ -349,7 +282,7 @@ function Home({ language }: { language: Language }) {
               {pick(
                 language,
                 "Four questions. One decision.",
-                "四个问题，一个决定。",
+                "四个问题，一个决定",
               )}
             </h2>
             <p className="mb-9 max-w-[700px] text-[14px] leading-[1.7] text-faint sm:mb-11 sm:text-[16px]">
@@ -386,55 +319,26 @@ function Home({ language }: { language: Language }) {
             </div>
           </section>
 
-          <section className="mt-24 grid grid-cols-1 gap-12 border-t border-line py-20 sm:mt-32 sm:py-28 lg:grid-cols-[minmax(360px,0.95fr)_minmax(0,1.05fr)] lg:gap-20 xl:gap-28">
-            <div>
+          <section className="mt-24 border-t border-line py-20 sm:mt-32 sm:py-28">
+            <div className="text-center">
               <span className="eyebrow">
-                {pick(language, "Verdict language", "结论用语")}
+                {pick(language, "Verdict language", "判读逻辑")}
               </span>
               <h2
                 data-section-heading=""
-                className="m-0 max-w-[620px] text-[clamp(40px,5.5vw,76px)] font-extrabold uppercase leading-[0.92] tracking-[-0.05em]"
+                className="m-0 whitespace-nowrap text-[clamp(32px,5.5vw,76px)] font-extrabold uppercase leading-[0.92] tracking-[-0.05em]"
               >
-                {pick(language, "Read the verdict.", "读懂结论。")}
+                {pick(language, "Read the verdict.", "结论，一目了然")}
               </h2>
-              <p className="mt-6 max-w-[520px] text-[15px] leading-[1.75] text-faint sm:text-[16px]">
+              <p className="mx-auto mt-6 max-w-[680px] text-[15px] leading-[1.75] text-faint sm:text-[16px]">
                 {pick(
                   language,
-                  "Four verdicts, each stated in words. Proceed never means safe, and unknown is never treated as a pass.",
-                  "四种结论，均以文字清楚说明。“继续”不代表安全，“未知”也绝不会被视为通过。",
+                  "Each dot is an illustrative replay result. Explore the field to see how evidence maps to a signing action.",
+                  "每枚圆片代表一份演示用回放结果。探索不同区域，看看证据会把签署决策引向何处。",
                 )}
               </p>
             </div>
-            <div className="border-t border-line">
-              {SCALE.map((verdict) => (
-                <div
-                  className="verdict-row grid grid-cols-1 gap-4 border-b border-line py-7 sm:grid-cols-[minmax(0,210px)_1fr] sm:items-baseline sm:gap-8 sm:py-9"
-                  key={verdict.grade}
-                  onPointerMove={moveSurfaceGlow}
-                  style={
-                    {
-                      "--surface-accent": SCALE_HEX[verdict.level],
-                    } as CSSProperties
-                  }
-                >
-                  <strong
-                    className={`verdict-grade block whitespace-nowrap text-[clamp(30px,3vw,46px)] leading-none tracking-[-0.05em] ${SCALE_COLOR[verdict.level]}`}
-                  >
-                    {say(language, verdict.displayGrade)}
-                  </strong>
-                  <div className="verdict-row-content">
-                    <span
-                      className={`verdict-badge inline-flex items-center rounded-full border px-3 py-1.5 text-[11px] font-bold uppercase ${SCALE_BADGE[verdict.level]}`}
-                    >
-                      {say(language, verdict.title)}
-                    </span>
-                    <p className="mt-3 text-[14px] leading-[1.7] text-faint sm:text-[15px]">
-                      {say(language, verdict.body)}
-                    </p>
-                  </div>
-                </div>
-              ))}
-            </div>
+            <VerdictActions language={language} />
           </section>
 
           <section className="decision-receipt border border-line px-7 py-16">
@@ -447,7 +351,7 @@ function Home({ language }: { language: Language }) {
             >
               {pick(language, "Know what to do", "签署之前")}
               <br />
-              {pick(language, "before you sign.", "明确该怎么做。")}
+              {pick(language, "before you sign.", "明确该怎么做")}
             </h2>
             <a href="#/analyze" className="btn btn-primary">
               {pick(language, "Start analysis", "开始分析")}

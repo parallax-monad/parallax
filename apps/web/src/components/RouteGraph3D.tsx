@@ -1,7 +1,10 @@
 import { useEffect, useRef } from "react";
 import * as THREE from "three";
 import type { Language } from "@/lib/i18n";
-import { pick } from "@/lib/i18n";
+import {
+  EVIDENCE_TRACE_MARKERS,
+  getEvidenceTraceAriaLabel,
+} from "./evidenceTrace";
 
 type HeroProgressRef = { current: number };
 type MarkerBaseConfig = {
@@ -111,11 +114,11 @@ const DRAG_PITCH_LIMIT = 0.65;
 
 const MARKERS: MarkerConfig[] = [
   {
-    label: "Kuru",
-    color: "#20e7b0",
-    coreColor: "#42ffd0",
-    highlightColor: "#f4ffff",
-    rimColor: "#3ddcff",
+    label: EVIDENCE_TRACE_MARKERS[0].label,
+    color: "#5840ff",
+    coreColor: "#6e54ff",
+    highlightColor: "#ffffff",
+    rimColor: "#9d8cff",
     role: "protocol",
     size: 8.4,
     phase: 0.2,
@@ -126,11 +129,11 @@ const MARKERS: MarkerConfig[] = [
     dispersed: [-82, 30, 8],
   },
   {
-    label: "PancakeSwap V2 / V3",
-    color: "#a66bff",
-    coreColor: "#c58bff",
-    highlightColor: "#fff7ff",
-    rimColor: "#7d8cff",
+    label: EVIDENCE_TRACE_MARKERS[1].label,
+    color: "#1c1c22",
+    coreColor: "#34343c",
+    highlightColor: "#ffffff",
+    rimColor: "#5840ff",
     role: "protocol",
     size: 7.8,
     phase: 2.4,
@@ -141,8 +144,8 @@ const MARKERS: MarkerConfig[] = [
     dispersed: [88, -34, -4],
   },
   {
-    label: "WMON",
-    color: "#ccff00",
+    label: EVIDENCE_TRACE_MARKERS[2].label,
+    color: "#5840ff",
     role: "signal",
     size: 3.8,
     phase: 1.1,
@@ -150,8 +153,8 @@ const MARKERS: MarkerConfig[] = [
     dispersed: [-114, -39, -32],
   },
   {
-    label: "ERC-20 / native MON",
-    color: "#69d7ff",
+    label: EVIDENCE_TRACE_MARKERS[3].label,
+    color: "#7567c9",
     role: "signal",
     size: 3.4,
     phase: 3.3,
@@ -159,8 +162,8 @@ const MARKERS: MarkerConfig[] = [
     dispersed: [116, 48, -42],
   },
   {
-    label: "ERC-721",
-    color: "#7e8cff",
+    label: EVIDENCE_TRACE_MARKERS[4].label,
+    color: "#8f83d6",
     role: "signal",
     size: 3,
     phase: 4.4,
@@ -168,8 +171,8 @@ const MARKERS: MarkerConfig[] = [
     dispersed: [-122, 56, -64],
   },
   {
-    label: "ERC-1155",
-    color: "#b99aff",
+    label: EVIDENCE_TRACE_MARKERS[5].label,
+    color: "#a8a8b0",
     role: "signal",
     size: 3,
     phase: 5.2,
@@ -179,11 +182,11 @@ const MARKERS: MarkerConfig[] = [
 ];
 
 const PALETTE = [
-  new THREE.Color("#f7fbff"),
-  new THREE.Color("#9ddfff"),
-  new THREE.Color("#6c7dff"),
-  new THREE.Color("#9b7cff"),
-  new THREE.Color("#ccff00"),
+  new THREE.Color("#d9d5ef"),
+  new THREE.Color("#a99cff"),
+  new THREE.Color("#7567c9"),
+  new THREE.Color("#5840ff"),
+  new THREE.Color("#24242b"),
 ];
 
 const VERTEX_SHADER = `
@@ -755,12 +758,12 @@ function createLabelTexture(config: MarkerConfig) {
   const canvas = document.createElement("canvas");
   const context = canvas.getContext("2d");
   if (!context) throw new Error("Unable to create marker label");
-  const fontSize = config.role === "protocol" ? 28 : 23;
+  const fontSize = config.role === "protocol" ? 22 : 18;
   const weight = config.role === "protocol" ? 700 : 600;
-  context.font = `${weight} ${fontSize}px Inter, sans-serif`;
+  context.font = `${weight} ${fontSize}px "IBM Plex Mono", monospace`;
   canvas.width = Math.ceil(context.measureText(config.label).width) + 36;
   canvas.height = 52;
-  context.font = `${weight} ${fontSize}px Inter, sans-serif`;
+  context.font = `${weight} ${fontSize}px "IBM Plex Mono", monospace`;
   context.textAlign = "center";
   context.textBaseline = "middle";
   context.fillStyle = config.color;
@@ -1081,13 +1084,14 @@ function createMarker(
     new THREE.SpriteMaterial({
       map: labelTexture,
       transparent: true,
-      opacity: config.role === "protocol" ? 0.84 : 0.34,
+      opacity: config.role === "protocol" ? 0.68 : 0.3,
       depthWrite: false,
     }),
   );
+  const labelScale = config.role === "protocol" ? 9.4 : 8.2;
   label.scale.set(
-    labelTexture.image.width / 7,
-    labelTexture.image.height / 7,
+    labelTexture.image.width / labelScale,
+    labelTexture.image.height / 8.2,
     1,
   );
   label.position.set(0, config.size * 1.15, 0);
@@ -1690,12 +1694,8 @@ export function RouteGraph3D({
   return (
     <div
       role="img"
-      aria-label={pick(
-        language,
-        "Monad DeFi ecosystem visualization; drag to rotate",
-        "Monad DeFi 生态系统可视化；可拖动旋转",
-      )}
-      className="absolute inset-0 overflow-hidden bg-[#02030a]"
+      aria-label={getEvidenceTraceAriaLabel(language)}
+      className="route-graph-monad-light absolute inset-0 overflow-hidden bg-transparent"
     >
       <div
         aria-hidden="true"
