@@ -1,7 +1,9 @@
 import { describe, expect, test } from "vitest";
+import * as evidenceTrace from "./evidenceTrace";
 import {
   EVIDENCE_TRACE_MARKERS,
   getEvidenceTraceAriaLabel,
+  getExpandedMarkerEdgeScale,
 } from "./evidenceTrace";
 
 describe("RouteGraph3D", () => {
@@ -22,5 +24,35 @@ describe("RouteGraph3D", () => {
       "ERC-1155",
     ]);
     expect(labels).not.toContain("BOUNDARY CHECK");
+  });
+
+  test("gives each protocol or asset a distinct restrained route color", () => {
+    expect(EVIDENCE_TRACE_MARKERS.map((marker) => marker.color)).toEqual([
+      "#59e1c2",
+      "#9d8cff",
+      "#f4bd63",
+      "#91b8ff",
+      "#d6a7ff",
+      "#ff8ea1",
+    ]);
+  });
+
+  test("caps wide-screen edge movement after the 67 percent viewport", () => {
+    expect(getExpandedMarkerEdgeScale(1440)).toBe(1);
+    expect(getExpandedMarkerEdgeScale(1920)).toBeGreaterThan(1);
+    expect(getExpandedMarkerEdgeScale(2149)).toBeCloseTo(1.12, 5);
+    expect(getExpandedMarkerEdgeScale(2880)).toBeCloseTo(1.12, 5);
+  });
+
+  test("moves protocol labels inward as the constellation expands", () => {
+    expect(evidenceTrace).toHaveProperty("getProtocolLabelOffset");
+    const getProtocolLabelOffset = (evidenceTrace as Record<string, unknown>)
+      .getProtocolLabelOffset;
+    expect(getProtocolLabelOffset).toBeTypeOf("function");
+    if (typeof getProtocolLabelOffset !== "function") return;
+
+    expect(getProtocolLabelOffset(-82, 8.4, 12, 0)).toBe(0);
+    expect(getProtocolLabelOffset(-82, 8.4, 12, 1)).toBeCloseTo(11.46, 5);
+    expect(getProtocolLabelOffset(88, 7.8, 28, 1)).toBeCloseTo(-19.07, 5);
   });
 });

@@ -4,6 +4,8 @@ import type { Language } from "@/lib/i18n";
 import {
   EVIDENCE_TRACE_MARKERS,
   getEvidenceTraceAriaLabel,
+  getExpandedMarkerEdgeScale,
+  getProtocolLabelOffset,
 } from "./evidenceTrace";
 
 type HeroProgressRef = { current: number };
@@ -112,16 +114,14 @@ const DRAG_YAW_SENSITIVITY = 0.0052;
 const DRAG_PITCH_SENSITIVITY = 0.0042;
 const DRAG_PITCH_LIMIT = 0.65;
 const AMBIENT_STAR_COLORS = ["#ffffff", "#eeeaff"] as const;
-const PROTOCOL_LABEL_COLOR = "#c4baff";
-const SIGNAL_LABEL_COLOR = "#e3e6ff";
 
 const MARKERS: MarkerConfig[] = [
   {
     label: EVIDENCE_TRACE_MARKERS[0].label,
-    color: "#836ef9",
-    coreColor: "#9d8cff",
+    color: EVIDENCE_TRACE_MARKERS[0].color,
+    coreColor: "#75e6b1",
     highlightColor: "#ffffff",
-    rimColor: "#9d8cff",
+    rimColor: "#c2fff1",
     role: "protocol",
     size: 8.4,
     phase: 0.2,
@@ -133,8 +133,8 @@ const MARKERS: MarkerConfig[] = [
   },
   {
     label: EVIDENCE_TRACE_MARKERS[1].label,
-    color: "#836ef9",
-    coreColor: "#9d8cff",
+    color: EVIDENCE_TRACE_MARKERS[1].color,
+    coreColor: "#836ef9",
     highlightColor: "#ffffff",
     rimColor: "#c4baff",
     role: "protocol",
@@ -148,7 +148,7 @@ const MARKERS: MarkerConfig[] = [
   },
   {
     label: EVIDENCE_TRACE_MARKERS[2].label,
-    color: "#ffffff",
+    color: EVIDENCE_TRACE_MARKERS[2].color,
     role: "signal",
     size: 3.8,
     phase: 1.1,
@@ -157,7 +157,7 @@ const MARKERS: MarkerConfig[] = [
   },
   {
     label: EVIDENCE_TRACE_MARKERS[3].label,
-    color: "#f4f1ff",
+    color: EVIDENCE_TRACE_MARKERS[3].color,
     role: "signal",
     size: 3.4,
     phase: 3.3,
@@ -166,7 +166,7 @@ const MARKERS: MarkerConfig[] = [
   },
   {
     label: EVIDENCE_TRACE_MARKERS[4].label,
-    color: "#e3e6ff",
+    color: EVIDENCE_TRACE_MARKERS[4].color,
     role: "signal",
     size: 3,
     phase: 4.4,
@@ -175,7 +175,7 @@ const MARKERS: MarkerConfig[] = [
   },
   {
     label: EVIDENCE_TRACE_MARKERS[5].label,
-    color: "#ffffff",
+    color: EVIDENCE_TRACE_MARKERS[5].color,
     role: "signal",
     size: 3,
     phase: 5.2,
@@ -763,8 +763,7 @@ function createLabelTexture(config: MarkerConfig) {
   context.font = `${weight} ${fontSize}px "IBM Plex Mono", monospace`;
   context.textAlign = "center";
   context.textBaseline = "middle";
-  context.fillStyle =
-    config.role === "protocol" ? PROTOCOL_LABEL_COLOR : SIGNAL_LABEL_COLOR;
+  context.fillStyle = config.color;
   context.shadowColor = "rgba(0, 0, 0, 0.82)";
   context.shadowBlur = 8;
   context.fillText(config.label, canvas.width / 2, canvas.height / 2);
@@ -1445,6 +1444,7 @@ export function RouteGraph3D({
       camera.rotation.y = -passivePointerX * 0.018;
 
       const markerExpansion = smoothstep(0.12, 0.9, expansion);
+      const edgeScale = getExpandedMarkerEdgeScale(container.clientWidth);
       const introPathAmount = 1 - introEmphasis;
       for (const marker of markers) {
         const { config, group } = marker;
@@ -1474,8 +1474,17 @@ export function RouteGraph3D({
             lerp(config.compact[2], config.dispersed[2], markerExpansion),
           );
         }
+        const markerEdgeScale =
+          marker.kind === "protocol" ? lerp(1, edgeScale, 0.45) : 1;
+        group.position.x *= lerp(1, markerEdgeScale, markerExpansion);
 
         if (marker.kind === "protocol") {
+          marker.label.position.x = getProtocolLabelOffset(
+            marker.config.dispersed[0],
+            marker.config.size,
+            marker.label.scale.x,
+            markerExpansion,
+          );
           if (!reduceMotion) {
             const depthResponse = clamp(
               (group.position.z + 45) / 90,
