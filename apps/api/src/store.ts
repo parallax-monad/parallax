@@ -1,4 +1,9 @@
-import type { NormalizedSwapIntent, RunResult } from "@parallax/contracts";
+import { isDeepStrictEqual } from "node:util";
+import type {
+  FailedRunResult,
+  NormalizedSwapIntent,
+  RunResult,
+} from "@parallax/contracts";
 
 export type CheckRunFailureCode =
   | "AGENT_FLOW_ERROR"
@@ -8,25 +13,38 @@ export type CheckRunRecord =
   | {
       runId: string;
       intent: NormalizedSwapIntent;
+      parentRunId?: string;
       status: "started";
     }
   | {
       runId: string;
       intent: NormalizedSwapIntent;
+      parentRunId?: string;
       status: "failed";
       failure: CheckRunFailureCode;
+      result: FailedRunResult;
     }
   | {
       runId: string;
       intent: NormalizedSwapIntent;
+      parentRunId?: string;
       status: "completed";
       result: RunResult;
     };
 
 export interface RunStore {
-  start(runId: string, intent: NormalizedSwapIntent): Promise<void>;
+  start(
+    runId: string,
+    intent: NormalizedSwapIntent,
+    parentRunId?: string,
+  ): Promise<void>;
   complete(result: RunResult): Promise<void>;
-  fail(runId: string, failure: CheckRunFailureCode): Promise<void>;
+  fail(
+    runId: string,
+    failure: CheckRunFailureCode,
+    result: FailedRunResult,
+  ): Promise<void>;
+  get(runId: string): CheckRunRecord | undefined;
 }
 
 /** Process-local placeholder; production persistence remains undecided. */
@@ -36,21 +54,30 @@ export class InMemoryRunStore implements RunStore {
   public async start(
     runId: string,
     intent: NormalizedSwapIntent,
+    parentRunId?: string,
   ): Promise<void> {
     if (this.runs.has(runId)) {
       throw new Error(`Run ${runId} already exists`);
     }
 
-    this.runs.set(runId, clone({ runId, intent, status: "started" }));
+    this.runs.set(
+      runId,
+      clone({ runId, intent, parentRunId, status: "started" }),
+    );
   }
 
   public async complete(result: RunResult): Promise<void> {
     const current = this.requireStarted(result.runId);
+    if (result.parentRunId !== current.parentRunId) {
+      throw new Error(`Run ${result.runId} parent does not match its start`);
+    }
+
     this.runs.set(
       result.runId,
       clone({
         runId: result.runId,
         intent: current.intent,
+        parentRunId: current.parentRunId,
         status: "completed",
         result,
       }),
@@ -60,11 +87,27 @@ export class InMemoryRunStore implements RunStore {
   public async fail(
     runId: string,
     failure: CheckRunFailureCode,
+    result: FailedRunResult,
   ): Promise<void> {
     const current = this.requireStarted(runId);
+    if (
+      result.runId !== runId ||
+      result.parentRunId !== current.parentRunId ||
+      !isDeepStrictEqual(result.intent, current.intent)
+    ) {
+      throw new Error(`Run ${runId} failure result does not match its start`);
+    }
+
     this.runs.set(
       runId,
-      clone({ runId, intent: current.intent, status: "failed", failure }),
+      clone({
+        runId,
+        intent: current.intent,
+        parentRunId: current.parentRunId,
+        status: "failed",
+        failure,
+        result,
+      }),
     );
   }
 

@@ -1,3 +1,4 @@
+import type { FailedRunResult } from "@parallax/contracts";
 import { describe, expect, it } from "vitest";
 import { type CheckService, createCheckApp } from "./http.js";
 
@@ -123,12 +124,102 @@ describe("POST /api/check transport", () => {
         };
       },
     };
-    const response = await dispatch(request('{"amountIn":"1"}'), service);
+    const response = await dispatch(
+      request('{"amountIn":"1","parentRunId":"run-1"}'),
+      service,
+    );
 
-    expect(received).toEqual({ amountIn: "1" });
+    expect(received).toEqual({ amountIn: "1", parentRunId: "run-1" });
     expect(response.status).toBe(400);
     await expect(response.json()).resolves.toMatchObject({
       error: { code: "INVALID_REQUEST" },
+    });
+  });
+
+  it("preserves an Integration Error Run envelope in an API error response", async () => {
+    const run: FailedRunResult = {
+      runId: "run-2",
+      parentRunId: "run-1",
+      replayMode: false,
+      intent: {
+        chainId: 143,
+        protocol: "kuru",
+        sender: "0x1111111111111111111111111111111111111111",
+        recipient: "0x1111111111111111111111111111111111111111",
+        recipientSource: "defaulted_from_sender",
+        tokenIn: { kind: "native" },
+        tokenOut: {
+          kind: "erc20",
+          address: "0xabcdefabcdefabcdefabcdefabcdefabcdefabcd",
+        },
+        amountInAtomic: "2",
+        economicBoundary: {
+          availability: "unavailable",
+          source: "unavailable",
+        },
+      },
+      status: "integration_error",
+      systemStatus: "INTEGRATION_ERROR",
+      verdict: "UNKNOWN",
+      summary: "The check could not be completed",
+      error: {
+        code: "MOSS_UNAVAILABLE",
+        stage: "unknown",
+        message: "Agent Flow could not complete the check",
+        retryable: true,
+      },
+      ruleResults: [],
+      recommendedActions: [],
+      irrelevantActions: [],
+      evidence: [],
+      scope: [
+        {
+          key: "P0-CHECK-SIMULATION-001",
+          label: "Moss simulation",
+          status: "unknown",
+          reason: "REQUIRED_CHECK_INTERRUPTED",
+        },
+      ],
+      diff: {
+        previousRunId: "run-1",
+        previousVerdict: "ADJUST",
+        changedFields: [
+          {
+            field: "amountInAtomic",
+            before: "1",
+            after: "2",
+          },
+        ],
+      },
+    };
+    const response = await dispatch(request(), {
+      async check() {
+        return {
+          status: 502 as const,
+          body: {
+            error: {
+              code: "AGENT_FLOW_ERROR" as const,
+              message: "Agent Flow could not complete the check",
+            },
+            run,
+          },
+        };
+      },
+    });
+
+    expect(response.status).toBe(502);
+    await expect(response.json()).resolves.toMatchObject({
+      error: { code: "AGENT_FLOW_ERROR" },
+      run: {
+        runId: "run-2",
+        parentRunId: "run-1",
+        status: "integration_error",
+        verdict: "UNKNOWN",
+        diff: {
+          previousRunId: "run-1",
+          changedFields: [{ field: "amountInAtomic" }],
+        },
+      },
     });
   });
 

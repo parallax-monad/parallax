@@ -8,6 +8,7 @@ import {
   chainIdSchema,
   positiveDecimalSchema,
   protocolSchema,
+  runIdSchema,
 } from "./common.js";
 
 export const recipientSourceSchema = z.enum([
@@ -92,6 +93,7 @@ function distinctAssetsSchema<T extends z.ZodRawShape>(schema: z.ZodObject<T>) {
 export const checkSwapRequestSchema = distinctAssetsSchema(
   z
     .object({
+      parentRunId: runIdSchema.optional(),
       chainId: chainIdSchema,
       protocol: protocolSchema,
       sender: addressSchema,
