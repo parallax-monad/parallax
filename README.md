@@ -51,6 +51,19 @@ The repository is currently in the P0 scaffold stage. Module owners will define 
 
 Target MVP completion date: August 5, 2026.
 
+## Backend runtime
+
+The Node runtime is composed through `bootstrapBackendApp()` and can be
+started directly with `pnpm --filter @parallax/api start`. The launcher
+requires `MONAD_RPC_URL`, `MOSS_RUNTIME_VERSION`, `MOSS_RUNTIME_REVISION`,
+`PARALLAX_TOKEN_REGISTRY_JSON`, `HOST`, and `PORT`, and reports configuration
+errors before opening the listener.
+
+P2 does not include the live Agent Flow implementation; until it is injected,
+`POST /api/check` returns a diagnostic integration error rather than a fake
+success. Recorded replay data is available only through `/api/replay/:id` and
+is never used as a live Check fallback.
+
 ## Collaboration
 
 - `main` is the shared integration branch.
