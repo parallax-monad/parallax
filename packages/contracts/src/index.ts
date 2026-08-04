@@ -6,6 +6,7 @@ export * from "./intent.js";
 export * from "./normalization.js";
 export * from "./registry.js";
 export * from "./replay.js";
+export * from "./rerun.js";
 export * from "./route.js";
 export * from "./run.js";
 export * from "./serialization.js";

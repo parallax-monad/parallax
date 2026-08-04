@@ -11,6 +11,7 @@ import {
   genericEvidenceItemSchema,
   normalizedSwapIntentSchema,
   type RuleResult,
+  rerunRejectionReasonSchema,
   ruleResultSchema,
   runDiffSchema,
   runResultSchema,
@@ -317,6 +318,12 @@ describe("checkSwapRequestSchema", () => {
         source: "user_declared",
       },
     };
+
+    expect(checkSwapRequestSchema.parse(request)).toEqual(request);
+  });
+
+  it("accepts an optional parent Run for a Re-run", () => {
+    const request = { ...baseRequest, parentRunId: "run-1" };
 
     expect(checkSwapRequestSchema.parse(request)).toEqual(request);
   });
@@ -759,6 +766,62 @@ describe("completed Run Result contract", () => {
     const result = runResultSchema.parse(completedResult);
     expect(result.status).toBe("completed");
     expect(result.ruleResults[0]?.status).toBe("NOT_APPLICABLE");
+  });
+
+  it("preserves an optional parent Run on a Re-run result", () => {
+    const result = runResultSchema.parse({
+      ...completedResult,
+      parentRunId: "run-0",
+      diff: {
+        previousRunId: "run-0",
+        previousVerdict: "UNKNOWN",
+        changedFields: [
+          {
+            field: "amountInAtomic",
+            before: "1000000000000000000",
+            after: "1500000000000000000",
+          },
+        ],
+      },
+    });
+
+    expect(result.parentRunId).toBe("run-0");
+  });
+
+  it("rejects a Run that names itself as its parent", () => {
+    expect(
+      runResultSchema.safeParse({
+        ...completedResult,
+        parentRunId: completedResult.runId,
+      }).success,
+    ).toBe(false);
+  });
+
+  it("rejects an incomplete or mismatched Re-run link", () => {
+    expect(
+      runResultSchema.safeParse({
+        ...completedResult,
+        parentRunId: "run-0",
+      }).success,
+    ).toBe(false);
+
+    expect(
+      runResultSchema.safeParse({
+        ...completedResult,
+        parentRunId: "run-0",
+        diff: {
+          previousRunId: "run-1",
+          previousVerdict: "UNKNOWN",
+          changedFields: [
+            {
+              field: "amountInAtomic",
+              before: "1000000000000000000",
+              after: "1500000000000000000",
+            },
+          ],
+        },
+      }).success,
+    ).toBe(false);
   });
 
   it("binds an available Route to trusted Evidence and the checked Intent", () => {
@@ -2206,6 +2269,30 @@ describe("Integration Error Result contract", () => {
     });
   });
 
+  it("preserves a parent and Diff on an Integration Error Re-run", () => {
+    const result = runResultSchema.parse({
+      ...integrationErrorResult,
+      parentRunId: "run-1",
+      diff: {
+        previousRunId: "run-1",
+        previousVerdict: "STOP",
+        changedFields: [
+          {
+            field: "protocol",
+            before: "kuru",
+            after: "pancake",
+          },
+        ],
+      },
+    });
+
+    expect(result).toMatchObject({
+      status: "integration_error",
+      parentRunId: "run-1",
+      diff: { previousRunId: "run-1" },
+    });
+  });
+
   it("rejects a RuleResult for an interrupted Scope subject", () => {
     expect(
       runResultSchema.safeParse({
@@ -2281,6 +2368,19 @@ describe("Integration Error Result contract", () => {
 });
 
 describe("run diff, scope, and serialization", () => {
+  it("exposes stable Re-run rejection reasons", () => {
+    expect(rerunRejectionReasonSchema.options).toEqual([
+      "PARENT_NOT_FOUND",
+      "PARENT_NOT_COMPLETED",
+      "PARENT_IS_REPLAY",
+      "RERUN_CHAINING_UNSUPPORTED",
+      "CHAIN_OR_SENDER_CHANGED",
+      "BOUNDARY_CHANGED",
+      "BOUNDARY_ASSET_CHANGED",
+      "NOT_EXACTLY_ONE_CHANGE",
+    ]);
+  });
+
   it("accepts an atomic input amount diff", () => {
     const result = runDiffSchema.parse({
       previousRunId: "run-1",
@@ -2296,6 +2396,62 @@ describe("run diff, scope, and serialization", () => {
 
     expect(result.changedFields[0]?.field).toBe("amountInAtomic");
   });
+
+  it("accepts a token-pair diff as one Intent condition", () => {
+    expect(
+      runDiffSchema.safeParse({
+        previousRunId: "run-1",
+        previousVerdict: "STOP",
+        changedFields: [
+          {
+            field: "tokenPair",
+            before: "native->erc20:0xabcdefabcdefabcdefabcdefabcdefabcdefabcd",
+            after: "erc20:0xabcdefabcdefabcdefabcdefabcdefabcdefabcd->native",
+          },
+        ],
+      }).success,
+    ).toBe(true);
+  });
+
+  it("rejects a Diff that contains multiple Intent conditions", () => {
+    expect(
+      runDiffSchema.safeParse({
+        previousRunId: "run-1",
+        previousVerdict: "ADJUST",
+        changedFields: [
+          {
+            field: "amountInAtomic",
+            before: "1000000000000000000",
+            after: "2000000000000000000",
+          },
+          { field: "protocol", before: "kuru", after: "pancake" },
+        ],
+      }).success,
+    ).toBe(false);
+  });
+
+  it("rejects a no-op Diff field", () => {
+    expect(
+      runDiffSchema.safeParse({
+        previousRunId: "run-1",
+        previousVerdict: "UNKNOWN",
+        changedFields: [{ field: "amountInAtomic", before: "1", after: "1" }],
+      }).success,
+    ).toBe(false);
+  });
+
+  it.each(["route", "economicBoundary"])(
+    "rejects unsupported Re-run Diff field %s",
+    (field) => {
+      expect(
+        runDiffSchema.safeParse({
+          previousRunId: "run-1",
+          previousVerdict: "ADJUST",
+          changedFields: [{ field, before: "before", after: "after" }],
+        }).success,
+      ).toBe(false);
+    },
+  );
 
   it("represents recipient-only reruns in the structured diff", () => {
     expect(
@@ -2313,7 +2469,7 @@ describe("run diff, scope, and serialization", () => {
     ).toBe(true);
   });
 
-  it("preserves recipient provenance in a rerun diff", () => {
+  it("rejects recipient provenance as an independent rerun diff", () => {
     expect(
       runDiffSchema.safeParse({
         previousRunId: "run-1",
@@ -2326,7 +2482,7 @@ describe("run diff, scope, and serialization", () => {
           },
         ],
       }).success,
-    ).toBe(true);
+    ).toBe(false);
   });
 
   it("rejects duplicate scope keys", () => {

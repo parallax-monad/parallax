@@ -1,4 +1,5 @@
 import {
+  type TokenRegistryConfig,
   type TrustedTokenRegistry,
   tokenRegistryConfigSchema,
 } from "@parallax/contracts";
@@ -17,6 +18,13 @@ export const backendEnvironmentSchema = z.object({
   MONAD_RPC_URL: rpcUrlSchema,
   MOSS_RUNTIME_VERSION: z.string().trim().min(1),
   MOSS_RUNTIME_REVISION: z.string().trim().min(1),
+});
+
+const tokenRegistryEnvironmentSchema = z.object({
+  PARALLAX_TOKEN_REGISTRY_JSON: z.preprocess(
+    (value) => value ?? "",
+    z.string().trim().min(1, "PARALLAX_TOKEN_REGISTRY_JSON is required"),
+  ),
 });
 
 export const mossIntegrationConfigSchema = z
@@ -46,6 +54,25 @@ export type BackendRuntime = {
   config: BackendRuntimeConfig;
   tokenRegistry: TrustedTokenRegistry;
 };
+
+/** Reads the verified token metadata required by the executable Node launcher. */
+export function parseTokenRegistryEnvironment(
+  environment: unknown,
+): TokenRegistryConfig {
+  const { PARALLAX_TOKEN_REGISTRY_JSON } =
+    tokenRegistryEnvironmentSchema.parse(environment);
+
+  let candidate: unknown;
+  try {
+    candidate = JSON.parse(PARALLAX_TOKEN_REGISTRY_JSON);
+  } catch (cause) {
+    throw new Error("PARALLAX_TOKEN_REGISTRY_JSON must be valid JSON", {
+      cause,
+    });
+  }
+
+  return tokenRegistryConfigSchema.parse(candidate);
+}
 
 // TODO(moss-integration, owner: Jie + Backend): Inject the confirmed P0 chain,
 // MON/USDC metadata, verification block, RPC, Moss runtime version, and
