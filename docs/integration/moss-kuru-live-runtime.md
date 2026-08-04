@@ -1,6 +1,6 @@
 # Moss Kuru Live Runtime (Reproducible Environment Contract)
 
-Status: REPRODUCIBLE RUNTIME LOCKED, LIVE SMOKE NOT RUN
+Status: REPRODUCIBLE RUNTIME LOCKED; LIVE SMOKE RAN AND REPRODUCED P0_LIVE_BLOCKED_SIMULATION
 
 This document pins the exact Moss runtime that the Kuru MON → USDC live adapter
 (`packages/moss-bridge/src/live-kuru.ts`) targets, and the exact environment
@@ -65,7 +65,7 @@ Moss git commit, not a workspace label.
 | Node | v22.23.2 (downloaded from nodejs.org `v22.23.2`, darwin-arm64 tarball) |
 | pnpm | 11.10.0 (matches Moss `packageManager`, activated via corepack under Node 22) |
 | OS / architecture | macOS 15.7.5 / darwin-arm64 |
-| Chain ID | 143 (Monad mainnet; enforced by `createRuntime`) |
+| Chain ID | 143 (Monad mainnet; observed by the adapter via `getChainId()`, not enforced by the adapter) |
 | Kuru protocol | Kuru CLOB (router `0xd651346d7c789536ebf06dc72aE3C8502cd695CC`) |
 | USDC address | `0x754704Bc059F8C67012fEd69BC8A327a5aafb603` |
 | Sender | `0xcccccccccccccccccccccccccccccccccccccccc` (no private key; read-only) |
@@ -109,6 +109,31 @@ The smoke saves raw stage output to the gitignored `.smoke-live/` directory and
 only writes the formal fixture under
 `fixtures/chain-evidence/kuru/live-success-mon-to-usdc/` after every acceptance
 condition passes.
+
+## Provenance trust levels
+
+Runtime, RPC, and block provenance are kept in three explicit layers. Do not
+promote one layer into another:
+
+1. **Smoke Harness verified runtime.** The harness may verify that
+   `MOSS_RUNTIME_PATH` is checked out at the declared revision (`git rev-parse
+   HEAD`), that every loaded `@themoss/*` package version matches the matrix
+   above, and that `MOSS_RUNTIME_REVISION` equals the declared value.
+2. **Adapter caller-declared runtime identity.** `runKuruLiveSwap` receives
+   `runtimeVersion`/`runtimeRevision` from its caller and records them as
+   provenance. The adapter fail-closes when the loaded `@themoss/core` version
+   disagrees with the declared `runtimeVersion`, but it does not itself prove
+   the checkout Git revision. These are **caller-declared/observed
+   provenance**, not an independently verified immutable identity.
+3. **RPC-observed blocks.** Each stage's `blockNumber` is the block observed
+   through RPC immediately before the stage call. The Moss simulator pins its
+   own base block internally (Moss ADR 0002) and does not expose it; a
+   top-level block must not be treated as the exact simulator block for every
+   stage.
+
+A downstream consumer must re-verify runtime revision, package identity, RPC
+chainId, and actual simulator block consistency before using the result as
+authoritative Live Evidence.
 
 ## Security and trust boundary
 

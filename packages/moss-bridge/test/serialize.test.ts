@@ -9,9 +9,17 @@ describe("evidence serialization", () => {
   });
 
   it("keeps no-route separate from integration failure", () => {
-    expect(normalizeMossError("no verified Kuru market path")).toMatchObject({
+    expect(
+      normalizeMossError("no verified Kuru market path", { stage: "QUOTE" }),
+    ).toMatchObject({
       code: "NO_ROUTE",
       integrationStatus: "OK",
+    });
+    // Without an explicit QUOTE/ACTION stage a route-like message is an
+    // integration failure, not a confirmed no-route classification.
+    expect(normalizeMossError("no verified Kuru market path")).toMatchObject({
+      code: "INTEGRATION_ERROR",
+      integrationStatus: "INTEGRATION_ERROR",
     });
     expect(normalizeMossError("transport failed")).toMatchObject({
       code: "INTEGRATION_ERROR",

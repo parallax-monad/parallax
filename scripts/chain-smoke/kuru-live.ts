@@ -30,8 +30,11 @@ import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
+  evaluateLiveAcceptance,
+  liveSuccessOf,
   MONAD_CHAIN_ID,
   MONAD_USDC_ADDRESS,
+  p0DecisionCandidate,
   runKuruLiveSwap,
   toJsonValue,
 } from "@parallax/moss-bridge";
@@ -107,26 +110,6 @@ function baseMetadata(
     isMock: false,
     // RPC URL is deliberately never persisted.
   };
-}
-
-function p0Candidate(
-  evidence: Awaited<ReturnType<typeof runKuruLiveSwap>>["evidence"],
-  stages: Awaited<ReturnType<typeof runKuruLiveSwap>>["stages"],
-): string {
-  const coverage = evidence.simulationCoverage.value;
-  if (evidence.executionStatus === "SUCCESS" && coverage?.complete === true) {
-    return "P0_LIVE_READY";
-  }
-  const failedStage = stages.find((stage) => !stage.success);
-  const code = failedStage?.error?.code;
-  if (code === "UNAVAILABLE" || code === "INTEGRATION_ERROR") {
-    return "P0_LIVE_BLOCKED_PORTABLE_RUNTIME";
-  }
-  // Every other failure mode - TIMEOUT, NO_ROUTE, REVERTED, a halted or
-  // incomplete simulation, or an execution that did not reach SUCCESS - means
-  // the live simulation boundary was not crossed on a runtime that loaded
-  // fine, so the decision is simulation-blocked, not portable-runtime.
-  return "P0_LIVE_BLOCKED_SIMULATION";
 }
 
 function stageStatus(
@@ -219,58 +202,37 @@ test("kuru live smoke: MON -> USDC", async () => {
   writeJson(artifactDir, "raw.json", result.raw);
   writeJson(artifactDir, "normalized.json", evidence);
 
-  const acceptance = {
-    discoverOk:
-      result.stages.find((stage) => stage.stage === "DISCOVER")?.success ===
-      true,
-    loadOk:
-      result.stages.find((stage) => stage.stage === "LOAD")?.success === true,
-    quoteRouteAvailable: evidence.quote.value !== null,
-    actionTransactionNonEmpty:
-      Array.isArray(evidence.action.value) && evidence.action.value.length > 0,
-    simulateCoversAllActions:
-      coverage?.expectedTransactions === coverage?.observedResults,
-    transactionIdentityMatched:
-      coverage?.missingTransactionIndexes.length === 0 &&
-      coverage?.unmatchedResultIndexes.length === 0,
-    simulationNotHalted: coverage?.halted !== true,
-    noUnmatchedResult: coverage?.unmatchedResultIndexes.length === 0,
-    noMissingTransaction: coverage?.missingTransactionIndexes.length === 0,
-    notReverted: evidence.executionStatus !== "REVERTED",
-    receiptPresent: evidence.receipt.value !== null,
-    outcomeParsed: evidence.outcome.value !== null,
-    flipOrderUpdatedNotBlocking: !JSON.stringify(
-      evidence.warnings.value ?? [],
-    ).includes("FlipOrderUpdated"),
-    runtimeProvenanceComplete:
-      evidence.runtimeVersion === runtimeVersion &&
-      evidence.runtimeRevision === runtimeRevision,
-    blockProvenanceComplete: evidence.blockNumber.value !== null,
-    isReplayFalse: evidence.isReplay === false,
-    isMockFalse: evidence.isMock === false,
-    executionSucceeded: evidence.executionStatus === "SUCCESS",
-  };
+  // One canonical acceptance gate: liveSuccess, P0_LIVE_READY, and the
+  // fixture decision all derive from the same evaluation.
+  const acceptance = evaluateLiveAcceptance(result, {
+    runtimeVersion,
+    runtimeRevision,
+  });
+  const liveSuccess = liveSuccessOf(acceptance);
+  const decision = p0DecisionCandidate(result, {
+    runtimeVersion,
+    runtimeRevision,
+  });
 
-  const passed = Object.values(acceptance).every(Boolean);
   const failedStage = result.stages.find((stage) => !stage.success);
   const status =
     evidence.integrationStatus === "TIMEOUT"
       ? "FAILED"
       : failedStage
         ? "PARTIALLY_VERIFIED"
-        : passed
+        : liveSuccess
           ? "PARTIALLY_VERIFIED"
           : "FAILED";
   const metadata = {
     ...baseMetadata(runId, startedAt),
     status,
-    liveSuccess: passed,
-    failureStage: passed ? null : (failedStage?.stage ?? "SIMULATE"),
-    failureCode: passed
+    liveSuccess,
+    failureStage: liveSuccess ? null : (failedStage?.stage ?? "SIMULATE"),
+    failureCode: liveSuccess
       ? null
       : (failedStage?.error?.code ??
         (evidence.integrationStatus === "TIMEOUT" ? "TIMEOUT" : "UNKNOWN")),
-    p0DecisionCandidate: p0Candidate(evidence, result.stages),
+    p0DecisionCandidate: decision,
     stageStatuses: stageStatus(result.stages),
     blockProvenance: {
       initial: result.evidence.blockNumber.value,
@@ -286,7 +248,7 @@ test("kuru live smoke: MON -> USDC", async () => {
   };
   writeJson(artifactDir, "metadata.json", metadata);
 
-  if (!passed) {
+  if (!liveSuccess) {
     const flipOrderBlocked = JSON.stringify(
       evidence.warnings.value ?? [],
     ).includes("FlipOrderUpdated");

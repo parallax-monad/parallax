@@ -13,14 +13,60 @@ describe("error semantics", () => {
     expect(warning).not.toHaveProperty("code", "INTEGRATION_ERROR");
   });
 
-  it("maps no-route to OK/NO_ROUTE, not an integration failure", () => {
+  it("maps a confirmed QUOTE no-route to OK/NO_ROUTE", () => {
     const error = normalizeMossError(
       "no verified Kuru market path for this token pair",
+      { stage: "QUOTE" },
     );
     expect(error.code).toBe("NO_ROUTE");
     expect(error.integrationStatus).toBe("OK");
     expect(error.normalization).toBe("DERIVED");
     expect(error.retryable).toBe(false);
+  });
+
+  it("does not derive NO_ROUTE from a stage-less route-like message", () => {
+    const error = normalizeMossError(
+      "no verified Kuru market path for this token pair",
+    );
+    expect(error.code).toBe("INTEGRATION_ERROR");
+    expect(error.integrationStatus).toBe("INTEGRATION_ERROR");
+  });
+
+  it("keeps a structured Integration Error authoritative over route wording", () => {
+    const error = classifyLiveError(
+      {
+        code: "INTEGRATION_ERROR",
+        integrationStatus: "INTEGRATION_ERROR",
+        message: "integration failure: no route available",
+      },
+      { stage: "QUOTE" },
+    );
+    expect(error.code).toBe("INTEGRATION_ERROR");
+    expect(error.integrationStatus).toBe("INTEGRATION_ERROR");
+    expect(error.normalization).toBe("PRESERVED");
+  });
+
+  it("does not derive REVERTED from a QUOTE error message", () => {
+    const error = normalizeMossError("execution reverted in quote", {
+      stage: "QUOTE",
+    });
+    expect(error.code).toBe("INTEGRATION_ERROR");
+    expect(error.integrationStatus).toBe("INTEGRATION_ERROR");
+  });
+
+  it("preserves a structured SIMULATE revert as OK/REVERTED", () => {
+    const error = classifyLiveError(
+      {
+        code: "REVERTED",
+        integrationStatus: "OK",
+        message: "execution reverted",
+        source: "rpc",
+      },
+      { stage: "SIMULATE" },
+    );
+    expect(error.code).toBe("REVERTED");
+    expect(error.integrationStatus).toBe("OK");
+    expect(error.normalization).toBe("PRESERVED");
   });
 
   it("maps simulator unavailability to UNAVAILABLE", () => {

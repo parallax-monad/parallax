@@ -12,6 +12,14 @@ export {
   MONAD_USDC_ADDRESS,
 } from "./kuru.js";
 export {
+  evaluateLiveAcceptance,
+  type LiveAcceptanceGate,
+  type LiveAcceptanceResult,
+  liveSuccessOf,
+  type P0DecisionCandidate,
+  p0DecisionCandidate,
+} from "./live-acceptance.js";
+export {
   loadMossRuntime,
   type MossRuntimeBundle,
   runKuruLiveSwap,

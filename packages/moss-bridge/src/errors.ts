@@ -1,4 +1,8 @@
-import type { NormalizedMossError, StageName } from "./types.js";
+import type {
+  IntegrationStatus,
+  NormalizedMossError,
+  StageName,
+} from "./types.js";
 
 /**
  * Deterministic error mapping for the Moss live boundary.
@@ -13,6 +17,89 @@ export type ClassifyContext = {
   stage?: StageName;
   source?: NormalizedMossError["source"];
 };
+
+const AUTHORITATIVE_STATUSES = new Set<IntegrationStatus>([
+  "OK",
+  "INTEGRATION_ERROR",
+  "UNAVAILABLE",
+  "TIMEOUT",
+]);
+
+const KNOWN_CODES = new Set<NormalizedMossError["code"]>([
+  "NO_ROUTE",
+  "REVERTED",
+  "TIMEOUT",
+  "UNAVAILABLE",
+  "INTEGRATION_ERROR",
+  "UNKNOWN",
+]);
+
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  return typeof value === "object" && value !== null
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
+function stringField(
+  value: Record<string, unknown> | undefined,
+  field: string,
+): string | undefined {
+  const candidate = value?.[field];
+  return typeof candidate === "string" ? candidate : undefined;
+}
+
+/**
+ * Structured errors are authoritative: when a thrown object carries an explicit
+ * `integrationStatus`, its code/status/source are preserved instead of being
+ * re-derived from message text. Message-based rules may only ever fire as a
+ * stage-limited DERIVED fallback for unstructured errors.
+ */
+function preserveStructuredError(
+  error: unknown,
+  context: ClassifyContext,
+  message: string,
+): NormalizedMossError | undefined {
+  const fields = asRecord(error);
+  const rawStatus = stringField(fields, "integrationStatus");
+  if (
+    rawStatus === undefined ||
+    !(AUTHORITATIVE_STATUSES as ReadonlySet<string>).has(rawStatus)
+  ) {
+    return undefined;
+  }
+  const status = rawStatus as IntegrationStatus;
+  const rawCode = stringField(fields, "code");
+  const code: NormalizedMossError["code"] =
+    rawCode !== undefined &&
+    KNOWN_CODES.has(rawCode as NormalizedMossError["code"])
+      ? (rawCode as NormalizedMossError["code"])
+      : status === "OK"
+        ? "UNKNOWN"
+        : status;
+  const rawSource = stringField(fields, "source");
+  const source: NormalizedMossError["source"] =
+    context.source ??
+    (rawSource === "moss" ||
+    rawSource === "rpc" ||
+    rawSource === "quote" ||
+    rawSource === "unknown"
+      ? rawSource
+      : "unknown");
+  const rawRetryable = fields?.retryable;
+  return {
+    ...(context.stage ? { stage: context.stage } : {}),
+    code,
+    message,
+    integrationStatus: status,
+    source,
+    normalization: "PRESERVED",
+    ...(typeof rawRetryable === "boolean"
+      ? { retryable: rawRetryable }
+      : status === "TIMEOUT" || status === "INTEGRATION_ERROR"
+        ? { retryable: true }
+        : {}),
+  };
+}
 
 /**
  * Structured timeout raised when a stage or the whole live chain exceeds its
@@ -109,6 +196,11 @@ export function classifyLiveError(
     };
   }
 
+  const preserved = preserveStructuredError(error, context, message);
+  if (preserved) {
+    return preserved;
+  }
+
   return normalizeMossError(message, context);
 }
 
@@ -123,7 +215,13 @@ export function normalizeMossError(
     ...(context.stage ? { stage: context.stage } : {}),
     message,
   };
-  if (/no verified Kuru market path|no Kuru market path/i.test(message)) {
+  // NO_ROUTE is only a confirmed terminal classification from an explicit
+  // QUOTE or ACTION stage. A route-like message from any other stage, or with
+  // no stage context, is not enough to claim a no-route result.
+  if (
+    (context.stage === "QUOTE" || context.stage === "ACTION") &&
+    /no verified Kuru market path|no Kuru market path/i.test(message)
+  ) {
     return {
       ...normalized,
       code: "NO_ROUTE",
@@ -153,7 +251,10 @@ export function normalizeMossError(
       retryable: true,
     };
   }
-  if (/execution reverted/i.test(message)) {
+  // REVERTED is only derivable from an explicitly confirmed SIMULATE-stage
+  // error. A revert-like message from QUOTE/ACTION/RPC is an integration
+  // failure, not simulation evidence.
+  if (context.stage === "SIMULATE" && /execution reverted/i.test(message)) {
     return {
       ...normalized,
       code: "REVERTED",

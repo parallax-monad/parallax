@@ -29,6 +29,23 @@ import type {
  * deadlines are deliberately shorter than the Vitest `testTimeout` (120s) so a
  * timeout can be captured, logged, and written to the artifact directory before
  * the test runner kills the process.
+ *
+ * Provenance trust levels (kept deliberately separate):
+ *   1. Smoke Harness verified runtime: the live smoke harness checks that
+ *      `MOSS_RUNTIME_PATH` is checked out at the declared revision and that
+ *      every loaded `@themoss/*` package version matches, before running.
+ *   2. Caller-declared runtime identity: `runtimeVersion`/`runtimeRevision`
+ *      are received from the caller of `runKuruLiveSwap`. This adapter
+ *      fail-closes when the loaded `@themoss/core` version disagrees with
+ *      `runtimeVersion`, but it does not itself prove the checkout Git
+ *      revision; it records the declared identity as provenance only.
+ *   3. RPC-observed blocks: `blockNumber` is the block observed through RPC
+ *      immediately before each stage call. It is not the block internally
+ *      pinned by the Moss simulator (not exposed by the runtime API, Moss
+ *      ADR 0002), so it must not be described as the exact simulator block.
+ * A consumer must re-verify runtime revision, package identity, RPC chainId,
+ * and simulator block consistency before treating the result as
+ * authoritative Live Evidence.
  */
 
 const DEFAULT_STAGE_TIMEOUT_MS = 30_000;
@@ -297,6 +314,9 @@ export async function runKuruLiveSwapWithBundle(
       );
     }
 
+    // Caller-declared runtime identity: recorded as provenance, not proven
+    // here. Version disagreement with the loaded bundle fails closed above;
+    // the checkout Git revision is verified by the Smoke Harness, not here.
     const identity: RuntimeIdentity = {
       runtimeVersion: input.runtimeVersion,
       runtimeRevision: input.runtimeRevision,
@@ -324,6 +344,9 @@ export async function runKuruLiveSwapWithBundle(
     };
     const mossRuntime = await createRuntime({ rpcUrl: input.rpcUrl });
     const client = mossRuntime.client;
+    // chainId is observed (read) from the RPC client, not enforced by the
+    // adapter; the Smoke Harness and any authoritative consumer must confirm
+    // the RPC is on Chain ID 143 before trusting the run.
     const chainId = await client.getChainId().catch(() => undefined);
     const readBlock = async (): Promise<string> =>
       (await client.getBlockNumber()).toString();

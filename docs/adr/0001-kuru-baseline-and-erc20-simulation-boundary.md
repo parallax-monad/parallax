@@ -87,3 +87,25 @@ raw→normalized mapping live in
 `pnpm smoke:kuru:live` replaces the previous unconditional `UNAVAILABLE` smoke:
 it is a real live smoke that reports `LIVE_SMOKE_NOT_RUN` until `MOSS_RPC_URL`
 is configured, and fails non-zero if a live run does not pass acceptance.
+
+### Provenance boundaries (2026-08-04)
+
+Runtime, RPC, and block provenance carry three distinct trust levels and must
+not be conflated:
+
+1. **Smoke Harness verified runtime** — the harness checks that
+   `MOSS_RUNTIME_PATH` is checked out at the declared revision and that the
+   loaded `@themoss/*` package versions match.
+2. **Adapter caller-declared runtime identity** — `runKuruLiveSwap` receives
+   `runtimeVersion`/`runtimeRevision` from the caller and records them as
+   provenance; it fails closed on a loaded-version mismatch but does not
+   itself prove the checkout Git revision. These are
+   caller-declared/observed values, not an independently verified immutable
+   identity.
+3. **RPC-observed blocks** — each stage block is observed through RPC before
+   the call; it is not the Moss simulator's internally pinned block (Moss
+   ADR 0002).
+
+A consumer must re-verify runtime revision, package identity, RPC chainId, and
+simulator block consistency before treating the result as authoritative Live
+Evidence.
