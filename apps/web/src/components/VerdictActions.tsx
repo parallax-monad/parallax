@@ -7,6 +7,7 @@ export type VerdictZone = "northwest" | "northeast" | "southwest" | "southeast";
 type VerdictQuadrant = {
   index: string;
   zone: VerdictZone;
+  tone: "evidence" | "ready" | "blocked" | "rerun";
   label: readonly [string, string];
   note: readonly [string, string];
   body: readonly [string, string];
@@ -16,41 +17,45 @@ const QUADRANTS: VerdictQuadrant[] = [
   {
     index: "04",
     zone: "northwest",
+    tone: "evidence",
     label: ["MORE EVIDENCE NEEDED", "证据尚不足"],
     note: ["EVIDENCE UNRESOLVED", "尚无法定论"],
     body: [
-      "The receipt cannot support a trustworthy signing action yet.",
-      "现有回执不足以支持可信的签署决策。",
+      "Collect the missing evidence before deciding whether to sign.",
+      "先补齐缺失证据，再决定是否签署。",
     ],
   },
   {
     index: "01",
     zone: "northeast",
+    tone: "ready",
     label: ["READY TO SIGN", "可以签署"],
     note: ["NO BLOCKING EVIDENCE", "未发现阻断证据"],
     body: [
-      "The checked scope contains no blocking evidence. This is not a promise of safety.",
-      "在本次核验范围内，未发现阻断签署的证据；但这并非安全承诺。",
+      "No blocking evidence was found in this replay scope. This is not a safety guarantee.",
+      "本次回放范围内未发现阻断证据；这并不代表安全保证。",
     ],
   },
   {
     index: "03",
     zone: "southwest",
+    tone: "blocked",
     label: ["DO NOT SIGN", "请勿签署"],
     note: ["EXECUTION BLOCKED", "执行不可行"],
     body: [
-      "The current path cannot execute or cannot satisfy the stated boundary.",
-      "当前路径无法执行，或无法满足既定边界。",
+      "Do not sign: the route cannot execute or meet the stated limits.",
+      "请勿签署：当前路径无法执行，或无法满足既定限制。",
     ],
   },
   {
     index: "02",
     zone: "southeast",
+    tone: "rerun",
     label: ["REVISE & RERUN", "调整后重跑"],
     note: ["CURRENT VERDICT", "当前判定"],
     body: [
-      "Change the condition identified by the evidence, then replay before signing.",
-      "请按证据指向调整交易条件，并在签署前重新回放。",
+      "Revise the evidence-identified condition, then rerun before signing.",
+      "按证据指向调整交易条件，并在签署前重新回放。",
     ],
   },
 ];
@@ -181,6 +186,7 @@ export function VerdictActions({ language }: { language: Language }) {
               className="verdict-quadrant"
               data-current-action={selected ? "true" : undefined}
               data-verdict-choice=""
+              data-verdict-tone={quadrant.tone}
               data-zone={quadrant.zone}
               key={quadrant.index}
               onFocus={interactionHandlers.onFocus}
@@ -198,7 +204,11 @@ export function VerdictActions({ language }: { language: Language }) {
           );
         })}
 
-        <div className="verdict-field-center" data-verdict-center="">
+        <div
+          className="verdict-field-center"
+          data-tone={selectedQuadrant.tone}
+          data-verdict-center=""
+        >
           <span>{pick(language, "SELECTED FIELD", "当前判读")}</span>
           <i aria-hidden="true" />
           <strong>

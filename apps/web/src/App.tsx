@@ -29,7 +29,7 @@ const DIMENSIONS: Dimension[] = [
   {
     key: "Cause",
     displayKey: { en: "Cause", zh: "原因" },
-    accent: "#5840ff",
+    accent: "#836ef9",
     title: { en: "What happened", zh: "发生了什么" },
     body: {
       en: "Moss runs quote, action, and simulation to show the real execution result of this intent.",
@@ -39,7 +39,7 @@ const DIMENSIONS: Dimension[] = [
   {
     key: "Evidence",
     displayKey: { en: "Evidence", zh: "证据" },
-    accent: "#6e54ff",
+    accent: "#9d8cff",
     title: { en: "What proves it", zh: "证据是什么" },
     body: {
       en: "Every conclusion traces back to normalized execution evidence, labelled with source, block, and replay.",
@@ -49,7 +49,7 @@ const DIMENSIONS: Dimension[] = [
   {
     key: "Adjust",
     displayKey: { en: "Adjust", zh: "调整" },
-    accent: "#836ef9",
+    accent: "#75e6b1",
     title: { en: "What you can change", zh: "可以改什么" },
     body: {
       en: "Adjustments tied to the actual cause: route, token pair, amount, or slippage.",
@@ -59,7 +59,7 @@ const DIMENSIONS: Dimension[] = [
   {
     key: "Irrelevant",
     displayKey: { en: "Irrelevant", zh: "无关项" },
-    accent: "#a8a8b0",
+    accent: "#91b8ff",
     title: { en: "What will not help", zh: "改了也无效" },
     body: {
       en: "Changes unrelated to the cause are marked irrelevant, so retries stop being guesswork.",
@@ -193,7 +193,7 @@ function Home({ language }: { language: Language }) {
           <div
             ref={shadeRef}
             aria-hidden="true"
-            className="pointer-events-none absolute inset-0 z-[2] opacity-0 [background:radial-gradient(ellipse_at_center,rgba(250,250,250,0.96)_0%,rgba(250,250,250,0.82)_38%,rgba(250,250,250,0.24)_72%,rgba(248,247,255,0.46)_100%)]"
+            className="pointer-events-none absolute inset-0 z-[2] opacity-0 [background:radial-gradient(ellipse_at_center,rgba(5,5,10,0.97)_0%,rgba(5,5,10,0.88)_40%,rgba(8,7,15,0.42)_72%,rgba(22,16,47,0.24)_100%)]"
           />
           <div className="pointer-events-none absolute inset-0 z-[3] flex items-center justify-center px-5 pt-[7vh] sm:px-10">
             <div
@@ -226,7 +226,7 @@ function Home({ language }: { language: Language }) {
                     </>
                   )}
                 </h1>
-                <p className="m-0 mt-7 max-w-[620px] text-[14px] leading-[1.75] text-[#3f3f46] sm:mt-9 sm:text-[16px]">
+                <p className="m-0 mt-7 max-w-[620px] text-[14px] leading-[1.75] text-dim sm:mt-9 sm:text-[16px]">
                   {pick(
                     language,
                     "Parallax turns one Moss replay into a traceable receipt—showing the intent, route, prepared action, simulation, boundary, and provenance before anything is signed.",

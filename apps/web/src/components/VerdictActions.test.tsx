@@ -30,6 +30,33 @@ describe("VerdictActions", () => {
     expect(html).toContain("REVISE &amp; RERUN");
   });
 
+  test("assigns a distinct semantic tone to every verdict", () => {
+    const html = renderToStaticMarkup(<VerdictActions language="en" />);
+
+    expect(html).toContain('data-verdict-tone="evidence"');
+    expect(html).toContain('data-verdict-tone="ready"');
+    expect(html).toContain('data-verdict-tone="blocked"');
+    expect(html).toContain('data-verdict-tone="rerun"');
+    expect(html).toContain('data-tone="rerun"');
+  });
+
+  test("states the signing action before qualification", () => {
+    const html = renderToStaticMarkup(<VerdictActions language="en" />);
+
+    expect(html).toContain(
+      "Collect the missing evidence before deciding whether to sign.",
+    );
+    expect(html).toContain(
+      "No blocking evidence was found in this replay scope. This is not a safety guarantee.",
+    );
+    expect(html).toContain(
+      "Do not sign: the route cannot execute or meet the stated limits.",
+    );
+    expect(html).toContain(
+      "Revise the evidence-identified condition, then rerun before signing.",
+    );
+  });
+
   test("follows mouse hover without requiring a click", () => {
     let selected: VerdictZone = "southeast";
     const handlers = createVerdictInteractionHandlers("northwest", (zone) => {
@@ -70,6 +97,8 @@ describe("VerdictActions", () => {
     expect(html).toContain("请勿签署");
     expect(html).toContain("调整后重跑");
     expect(html).toContain("移动指针，查看结论");
+    expect(html).toContain("先补齐缺失证据，再决定是否签署");
+    expect(html).toContain("请勿签署：当前路径无法执行");
     expect(html).not.toContain("需要更多证据");
   });
 });

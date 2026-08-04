@@ -111,12 +111,15 @@ const SIGNAL_FOCUS_Z_OFFSET = 3;
 const DRAG_YAW_SENSITIVITY = 0.0052;
 const DRAG_PITCH_SENSITIVITY = 0.0042;
 const DRAG_PITCH_LIMIT = 0.65;
+const AMBIENT_STAR_COLORS = ["#ffffff", "#eeeaff"] as const;
+const PROTOCOL_LABEL_COLOR = "#c4baff";
+const SIGNAL_LABEL_COLOR = "#e3e6ff";
 
 const MARKERS: MarkerConfig[] = [
   {
     label: EVIDENCE_TRACE_MARKERS[0].label,
-    color: "#5840ff",
-    coreColor: "#6e54ff",
+    color: "#836ef9",
+    coreColor: "#9d8cff",
     highlightColor: "#ffffff",
     rimColor: "#9d8cff",
     role: "protocol",
@@ -130,10 +133,10 @@ const MARKERS: MarkerConfig[] = [
   },
   {
     label: EVIDENCE_TRACE_MARKERS[1].label,
-    color: "#1c1c22",
-    coreColor: "#34343c",
+    color: "#836ef9",
+    coreColor: "#9d8cff",
     highlightColor: "#ffffff",
-    rimColor: "#5840ff",
+    rimColor: "#c4baff",
     role: "protocol",
     size: 7.8,
     phase: 2.4,
@@ -145,7 +148,7 @@ const MARKERS: MarkerConfig[] = [
   },
   {
     label: EVIDENCE_TRACE_MARKERS[2].label,
-    color: "#5840ff",
+    color: "#ffffff",
     role: "signal",
     size: 3.8,
     phase: 1.1,
@@ -154,7 +157,7 @@ const MARKERS: MarkerConfig[] = [
   },
   {
     label: EVIDENCE_TRACE_MARKERS[3].label,
-    color: "#7567c9",
+    color: "#f4f1ff",
     role: "signal",
     size: 3.4,
     phase: 3.3,
@@ -163,7 +166,7 @@ const MARKERS: MarkerConfig[] = [
   },
   {
     label: EVIDENCE_TRACE_MARKERS[4].label,
-    color: "#8f83d6",
+    color: "#e3e6ff",
     role: "signal",
     size: 3,
     phase: 4.4,
@@ -172,7 +175,7 @@ const MARKERS: MarkerConfig[] = [
   },
   {
     label: EVIDENCE_TRACE_MARKERS[5].label,
-    color: "#a8a8b0",
+    color: "#ffffff",
     role: "signal",
     size: 3,
     phase: 5.2,
@@ -182,11 +185,11 @@ const MARKERS: MarkerConfig[] = [
 ];
 
 const PALETTE = [
-  new THREE.Color("#d9d5ef"),
-  new THREE.Color("#a99cff"),
-  new THREE.Color("#7567c9"),
-  new THREE.Color("#5840ff"),
-  new THREE.Color("#24242b"),
+  new THREE.Color("#ffffff"),
+  new THREE.Color("#f4f1ff"),
+  new THREE.Color("#e3e6ff"),
+  new THREE.Color("#d2d7f2"),
+  new THREE.Color("#bfc6e2"),
 ];
 
 const VERTEX_SHADER = `
@@ -500,13 +503,7 @@ function createAmbientMicroStars(
   const alphas = new Float32Array(count);
   const depthLayers = new Float32Array(count);
   const random = createSeededRandom(0x414d4249);
-  const palette = [
-    new THREE.Color("#eef8ff"),
-    new THREE.Color("#a8dcff"),
-    new THREE.Color("#9d8cff"),
-    new THREE.Color("#81f3ff"),
-    new THREE.Color("#ccff00"),
-  ];
+  const palette = AMBIENT_STAR_COLORS.map((color) => new THREE.Color(color));
   const boundedAspect = clamp(aspect, 0.6, 2.2);
   const halfFovTangent = Math.tan(THREE.MathUtils.degToRad(54 * 0.5));
   for (let index = 0; index < count; index += 1) {
@@ -766,7 +763,10 @@ function createLabelTexture(config: MarkerConfig) {
   context.font = `${weight} ${fontSize}px "IBM Plex Mono", monospace`;
   context.textAlign = "center";
   context.textBaseline = "middle";
-  context.fillStyle = config.color;
+  context.fillStyle =
+    config.role === "protocol" ? PROTOCOL_LABEL_COLOR : SIGNAL_LABEL_COLOR;
+  context.shadowColor = "rgba(0, 0, 0, 0.82)";
+  context.shadowBlur = 8;
   context.fillText(config.label, canvas.width / 2, canvas.height / 2);
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;

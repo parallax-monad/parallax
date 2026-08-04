@@ -22,7 +22,7 @@ export function SiteNav({
         href="#/"
         className="text-[25px] font-extrabold tracking-[-0.07em] text-accent no-underline sm:text-[29px]"
       >
-        PARAL<span className="text-[#0a0a0c]">LAX</span>
+        PARAL<span className="text-white">LAX</span>
       </a>
       <div className="ml-auto flex items-center gap-4 sm:gap-[30px]">
         <div className="flex items-center border-l border-line-strong pl-4 sm:pl-[30px]">
