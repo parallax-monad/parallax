@@ -6,41 +6,9 @@ import {
   SUPPORTED_TOKENS_IN,
   SUPPORTED_TOKENS_OUT,
 } from "@/lib/analyze/fixtures";
-import type { CheckSwapInput, Protocol } from "@/lib/analyze/types";
+import type { FormState } from "@/lib/analyze/form";
+import type { Protocol } from "@/lib/analyze/types";
 import { type Copy, type Language, say } from "@/lib/i18n";
-
-export type FormState = {
-  protocol: Protocol;
-  tokenIn: string;
-  tokenOut: string;
-  amountIn: string;
-  slippage: string;
-  minimumReceived: string;
-};
-
-export const INITIAL_FORM: FormState = {
-  protocol: "kuru",
-  tokenIn: "MON",
-  tokenOut: "USDC",
-  amountIn: "1200",
-  slippage: "0.5",
-  minimumReceived: "",
-};
-
-export function toInput(form: FormState, parentRunId?: string): CheckSwapInput {
-  return {
-    parentRunId,
-    protocol: form.protocol,
-    tokenIn: form.tokenIn,
-    tokenOut: form.tokenOut,
-    amountIn: form.amountIn,
-    slippage: form.slippage,
-    minimumReceived: form.minimumReceived || undefined,
-    minimumReceivedSource: form.minimumReceived
-      ? "user_declared"
-      : "unavailable",
-  };
-}
 
 const LABELS: Record<FormFieldKey, Copy> = {
   protocol: { en: "Protocol", zh: "协议" },

@@ -8,14 +8,10 @@ import { DiffCard } from "@/components/analyze/DiffCard";
 import { EvidenceDrawer } from "@/components/analyze/EvidenceDrawer";
 import { FlowArrow } from "@/components/analyze/FlowArrow";
 import { Reveal } from "@/components/analyze/Reveal";
-import {
-  type FormState,
-  INITIAL_FORM,
-  SwapForm,
-  toInput,
-} from "@/components/analyze/SwapForm";
+import { SwapForm } from "@/components/analyze/SwapForm";
 import { VerdictCard } from "@/components/analyze/VerdictCard";
 import { flaggedFields } from "@/lib/analyze/fields";
+import { type FormState, INITIAL_FORM, toInput } from "@/lib/analyze/form";
 import { checkSwap } from "@/lib/analyze/service";
 import type { CheckSwapResult } from "@/lib/analyze/types";
 import { type Language, say } from "@/lib/i18n";

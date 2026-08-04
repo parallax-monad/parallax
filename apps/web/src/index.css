@@ -49,6 +49,13 @@
   .btn-primary {
     @apply border-accent bg-accent text-accent-ink hover:bg-accent-bright hover:text-black hover:border-accent-bright;
   }
+  /* Wallet demo primary. Monad violet instead of the landing page's acid green. */
+  .btn-monad {
+    @apply border-monad bg-monad text-monad-ink hover:border-monad-bright hover:bg-monad-bright hover:text-white;
+  }
+  .eyebrow-monad {
+    @apply mb-2 block text-[12px] font-bold uppercase tracking-[0.13em] text-monad-dim;
+  }
   .pill {
     @apply inline-flex items-center gap-1.5 rounded-full border border-line-strong bg-ink-rail px-2.5 py-[4px] text-[11px] font-bold uppercase leading-tight tracking-[0.05em] text-dim;
   }

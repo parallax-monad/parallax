@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { AnalyzePage } from "@/components/analyze/AnalyzePage";
 import { RouteGraph } from "@/components/RouteGraph";
 import { SiteNav } from "@/components/SiteNav";
+import { WalletApp } from "@/components/wallet/WalletApp";
 import {
   type Copy,
   getInitialLanguage,
@@ -124,7 +124,7 @@ export default function App() {
         onLanguageChange={setLanguage}
       />
       {route === "analyze" ? (
-        <AnalyzePage language={language} />
+        <WalletApp language={language} />
       ) : (
         <Home language={language} />
       )}

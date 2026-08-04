@@ -23,6 +23,14 @@ export default {
           ink: "#080a00",
           bright: "#e0ff4d",
         },
+        // Monad brand violet, used by the wallet demo. The landing page keeps
+        // the acid-green accent, so the two surfaces stay distinguishable.
+        monad: {
+          DEFAULT: "#6E56F8",
+          ink: "#ffffff",
+          bright: "#8B75FF",
+          dim: "#A996FF",
+        },
         risk: {
           low: "#22c55e",
           moderate: "#eab308",
