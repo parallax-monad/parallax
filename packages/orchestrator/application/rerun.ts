@@ -2,6 +2,7 @@ import { isDeepStrictEqual } from "node:util";
 import {
   assetIdentity,
   type NormalizedSwapIntent,
+  type RerunRejectionReason,
   type RunDiff,
   type RunResult,
   runDiffSchema,
@@ -22,7 +23,11 @@ export type RerunContext =
 
 export type RerunResolution =
   | { success: true; context: RerunContext }
-  | { success: false; message: string };
+  | {
+      success: false;
+      reason: RerunRejectionReason;
+      message: string;
+    };
 
 /** Resolves the immutable baseline and exact single-condition child diff. */
 export function resolveRerun(
@@ -35,16 +40,26 @@ export function resolveRerun(
   }
 
   const parent = store.get(parentRunId);
-  if (parent?.status !== "completed" || parent.result.status !== "completed") {
+  if (parent === undefined) {
     return {
       success: false,
-      message: "The parent Run does not exist or is not completed",
+      reason: "PARENT_NOT_FOUND",
+      message: "The parent Run was not found",
+    };
+  }
+
+  if (parent.status !== "completed" || parent.result.status !== "completed") {
+    return {
+      success: false,
+      reason: "PARENT_NOT_COMPLETED",
+      message: "The parent Run is not completed",
     };
   }
 
   if (parent.result.replayMode) {
     return {
       success: false,
+      reason: "PARENT_IS_REPLAY",
       message: "Recorded Replay Runs cannot be re-run",
     };
   }
@@ -52,7 +67,8 @@ export function resolveRerun(
   if (parent.result.parentRunId !== undefined) {
     return {
       success: false,
-      message: "Only one Re-run is supported for a baseline Run",
+      reason: "RERUN_CHAINING_UNSUPPORTED",
+      message: "A Re-run must target a baseline Run",
     };
   }
 
@@ -62,6 +78,7 @@ export function resolveRerun(
   ) {
     return {
       success: false,
+      reason: "CHAIN_OR_SENDER_CHANGED",
       message: "A Re-run must preserve the baseline chain and sender",
     };
   }
@@ -74,6 +91,7 @@ export function resolveRerun(
   ) {
     return {
       success: false,
+      reason: "BOUNDARY_CHANGED",
       message:
         "A verification Re-run must preserve the baseline Economic Boundary",
     };
@@ -88,6 +106,7 @@ export function resolveRerun(
   ) {
     return {
       success: false,
+      reason: "BOUNDARY_ASSET_CHANGED",
       message:
         "A Re-run cannot change the Boundary asset while preserving the original Economic Boundary",
     };
@@ -95,7 +114,11 @@ export function resolveRerun(
 
   const diff = buildRunDiff(parent.result, intent);
   if (!diff.success) {
-    return { success: false, message: diff.message };
+    return {
+      success: false,
+      reason: "NOT_EXACTLY_ONE_CHANGE",
+      message: diff.message,
+    };
   }
 
   return {

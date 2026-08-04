@@ -80,6 +80,7 @@ describe("Re-run application use case", () => {
 
     expect(result).toEqual({
       success: false,
+      reason: "NOT_EXACTLY_ONE_CHANGE",
       message: "A Re-run must change exactly one supported Intent field",
     });
   });
@@ -93,6 +94,7 @@ describe("Re-run application use case", () => {
 
     expect(result).toEqual({
       success: false,
+      reason: "NOT_EXACTLY_ONE_CHANGE",
       message: "A Re-run must change exactly one supported Intent field",
     });
   });
@@ -162,8 +164,63 @@ describe("Re-run application use case", () => {
 
     expect(result).toEqual({
       success: false,
+      reason: "BOUNDARY_ASSET_CHANGED",
       message:
         "A Re-run cannot change the Boundary asset while preserving the original Economic Boundary",
+    });
+  });
+
+  it("distinguishes missing and incomplete parents", () => {
+    expect(resolveRerun("missing", intent, { get: () => undefined })).toEqual({
+      success: false,
+      reason: "PARENT_NOT_FOUND",
+      message: "The parent Run was not found",
+    });
+
+    expect(
+      resolveRerun("started", intent, {
+        get: () => ({ status: "started" }),
+      }),
+    ).toEqual({
+      success: false,
+      reason: "PARENT_NOT_COMPLETED",
+      message: "The parent Run is not completed",
+    });
+  });
+
+  it("rejects replay and child parents with stable reasons", () => {
+    expect(
+      resolveRerun(
+        "replay",
+        { ...intent, amountInAtomic: "2000000000000000000" },
+        {
+          get: () => ({
+            status: "completed",
+            result: { ...baseline, runId: "replay", replayMode: true },
+          }),
+        },
+      ),
+    ).toEqual({
+      success: false,
+      reason: "PARENT_IS_REPLAY",
+      message: "Recorded Replay Runs cannot be re-run",
+    });
+
+    expect(
+      resolveRerun(
+        "child",
+        { ...intent, amountInAtomic: "2000000000000000000" },
+        {
+          get: () => ({
+            status: "completed",
+            result: { ...baseline, runId: "child", parentRunId: "run-0" },
+          }),
+        },
+      ),
+    ).toEqual({
+      success: false,
+      reason: "RERUN_CHAINING_UNSUPPORTED",
+      message: "A Re-run must target a baseline Run",
     });
   });
 });

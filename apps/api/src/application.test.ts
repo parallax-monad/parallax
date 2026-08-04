@@ -449,7 +449,12 @@ describe("CheckApplicationService", () => {
       service.check(publicRequest({ parentRunId: "missing" })),
     ).resolves.toMatchObject({
       status: 400,
-      body: { error: { code: "INVALID_RERUN" } },
+      body: {
+        error: {
+          code: "INVALID_RERUN",
+          reason: "PARENT_NOT_FOUND",
+        },
+      },
     });
 
     const baseline = createService(
@@ -497,6 +502,7 @@ describe("CheckApplicationService", () => {
       body: {
         error: {
           code: "INVALID_RERUN",
+          reason: "NOT_EXACTLY_ONE_CHANGE",
           message: "A Re-run must change exactly one supported Intent field",
         },
       },
@@ -614,7 +620,12 @@ describe("CheckApplicationService", () => {
       ),
     ).resolves.toMatchObject({
       status: 400,
-      body: { error: { code: "INVALID_RERUN" } },
+      body: {
+        error: {
+          code: "INVALID_RERUN",
+          reason: "CHAIN_OR_SENDER_CHANGED",
+        },
+      },
     });
 
     await expect(
@@ -631,7 +642,12 @@ describe("CheckApplicationService", () => {
       ),
     ).resolves.toMatchObject({
       status: 400,
-      body: { error: { code: "INVALID_RERUN" } },
+      body: {
+        error: {
+          code: "INVALID_RERUN",
+          reason: "BOUNDARY_CHANGED",
+        },
+      },
     });
 
     expect(store.get("run-2")).toBeUndefined();
@@ -687,7 +703,12 @@ describe("CheckApplicationService", () => {
       nested.check(publicRequest({ parentRunId: "run-2", amountIn: "3" })),
     ).resolves.toMatchObject({
       status: 400,
-      body: { error: { code: "INVALID_RERUN" } },
+      body: {
+        error: {
+          code: "INVALID_RERUN",
+          reason: "PARENT_NOT_COMPLETED",
+        },
+      },
     });
     expect(store.get("run-3")).toBeUndefined();
   });
@@ -843,7 +864,12 @@ describe("CheckApplicationService", () => {
       rerun.check(publicRequest({ parentRunId: "run-1", amountIn: "2" })),
     ).resolves.toMatchObject({
       status: 400,
-      body: { error: { code: "INVALID_RERUN" } },
+      body: {
+        error: {
+          code: "INVALID_RERUN",
+          reason: "PARENT_IS_REPLAY",
+        },
+      },
     });
   });
 

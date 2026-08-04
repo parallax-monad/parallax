@@ -11,6 +11,7 @@ import {
   genericEvidenceItemSchema,
   normalizedSwapIntentSchema,
   type RuleResult,
+  rerunRejectionReasonSchema,
   ruleResultSchema,
   runDiffSchema,
   runResultSchema,
@@ -2367,6 +2368,19 @@ describe("Integration Error Result contract", () => {
 });
 
 describe("run diff, scope, and serialization", () => {
+  it("exposes stable Re-run rejection reasons", () => {
+    expect(rerunRejectionReasonSchema.options).toEqual([
+      "PARENT_NOT_FOUND",
+      "PARENT_NOT_COMPLETED",
+      "PARENT_IS_REPLAY",
+      "RERUN_CHAINING_UNSUPPORTED",
+      "CHAIN_OR_SENDER_CHANGED",
+      "BOUNDARY_CHANGED",
+      "BOUNDARY_ASSET_CHANGED",
+      "NOT_EXACTLY_ONE_CHANGE",
+    ]);
+  });
+
   it("accepts an atomic input amount diff", () => {
     const result = runDiffSchema.parse({
       previousRunId: "run-1",

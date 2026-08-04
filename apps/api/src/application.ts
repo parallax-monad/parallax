@@ -5,6 +5,7 @@ import {
   type EvidenceRef,
   type FailedRunResult,
   failedRunResultSchema,
+  type RerunRejectionReason,
   type RunResult,
   runResultSchema,
 } from "@parallax/contracts";
@@ -25,12 +26,21 @@ export type CheckApiErrorCode =
   | "INVALID_AGENT_FLOW_RESPONSE"
   | "RUN_STORE_ERROR";
 
+export type CheckApiError =
+  | {
+      code: "INVALID_RERUN";
+      reason: RerunRejectionReason;
+      message: string;
+      issues?: unknown;
+    }
+  | {
+      code: Exclude<CheckApiErrorCode, "INVALID_RERUN">;
+      message: string;
+      issues?: unknown;
+    };
+
 export type CheckApiErrorBody = {
-  error: {
-    code: CheckApiErrorCode;
-    message: string;
-    issues?: unknown;
-  };
+  error: CheckApiError;
   run?: FailedRunResult;
 };
 
@@ -85,6 +95,7 @@ export class CheckApplicationService {
     if (!rerun.success) {
       return errorResponse(400, {
         code: "INVALID_RERUN",
+        reason: rerun.reason,
         message: rerun.message,
       });
     }
