@@ -67,9 +67,11 @@ pnpm --filter @parallax/api start
 ```
 
 P2 does not include the live Agent Flow implementation; until it is injected,
-`POST /api/check` returns a diagnostic integration error rather than a fake
-success. Recorded replay data is available only through `/api/replay/:id` and
-is never used as a live Check fallback.
+`POST /api/check` returns HTTP 502 with `error.code: "UNSUPPORTED"` and a
+fail-closed Run envelope whose verdict is `UNKNOWN` and whose integration
+error is not retryable, rather than a fake success. Recorded replay data is
+available only through `/api/replay/:id` and is never used as a live Check
+fallback.
 
 ## Collaboration
 
