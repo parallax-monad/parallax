@@ -93,19 +93,24 @@ is configured, and fails non-zero if a live run does not pass acceptance.
 Runtime, RPC, and block provenance carry three distinct trust levels and must
 not be conflated:
 
-1. **Smoke Harness verified runtime** — the harness checks that
-   `MOSS_RUNTIME_PATH` is checked out at the declared revision and that the
-   loaded `@themoss/*` package versions match.
-2. **Adapter caller-declared runtime identity** — `runKuruLiveSwap` receives
-   `runtimeVersion`/`runtimeRevision` from the caller and records them as
-   provenance; it fails closed on a loaded-version mismatch but does not
-   itself prove the checkout Git revision. These are
-   caller-declared/observed values, not an independently verified immutable
-   identity.
-3. **RPC-observed blocks** — each stage block is observed through RPC before
-   the call; it is not the Moss simulator's internally pinned block (Moss
-   ADR 0002).
+1. **Smoke execution environment inputs** — the smoke harness receives
+   `MOSS_RUNTIME_PATH`, `MOSS_RUNTIME_VERSION`, and `MOSS_RUNTIME_REVISION`
+   from the operator. The current harness does not independently attest the
+   checkout: it does not prove the Git revision, verify every loaded
+   `@themoss/*` package identity, confirm the RPC chain ID, or observe the
+   simulator's internally pinned block.
+2. **Adapter caller-declared runtime provenance** — `runKuruLiveSwap`
+   receives `runtimeVersion`/`runtimeRevision` from the caller and records
+   them as provenance; it fails closed on a loaded `@themoss/core` version
+   mismatch but does not itself prove the checkout Git revision or the
+   identity of every loaded package. These are caller-declared/observed
+   values, not an independently verified immutable identity.
+3. **RPC-observed chain and stage blocks** — `chainId` is read from the RPC
+   client and recorded, not enforced to equal 143 by the adapter. Each stage
+   block is observed through RPC before the call; it is not the Moss
+   simulator's internally pinned block (Moss ADR 0002).
 
-A consumer must re-verify runtime revision, package identity, RPC chainId, and
-simulator block consistency before treating the result as authoritative Live
-Evidence.
+A consumer must independently re-verify the Moss Git revision, every Moss
+package identity, the RPC chain ID, and simulator block consistency before
+interpreting the result as P0_LIVE_READY, authoritative Live Evidence, or
+production Agent Flow input.

@@ -84,6 +84,10 @@ Moss git commit, not a workspace label.
 
 ## How to reproduce
 
+These steps are operator actions performed once before a run. They are not
+executed automatically by the adapter or the smoke at runtime; the operator
+uses them to confirm the checkout before running.
+
 ```bash
 # 1. Pin the Moss runtime in a dedicated checkout (never touch the upstream repo).
 cd /Users/jie/Documents/web3-week2/moss   # local fork with upstream remote
@@ -115,25 +119,33 @@ condition passes.
 Runtime, RPC, and block provenance are kept in three explicit layers. Do not
 promote one layer into another:
 
-1. **Smoke Harness verified runtime.** The harness may verify that
-   `MOSS_RUNTIME_PATH` is checked out at the declared revision (`git rev-parse
-   HEAD`), that every loaded `@themoss/*` package version matches the matrix
-   above, and that `MOSS_RUNTIME_REVISION` equals the declared value.
-2. **Adapter caller-declared runtime identity.** `runKuruLiveSwap` receives
+1. **Smoke configuration inputs.** The smoke harness receives
+   `MOSS_RUNTIME_PATH`, `MOSS_RUNTIME_VERSION`, and `MOSS_RUNTIME_REVISION`
+   from the operator. These are configuration inputs, not runtime
+   attestations: the current harness does not independently verify the
+   checkout Git revision, the identity of every loaded `@themoss/*` package,
+   the RPC chain ID, or the simulator's internally pinned block. The
+   reproduction steps below are manual operator actions; they are not
+   performed automatically at runtime.
+2. **Adapter caller-declared runtime provenance.** `runKuruLiveSwap` receives
    `runtimeVersion`/`runtimeRevision` from its caller and records them as
-   provenance. The adapter fail-closes when the loaded `@themoss/core` version
-   disagrees with the declared `runtimeVersion`, but it does not itself prove
-   the checkout Git revision. These are **caller-declared/observed
-   provenance**, not an independently verified immutable identity.
-3. **RPC-observed blocks.** Each stage's `blockNumber` is the block observed
-   through RPC immediately before the stage call. The Moss simulator pins its
-   own base block internally (Moss ADR 0002) and does not expose it; a
-   top-level block must not be treated as the exact simulator block for every
-   stage.
+   provenance. `MOSS_RUNTIME_REVISION` is a pinned/declarative value. The
+   adapter fail-closes when the loaded `@themoss/core` version disagrees with
+   the declared `runtimeVersion`, but it does not itself prove the checkout
+   Git revision or every package identity. These are **caller-declared/
+   observed provenance**, not an independently verified immutable identity.
+3. **RPC-observed chain and stage blocks.** `chainId` is read from the RPC
+   client and recorded; the adapter does not enforce that it equals 143. Each
+   stage's `blockNumber` is the block observed through RPC immediately before
+   the stage call. The Moss simulator pins its own base block internally
+   (Moss ADR 0002) and does not expose it; a top-level block must not be
+   treated as the exact simulator block for every stage.
 
-A downstream consumer must re-verify runtime revision, package identity, RPC
-chainId, and actual simulator block consistency before using the result as
-authoritative Live Evidence.
+A downstream consumer must independently re-verify the Moss Git revision,
+every Moss package identity, the RPC chain ID, and actual simulator block
+consistency before interpreting the result as P0_LIVE_READY, authoritative
+Live Evidence, or production Agent Flow input. The result is not
+authoritative unless independently re-verified.
 
 ## Security and trust boundary
 

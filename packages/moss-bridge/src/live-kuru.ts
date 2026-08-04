@@ -31,21 +31,28 @@ import type {
  * the test runner kills the process.
  *
  * Provenance trust levels (kept deliberately separate):
- *   1. Smoke Harness verified runtime: the live smoke harness checks that
- *      `MOSS_RUNTIME_PATH` is checked out at the declared revision and that
- *      every loaded `@themoss/*` package version matches, before running.
- *   2. Caller-declared runtime identity: `runtimeVersion`/`runtimeRevision`
- *      are received from the caller of `runKuruLiveSwap`. This adapter
- *      fail-closes when the loaded `@themoss/core` version disagrees with
- *      `runtimeVersion`, but it does not itself prove the checkout Git
- *      revision; it records the declared identity as provenance only.
- *   3. RPC-observed blocks: `blockNumber` is the block observed through RPC
- *      immediately before each stage call. It is not the block internally
- *      pinned by the Moss simulator (not exposed by the runtime API, Moss
- *      ADR 0002), so it must not be described as the exact simulator block.
- * A consumer must re-verify runtime revision, package identity, RPC chainId,
- * and simulator block consistency before treating the result as
- * authoritative Live Evidence.
+ *   1. Smoke configuration inputs: the smoke harness receives
+ *      MOSS_RUNTIME_PATH / MOSS_RUNTIME_VERSION / MOSS_RUNTIME_REVISION from
+ *      the operator. The current harness does not independently attest the
+ *      checkout Git revision, every loaded `@themoss/*` package identity, the
+ *      RPC chain ID, or the simulator's pinned block; full runtime
+ *      verification remains downstream.
+ *   2. Adapter caller-declared runtime provenance: `runtimeVersion` and
+ *      `runtimeRevision` are provided by the caller of `runKuruLiveSwap`.
+ *      The adapter fail-closes when the loaded `@themoss/core` version
+ *      disagrees with `runtimeVersion`, but it does not independently prove
+ *      the checkout Git revision or the identity of every loaded package; the
+ *      declared identity is recorded as provenance only.
+ *   3. RPC-observed chain and stage blocks: `chainId` is read from the RPC
+ *      client and recorded (not enforced to equal 143), and each stage's
+ *      `blockNumber` is the block observed through RPC immediately before the
+ *      stage call. It is not the block internally pinned by the Moss
+ *      simulator (not exposed by the runtime API, Moss ADR 0002), so it must
+ *      not be described as the exact simulator block.
+ * A consumer must independently re-verify the Moss Git revision, every
+ * package identity, the RPC chain ID, and simulator block consistency before
+ * interpreting the result as P0_LIVE_READY, authoritative Live Evidence, or
+ * production Agent Flow input; it is not authoritative unless re-verified.
  */
 
 const DEFAULT_STAGE_TIMEOUT_MS = 30_000;
@@ -314,9 +321,10 @@ export async function runKuruLiveSwapWithBundle(
       );
     }
 
-    // Caller-declared runtime identity: recorded as provenance, not proven
-    // here. Version disagreement with the loaded bundle fails closed above;
-    // the checkout Git revision is verified by the Smoke Harness, not here.
+    // Caller-declared runtime provenance: recorded as provenance, not proven
+    // here. A loaded @themoss/core version disagreement fails closed above;
+    // the checkout Git revision and full package identity verification remain
+    // a downstream/operator responsibility, not an adapter check.
     const identity: RuntimeIdentity = {
       runtimeVersion: input.runtimeVersion,
       runtimeRevision: input.runtimeRevision,
