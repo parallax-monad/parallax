@@ -618,8 +618,22 @@ function parseStructuredError(
   const integrationStatus = normalizeIntegrationStatus(value.integrationStatus);
   const source = normalizeErrorSource(value.source);
 
-  // A fully preserved record requires a valid code and integration status.
-  // Missing stage or source are tolerated and filled from context.
+  // A structured non-OK integration status is authoritative even when the
+  // code is missing, schema-invalid, or inconsistent with the message or
+  // stage. It must never be downgraded to OK by message heuristics.
+  if (integrationStatus && integrationStatus !== "OK") {
+    return {
+      stage,
+      code: code ?? integrationStatus,
+      message: value.message,
+      integrationStatus,
+      source,
+      normalization: "PRESERVED",
+    };
+  }
+
+  // A fully preserved OK record still requires a valid code so that we do
+  // not manufacture a structured record from an arbitrary message object.
   if (!code || !integrationStatus) return null;
 
   return {

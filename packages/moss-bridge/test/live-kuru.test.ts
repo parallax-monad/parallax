@@ -609,6 +609,200 @@ describe("live normalization over the recorded fixture", () => {
   });
 });
 
+function liveErrors(
+  rawErrors: import("../src/index.js").RawKuruEvidence["errors"],
+) {
+  return normalizeLiveKuruEvidence({
+    intent: INTENT,
+    raw: {
+      discover: null,
+      load: null,
+      quote: null,
+      action: null,
+      simulation: null,
+      errors: rawErrors,
+    },
+    runtime: {
+      runtimeVersion: "0.1.0",
+      runtimeRevision: "d09b38cbc44ee7f5722c5d09e7224f7750187762",
+      packageVersions: {},
+    },
+    fetchedAt: "2026-08-03T00:00:00.000Z",
+    stages: [],
+  });
+}
+
+describe("structured integrationStatus preservation", () => {
+  it("preserves SIMULATE INTEGRATION_ERROR when code is missing", () => {
+    const evidence = liveErrors({
+      simulate: {
+        stage: "SIMULATE",
+        integrationStatus: "INTEGRATION_ERROR",
+        message: "execution reverted",
+      },
+    });
+    expect(evidence.integrationStatus).toBe("INTEGRATION_ERROR");
+    expect(evidence.executionStatus).toBe("UNKNOWN");
+    expect(evidence.errors.value).toEqual([
+      expect.objectContaining({
+        stage: "SIMULATE",
+        code: "INTEGRATION_ERROR",
+        integrationStatus: "INTEGRATION_ERROR",
+        normalization: "PRESERVED",
+      }),
+    ]);
+  });
+
+  it("preserves SIMULATE INTEGRATION_ERROR when code is invalid", () => {
+    const evidence = liveErrors({
+      simulate: {
+        stage: "SIMULATE",
+        code: "INVALID_CODE",
+        integrationStatus: "INTEGRATION_ERROR",
+        message: "execution reverted",
+      },
+    });
+    expect(evidence.integrationStatus).toBe("INTEGRATION_ERROR");
+    expect(evidence.executionStatus).toBe("UNKNOWN");
+    expect(evidence.errors.value).toEqual([
+      expect.objectContaining({
+        stage: "SIMULATE",
+        code: "INTEGRATION_ERROR",
+        integrationStatus: "INTEGRATION_ERROR",
+        normalization: "PRESERVED",
+      }),
+    ]);
+  });
+
+  it("preserves SIMULATE INTEGRATION_ERROR when code is mismatched", () => {
+    const evidence = liveErrors({
+      simulate: {
+        stage: "SIMULATE",
+        code: "RPC_FAILURE",
+        integrationStatus: "INTEGRATION_ERROR",
+        message: "execution reverted",
+      },
+    });
+    expect(evidence.integrationStatus).toBe("INTEGRATION_ERROR");
+    expect(evidence.executionStatus).toBe("UNKNOWN");
+    expect(evidence.errors.value).toEqual([
+      expect.objectContaining({
+        stage: "SIMULATE",
+        code: "INTEGRATION_ERROR",
+        integrationStatus: "INTEGRATION_ERROR",
+        normalization: "PRESERVED",
+      }),
+    ]);
+  });
+
+  it("preserves QUOTE INTEGRATION_ERROR and does not derive NO_ROUTE", () => {
+    const evidence = liveErrors({
+      quote: {
+        stage: "QUOTE",
+        integrationStatus: "INTEGRATION_ERROR",
+        message: "no route found",
+      },
+    });
+    expect(evidence.integrationStatus).toBe("INTEGRATION_ERROR");
+    expect(evidence.executionStatus).toBe("UNKNOWN");
+    expect(evidence.errors.value).toEqual([
+      expect.objectContaining({
+        stage: "QUOTE",
+        code: "INTEGRATION_ERROR",
+        integrationStatus: "INTEGRATION_ERROR",
+        normalization: "PRESERVED",
+      }),
+    ]);
+  });
+
+  it("derives REVERTED from a confirmed SIMULATE revert result", () => {
+    const evidence = normalizeLiveKuruEvidence({
+      intent: INTENT,
+      raw: {
+        discover: null,
+        load: null,
+        quote: QUOTE,
+        action: CAPABILITY,
+        simulation: {
+          results: [
+            {
+              protocol: "kuru",
+              method: "swap",
+              transaction: TRANSACTION,
+              reverted: true,
+              revertReason: "execution reverted",
+              warnings: [],
+              gas: "1",
+            },
+          ],
+        },
+      },
+      runtime: {
+        runtimeVersion: "0.1.0",
+        runtimeRevision: "d09b38cbc44ee7f5722c5d09e7224f7750187762",
+        packageVersions: {},
+      },
+      fetchedAt: "2026-08-03T00:00:00.000Z",
+      stages: [],
+    });
+    expect(evidence.integrationStatus).toBe("OK");
+    expect(evidence.executionStatus).toBe("REVERTED");
+    expect(evidence.revertReason.value).toBe("execution reverted");
+  });
+
+  it("derives NO_ROUTE from unstructured QUOTE route message", () => {
+    const evidence = liveErrors({
+      quote: "no verified Kuru market path for this token pair",
+    });
+    expect(evidence.integrationStatus).toBe("OK");
+    expect(evidence.executionStatus).toBe("NO_ROUTE");
+    expect(evidence.errors.value).toEqual([
+      expect.objectContaining({
+        stage: "QUOTE",
+        code: "NO_ROUTE",
+        integrationStatus: "OK",
+        normalization: "DERIVED",
+      }),
+    ]);
+  });
+
+  it("keeps FlipOrderUpdated warnings through the live entry point", () => {
+    const raw = JSON.parse(
+      readFileSync(
+        new URL(
+          "../../../fixtures/chain-evidence/kuru/mon-to-usdc/raw.json",
+          import.meta.url,
+        ),
+        "utf8",
+      ),
+    ) as import("../src/index.js").RawKuruEvidence;
+    const evidence = normalizeLiveKuruEvidence({
+      intent: INTENT,
+      raw,
+      runtime: {
+        runtimeVersion: "0.1.0",
+        runtimeRevision: "d09b38cbc44ee7f5722c5d09e7224f7750187762",
+        packageVersions: {},
+      },
+      fetchedAt: "2026-08-03T00:00:00.000Z",
+      stages: [],
+    });
+    expect(evidence.executionStatus).toBe("UNKNOWN");
+    expect(evidence.integrationStatus).toBe("OK");
+    expect(evidence.receipt.value).toBeNull();
+    expect(evidence.outcome.value).toBeNull();
+    expect(JSON.stringify(evidence.warnings.value)).toContain(
+      "FlipOrderUpdated",
+    );
+    expect(evidence.simulationCoverage.value?.complete).toBe(false);
+    expect(
+      evidence.limitations.some((limitation) =>
+        limitation.includes("FlipOrderUpdated"),
+      ),
+    ).toBe(true);
+  });
+});
+
 describe("secret redaction", () => {
   it("redacts RPC userinfo and query secrets", () => {
     const redacted = redact(
