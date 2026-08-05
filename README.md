@@ -58,20 +58,26 @@ started directly with `pnpm --filter @parallax/api start` after copying
 `.env.example` to `.env` and filling in the required values. The launcher
 requires `MONAD_RPC_URL`, `MOSS_RUNTIME_VERSION`, `MOSS_RUNTIME_REVISION`,
 `PARALLAX_TOKEN_REGISTRY_JSON`, `HOST`, and `PORT`, and optionally accepts
-`CORS_ORIGIN` for the browser origin allowed to call the API. It reports
-configuration errors before opening the listener.
+`CORS_ORIGIN` for the browser origin allowed to call the API. Supplying
+`MOSS_RUNTIME_PATH` enables the live Kuru Agent Flow; it must point to a
+readable, built Moss Git checkout with its `.git` metadata retained, and the
+runtime environment must provide the `git` executable. Bootstrap verifies the
+checkout structure, package identities, versions, and Git revision before
+composing the app; without the path, `/api/check` remains explicitly
+unsupported. Configuration and runtime provenance errors are reported before
+opening the listener.
 
 ```bash
 cp .env.example .env
 pnpm --filter @parallax/api start
 ```
 
-P2 does not include the live Agent Flow implementation; until it is injected,
-`POST /api/check` returns HTTP 502 with `error.code: "UNSUPPORTED"` and a
-fail-closed Run envelope whose verdict is `UNKNOWN` and whose integration
-error is not retryable, rather than a fake success. Recorded replay data is
-available only through `/api/replay/:id` and is never used as a live Check
-fallback.
+The P0 Workstream D integration now connects `/api/check` to the live Kuru
+Agent Flow when `MOSS_RUNTIME_PATH` points at the pinned, built Moss checkout.
+Without that path, `POST /api/check` returns HTTP 502 with
+`error.code: "UNSUPPORTED"` and a fail-closed Run envelope whose verdict is
+`UNKNOWN`, rather than a fake success. Recorded replay data is available only
+through `/api/replay/:id` and is never used as a live Check fallback.
 
 ## Collaboration
 

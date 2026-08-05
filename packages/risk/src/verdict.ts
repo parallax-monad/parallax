@@ -132,7 +132,7 @@ function evaluateBoundary(
 }
 
 function quoteOutput(evidence: NormalizedKuruEvidence): string | null {
-  if (!record(evidence.quote.value)) return null;
+  if (!isRecord(evidence.quote.value)) return null;
   const value = evidence.quote.value.estimatedAmountOut;
   return typeof value === "string" ? value : null;
 }
@@ -171,6 +171,6 @@ function compareDecimal(left: string, right: string): number {
   return leftScaled === rightScaled ? 0 : leftScaled > rightScaled ? 1 : -1;
 }
 
-function record(value: unknown): value is Record<string, unknown> {
+function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }

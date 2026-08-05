@@ -9,7 +9,10 @@ const mon = { kind: "native" as const };
 const usdc = { kind: "erc20" as const, address: usdcAddress };
 
 const registry = createTrustedTokenRegistry({
-  chains: [{ chainId: 143, symbol: "MON", decimals: 18 }],
+  chains: [
+    { chainId: 143, symbol: "MON", decimals: 18 },
+    { chainId: 1, symbol: "ETH", decimals: 18 },
+  ],
   tokens: [
     {
       chainId: 143,
@@ -100,7 +103,7 @@ describe("normalizeCheckSwapRequest", () => {
     });
   });
 
-  it("rejects an unsupported chain", () => {
+  it("rejects every chain other than Monad 143", () => {
     expect(
       normalizeCheckSwapRequest(request({ chainId: 1 }), registry),
     ).toMatchObject({

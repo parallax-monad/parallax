@@ -63,3 +63,28 @@ export function convertHumanAmountToAtomic(
 
   return { success: true, amountAtomic: amountAtomic.toString() };
 }
+
+/**
+ * Converts an atomic token amount to the plain decimal string expected by
+ * external protocol adapters without using floating-point arithmetic.
+ */
+export function convertAtomicAmountToHuman(
+  amountAtomic: string,
+  decimals: number,
+): string {
+  if (
+    !/^(?:0|[1-9]\d*)$/.test(amountAtomic) ||
+    !Number.isInteger(decimals) ||
+    decimals < 0 ||
+    decimals > 255
+  ) {
+    throw new Error("Invalid atomic amount or token decimals");
+  }
+
+  if (decimals === 0) return amountAtomic;
+
+  const padded = amountAtomic.padStart(decimals + 1, "0");
+  const whole = padded.slice(0, -decimals);
+  const fraction = padded.slice(-decimals).replace(/0+$/, "");
+  return fraction.length === 0 ? whole : `${whole}.${fraction}`;
+}

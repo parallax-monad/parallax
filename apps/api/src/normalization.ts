@@ -11,6 +11,9 @@ import {
   type TrustedTokenRegistry,
 } from "@parallax/contracts";
 
+/** Backend live Check is intentionally scoped to Monad Chain 143. */
+export const BACKEND_CHAIN_ID = 143;
+
 /**
  * Establishes the authoritative API-to-domain boundary by resolving trusted
  * token metadata and converting every business amount to atomic units.
@@ -19,6 +22,14 @@ export function normalizeCheckSwapRequest(
   request: CheckSwapRequest,
   registry: TrustedTokenRegistry,
 ): IntentNormalizationResult {
+  if (request.chainId !== BACKEND_CHAIN_ID) {
+    return failure(
+      "UNSUPPORTED_CHAIN",
+      "chainId",
+      `Chain ${request.chainId} is not supported; live checks require Chain ${BACKEND_CHAIN_ID}`,
+    );
+  }
+
   if (!registry.hasChain(request.chainId)) {
     return failure(
       "UNSUPPORTED_CHAIN",

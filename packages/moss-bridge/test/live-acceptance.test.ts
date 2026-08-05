@@ -11,6 +11,7 @@ const DECLARED = { runtimeVersion: "0.1.0", runtimeRevision: "d09b38c" };
 /** A run whose acceptance gate passes completely. */
 function passingResult(): LiveAcceptanceResult {
   return {
+    observedChainId: 143,
     stages: [
       { stage: "DISCOVER", success: true },
       { stage: "LOAD", success: true },
@@ -18,6 +19,7 @@ function passingResult(): LiveAcceptanceResult {
       { stage: "ACTION", success: true },
       { stage: "SIMULATE", success: true },
     ],
+    simulatorPinnedBlock: "92820000",
     evidence: {
       quote: { value: { estimatedAmountOut: "1" } },
       action: { value: [{ method: "swap" }] },
@@ -34,10 +36,13 @@ function passingResult(): LiveAcceptanceResult {
       receipt: { value: { status: "success" } },
       outcome: { value: { amountReceivedAtomic: "1" } },
       warnings: { value: [] },
+      assetChangeAssessment: "NOT_APPLICABLE",
       blockNumber: { value: "92820000" },
       isReplay: false,
       isMock: false,
+      simulatorPinnedBlock: "92820000",
       executionStatus: "SUCCESS",
+      integrationStatus: "OK",
       runtimeVersion: DECLARED.runtimeVersion,
       runtimeRevision: DECLARED.runtimeRevision,
     },
@@ -68,6 +73,41 @@ describe("live acceptance gate", () => {
     expect(acceptance.runtimeProvenanceComplete).toBe(false);
     expect(liveSuccessOf(acceptance)).toBe(false);
     expect(p0DecisionCandidate(result, DECLARED)).not.toBe("P0_LIVE_READY");
+  });
+
+  it("fails liveSuccess when the simulator pinned block is unavailable", () => {
+    const result = passingResult();
+    result.simulatorPinnedBlock = undefined;
+    const acceptance = evaluateLiveAcceptance(result, DECLARED);
+    expect(acceptance.simulatorPinnedBlockComplete).toBe(false);
+    expect(liveSuccessOf(acceptance)).toBe(false);
+  });
+
+  it("fails liveSuccess when Evidence and API pinned blocks disagree", () => {
+    const result = passingResult();
+    result.evidence.simulatorPinnedBlock = "92820001";
+    const acceptance = evaluateLiveAcceptance(result, DECLARED);
+    expect(acceptance.simulatorPinnedBlockComplete).toBe(false);
+    expect(liveSuccessOf(acceptance)).toBe(false);
+  });
+
+  it("fails liveSuccess when the RPC is on the wrong chain", () => {
+    const result = passingResult() as LiveAcceptanceResult & {
+      observedChainId: number;
+    };
+    result.observedChainId = 1;
+    const acceptance = evaluateLiveAcceptance(result, DECLARED);
+    expect(acceptance.chainIdCorrect).toBe(false);
+    expect(liveSuccessOf(acceptance)).toBe(false);
+    expect(p0DecisionCandidate(result, DECLARED)).not.toBe("P0_LIVE_READY");
+  });
+
+  it("fails liveSuccess when asset changes are not explained", () => {
+    const result = passingResult();
+    result.evidence.assetChangeAssessment = "UNKNOWN";
+    const acceptance = evaluateLiveAcceptance(result, DECLARED);
+    expect(acceptance.assetChangesExplained).toBe(false);
+    expect(liveSuccessOf(acceptance)).toBe(false);
   });
 
   it("keeps an outcome-parsing failure from being P0-ready", () => {

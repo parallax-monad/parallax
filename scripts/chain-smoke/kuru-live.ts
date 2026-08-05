@@ -20,10 +20,10 @@
  *   MOSS_RPC_URL         - read-only Monad mainnet RPC
  *   MOSS_RUNTIME_PATH    - pinned Moss checkout with built workspace packages
  *   MOSS_RUNTIME_VERSION - exact @themoss/core version (e.g. 0.1.0)
- *   MOSS_RUNTIME_REVISION- immutable Moss git commit or package identity
+ *   MOSS_RUNTIME_REVISION- immutable Moss git commit
  *
- * When MOSS_RPC_URL is absent the smoke reports LIVE_SMOKE_NOT_RUN and passes;
- * that is a configuration state, not an implementation failure.
+ * Missing inputs produce a persisted configuration artifact and a non-zero
+ * result; a smoke without the real runtime/RPC is not an acceptance success.
  */
 import { execFileSync } from "node:child_process";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
@@ -39,10 +39,13 @@ import {
   toJsonValue,
 } from "@parallax/moss-bridge";
 import { expect, test } from "vitest";
+import { bootstrapBackendApp } from "../../apps/api/src/bootstrap/backend.js";
+import { runResultSchema } from "../../packages/contracts/src/index.js";
+import type { KuruLiveRunner } from "../../packages/orchestrator/agent-flow/index.js";
 
 const rpcUrl = process.env.MOSS_RPC_URL;
 const runtimePath = process.env.MOSS_RUNTIME_PATH;
-const runtimeVersion = process.env.MOSS_RUNTIME_VERSION ?? "0.1.0";
+const runtimeVersion = process.env.MOSS_RUNTIME_VERSION?.trim() || undefined;
 const runtimeRevision = process.env.MOSS_RUNTIME_REVISION;
 const sender =
   process.env.MOSS_SENDER ?? "0xcccccccccccccccccccccccccccccccccccccccc";
@@ -58,13 +61,31 @@ const fixtureDir = join(
   "live-success-mon-to-usdc",
 );
 
-const intent = {
-  chainId: MONAD_CHAIN_ID,
+const apiTokenRegistry = {
+  chains: [{ chainId: 143, symbol: "MON", decimals: 18 }],
+  tokens: [
+    {
+      chainId: 143,
+      address: MONAD_USDC_ADDRESS,
+      symbol: "USDC",
+      decimals: 6,
+      decimalsSource: "onchain_verified" as const,
+      verifiedAtBlock: "90000000",
+    },
+  ],
+};
+
+const apiCheckRequest = {
+  chainId: 143,
+  protocol: "kuru" as const,
   sender,
-  tokenIn: "MON",
-  tokenOut: MONAD_USDC_ADDRESS,
+  tokenIn: { kind: "native" as const },
+  tokenOut: { kind: "erc20" as const, address: MONAD_USDC_ADDRESS },
   amountIn: "0.01",
-  minimumReceivedSource: "unavailable" as const,
+  economicBoundary: {
+    availability: "unavailable" as const,
+    source: "unavailable" as const,
+  },
 };
 
 function writeJson(dir: string, name: string, value: unknown): void {
@@ -95,8 +116,8 @@ function baseMetadata(
     nodeVersion: process.version,
     pnpmVersion: process.env.npm_config_user_agent ?? "unknown",
     parallaxCommit,
-    mossRuntimeVersion: runtimeVersion,
-    mossRuntimeRevision: runtimeRevision,
+    mossRuntimeVersion: runtimeVersion ?? null,
+    mossRuntimeRevision: runtimeRevision ?? null,
     chainId: MONAD_CHAIN_ID,
     sender,
     tokenIn: "MON",
@@ -130,34 +151,105 @@ function stageStatus(
   }));
 }
 
-test("kuru live smoke: MON -> USDC", async () => {
-  if (!rpcUrl || !runtimePath || !runtimeRevision) {
-    const missing = [
-      !rpcUrl && "MOSS_RPC_URL",
-      !runtimePath && "MOSS_RUNTIME_PATH",
-      !runtimeRevision && "MOSS_RUNTIME_REVISION",
-    ].filter(Boolean);
-    console.log(
-      `LIVE_SMOKE_NOT_RUN missing=${missing.join(",")} node=${process.version}`,
-    );
-    expect(true).toBe(true);
-    return;
-  }
+function apiCheckAcceptanceOf(
+  value: unknown,
+  expected: { runId: string; simulatorPinnedBlock: string },
+): boolean {
+  const parsed = runResultSchema.safeParse(value);
+  if (!parsed.success || parsed.data.status !== "completed") return false;
 
+  return (
+    parsed.data.runId === expected.runId &&
+    parsed.data.systemStatus === "OK" &&
+    parsed.data.verdict === "PROCEED" &&
+    parsed.data.simulatorPinnedBlock === expected.simulatorPinnedBlock &&
+    parsed.data.scope.every((item) => item.status !== "unknown") &&
+    parsed.data.evidence.every(
+      (item) => item.isReplay === false && item.isMock === false,
+    )
+  );
+}
+
+test("kuru live smoke: MON -> USDC", async () => {
   const runId = `kuru-live-${Date.now()}`;
   const startedAt = new Date().toISOString();
   const artifactDir = join(smokeOutDir, runId);
-  let result: Awaited<ReturnType<typeof runKuruLiveSwap>> | undefined;
-  try {
-    result = await runKuruLiveSwap({
-      runId,
-      intent,
-      rpcUrl,
-      runtimePath,
-      runtimeVersion,
-      runtimeRevision,
-      logger: (line) => console.log(line),
+  if (!rpcUrl || !runtimePath || !runtimeVersion || !runtimeRevision) {
+    const missing = [
+      !rpcUrl && "MOSS_RPC_URL",
+      !runtimePath && "MOSS_RUNTIME_PATH",
+      !runtimeVersion && "MOSS_RUNTIME_VERSION",
+      !runtimeRevision && "MOSS_RUNTIME_REVISION",
+    ].filter(Boolean);
+    const metadata = {
+      ...baseMetadata(runId, startedAt),
+      status: "CONFIGURATION_ERROR",
+      liveSuccess: false,
+      p0DecisionCandidate: "P0_LIVE_BLOCKED_PORTABLE_RUNTIME",
+      failureStage: "INIT",
+      failureCode: "MISSING_CONFIGURATION",
+      missingEnvironment: missing,
+    };
+    writeJson(artifactDir, "raw.json", {});
+    writeJson(artifactDir, "normalized.json", {
+      integrationStatus: "UNAVAILABLE",
+      executionStatus: "UNKNOWN",
+      isReplay: false,
+      isMock: false,
+      replayMode: false,
+      limitations: ["Live smoke configuration is incomplete."],
     });
+    writeJson(artifactDir, "api-check.json", {});
+    writeJson(artifactDir, "metadata.json", metadata);
+    console.log(
+      `LIVE_SMOKE_NOT_RUN missing=${missing.join(",")} artifact=${artifactDir} node=${process.version}`,
+    );
+    expect.fail(`Live smoke requires: ${missing.join(", ")}`);
+    return;
+  }
+
+  let result: Awaited<ReturnType<typeof runKuruLiveSwap>> | undefined;
+  let apiResponseStatus: number | undefined;
+  let apiResponseBody: unknown;
+  try {
+    // Exercise the real configured Agent Flow selection and HTTP application
+    // boundary. The injected runner is still the real Moss adapter; it only
+    // lets this smoke persist the raw adapter result alongside the public
+    // /api/check response without replacing the Agent Flow under test.
+    let captured: Awaited<ReturnType<typeof runKuruLiveSwap>> | undefined;
+    const liveRunner: KuruLiveRunner = async (adapterInput) => {
+      const live = await runKuruLiveSwap({
+        ...adapterInput,
+        logger: (line) => console.log(line),
+      });
+      captured = live;
+      return live;
+    };
+    const app = bootstrapBackendApp({
+      environment: {
+        MONAD_RPC_URL: rpcUrl,
+        MOSS_RUNTIME_PATH: runtimePath,
+        MOSS_RUNTIME_VERSION: runtimeVersion,
+        MOSS_RUNTIME_REVISION: runtimeRevision,
+      },
+      tokenRegistry: apiTokenRegistry,
+      liveRunner,
+    });
+    const response = await app.fetch(
+      new Request("https://smoke.local/api/check", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(apiCheckRequest),
+      }),
+    );
+    apiResponseStatus = response.status;
+    apiResponseBody = await response.json();
+    result = captured;
+    if (result === undefined) {
+      throw new Error(
+        "The live /api/check smoke returned without a captured Moss result",
+      );
+    }
   } catch (error) {
     // Overall deadline, runtime mismatch, or unexpected init failure.
     const failureCode =
@@ -173,6 +265,7 @@ test("kuru live smoke: MON -> USDC", async () => {
       p0DecisionCandidate: "P0_LIVE_BLOCKED_PORTABLE_RUNTIME",
       stageStatuses: [],
       blockProvenance: null,
+      apiCheckStatus: apiResponseStatus ?? null,
       error: toJsonValue(error instanceof Error ? error.message : error),
     };
     writeJson(artifactDir, "raw.json", {});
@@ -185,6 +278,7 @@ test("kuru live smoke: MON -> USDC", async () => {
       replayMode: false,
       limitations: ["Live chain did not produce evidence; see metadata."],
     });
+    writeJson(artifactDir, "api-check.json", apiResponseBody ?? {});
     writeJson(artifactDir, "metadata.json", metadata);
     console.error(
       `LIVE_SMOKE_FAILED stage=INIT code=${failureCode} artifact=${artifactDir}`,
@@ -201,18 +295,38 @@ test("kuru live smoke: MON -> USDC", async () => {
   // Always persist sanitized evidence.
   writeJson(artifactDir, "raw.json", result.raw);
   writeJson(artifactDir, "normalized.json", evidence);
+  writeJson(artifactDir, "api-check.json", apiResponseBody ?? {});
 
-  // One canonical acceptance gate: liveSuccess, P0_LIVE_READY, and the
-  // fixture decision all derive from the same evaluation.
+  // The adapter acceptance gate is canonical for live evidence. The smoke adds
+  // the independent requirement that the public /api/check boundary succeeded
+  // and returned the same run/provenance.
   const acceptance = evaluateLiveAcceptance(result, {
     runtimeVersion,
     runtimeRevision,
   });
-  const liveSuccess = liveSuccessOf(acceptance);
-  const decision = p0DecisionCandidate(result, {
+  const apiCheckAcceptance = apiCheckAcceptanceOf(apiResponseBody, {
+    runId,
+    simulatorPinnedBlock: result.simulatorPinnedBlock ?? "",
+  });
+  const apiCheck = runResultSchema.safeParse(apiResponseBody);
+  const apiCheckProvenanceMatches =
+    apiCheck.success &&
+    apiCheck.data.runId === runId &&
+    apiCheck.data.simulatorPinnedBlock === result.simulatorPinnedBlock;
+  const liveSuccess =
+    apiResponseStatus === 200 &&
+    apiCheckAcceptance &&
+    apiCheckProvenanceMatches &&
+    liveSuccessOf(acceptance);
+  const adapterDecision = p0DecisionCandidate(result, {
     runtimeVersion,
     runtimeRevision,
   });
+  const decision = liveSuccess
+    ? "P0_LIVE_READY"
+    : adapterDecision === "P0_LIVE_READY"
+      ? "P0_LIVE_BLOCKED_SIMULATION"
+      : adapterDecision;
 
   const failedStage = result.stages.find((stage) => !stage.success);
   const status =
@@ -233,6 +347,12 @@ test("kuru live smoke: MON -> USDC", async () => {
       : (failedStage?.error?.code ??
         (evidence.integrationStatus === "TIMEOUT" ? "TIMEOUT" : "UNKNOWN")),
     p0DecisionCandidate: decision,
+    apiCheckStatus: apiResponseStatus ?? null,
+    apiCheckSchemaValid: apiCheck.success,
+    apiCheckAcceptance,
+    apiCheckProvenanceMatches,
+    observedChainId: result.observedChainId ?? null,
+    simulatorPinnedBlock: result.simulatorPinnedBlock ?? null,
     stageStatuses: stageStatus(result.stages),
     blockProvenance: {
       initial: result.evidence.blockNumber.value,

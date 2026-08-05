@@ -4,7 +4,11 @@
  * P0 candidate can never drift apart.
  */
 
+import { MONAD_CHAIN_ID } from "./kuru.js";
+
 export type LiveAcceptanceGate = {
+  integrationStatusOk: boolean;
+  chainIdCorrect: boolean;
   discoverOk: boolean;
   loadOk: boolean;
   quoteRouteAvailable: boolean;
@@ -12,16 +16,20 @@ export type LiveAcceptanceGate = {
   simulateCoversAllActions: boolean;
   transactionIdentityMatched: boolean;
   simulationNotHalted: boolean;
+  coverageComplete: boolean;
   noUnmatchedResult: boolean;
   noMissingTransaction: boolean;
   notReverted: boolean;
   receiptPresent: boolean;
   outcomeParsed: boolean;
   flipOrderUpdatedNotBlocking: boolean;
+  warningsEmpty: boolean;
+  assetChangesExplained: boolean;
   runtimeProvenanceComplete: boolean;
   blockProvenanceComplete: boolean;
   isReplayFalse: boolean;
   isMockFalse: boolean;
+  simulatorPinnedBlockComplete: boolean;
   executionSucceeded: boolean;
 };
 
@@ -32,6 +40,8 @@ export type P0DecisionCandidate =
 
 /** Structural subset of a live run consumed by the acceptance gate. */
 export type LiveAcceptanceResult = {
+  /** Chain ID observed from the RPC used for this run. */
+  observedChainId?: number;
   stages: Array<{
     stage: string;
     success: boolean;
@@ -53,13 +63,21 @@ export type LiveAcceptanceResult = {
     receipt: { value: unknown };
     outcome: { value: unknown };
     warnings: { value?: unknown };
+    assetChangeAssessment:
+      | "EXPLAINED"
+      | "UNEXPLAINED"
+      | "UNKNOWN"
+      | "NOT_APPLICABLE";
     blockNumber: { value: unknown };
     isReplay?: boolean;
     isMock?: boolean;
+    simulatorPinnedBlock?: string;
     executionStatus: string;
+    integrationStatus: string;
     runtimeVersion?: string;
     runtimeRevision?: string;
   };
+  simulatorPinnedBlock?: string;
 };
 
 type DeclaredRuntime = { runtimeVersion: string; runtimeRevision: string };
@@ -76,9 +94,11 @@ export function evaluateLiveAcceptance(
     );
 
   return {
+    integrationStatusOk: evidence.integrationStatus === "OK",
+    chainIdCorrect: result.observedChainId === Number(MONAD_CHAIN_ID),
     discoverOk: stageOk("DISCOVER"),
     loadOk: stageOk("LOAD"),
-    quoteRouteAvailable: evidence.quote.value !== null,
+    quoteRouteAvailable: present(evidence.quote.value),
     actionTransactionNonEmpty:
       Array.isArray(evidence.action.value) && evidence.action.value.length > 0,
     simulateCoversAllActions:
@@ -87,22 +107,40 @@ export function evaluateLiveAcceptance(
       coverage?.missingTransactionIndexes.length === 0 &&
       coverage?.unmatchedResultIndexes.length === 0,
     simulationNotHalted: coverage?.halted !== true,
+    coverageComplete: coverage?.complete === true,
     noUnmatchedResult: coverage?.unmatchedResultIndexes.length === 0,
     noMissingTransaction: coverage?.missingTransactionIndexes.length === 0,
     notReverted: evidence.executionStatus !== "REVERTED",
-    receiptPresent: evidence.receipt.value !== null,
-    outcomeParsed: evidence.outcome.value !== null,
+    receiptPresent: present(evidence.receipt.value),
+    outcomeParsed: present(evidence.outcome.value),
     flipOrderUpdatedNotBlocking: !JSON.stringify(
       evidence.warnings.value ?? [],
     ).includes("FlipOrderUpdated"),
+    warningsEmpty:
+      Array.isArray(evidence.warnings.value) &&
+      evidence.warnings.value.length === 0,
+    assetChangesExplained:
+      evidence.assetChangeAssessment === "EXPLAINED" ||
+      evidence.assetChangeAssessment === "NOT_APPLICABLE",
     runtimeProvenanceComplete:
       evidence.runtimeVersion === declared.runtimeVersion &&
       evidence.runtimeRevision === declared.runtimeRevision,
-    blockProvenanceComplete: evidence.blockNumber.value !== null,
+    blockProvenanceComplete: isBlockNumber(evidence.blockNumber.value),
     isReplayFalse: evidence.isReplay === false,
     isMockFalse: evidence.isMock === false,
+    simulatorPinnedBlockComplete:
+      isBlockNumber(result.simulatorPinnedBlock) &&
+      evidence.simulatorPinnedBlock === result.simulatorPinnedBlock,
     executionSucceeded: evidence.executionStatus === "SUCCESS",
   };
+}
+
+function present(value: unknown): boolean {
+  return value !== null && value !== undefined;
+}
+
+function isBlockNumber(value: unknown): boolean {
+  return typeof value === "string" && /^\d+$/.test(value);
 }
 
 export function liveSuccessOf(acceptance: LiveAcceptanceGate): boolean {
