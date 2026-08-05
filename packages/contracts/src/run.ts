@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { type AssetReference, assetIdentity } from "./common.js";
+import { type AssetReference, assetIdentity, runIdSchema } from "./common.js";
 import {
   type ActionEvaluation,
   actionEvaluationSchema,
@@ -23,11 +23,7 @@ export const runDiffFieldSchema = z.enum([
   "amountInAtomic",
   "protocol",
   "recipient",
-  "recipientSource",
-  "tokenIn",
-  "tokenOut",
-  "route",
-  "economicBoundary",
+  "tokenPair",
 ]);
 
 export const changedFieldSchema = z
@@ -36,18 +32,23 @@ export const changedFieldSchema = z
     before: z.string(),
     after: z.string(),
   })
-  .strict();
+  .strict()
+  .refine(({ before, after }) => before !== after, {
+    message: "A Diff field must describe an actual change",
+    path: ["after"],
+  });
 
 export const runDiffSchema = z
   .object({
-    previousRunId: z.string().trim().min(1),
+    previousRunId: runIdSchema,
     previousVerdict: verdictSchema,
-    changedFields: z.array(changedFieldSchema).min(1),
+    changedFields: z.array(changedFieldSchema).min(1).max(1),
   })
   .strict();
 
 const runIdentitySchema = z.object({
-  runId: z.string().trim().min(1),
+  runId: runIdSchema,
+  parentRunId: runIdSchema.optional(),
   replayMode: z.boolean(),
   intent: normalizedSwapIntentSchema,
 });
@@ -55,6 +56,14 @@ const runIdentitySchema = z.object({
 type RunIdentity = z.infer<typeof runIdentitySchema>;
 
 function validateRunIdentity(result: RunIdentity, context: z.RefinementCtx) {
+  if (result.parentRunId === result.runId) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "A Run cannot be its own parent",
+      path: ["parentRunId"],
+    });
+  }
+
   if (
     result.intent.recipientSource === "defaulted_from_sender" &&
     result.intent.recipient.toLowerCase() !== result.intent.sender.toLowerCase()
@@ -76,6 +85,31 @@ function validateRunIdentity(result: RunIdentity, context: z.RefinementCtx) {
       code: z.ZodIssueCode.custom,
       message: "Live runs cannot use a demo_preset Economic Boundary",
       path: ["intent", "economicBoundary", "source"],
+    });
+  }
+}
+
+function validateRunDiff(
+  result: { parentRunId?: string; diff?: RunDiff },
+  context: z.RefinementCtx,
+) {
+  if ((result.parentRunId === undefined) !== (result.diff === undefined)) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "A Re-run must include both parentRunId and diff",
+      path: result.parentRunId === undefined ? ["diff"] : ["parentRunId"],
+    });
+  }
+
+  if (
+    result.parentRunId !== undefined &&
+    result.diff !== undefined &&
+    result.parentRunId !== result.diff.previousRunId
+  ) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "diff.previousRunId must match parentRunId",
+      path: ["diff", "previousRunId"],
     });
   }
 }
@@ -1214,6 +1248,7 @@ export const completedRunResultSchema = runIdentitySchema
   .strict()
   .superRefine((result, context) => {
     validateRunIdentity(result, context);
+    validateRunDiff(result, context);
     const evidenceByKey = collectEvidence(
       result.evidence,
       result.replayMode,
@@ -1298,6 +1333,7 @@ export const failedRunResultSchema = runIdentitySchema
     verdict: z.literal("UNKNOWN"),
     summary: z.string().trim().min(1),
     error: integrationErrorSchema,
+    diff: runDiffSchema.optional(),
     ruleResults: z.array(ruleResultSchema),
     recommendedActions: z.array(actionEvaluationSchema),
     irrelevantActions: z.array(actionEvaluationSchema).max(0),
@@ -1307,6 +1343,7 @@ export const failedRunResultSchema = runIdentitySchema
   .strict()
   .superRefine((result, context) => {
     validateRunIdentity(result, context);
+    validateRunDiff(result, context);
     const evidenceByKey = collectEvidence(
       result.evidence,
       result.replayMode,

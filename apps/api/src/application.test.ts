@@ -1,4 +1,5 @@
 import type {
+  CheckSwapRequest,
   EvidenceItem,
   EvidenceRef,
   NormalizedSwapIntent,
@@ -6,7 +7,8 @@ import type {
 } from "@parallax/contracts";
 import { describe, expect, it } from "vitest";
 import { CheckApplicationService } from "./application.js";
-import type { AgentFlowPort } from "./ports.js";
+import { normalizeCheckSwapRequest } from "./normalization.js";
+import { type AgentFlowPort, UnsupportedAgentFlowError } from "./ports.js";
 import type { BackendRuntime } from "./runtime-config.js";
 import { InMemoryRunStore, type RunStore } from "./store.js";
 import { createTrustedTokenRegistry } from "./trusted-token-registry.js";
@@ -44,7 +46,9 @@ const runtime: BackendRuntime = {
 
 type CompletedRunResult = Extract<RunResult, { status: "completed" }>;
 
-function publicRequest(overrides: Record<string, unknown> = {}) {
+function publicRequest(
+  overrides: Partial<CheckSwapRequest> = {},
+): CheckSwapRequest {
   return {
     chainId: 143,
     protocol: "kuru",
@@ -329,12 +333,13 @@ function completedEconomicResult(
 function createService(
   agentFlow: AgentFlowPort,
   store: RunStore = new InMemoryRunStore(),
+  createRunId: () => string = () => "run-1",
 ) {
   return new CheckApplicationService({
     runtime,
     agentFlow,
     store,
-    createRunId: () => "run-1",
+    createRunId,
   });
 }
 
@@ -369,6 +374,502 @@ describe("CheckApplicationService", () => {
       status: "completed",
       intent: receivedIntent,
       result: response.body,
+    });
+  });
+
+  it("creates an immutable child Run and Diff for a Re-run", async () => {
+    const store = new InMemoryRunStore();
+    const baseline = createService(
+      {
+        async check(input) {
+          return completedRouteResult(input.runId, input.intent);
+        },
+      },
+      store,
+    );
+    const baselineResponse = await baseline.check(publicRequest());
+    expect(baselineResponse.status).toBe(200);
+
+    const rerun = createService(
+      {
+        async check(input) {
+          return completedRouteResult(input.runId, input.intent);
+        },
+      },
+      store,
+      () => "run-2",
+    );
+
+    const response = await rerun.check(
+      publicRequest({ parentRunId: "run-1", amountIn: "2" }),
+    );
+
+    expect(response).toMatchObject({
+      status: 200,
+      body: {
+        runId: "run-2",
+        parentRunId: "run-1",
+        diff: {
+          previousRunId: "run-1",
+          previousVerdict: "UNKNOWN",
+          changedFields: [
+            {
+              field: "amountInAtomic",
+              before: "1500000000000000000",
+              after: "2000000000000000000",
+            },
+          ],
+        },
+      },
+    });
+    expect(store.get("run-1")).toMatchObject({
+      status: "completed",
+      parentRunId: undefined,
+      result: baselineResponse.body,
+    });
+    expect(store.get("run-2")).toMatchObject({
+      status: "completed",
+      parentRunId: "run-1",
+      result: response.body,
+    });
+  });
+
+  it("rejects a Re-run without a completed baseline or a changed Intent", async () => {
+    const store = new InMemoryRunStore();
+    const service = createService(
+      {
+        async check() {
+          throw new Error("must not run");
+        },
+      },
+      store,
+    );
+
+    await expect(
+      service.check(publicRequest({ parentRunId: "missing" })),
+    ).resolves.toMatchObject({
+      status: 400,
+      body: {
+        error: {
+          code: "INVALID_RERUN",
+          reason: "PARENT_NOT_FOUND",
+        },
+      },
+    });
+
+    const baseline = createService(
+      {
+        async check(input) {
+          return completedRouteResult(input.runId, input.intent);
+        },
+      },
+      store,
+    );
+    await baseline.check(publicRequest());
+
+    const unchangedRerun = createService(
+      {
+        async check() {
+          throw new Error("must not run");
+        },
+      },
+      store,
+      () => "run-2",
+    );
+    await expect(
+      unchangedRerun.check(publicRequest({ parentRunId: "run-1" })),
+    ).resolves.toMatchObject({
+      status: 400,
+      body: { error: { code: "INVALID_RERUN" } },
+    });
+    expect(store.get("run-2")).toBeUndefined();
+
+    const provenanceOnlyRerun = createService(
+      {
+        async check() {
+          throw new Error("must not run");
+        },
+      },
+      store,
+      () => "run-3",
+    );
+    await expect(
+      provenanceOnlyRerun.check(
+        publicRequest({ parentRunId: "run-1", recipient: sender }),
+      ),
+    ).resolves.toMatchObject({
+      status: 400,
+      body: {
+        error: {
+          code: "INVALID_RERUN",
+          reason: "NOT_EXACTLY_ONE_CHANGE",
+          message: "A Re-run must change exactly one supported Intent field",
+        },
+      },
+    });
+    expect(store.get("run-3")).toBeUndefined();
+
+    const recipientRerun = createService(
+      {
+        async check(input) {
+          return completedRouteResult(input.runId, input.intent);
+        },
+      },
+      store,
+      () => "run-4",
+    );
+    await expect(
+      recipientRerun.check(
+        publicRequest({
+          parentRunId: "run-1",
+          recipient: "0x2222222222222222222222222222222222222222",
+        }),
+      ),
+    ).resolves.toMatchObject({
+      status: 200,
+      body: {
+        parentRunId: "run-1",
+        diff: {
+          changedFields: [
+            {
+              field: "recipient",
+              before: sender,
+              after: "0x2222222222222222222222222222222222222222",
+            },
+          ],
+        },
+      },
+    });
+  });
+
+  it("rejects a Re-run that changes more than one Intent condition", async () => {
+    const store = new InMemoryRunStore();
+    const baseline = createService(
+      {
+        async check(input) {
+          return completedRouteResult(input.runId, input.intent);
+        },
+      },
+      store,
+    );
+    await baseline.check(publicRequest());
+
+    let agentFlowCalled = false;
+    const rerun = createService(
+      {
+        async check() {
+          agentFlowCalled = true;
+          throw new Error("must not run");
+        },
+      },
+      store,
+      () => "run-2",
+    );
+
+    await expect(
+      rerun.check(
+        publicRequest({
+          parentRunId: "run-1",
+          amountIn: "2",
+          protocol: "pancake",
+        }),
+      ),
+    ).resolves.toMatchObject({
+      status: 400,
+      body: {
+        error: {
+          code: "INVALID_RERUN",
+          message: "A Re-run must change exactly one supported Intent field",
+        },
+      },
+    });
+
+    expect(agentFlowCalled).toBe(false);
+    expect(store.get("run-2")).toBeUndefined();
+  });
+
+  it("preserves baseline ownership and Economic Boundary during a Re-run", async () => {
+    const store = new InMemoryRunStore();
+    const baseline = createService(
+      {
+        async check(input) {
+          return completedRouteResult(input.runId, input.intent);
+        },
+      },
+      store,
+    );
+    await baseline.check(publicRequest());
+
+    const rerun = createService(
+      {
+        async check() {
+          throw new Error("must not run");
+        },
+      },
+      store,
+      () => "run-2",
+    );
+
+    await expect(
+      rerun.check(
+        publicRequest({
+          parentRunId: "run-1",
+          sender: "0x2222222222222222222222222222222222222222",
+          amountIn: "2",
+        }),
+      ),
+    ).resolves.toMatchObject({
+      status: 400,
+      body: {
+        error: {
+          code: "INVALID_RERUN",
+          reason: "CHAIN_OR_SENDER_CHANGED",
+        },
+      },
+    });
+
+    await expect(
+      rerun.check(
+        publicRequest({
+          parentRunId: "run-1",
+          amountIn: "2",
+          economicBoundary: {
+            availability: "available",
+            minimumReceived: "0.01",
+            source: "user_declared",
+          },
+        }),
+      ),
+    ).resolves.toMatchObject({
+      status: 400,
+      body: {
+        error: {
+          code: "INVALID_RERUN",
+          reason: "BOUNDARY_CHANGED",
+        },
+      },
+    });
+
+    expect(store.get("run-2")).toBeUndefined();
+  });
+
+  it("preserves the Diff on a failed child and rejects nested Re-runs", async () => {
+    const store = new InMemoryRunStore();
+    const baseline = createService(
+      {
+        async check(input) {
+          return completedRouteResult(input.runId, input.intent);
+        },
+      },
+      store,
+    );
+    await baseline.check(publicRequest());
+
+    const child = createService(
+      {
+        async check(input) {
+          return integrationErrorResult(input.runId, input.intent);
+        },
+      },
+      store,
+      () => "run-2",
+    );
+    const childResponse = await child.check(
+      publicRequest({ parentRunId: "run-1", amountIn: "2" }),
+    );
+
+    expect(childResponse).toMatchObject({
+      status: 200,
+      body: {
+        status: "integration_error",
+        parentRunId: "run-1",
+        diff: {
+          previousRunId: "run-1",
+          changedFields: [{ field: "amountInAtomic" }],
+        },
+      },
+    });
+
+    const nested = createService(
+      {
+        async check() {
+          throw new Error("must not run");
+        },
+      },
+      store,
+      () => "run-3",
+    );
+    await expect(
+      nested.check(publicRequest({ parentRunId: "run-2", amountIn: "3" })),
+    ).resolves.toMatchObject({
+      status: 400,
+      body: {
+        error: {
+          code: "INVALID_RERUN",
+          reason: "PARENT_NOT_COMPLETED",
+        },
+      },
+    });
+    expect(store.get("run-3")).toBeUndefined();
+  });
+
+  it("preserves parent and Diff when Agent Flow throws during a Re-run", async () => {
+    const store = new InMemoryRunStore();
+    const baseline = createService(
+      {
+        async check(input) {
+          return completedRouteResult(input.runId, input.intent);
+        },
+      },
+      store,
+    );
+    await baseline.check(publicRequest());
+
+    const child = createService(
+      {
+        async check() {
+          throw new Error("secret RPC credential appeared here");
+        },
+      },
+      store,
+      () => "run-2",
+    );
+
+    const response = await child.check(
+      publicRequest({ parentRunId: "run-1", amountIn: "2" }),
+    );
+
+    expect(response).toMatchObject({
+      status: 502,
+      body: {
+        error: { code: "AGENT_FLOW_ERROR" },
+        run: {
+          status: "integration_error",
+          systemStatus: "INTEGRATION_ERROR",
+          verdict: "UNKNOWN",
+          parentRunId: "run-1",
+          diff: {
+            previousRunId: "run-1",
+            changedFields: [{ field: "amountInAtomic" }],
+          },
+        },
+      },
+    });
+    expect(store.get("run-2")).toMatchObject({
+      status: "failed",
+      failure: "AGENT_FLOW_ERROR",
+      parentRunId: "run-1",
+      result: {
+        status: "integration_error",
+        systemStatus: "INTEGRATION_ERROR",
+        verdict: "UNKNOWN",
+        parentRunId: "run-1",
+        diff: {
+          previousRunId: "run-1",
+          changedFields: [{ field: "amountInAtomic" }],
+        },
+      },
+    });
+  });
+
+  it("preserves parent and Diff when Agent Flow returns an invalid child result", async () => {
+    const store = new InMemoryRunStore();
+    const baseline = createService(
+      {
+        async check(input) {
+          return completedRouteResult(input.runId, input.intent);
+        },
+      },
+      store,
+    );
+    await baseline.check(publicRequest());
+
+    const child = createService(
+      {
+        async check() {
+          return { invalid: true };
+        },
+      },
+      store,
+      () => "run-2",
+    );
+
+    const response = await child.check(
+      publicRequest({ parentRunId: "run-1", amountIn: "2" }),
+    );
+
+    expect(response).toMatchObject({
+      status: 502,
+      body: {
+        error: { code: "INVALID_AGENT_FLOW_RESPONSE" },
+        run: {
+          status: "integration_error",
+          systemStatus: "INTEGRATION_ERROR",
+          verdict: "UNKNOWN",
+          parentRunId: "run-1",
+          diff: {
+            previousRunId: "run-1",
+            changedFields: [{ field: "amountInAtomic" }],
+          },
+        },
+      },
+    });
+    expect(store.get("run-2")).toMatchObject({
+      status: "failed",
+      failure: "INVALID_AGENT_FLOW_RESPONSE",
+      parentRunId: "run-1",
+      result: {
+        status: "integration_error",
+        systemStatus: "INTEGRATION_ERROR",
+        verdict: "UNKNOWN",
+        parentRunId: "run-1",
+        diff: {
+          previousRunId: "run-1",
+          changedFields: [{ field: "amountInAtomic" }],
+        },
+      },
+    });
+  });
+
+  it("does not allow a Recorded Replay Run to become a Re-run baseline", async () => {
+    const store = new InMemoryRunStore();
+    const replayIntent = runtime.tokenRegistry
+      ? normalizeCheckSwapRequest(publicRequest(), runtime.tokenRegistry)
+      : undefined;
+    if (!replayIntent?.success) {
+      throw new Error("missing normalized replay intent");
+    }
+    await store.start("run-1", replayIntent.intent);
+    await store.complete({
+      ...completedRouteResult("run-1", replayIntent.intent),
+      replayMode: true,
+      evidence: completedRouteResult("run-1", replayIntent.intent).evidence.map(
+        (evidence) => ({
+          ...evidence,
+          isReplay: true,
+        }),
+      ),
+    });
+
+    const rerun = createService(
+      {
+        async check() {
+          throw new Error("must not run");
+        },
+      },
+      store,
+      () => "run-2",
+    );
+    await expect(
+      rerun.check(publicRequest({ parentRunId: "run-1", amountIn: "2" })),
+    ).resolves.toMatchObject({
+      status: 400,
+      body: {
+        error: {
+          code: "INVALID_RERUN",
+          reason: "PARENT_IS_REPLAY",
+        },
+      },
     });
   });
 
@@ -559,12 +1060,23 @@ describe("CheckApplicationService", () => {
 
     const response = await service.check(publicRequest());
 
-    expect(response).toEqual({
+    expect(response).toMatchObject({
       status: 502,
       body: {
         error: {
           code: "AGENT_FLOW_ERROR",
           message: "Agent Flow could not complete the check",
+        },
+        run: {
+          runId: "run-1",
+          status: "integration_error",
+          systemStatus: "INTEGRATION_ERROR",
+          verdict: "UNKNOWN",
+          error: {
+            code: "INTERNAL_ERROR",
+            stage: "unknown",
+            retryable: false,
+          },
         },
       },
     });
@@ -572,6 +1084,86 @@ describe("CheckApplicationService", () => {
     expect(store.get("run-1")).toMatchObject({
       status: "failed",
       failure: "AGENT_FLOW_ERROR",
+    });
+  });
+
+  it.each([
+    {
+      name: "structured timeout",
+      cause: {
+        code: "TIMEOUT",
+        stage: "SIMULATE",
+        integrationStatus: "TIMEOUT",
+      },
+      expected: {
+        code: "TIMEOUT",
+        stage: "simulation",
+        retryable: true,
+      },
+    },
+    {
+      name: "RPC unavailability",
+      cause: {
+        code: "UNAVAILABLE",
+        stage: "QUOTE",
+        integrationStatus: "UNAVAILABLE",
+        source: "rpc",
+      },
+      expected: {
+        code: "RPC_UNAVAILABLE",
+        stage: "quote",
+        retryable: true,
+      },
+    },
+  ])("maps $name from a structured Agent Flow failure", async (testCase) => {
+    const service = createService({
+      async check() {
+        throw testCase.cause;
+      },
+    });
+
+    const response = await service.check(publicRequest());
+
+    expect(response).toMatchObject({
+      status: 502,
+      body: { run: { error: testCase.expected } },
+    });
+  });
+
+  it("returns UNSUPPORTED when Live Agent Flow is not wired", async () => {
+    const store = new InMemoryRunStore();
+    const service = createService(
+      {
+        async check() {
+          throw new UnsupportedAgentFlowError();
+        },
+      },
+      store,
+    );
+
+    const response = await service.check(publicRequest());
+
+    expect(response).toMatchObject({
+      status: 502,
+      body: {
+        error: {
+          code: "UNSUPPORTED",
+          message: "Live Agent Flow is not available in this runtime",
+        },
+        run: {
+          status: "integration_error",
+          verdict: "UNKNOWN",
+          error: {
+            code: "UNSUPPORTED",
+            stage: "unknown",
+            retryable: false,
+          },
+        },
+      },
+    });
+    expect(store.get("run-1")).toMatchObject({
+      status: "failed",
+      failure: "UNSUPPORTED",
     });
   });
 
@@ -659,6 +1251,9 @@ describe("CheckApplicationService", () => {
           throw new Error("database connection details");
         },
         async fail() {},
+        get() {
+          return undefined;
+        },
       },
     );
 
