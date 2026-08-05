@@ -48,6 +48,7 @@ export const coreEvidenceRoleSchema = z.enum(["EVIDENCE_COMPLETENESS"]);
 const evidenceProvenanceShape = {
   key: z.string().trim().min(1),
   blockNumber: z.string().regex(/^\d+$/).optional(),
+  simulatorPinnedBlock: z.string().regex(/^\d+$/).optional(),
   runtimeVersion: z.string().trim().min(1).optional(),
   runtimeRevision: z.string().trim().min(1).optional(),
   fixtureId: z.string().trim().min(1).optional(),

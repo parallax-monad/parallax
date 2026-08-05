@@ -4,10 +4,12 @@ import type { MossIntegrationConfig } from "./runtime-config.js";
 export type AgentFlowCheckInput = {
   runId: string;
   intent: NormalizedSwapIntent;
+  tokenInDecimals: number;
+  tokenOutDecimals: number;
   moss: MossIntegrationConfig;
 };
 
-/** Identifies the deliberate P2 state where Live Agent Flow is not wired. */
+/** Identifies the explicit no-runtime state where Live Agent Flow is unavailable. */
 export class UnsupportedAgentFlowError extends Error {
   public readonly code = "UNSUPPORTED" as const;
 

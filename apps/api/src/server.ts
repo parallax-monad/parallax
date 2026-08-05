@@ -11,7 +11,7 @@ export type StartConfiguredBackendServerOptions = Omit<
   "tokenRegistry"
 >;
 
-/** Starts the configured P2 backend with process environment injection. */
+/** Starts the configured P0 backend with process environment injection. */
 export function startConfiguredBackendServer(
   options: StartConfiguredBackendServerOptions = {},
 ): ServerType {

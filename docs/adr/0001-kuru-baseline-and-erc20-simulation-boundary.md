@@ -14,7 +14,7 @@ Parallax needs a reproducible, pre-signing evidence boundary for Monad Kuru swap
 
 ## Current Moss baseline
 
-The stable published packages are not a safe runtime dependency for this baseline. This PR therefore preserves recorded raw evidence, normalization, replay, and deterministic rules without pretending that a live adapter is portable today.
+The stable published packages are not a safe runtime dependency for this baseline. The backend now selects the live Agent Flow when a pinned Moss checkout is configured; the adapter validates that checkout and fails closed when the runtime cannot provide all required provenance. Recorded raw evidence, normalization, replay, and deterministic rules remain independent of live runtime availability.
 
 ## MON to USDC status
 
@@ -56,7 +56,7 @@ Use MON to USDC as the recorded baseline. Preserve USDC to MON bidirectional con
 
 ## Evidence and reproduction commands
 
-`pnpm test` replays recorded evidence. `pnpm smoke:kuru` is intentionally `UNAVAILABLE` until a portable Moss runtime dependency is approved; it must not be represented as a live smoke success.
+`pnpm test` replays recorded evidence. `pnpm smoke:kuru:live` is the live path; it requires all Moss/RPC inputs, exercises the real POST `/api/check` boundary, and fails closed when acceptance is incomplete. It must not be represented as a live smoke success until the full gate passes.
 
 ## Delivery stages
 
@@ -80,13 +80,15 @@ Both old claims were re-checked against the live remotes and are confirmed:
 The pinned runtime is now the local fork `main` commit
 `d09b38cbc44ee7f5722c5d09e7224f7750187762` (exact `@themoss/*@0.1.0`
 workspace, reproducible via frozen lockfile under Node 22 / pnpm 11.10.0).
-On that runtime, `FlipOrderUpdated` still halts the receipt path, so the live
-P0 status is `P0_LIVE_BLOCKED_SIMULATION`. Details, the runtime matrix, and the
-raw→normalized mapping live in
+The repository currently has no configured Moss/RPC environment, so its
+verified status remains `P0_LIVE_BLOCKED_PORTABLE_RUNTIME`; when the runtime is
+configured, `FlipOrderUpdated` is expected to block the simulation/receipt path
+on this revision. Details, the runtime matrix, and the raw→normalized mapping live in
 [docs/integration/moss-kuru-live-runtime.md](moss-kuru-live-runtime.md).
 `pnpm smoke:kuru:live` replaces the previous unconditional `UNAVAILABLE` smoke:
-it is a real live smoke that reports `LIVE_SMOKE_NOT_RUN` until `MOSS_RPC_URL`
-is configured, and fails non-zero if a live run does not pass acceptance.
+it is a real live smoke that fails with a persisted configuration artifact until
+all required Moss/RPC inputs are configured, and fails non-zero if a live run
+does not pass acceptance.
 
 ### Provenance boundaries (2026-08-04)
 
@@ -95,22 +97,20 @@ not be conflated:
 
 1. **Smoke execution environment inputs** — the smoke harness receives
    `MOSS_RUNTIME_PATH`, `MOSS_RUNTIME_VERSION`, and `MOSS_RUNTIME_REVISION`
-   from the operator. The current harness does not independently attest the
-   checkout: it does not prove the Git revision, verify every loaded
-   `@themoss/*` package identity, confirm the RPC chain ID, or observe the
-   simulator's internally pinned block.
-2. **Adapter caller-declared runtime provenance** — `runKuruLiveSwap`
-   receives `runtimeVersion`/`runtimeRevision` from the caller and records
-   them as provenance; it fails closed on a loaded `@themoss/core` version
-   mismatch but does not itself prove the checkout Git revision or the
-   identity of every loaded package. These are caller-declared/observed
-   values, not an independently verified immutable identity.
+   from the operator. The adapter independently checks the checkout Git
+   revision and every loaded `@themoss/*` package manifest.
+2. **Adapter-verified runtime provenance** — `runKuruLiveSwap` fails closed
+   when the checkout revision or package versions disagree with the configured
+   runtime identity, then records the verified identity as provenance.
 3. **RPC-observed chain and stage blocks** — `chainId` is read from the RPC
-   client and recorded, not enforced to equal 143 by the adapter. Each stage
-   block is observed through RPC before the call; it is not the Moss
-   simulator's internally pinned block (Moss ADR 0002).
+   client and passed to Agent Flow, which enforces Chain ID 143. Each stage
+   block is observed through RPC before the stage call. Agent Flow and the live
+   acceptance gate additionally require an explicit, valid
+   `simulatorPinnedBlock`; an observed stage block is not a substitute for the
+   Moss simulator's internally pinned block (Moss ADR 0002).
 
-A consumer must independently re-verify the Moss Git revision, every Moss
-package identity, the RPC chain ID, and simulator block consistency before
-interpreting the result as P0_LIVE_READY, authoritative Live Evidence, or
-production Agent Flow input.
+The current pinned d09b runtime does not expose `simulatorPinnedBlock`, so it
+cannot produce an authoritative production Agent Flow result until that runtime
+surface is added or a runtime revision exposing it is approved. A consumer must
+still independently verify any stronger deployment or production-readiness
+claim.

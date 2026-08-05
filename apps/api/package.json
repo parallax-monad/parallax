@@ -12,6 +12,7 @@
   "dependencies": {
     "@hono/node-server": "2.0.12",
     "@parallax/contracts": "workspace:*",
+    "@parallax/moss-bridge": "workspace:*",
     "@parallax/orchestrator": "workspace:*",
     "hono": "4.12.33",
     "tsx": "4.23.5",

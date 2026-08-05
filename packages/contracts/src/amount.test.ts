@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { convertHumanAmountToAtomic } from "./amount.js";
+import {
+  convertAtomicAmountToHuman,
+  convertHumanAmountToAtomic,
+} from "./amount.js";
 import { atomicAmountSchema, UINT256_MAX } from "./common.js";
 
 describe("atomicAmountSchema", () => {
@@ -57,5 +60,22 @@ describe("convertHumanAmountToAtomic", () => {
       success: false,
       error: { code: "AMOUNT_EXCEEDS_UINT256" },
     });
+  });
+});
+
+describe("convertAtomicAmountToHuman", () => {
+  it.each([
+    ["1000000000000000000", 18, "1"],
+    ["10000000000000000", 18, "0.01"],
+    ["1234500", 6, "1.2345"],
+    ["1", 0, "1"],
+  ])("converts %s with %i decimals exactly", (amount, decimals, expected) => {
+    expect(convertAtomicAmountToHuman(amount, decimals)).toBe(expected);
+  });
+
+  it("rejects malformed atomic values", () => {
+    expect(() => convertAtomicAmountToHuman("01", 18)).toThrow(
+      "Invalid atomic amount or token decimals",
+    );
   });
 });
