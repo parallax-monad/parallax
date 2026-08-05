@@ -1,5 +1,6 @@
 import { type ServerType, serve as serveNode } from "@hono/node-server";
 import { serializeJson } from "@parallax/contracts";
+import { validateMossRuntimePathSync } from "@parallax/moss-bridge";
 import type { KuruLiveRunner } from "@parallax/orchestrator/agent-flow";
 import { KuruLiveAgentFlow } from "@parallax/orchestrator/agent-flow";
 import type { ReplayFixtureRepository } from "@parallax/orchestrator/application";
@@ -166,7 +167,24 @@ export function startBackendServer(
     HOST: options.hostname ?? serverEnvironment.HOST,
     PORT: options.port ?? serverEnvironment.PORT,
   });
-  const app = bootstrapBackendApp({ ...options, environment });
+  const runtime = bootstrapBackendRuntime({
+    environment,
+    tokenRegistry: options.tokenRegistry,
+  });
+  if (runtime.config.moss.runtimePath !== undefined) {
+    validateMossRuntimePathSync(runtime.config.moss.runtimePath, {
+      runtimeVersion: runtime.config.moss.runtimeVersion,
+      runtimeRevision: runtime.config.moss.runtimeRevision,
+    });
+  }
+  const app = createBackendApp({
+    runtime,
+    corsOrigin: options.corsOrigin ?? serverEnvironment.CORS_ORIGIN,
+    agentFlow: options.agentFlow,
+    liveRunner: options.liveRunner,
+    store: options.store,
+    replayRepository: options.replayRepository,
+  });
 
   return (options.serverFactory ?? serveNode)(
     {

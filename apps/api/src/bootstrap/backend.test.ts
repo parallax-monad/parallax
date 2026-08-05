@@ -1,3 +1,6 @@
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { ServerType } from "@hono/node-server";
 import type { KuruLiveRunner } from "@parallax/orchestrator/agent-flow";
 import { describe, expect, it } from "vitest";
@@ -159,6 +162,30 @@ describe("backend Node runtime", () => {
         tokenRegistry,
       }),
     ).toThrow();
+  });
+
+  it("rejects an invalid Moss runtime before opening a socket", () => {
+    let serverFactoryCalls = 0;
+    const invalidRuntimePath = mkdtempSync(
+      join(tmpdir(), "parallax-invalid-moss-runtime-"),
+    );
+
+    expect(() =>
+      startBackendServer({
+        environment: {
+          ...environment,
+          MOSS_RUNTIME_PATH: invalidRuntimePath,
+        },
+        tokenRegistry,
+        hostname: "127.0.0.1",
+        port: 9000,
+        serverFactory: () => {
+          serverFactoryCalls += 1;
+          return { close: () => undefined } as never;
+        },
+      }),
+    ).toThrow(/does not contain a Moss checkout/);
+    expect(serverFactoryCalls).toBe(0);
   });
 
   it.each(["", "   "])(

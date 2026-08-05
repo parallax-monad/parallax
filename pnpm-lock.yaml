@@ -32,6 +32,9 @@ importers:
       '@parallax/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@parallax/moss-bridge':
+        specifier: workspace:*
+        version: link:../../packages/moss-bridge
       '@parallax/orchestrator':
         specifier: workspace:*
         version: link:../../packages/orchestrator

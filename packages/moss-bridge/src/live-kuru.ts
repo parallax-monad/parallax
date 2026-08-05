@@ -1,4 +1,4 @@
-import { execFile } from "node:child_process";
+import { execFile, execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -93,6 +93,11 @@ export type MossRuntimeBundle = {
   checkoutRevision?: string;
 };
 
+export type MossRuntimeExpectation = {
+  runtimeVersion: string;
+  runtimeRevision: string;
+};
+
 async function readCheckoutRevision(
   runtimePath: string,
 ): Promise<string | undefined> {
@@ -102,11 +107,28 @@ async function readCheckoutRevision(
       ["-C", runtimePath, "rev-parse", "HEAD"],
       { encoding: "utf8", timeout: 2_000 },
     );
-    const revision = stdout.trim();
-    return /^[0-9a-f]{40}$/i.test(revision) ? revision : undefined;
+    return parseCheckoutRevision(stdout);
   } catch {
     return undefined;
   }
+}
+
+function readCheckoutRevisionSync(runtimePath: string): string | undefined {
+  try {
+    const stdout = execFileSync(
+      "git",
+      ["-C", runtimePath, "rev-parse", "HEAD"],
+      { encoding: "utf8", timeout: 2_000 },
+    );
+    return parseCheckoutRevision(stdout);
+  } catch {
+    return undefined;
+  }
+}
+
+function parseCheckoutRevision(stdout: string): string | undefined {
+  const revision = stdout.trim();
+  return /^[0-9a-f]{40}$/i.test(revision) ? revision : undefined;
 }
 
 function firstExisting(runtimePath: string, candidates: string[]): string {
@@ -119,62 +141,116 @@ function firstExisting(runtimePath: string, candidates: string[]): string {
   );
 }
 
-/**
- * Load every `@themoss/*` package from a pinned Moss checkout and read its
- * exact package.json version. This is the reproducible runtime identity.
- */
-export async function loadMossRuntime(
-  runtimePath: string,
-): Promise<MossRuntimeBundle> {
-  if (!existsSync(join(runtimePath, "package.json"))) {
-    throw new Error(
-      `MOSS_RUNTIME_PATH does not contain a Moss checkout: ${runtimePath}`,
-    );
-  }
-  const [core, erc, kuru, simulator, system] = await Promise.all([
-    import(
-      pathToFileURL(
-        firstExisting(runtimePath, PACKAGE_DIST_CANDIDATES["@themoss/core"]),
-      ).href
-    ),
-    import(
-      pathToFileURL(
-        firstExisting(runtimePath, PACKAGE_DIST_CANDIDATES["@themoss/erc"]),
-      ).href
-    ),
-    import(
-      pathToFileURL(
-        firstExisting(
-          runtimePath,
-          PACKAGE_DIST_CANDIDATES["@themoss/protocol-kuru"],
-        ),
-      ).href
-    ),
-    import(
-      pathToFileURL(
-        firstExisting(
-          runtimePath,
-          PACKAGE_DIST_CANDIDATES["@themoss/simulator"],
-        ),
-      ).href
-    ),
-    import(
-      pathToFileURL(
-        firstExisting(runtimePath, PACKAGE_DIST_CANDIDATES["@themoss/system"]),
-      ).href
-    ),
-  ]);
+function readPackageVersions(runtimePath: string): Record<string, string> {
   const packageVersions: Record<string, string> = {};
   for (const [name, candidates] of Object.entries(
     PACKAGE_MANIFEST_CANDIDATES,
   )) {
     const manifestPath = firstExisting(runtimePath, candidates);
     const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as {
-      name?: string;
-      version?: string;
+      name?: unknown;
+      version?: unknown;
     };
-    packageVersions[manifest.name ?? name] = manifest.version ?? "unknown";
+    if (manifest.name !== name) {
+      throw new Error(
+        `Moss package manifest mismatch: expected ${name}, found ${String(manifest.name ?? "unknown")}`,
+      );
+    }
+    if (typeof manifest.version !== "string" || manifest.version.length === 0) {
+      throw new Error(`Moss package ${name} has no valid version`);
+    }
+    packageVersions[name] = manifest.version;
   }
+  return packageVersions;
+}
+
+function assertCheckoutRevision(
+  checkoutRevision: string | undefined,
+  expectedRevision: string,
+): void {
+  if (checkoutRevision !== expectedRevision) {
+    throw new Error(
+      `MOSS runtime revision mismatch: expected ${expectedRevision}, loaded ${checkoutRevision ?? "unknown"}`,
+    );
+  }
+}
+
+function resolveMossRuntimeDistPaths(runtimePath: string): {
+  core: string;
+  erc: string;
+  kuru: string;
+  simulator: string;
+  system: string;
+} {
+  return {
+    core: firstExisting(runtimePath, PACKAGE_DIST_CANDIDATES["@themoss/core"]),
+    erc: firstExisting(runtimePath, PACKAGE_DIST_CANDIDATES["@themoss/erc"]),
+    kuru: firstExisting(
+      runtimePath,
+      PACKAGE_DIST_CANDIDATES["@themoss/protocol-kuru"],
+    ),
+    simulator: firstExisting(
+      runtimePath,
+      PACKAGE_DIST_CANDIDATES["@themoss/simulator"],
+    ),
+    system: firstExisting(
+      runtimePath,
+      PACKAGE_DIST_CANDIDATES["@themoss/system"],
+    ),
+  };
+}
+
+/** Validates the configured runtime synchronously before a server can bind. */
+export function validateMossRuntimePathSync(
+  runtimePath: string,
+  expected: MossRuntimeExpectation,
+): void {
+  if (!existsSync(join(runtimePath, "package.json"))) {
+    throw new Error(
+      `MOSS_RUNTIME_PATH does not contain a Moss checkout: ${runtimePath}`,
+    );
+  }
+  const packageVersions = readPackageVersions(runtimePath);
+  assertPackageVersions(packageVersions, expected.runtimeVersion);
+  assertCheckoutRevision(
+    readCheckoutRevisionSync(runtimePath),
+    expected.runtimeRevision,
+  );
+  resolveMossRuntimeDistPaths(runtimePath);
+}
+
+/**
+ * Load every `@themoss/*` package from a pinned Moss checkout and read its
+ * exact package.json version. This is the reproducible runtime identity.
+ */
+export async function loadMossRuntime(
+  runtimePath: string,
+  expected: MossRuntimeExpectation,
+): Promise<MossRuntimeBundle> {
+  if (!existsSync(join(runtimePath, "package.json"))) {
+    throw new Error(
+      `MOSS_RUNTIME_PATH does not contain a Moss checkout: ${runtimePath}`,
+    );
+  }
+  const packageVersions = readPackageVersions(runtimePath);
+  assertPackageVersions(packageVersions, expected.runtimeVersion);
+  const checkoutRevision = await readCheckoutRevision(runtimePath);
+  assertCheckoutRevision(checkoutRevision, expected.runtimeRevision);
+
+  const {
+    core: corePath,
+    erc: ercPath,
+    kuru: kuruPath,
+    simulator: simulatorPath,
+    system: systemPath,
+  } = resolveMossRuntimeDistPaths(runtimePath);
+  const [core, erc, kuru, simulator, system] = await Promise.all([
+    import(pathToFileURL(corePath).href),
+    import(pathToFileURL(ercPath).href),
+    import(pathToFileURL(kuruPath).href),
+    import(pathToFileURL(simulatorPath).href),
+    import(pathToFileURL(systemPath).href),
+  ]);
   return {
     core,
     erc,
@@ -182,7 +258,7 @@ export async function loadMossRuntime(
     simulator,
     system,
     packageVersions,
-    checkoutRevision: await readCheckoutRevision(runtimePath),
+    checkoutRevision,
   };
 }
 
@@ -357,7 +433,10 @@ function stageKey(stage: StageName): keyof RawKuruEvidence {
 export async function runKuruLiveSwap(
   input: LiveKuruAdapterInput,
 ): Promise<LiveKuruResult> {
-  const bundle = await loadMossRuntime(input.runtimePath);
+  const bundle = await loadMossRuntime(input.runtimePath, {
+    runtimeVersion: input.runtimeVersion,
+    runtimeRevision: input.runtimeRevision,
+  });
   return runKuruLiveSwapWithBundle(input, bundle);
 }
 
@@ -388,11 +467,7 @@ export async function runKuruLiveSwapWithBundle(
 
     assertPackageVersions(bundle.packageVersions, input.runtimeVersion);
 
-    if (bundle.checkoutRevision !== input.runtimeRevision) {
-      throw new Error(
-        `MOSS runtime revision mismatch: expected ${input.runtimeRevision}, loaded ${bundle.checkoutRevision ?? "unknown"}`,
-      );
-    }
+    assertCheckoutRevision(bundle.checkoutRevision, input.runtimeRevision);
 
     const identity: RuntimeIdentity = {
       runtimeVersion: input.runtimeVersion,
