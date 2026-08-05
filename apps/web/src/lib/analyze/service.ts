@@ -26,6 +26,12 @@ const UNAVAILABLE: Copy = { en: "unavailable", zh: "无法取得" };
 const amountCopy = (value: string): Copy =>
   value === "unavailable" ? UNAVAILABLE : { en: value, zh: value };
 
+/** Amounts carry their token symbol so a diff row is readable on its own. */
+const amountWithUnit = (amount: string, symbol: string): Copy => ({
+  en: `${amount} ${symbol}`,
+  zh: `${amount} ${symbol}`,
+});
+
 /** Integration faults surface as INTEGRATION_ERROR, never protocol risk (FR-09). */
 function integrationError(
   input: CheckSwapInput,
@@ -53,7 +59,7 @@ function integrationError(
         reason: message,
       },
     ],
-    replayMode: true,
+    replayMode: false,
     intent: {
       tokenIn: input.tokenIn,
       tokenOut: input.tokenOut,
@@ -96,6 +102,20 @@ function buildDiff(
         VERDICT_RANK[next.verdict] > VERDICT_RANK[previous.verdict]
           ? "improved"
           : "worsened",
+    });
+  }
+
+  // Compares the requested input, not the quote, so a rerun that only changed
+  // the amount still reports the condition the user actually edited.
+  if (previous.intent.amountIn !== next.intent.amountIn) {
+    rows.push({
+      field: DIFF_FIELD.amountIn,
+      previous: amountWithUnit(
+        previous.intent.amountIn,
+        previous.intent.tokenIn,
+      ),
+      next: amountWithUnit(next.intent.amountIn, next.intent.tokenIn),
+      direction: "changed",
     });
   }
 

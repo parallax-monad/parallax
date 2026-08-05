@@ -27,7 +27,10 @@ export function WalletChecking({
       className="flex flex-1 flex-col justify-center px-5 pb-10"
     >
       <span className="eyebrow-monad">
-        {say(language, { en: "Parallax", zh: "Parallax" })}
+        {say(language, {
+          en: "Parallax · Simulated demo",
+          zh: "Parallax · 模拟演示",
+        })}
       </span>
       <h2 className="m-0 text-[24px] font-extrabold leading-[1.15] tracking-[-0.04em]">
         {say(language, {

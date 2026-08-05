@@ -13,6 +13,7 @@ import { WalletSwap } from "@/components/wallet/WalletSwap";
 import { flaggedFields } from "@/lib/analyze/fields";
 import { type FormState, INITIAL_FORM, toInput } from "@/lib/analyze/form";
 import { checkSwap } from "@/lib/analyze/service";
+import { createStageScheduler } from "@/lib/analyze/stageScheduler";
 import type { CheckSwapResult } from "@/lib/analyze/types";
 import type { Language } from "@/lib/i18n";
 
@@ -48,7 +49,6 @@ function ScreenTransition({ children }: { children: ReactNode }) {
     </div>
   );
 }
-
 export function WalletApp({
   language,
   onLanguageChange,
@@ -63,50 +63,37 @@ export function WalletApp({
   const [drawerOpen, setDrawerOpen] = useState(false);
   /** Bumped on every return home, so the background replays its entrance. */
   const [homeVisit, setHomeVisit] = useState(0);
-  const timersRef = useRef<number[]>([]);
+  const schedulerRef = useRef(createStageScheduler());
 
-  const clearTimers = () => {
-    for (const timer of timersRef.current) window.clearTimeout(timer);
-    timersRef.current = [];
-  };
-
-  // Reads the ref inside the cleanup rather than closing over clearTimers, so
-  // the effect stays dependency-free and still cancels on unmount.
+  // Reads the ref inside the cleanup so the effect stays dependency-free and
+  // still cancels an in-flight pipeline when the screen unmounts.
   useEffect(() => {
-    return () => {
-      for (const timer of timersRef.current) window.clearTimeout(timer);
-    };
+    const scheduler = schedulerRef.current;
+    return () => scheduler.cancel();
   }, []);
 
   const runCheck = () => {
-    clearTimers();
     const parent = result;
     setResult(undefined);
     setDrawerOpen(false);
     setStage(0);
     setScreen("checking");
 
-    for (let index = 1; index <= WALLET_STAGE_COUNT; index++) {
-      timersRef.current.push(
-        window.setTimeout(() => setStage(index), STAGE_MS * index),
-      );
-    }
-
-    timersRef.current.push(
-      window.setTimeout(
-        () => {
-          setResult(
-            checkSwap(toInput(form, parent?.runId), { previous: parent }),
-          );
-          setScreen("result");
-        },
-        STAGE_MS * (WALLET_STAGE_COUNT + 1),
-      ),
-    );
+    schedulerRef.current.run({
+      stageCount: WALLET_STAGE_COUNT,
+      stageMs: STAGE_MS,
+      onStage: setStage,
+      onSettle: () => {
+        setResult(
+          checkSwap(toInput(form, parent?.runId), { previous: parent }),
+        );
+        setScreen("result");
+      },
+    });
   };
 
   const discard = () => {
-    clearTimers();
+    schedulerRef.current.cancel();
     setResult(undefined);
     setDrawerOpen(false);
     setForm(INITIAL_FORM);
