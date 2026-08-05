@@ -10,6 +10,7 @@ import {
   normalizeLiveKuruEvidence,
   redact,
   runKuruLiveSwapWithBundle,
+  validateMossRuntimePathSync,
 } from "../src/index.js";
 
 const SENDER = "0xcccccccccccccccccccccccccccccccccccccccc";
@@ -494,7 +495,11 @@ describe("kuru live adapter", () => {
 
 describe("loadMossRuntime", () => {
   const createMossRuntimeFixture = (
-    overrides: { coreSource?: string; versions?: Record<string, string> } = {},
+    overrides: {
+      coreSource?: string;
+      versions?: Record<string, string>;
+      withGit?: boolean;
+    } = {},
   ) => {
     const dir = mkdtempSync(join(tmpdir(), "moss-runtime-"));
     writeFileSync(
@@ -528,23 +533,26 @@ describe("loadMossRuntime", () => {
           : "export const marker = 'stub';\n",
       );
     }
-    execFileSync("git", ["init", "-q", dir]);
-    execFileSync("git", ["-C", dir, "add", "."]);
-    execFileSync("git", [
-      "-C",
-      dir,
-      "-c",
-      "user.name=Moss Test",
-      "-c",
-      "user.email=moss-test@example.invalid",
-      "commit",
-      "-q",
-      "-m",
-      "fixture",
-    ]);
-    const revision = execFileSync("git", ["-C", dir, "rev-parse", "HEAD"], {
-      encoding: "utf8",
-    }).trim();
+    let revision = "0".repeat(40);
+    if (overrides.withGit !== false) {
+      execFileSync("git", ["init", "-q", dir]);
+      execFileSync("git", ["-C", dir, "add", "."]);
+      execFileSync("git", [
+        "-C",
+        dir,
+        "-c",
+        "user.name=Moss Test",
+        "-c",
+        "user.email=moss-test@example.invalid",
+        "commit",
+        "-q",
+        "-m",
+        "fixture",
+      ]);
+      revision = execFileSync("git", ["-C", dir, "rev-parse", "HEAD"], {
+        encoding: "utf8",
+      }).trim();
+    }
     return { dir, revision };
   };
 
@@ -604,6 +612,21 @@ describe("loadMossRuntime", () => {
     } finally {
       delete globalState[marker];
     }
+  });
+
+  it("reports a non-Git checkout separately from a revision mismatch", async () => {
+    const { dir, revision } = createMossRuntimeFixture({ withGit: false });
+    const expected = {
+      runtimeVersion: "0.1.0",
+      runtimeRevision: revision,
+    };
+
+    await expect(loadMossRuntime(dir, expected)).rejects.toThrow(
+      /not a readable Git checkout/,
+    );
+    expect(() => validateMossRuntimePathSync(dir, expected)).toThrow(
+      /not a readable Git checkout/,
+    );
   });
 
   it("rejects a path that is not a Moss checkout", async () => {

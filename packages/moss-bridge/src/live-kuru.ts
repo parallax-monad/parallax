@@ -98,37 +98,93 @@ export type MossRuntimeExpectation = {
   runtimeRevision: string;
 };
 
-async function readCheckoutRevision(
-  runtimePath: string,
-): Promise<string | undefined> {
+type MossRuntimeProvenanceCode =
+  | "GIT_UNAVAILABLE"
+  | "NOT_GIT_CHECKOUT"
+  | "GIT_COMMAND_TIMEOUT"
+  | "INVALID_GIT_REVISION";
+
+class MossRuntimeProvenanceError extends Error {
+  readonly code: MossRuntimeProvenanceCode;
+
+  constructor(code: MossRuntimeProvenanceCode, message: string) {
+    super(message);
+    this.name = "MossRuntimeProvenanceError";
+    this.code = code;
+  }
+}
+
+async function readCheckoutRevision(runtimePath: string): Promise<string> {
   try {
     const { stdout } = await execFileAsync(
       "git",
       ["-C", runtimePath, "rev-parse", "HEAD"],
       { encoding: "utf8", timeout: 2_000 },
     );
-    return parseCheckoutRevision(stdout);
-  } catch {
-    return undefined;
+    return parseCheckoutRevision(stdout, runtimePath);
+  } catch (error) {
+    if (error instanceof MossRuntimeProvenanceError) throw error;
+    throw checkoutRevisionCommandError(runtimePath, error);
   }
 }
 
-function readCheckoutRevisionSync(runtimePath: string): string | undefined {
+function readCheckoutRevisionSync(runtimePath: string): string {
   try {
     const stdout = execFileSync(
       "git",
       ["-C", runtimePath, "rev-parse", "HEAD"],
-      { encoding: "utf8", timeout: 2_000 },
+      { encoding: "utf8", timeout: 2_000, stdio: "pipe" },
     );
-    return parseCheckoutRevision(stdout);
-  } catch {
-    return undefined;
+    return parseCheckoutRevision(stdout, runtimePath);
+  } catch (error) {
+    if (error instanceof MossRuntimeProvenanceError) throw error;
+    throw checkoutRevisionCommandError(runtimePath, error);
   }
 }
 
-function parseCheckoutRevision(stdout: string): string | undefined {
+function parseCheckoutRevision(stdout: string, runtimePath: string): string {
   const revision = stdout.trim();
-  return /^[0-9a-f]{40}$/i.test(revision) ? revision : undefined;
+  if (!/^[0-9a-f]{40}$/i.test(revision)) {
+    throw new MossRuntimeProvenanceError(
+      "INVALID_GIT_REVISION",
+      `MOSS_RUNTIME_PATH returned an invalid Git revision: ${runtimePath}`,
+    );
+  }
+  return revision;
+}
+
+function checkoutRevisionCommandError(
+  runtimePath: string,
+  error: unknown,
+): MossRuntimeProvenanceError {
+  const details =
+    typeof error === "object" && error !== null
+      ? (error as {
+          code?: unknown;
+          killed?: unknown;
+          signal?: unknown;
+        })
+      : undefined;
+  if (details?.code === "ENOENT") {
+    return new MossRuntimeProvenanceError(
+      "GIT_UNAVAILABLE",
+      `Git is required to verify MOSS_RUNTIME_PATH but was not found: ${runtimePath}`,
+    );
+  }
+  if (
+    details?.code === "ETIMEDOUT" ||
+    details?.killed === true ||
+    details?.signal === "SIGTERM"
+  ) {
+    return new MossRuntimeProvenanceError(
+      "GIT_COMMAND_TIMEOUT",
+      `Git revision verification timed out for MOSS_RUNTIME_PATH: ${runtimePath}`,
+    );
+  }
+  return new MossRuntimeProvenanceError(
+    "NOT_GIT_CHECKOUT",
+    `MOSS_RUNTIME_PATH is not a readable Git checkout: ${runtimePath}`,
+  );
 }
 
 function firstExisting(runtimePath: string, candidates: string[]): string {

@@ -77,7 +77,7 @@ Moss git commit, not a workspace label.
 | Variable | Secret | Purpose |
 | --- | --- | --- |
 | `MOSS_RPC_URL` | yes (never printed) | read-only Monad RPC endpoint for `createRuntime`, quote reads, and `debug_traceCall` simulation |
-| `MOSS_RUNTIME_PATH` | no | absolute path to the pinned Moss checkout with built workspace `dist` |
+| `MOSS_RUNTIME_PATH` | no | absolute path to the pinned Moss Git checkout with built workspace `dist`; `.git` metadata must be retained and `git` must be available to the runtime environment |
 | `MOSS_RUNTIME_VERSION` | no | exact `@themoss/core` version, e.g. `0.1.0` |
 | `MOSS_RUNTIME_REVISION` | no | immutable Moss git commit, e.g. `d09b38cbc44ee7f5722c5d09e7224f7750187762` |
 | `MOSS_SENDER` | no | read-only sender address (defaults to the fixture sender above) |
@@ -88,6 +88,13 @@ These steps are operator actions performed once before a run. The adapter and
 smoke still independently verify the configured checkout, package versions,
 RPC Chain ID, and simulator pinned block before treating the result as live
 acceptance evidence.
+
+The backend bootstrap performs the same runtime provenance preflight before it
+composes the application or opens a listener. `MOSS_RUNTIME_PATH` must
+therefore remain a readable Git checkout: the `.git` metadata and the `git`
+executable are required to verify `MOSS_RUNTIME_REVISION`. A packed runtime
+directory without authoritative Git metadata is rejected rather than treated
+as a verified checkout.
 
 ```bash
 # 1. Pin the Moss runtime in a dedicated checkout (never touch the upstream repo).

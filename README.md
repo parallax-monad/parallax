@@ -59,8 +59,12 @@ started directly with `pnpm --filter @parallax/api start` after copying
 requires `MONAD_RPC_URL`, `MOSS_RUNTIME_VERSION`, `MOSS_RUNTIME_REVISION`,
 `PARALLAX_TOKEN_REGISTRY_JSON`, `HOST`, and `PORT`, and optionally accepts
 `CORS_ORIGIN` for the browser origin allowed to call the API. Supplying
-`MOSS_RUNTIME_PATH` enables the live Kuru Agent Flow; without it, `/api/check`
-remains explicitly unsupported. It reports configuration errors before
+`MOSS_RUNTIME_PATH` enables the live Kuru Agent Flow; it must point to a
+readable, built Moss Git checkout with its `.git` metadata retained, and the
+runtime environment must provide the `git` executable. Bootstrap verifies the
+checkout structure, package identities, versions, and Git revision before
+composing the app; without the path, `/api/check` remains explicitly
+unsupported. Configuration and runtime provenance errors are reported before
 opening the listener.
 
 ```bash

@@ -139,6 +139,12 @@ export function bootstrapBackendApp(options: BootstrapBackendAppOptions): Hono {
     environment,
     tokenRegistry: options.tokenRegistry,
   });
+  if (runtime.config.moss.runtimePath !== undefined) {
+    validateMossRuntimePathSync(runtime.config.moss.runtimePath, {
+      runtimeVersion: runtime.config.moss.runtimeVersion,
+      runtimeRevision: runtime.config.moss.runtimeRevision,
+    });
+  }
 
   return createBackendApp({
     runtime,
@@ -167,24 +173,7 @@ export function startBackendServer(
     HOST: options.hostname ?? serverEnvironment.HOST,
     PORT: options.port ?? serverEnvironment.PORT,
   });
-  const runtime = bootstrapBackendRuntime({
-    environment,
-    tokenRegistry: options.tokenRegistry,
-  });
-  if (runtime.config.moss.runtimePath !== undefined) {
-    validateMossRuntimePathSync(runtime.config.moss.runtimePath, {
-      runtimeVersion: runtime.config.moss.runtimeVersion,
-      runtimeRevision: runtime.config.moss.runtimeRevision,
-    });
-  }
-  const app = createBackendApp({
-    runtime,
-    corsOrigin: options.corsOrigin ?? serverEnvironment.CORS_ORIGIN,
-    agentFlow: options.agentFlow,
-    liveRunner: options.liveRunner,
-    store: options.store,
-    replayRepository: options.replayRepository,
-  });
+  const app = bootstrapBackendApp({ ...options, environment });
 
   return (options.serverFactory ?? serveNode)(
     {
