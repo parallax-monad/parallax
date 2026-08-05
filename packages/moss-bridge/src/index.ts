@@ -1,4 +1,9 @@
-export { normalizeMossError } from "./errors.js";
+export {
+  classifyLiveError,
+  normalizeMossError,
+  StageTimeoutError,
+  structuredError,
+} from "./errors.js";
 export {
   KURU_PROTOCOL,
   LIVE_ADAPTER_LIMITATION,
@@ -7,6 +12,21 @@ export {
   MONAD_USDC_ADDRESS,
 } from "./kuru.js";
 export {
+  evaluateLiveAcceptance,
+  type LiveAcceptanceGate,
+  type LiveAcceptanceResult,
+  liveSuccessOf,
+  type P0DecisionCandidate,
+  p0DecisionCandidate,
+} from "./live-acceptance.js";
+export {
+  loadMossRuntime,
+  type MossRuntimeBundle,
+  runKuruLiveSwap,
+  runKuruLiveSwapWithBundle,
+} from "./live-kuru.js";
+export {
+  normalizeLiveKuruEvidence,
   normalizeRecordedKuruEvidence,
   replayKuruEvidence,
 } from "./normalize.js";

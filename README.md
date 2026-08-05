@@ -51,6 +51,28 @@ The repository is currently in the P0 scaffold stage. Module owners will define 
 
 Target MVP completion date: August 5, 2026.
 
+## Backend runtime
+
+The Node runtime is composed through `bootstrapBackendApp()` and can be
+started directly with `pnpm --filter @parallax/api start` after copying
+`.env.example` to `.env` and filling in the required values. The launcher
+requires `MONAD_RPC_URL`, `MOSS_RUNTIME_VERSION`, `MOSS_RUNTIME_REVISION`,
+`PARALLAX_TOKEN_REGISTRY_JSON`, `HOST`, and `PORT`, and optionally accepts
+`CORS_ORIGIN` for the browser origin allowed to call the API. It reports
+configuration errors before opening the listener.
+
+```bash
+cp .env.example .env
+pnpm --filter @parallax/api start
+```
+
+P2 does not include the live Agent Flow implementation; until it is injected,
+`POST /api/check` returns HTTP 502 with `error.code: "UNSUPPORTED"` and a
+fail-closed Run envelope whose verdict is `UNKNOWN` and whose integration
+error is not retryable, rather than a fake success. Recorded replay data is
+available only through `/api/replay/:id` and is never used as a live Check
+fallback.
+
 ## Collaboration
 
 - `main` is the shared integration branch.

@@ -37,6 +37,225 @@
   .card {
     @apply border border-line bg-ink-elev p-5 transition-colors hover:border-line-strong;
   }
+  .hero-webgl-fallback {
+    background:
+      radial-gradient(
+        circle at 28% 34%,
+        rgba(111, 85, 255, 0.2),
+        transparent 26%
+      ),
+      radial-gradient(
+        circle at 72% 58%,
+        rgba(73, 188, 255, 0.14),
+        transparent 24%
+      ),
+      radial-gradient(
+        circle at 50% 48%,
+        rgba(204, 255, 0, 0.07),
+        transparent 18%
+      ),
+      radial-gradient(
+        circle at 16% 72%,
+        rgba(255, 255, 255, 0.34) 0 1px,
+        transparent 1.5px
+      ),
+      radial-gradient(
+        circle at 80% 22%,
+        rgba(255, 255, 255, 0.28) 0 1px,
+        transparent 1.5px
+      ),
+      linear-gradient(145deg, #02030a, #040611 48%, #010205);
+  }
+  .landing-space {
+    position: relative;
+    isolation: isolate;
+  }
+  .landing-space-background {
+    position: absolute;
+    inset: -3rem auto -7rem 50%;
+    width: 100vw;
+    z-index: 0;
+    overflow: hidden;
+    pointer-events: none;
+    transform: translateX(-50%);
+    background: linear-gradient(
+      180deg,
+      rgba(3, 4, 12, 0.54),
+      rgba(1, 2, 8, 0.18) 42%,
+      rgba(4, 3, 13, 0.46)
+    );
+  }
+  .landing-space-background::before,
+  .landing-space-background::after {
+    position: absolute;
+    inset: 0;
+    content: "";
+    pointer-events: none;
+  }
+  .landing-space-background::before {
+    background-image:
+      radial-gradient(
+        circle,
+        rgba(235, 247, 255, 0.62) 0 0.8px,
+        transparent 1.35px
+      ),
+      radial-gradient(
+        circle,
+        rgba(139, 218, 255, 0.52) 0 1px,
+        transparent 1.55px
+      ),
+      radial-gradient(
+        circle,
+        rgba(178, 145, 255, 0.48) 0 1.15px,
+        transparent 1.7px
+      ),
+      radial-gradient(
+        circle,
+        rgba(204, 255, 0, 0.34) 0 0.85px,
+        transparent 1.5px
+      ),
+      radial-gradient(
+        circle,
+        rgba(248, 251, 255, 0.44) 0 0.65px,
+        transparent 1.2px
+      );
+    background-size:
+      173px 191px,
+      263px 241px,
+      337px 293px,
+      421px 367px,
+      139px 157px;
+    background-position:
+      11px 23px,
+      89px 137px,
+      193px 71px,
+      37px 211px,
+      73px 19px;
+    opacity: 0.34;
+    -webkit-mask-image: radial-gradient(
+      ellipse at center,
+      rgba(0, 0, 0, 0.56),
+      #000 72%
+    );
+    mask-image: radial-gradient(
+      ellipse at center,
+      rgba(0, 0, 0, 0.56),
+      #000 72%
+    );
+  }
+  .landing-space-background::after {
+    background-image:
+      radial-gradient(
+        ellipse at 13% 20%,
+        rgba(103, 76, 255, 0.11),
+        transparent 32%
+      ),
+      radial-gradient(
+        ellipse at 90% 31%,
+        rgba(52, 182, 255, 0.075),
+        transparent 29%
+      ),
+      radial-gradient(
+        ellipse at 7% 58%,
+        rgba(62, 88, 211, 0.052),
+        transparent 30%
+      ),
+      radial-gradient(
+        ellipse at 82% 88%,
+        rgba(135, 79, 255, 0.09),
+        transparent 34%
+      ),
+      radial-gradient(
+        ellipse at 18% 94%,
+        rgba(49, 184, 219, 0.055),
+        transparent 27%
+      );
+  }
+  .decision-receipt {
+    position: relative;
+    overflow: hidden;
+    background:
+      radial-gradient(
+        ellipse at 12% 18%,
+        rgba(155, 124, 255, 0.11),
+        transparent 38%
+      ),
+      radial-gradient(
+        ellipse at 88% 28%,
+        rgba(105, 215, 255, 0.08),
+        transparent 36%
+      ),
+      radial-gradient(
+        ellipse at 72% 92%,
+        rgba(204, 255, 0, 0.028),
+        transparent 34%
+      ),
+      linear-gradient(145deg, rgba(20, 20, 25, 0.98), rgba(10, 11, 16, 0.98));
+  }
+  .decision-receipt::before {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    content: "";
+    pointer-events: none;
+    background: linear-gradient(
+      90deg,
+      rgba(155, 124, 255, 0.12),
+      rgba(105, 215, 255, 0.06),
+      transparent 65%
+    );
+    opacity: 0.3;
+  }
+  .decision-receipt > * {
+    position: relative;
+    z-index: 1;
+  }
+  .question-card {
+    --pointer-x: 50%;
+    --pointer-y: 50%;
+    --surface-accent: #ccff00;
+    position: relative;
+    overflow: hidden;
+    background:
+      radial-gradient(
+        320px circle at var(--pointer-x) var(--pointer-y),
+        color-mix(in srgb, var(--surface-accent) 0%, transparent),
+        transparent 68%
+      ),
+      linear-gradient(145deg, rgba(20, 20, 25, 0.98), rgba(10, 11, 16, 0.98));
+    transition:
+      transform 240ms ease,
+      border-color 240ms ease,
+      background-color 240ms ease;
+  }
+  .question-card-title,
+  .question-card-key {
+    transition:
+      color 220ms ease,
+      filter 220ms ease;
+  }
+  .verdict-row {
+    --pointer-x: 50%;
+    --pointer-y: 50%;
+    --surface-accent: #ffffff;
+    background: radial-gradient(
+      420px circle at var(--pointer-x) var(--pointer-y),
+      color-mix(in srgb, var(--surface-accent) 0%, transparent),
+      transparent 72%
+    );
+    transition:
+      background-color 240ms ease,
+      border-color 240ms ease;
+  }
+  .verdict-grade,
+  .verdict-badge,
+  .verdict-row-content {
+    transition:
+      transform 220ms ease,
+      filter 220ms ease,
+      background-color 220ms ease,
+      border-color 220ms ease;
+  }
   .card-head {
     @apply mb-1 flex items-baseline justify-between gap-3 border-b border-line pb-3;
   }
@@ -105,5 +324,77 @@
   }
   .no-scrollbar::-webkit-scrollbar {
     display: none;
+  }
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .question-card:hover {
+    transform: translateY(-3px);
+    border-color: color-mix(in srgb, var(--surface-accent) 68%, #2a2a2a);
+    background:
+      radial-gradient(
+        320px circle at var(--pointer-x) var(--pointer-y),
+        color-mix(in srgb, var(--surface-accent) 16%, transparent),
+        transparent 68%
+      ),
+      linear-gradient(145deg, rgba(22, 23, 29, 0.98), rgba(11, 12, 17, 0.98));
+  }
+  .question-card:hover .question-card-title,
+  .question-card:hover .question-card-key {
+    filter: brightness(1.18);
+  }
+  .verdict-row:hover {
+    border-color: color-mix(in srgb, var(--surface-accent) 42%, #1e1e1e);
+    background: radial-gradient(
+      420px circle at var(--pointer-x) var(--pointer-y),
+      color-mix(in srgb, var(--surface-accent) 11%, transparent),
+      transparent 72%
+    );
+  }
+  .verdict-row:hover .verdict-grade {
+    filter: brightness(1.18);
+  }
+  .verdict-row:hover .verdict-badge {
+    background-color: color-mix(
+      in srgb,
+      var(--surface-accent) 10%,
+      transparent
+    );
+    border-color: color-mix(in srgb, var(--surface-accent) 76%, transparent);
+  }
+  .verdict-row:hover .verdict-row-content {
+    transform: translateX(3px);
+  }
+}
+
+html[lang="zh-CN"] [data-hero-title] {
+  font-size: clamp(50px, 11vw, 112px);
+  letter-spacing: -0.02em;
+  line-height: 1.02;
+}
+
+html[lang="zh-CN"] [data-section-heading] {
+  letter-spacing: -0.025em;
+  line-height: 1;
+}
+
+html[lang="zh-CN"] .eyebrow,
+html[lang="zh-CN"] .question-card-key {
+  letter-spacing: 0.08em;
+}
+
+html[lang="zh-CN"] .verdict-grade {
+  letter-spacing: -0.02em;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .question-card,
+  .question-card-title,
+  .question-card-key,
+  .verdict-row,
+  .verdict-grade,
+  .verdict-badge,
+  .verdict-row-content {
+    transition-duration: 1ms;
   }
 }

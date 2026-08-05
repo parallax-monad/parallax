@@ -14,3 +14,6 @@ coverage/
 *.swp
 *.swo
 *~
+
+# Live smoke scratch output (never committed)
+.smoke-live/

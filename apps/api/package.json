@@ -4,11 +4,17 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "vitest run",
+    "start": "node --env-file=../../.env --import=tsx src/server.ts",
+    "test": "vitest run --exclude src/server.integration.test.ts",
+    "test:integration": "vitest run --config vitest.integration.config.ts src/server.integration.test.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
+    "@hono/node-server": "2.0.12",
     "@parallax/contracts": "workspace:*",
+    "@parallax/orchestrator": "workspace:*",
+    "hono": "4.12.33",
+    "tsx": "4.23.5",
     "zod": "3.25.76"
   }
 }
