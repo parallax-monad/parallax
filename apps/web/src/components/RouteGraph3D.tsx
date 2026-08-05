@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import * as THREE from "three";
 import type { Language } from "@/lib/i18n";
 import {
+  AMBIENT_STAR_COLORS,
   EVIDENCE_TRACE_MARKERS,
   getEvidenceTraceAriaLabel,
   getExpandedMarkerEdgeScale,
@@ -113,8 +114,6 @@ const SIGNAL_FOCUS_Z_OFFSET = 3;
 const DRAG_YAW_SENSITIVITY = 0.0052;
 const DRAG_PITCH_SENSITIVITY = 0.0042;
 const DRAG_PITCH_LIMIT = 0.65;
-const AMBIENT_STAR_COLORS = ["#ffffff", "#eeeaff"] as const;
-
 const MARKERS: MarkerConfig[] = [
   {
     label: EVIDENCE_TRACE_MARKERS[0].label,

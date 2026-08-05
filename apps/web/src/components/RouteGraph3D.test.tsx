@@ -27,6 +27,10 @@ describe("RouteGraph3D", () => {
   });
 
   test("gives each protocol or asset a distinct restrained route color", () => {
+    expect(evidenceTrace).toHaveProperty("AMBIENT_STAR_COLORS", [
+      "#ffffff",
+      "#eeeaff",
+    ]);
     expect(EVIDENCE_TRACE_MARKERS.map((marker) => marker.color)).toEqual([
       "#59e1c2",
       "#9d8cff",
@@ -45,14 +49,14 @@ describe("RouteGraph3D", () => {
   });
 
   test("moves protocol labels inward as the constellation expands", () => {
-    expect(evidenceTrace).toHaveProperty("getProtocolLabelOffset");
-    const getProtocolLabelOffset = (evidenceTrace as Record<string, unknown>)
-      .getProtocolLabelOffset;
-    expect(getProtocolLabelOffset).toBeTypeOf("function");
-    if (typeof getProtocolLabelOffset !== "function") return;
-
-    expect(getProtocolLabelOffset(-82, 8.4, 12, 0)).toBe(0);
-    expect(getProtocolLabelOffset(-82, 8.4, 12, 1)).toBeCloseTo(11.46, 5);
-    expect(getProtocolLabelOffset(88, 7.8, 28, 1)).toBeCloseTo(-19.07, 5);
+    expect(evidenceTrace.getProtocolLabelOffset(-82, 8.4, 12, 0)).toBe(0);
+    expect(evidenceTrace.getProtocolLabelOffset(-82, 8.4, 12, 1)).toBeCloseTo(
+      11.46,
+      5,
+    );
+    expect(evidenceTrace.getProtocolLabelOffset(88, 7.8, 28, 1)).toBeCloseTo(
+      -19.07,
+      5,
+    );
   });
 });

@@ -36,7 +36,7 @@ const EVIDENCE_ROWS = [
   {
     index: "06",
     label: ["Provenance", "证据溯源"] as const,
-    value: "MOSS REPLAY / v0.4",
+    value: "MOSS REPLAY / FIXTURE",
     status: ["TRACEABLE", "可追溯"] as const,
   },
 ];
@@ -56,8 +56,8 @@ export function HeroEvidenceReceipt({ language }: { language: Language }) {
       </header>
 
       <div className="hero-receipt-meta">
-        <span>MONAD TESTNET</span>
-        <span>BLOCK 13,842,911</span>
+        <span>DEMO NETWORK</span>
+        <span>SAMPLE BLOCK</span>
         <span>READ ONLY</span>
       </div>
 

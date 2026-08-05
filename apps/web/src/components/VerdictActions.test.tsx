@@ -12,22 +12,29 @@ describe("VerdictActions", () => {
 
     expect(html).toContain('data-verdict-field=""');
     expect(html.match(/data-verdict-choice=/g)).toHaveLength(4);
-    expect(html.match(/data-receipt-dot=/g)).toHaveLength(37);
+    expect(
+      html.match(/aria-describedby="verdict-vote-instructions"/g),
+    ).toHaveLength(4);
+    expect(html).toContain(
+      "Choose one verdict. You have one vote. Choosing another verdict moves your vote.",
+    );
+    expect(html.match(/data-vote-dot=/g)).toHaveLength(37);
+    expect(html).toContain("37 DEMO VOTES / INTERACTIVE POLL");
+    expect(html).toContain("ONE PERSON / ONE VOTE");
     expect(html).toContain("READY TO SIGN");
     expect(html).toContain("REVISE &amp; RERUN");
     expect(html).toContain("DO NOT SIGN");
     expect(html).toContain("MORE EVIDENCE NEEDED");
   });
 
-  test("exposes one selected quadrant as an interactive choice", () => {
+  test("starts as an uncast interactive vote", () => {
     const html = renderToStaticMarkup(<VerdictActions language="en" />);
 
     expect(html).toContain('data-verdict-center=""');
-    expect(html).toContain('data-activation="pointer"');
-    expect(html.match(/aria-pressed="true"/g)).toHaveLength(1);
-    expect(html.match(/aria-pressed="false"/g)).toHaveLength(3);
-    expect(html).toContain("SELECTED FIELD");
-    expect(html).toContain("REVISE &amp; RERUN");
+    expect(html).toContain('data-activation="vote"');
+    expect(html.match(/aria-pressed="true"/g) ?? []).toHaveLength(0);
+    expect(html.match(/aria-pressed="false"/g)).toHaveLength(4);
+    expect(html).toContain("CAST YOUR VOTE");
   });
 
   test("assigns a distinct semantic tone to every verdict", () => {
@@ -37,7 +44,7 @@ describe("VerdictActions", () => {
     expect(html).toContain('data-verdict-tone="ready"');
     expect(html).toContain('data-verdict-tone="blocked"');
     expect(html).toContain('data-verdict-tone="rerun"');
-    expect(html).toContain('data-tone="rerun"');
+    expect(html).not.toContain('data-tone="rerun"');
   });
 
   test("states the signing action before qualification", () => {
@@ -57,14 +64,49 @@ describe("VerdictActions", () => {
     );
   });
 
-  test("follows mouse hover without requiring a click", () => {
-    let selected: VerdictZone = "southeast";
-    const handlers = createVerdictInteractionHandlers("northwest", (zone) => {
-      selected = zone;
-    });
+  test("uses hover for preview and click for voting", () => {
+    let previewed: VerdictZone | null = null;
+    let voted: VerdictZone | null = null;
+    const handlers = createVerdictInteractionHandlers(
+      "northwest",
+      (zone) => {
+        previewed = zone;
+      },
+      (zone) => {
+        voted = zone;
+      },
+    );
 
     handlers.onPointerEnter({ pointerType: "mouse" });
-    expect(selected).toBe("northwest");
+    expect(previewed).toBe("northwest");
+    expect(voted).toBeNull();
+    expect("onClick" in handlers).toBe(true);
+    if ("onClick" in handlers) handlers.onClick();
+    expect(voted).toBe("northwest");
+  });
+
+  test("moves the same vote when another quadrant is chosen", () => {
+    let voted: VerdictZone | null = null;
+    const preview = () => {};
+    const northwest = createVerdictInteractionHandlers(
+      "northwest",
+      preview,
+      (zone) => {
+        voted = zone;
+      },
+    );
+    const northeast = createVerdictInteractionHandlers(
+      "northeast",
+      preview,
+      (zone) => {
+        voted = zone;
+      },
+    );
+
+    northwest.onClick();
+    expect(voted).toBe("northwest");
+    northeast.onClick();
+    expect(voted).toBe("northeast");
   });
 
   test("uses touch press as a fallback but ignores touch enter", () => {
@@ -96,7 +138,8 @@ describe("VerdictActions", () => {
     expect(html).toContain("可以签署");
     expect(html).toContain("请勿签署");
     expect(html).toContain("调整后重跑");
-    expect(html).toContain("移动指针，查看结论");
+    expect(html).toContain("一人一票 · 点击改投");
+    expect(html).toContain("一人一票");
     expect(html).toContain("先补齐缺失证据，再决定是否签署");
     expect(html).toContain("请勿签署：当前路径无法执行");
     expect(html).not.toContain("需要更多证据");

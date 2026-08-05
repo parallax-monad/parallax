@@ -97,51 +97,73 @@ function createReceiptDots() {
   });
 }
 
-const RECEIPT_DOTS = createReceiptDots();
+const DEMO_VOTE_DOTS = createReceiptDots();
+
+const USER_VOTE_POSITION: Record<VerdictZone, { x: number; y: number }> = {
+  northwest: { x: 39, y: 34 },
+  northeast: { x: 61, y: 33 },
+  southwest: { x: 39, y: 72 },
+  southeast: { x: 61, y: 72 },
+};
 
 type VerdictPointerEvent = { pointerType: string };
 
 export function createVerdictInteractionHandlers(
   zone: VerdictZone,
-  selectZone: (zone: VerdictZone) => void,
+  previewZone: (zone: VerdictZone) => void,
+  voteZone: (zone: VerdictZone) => void = previewZone,
 ) {
   return {
-    onFocus: () => selectZone(zone),
+    onClick: () => voteZone(zone),
+    onFocus: () => previewZone(zone),
     onPointerDown: (event: VerdictPointerEvent) => {
-      if (event.pointerType === "touch") selectZone(zone);
+      if (event.pointerType === "touch") voteZone(zone);
     },
     onPointerEnter: (event: VerdictPointerEvent) => {
-      if (event.pointerType !== "touch") selectZone(zone);
+      if (event.pointerType !== "touch") previewZone(zone);
     },
   };
 }
 
 export function VerdictActions({ language }: { language: Language }) {
-  const [selectedZone, setSelectedZone] = useState<VerdictZone>("southeast");
-  const selectedQuadrant =
-    QUADRANTS.find((quadrant) => quadrant.zone === selectedZone) ??
-    QUADRANTS[3];
+  const [previewZone, setPreviewZone] = useState<VerdictZone | null>(null);
+  const [selectedZone, setSelectedZone] = useState<VerdictZone | null>(null);
+  const activeZone = previewZone ?? selectedZone;
+  const activeQuadrant = QUADRANTS.find(
+    (quadrant) => quadrant.zone === activeZone,
+  );
+  const totalVotes = 37 + (selectedZone ? 1 : 0);
+  const voteCount = (zone: VerdictZone) =>
+    DOT_COUNTS[zone] + (selectedZone === zone ? 1 : 0);
 
   return (
     <div className="verdict-actions">
+      <p className="sr-only" id="verdict-vote-instructions">
+        {pick(
+          language,
+          "Choose one verdict. You have one vote. Choosing another verdict moves your vote.",
+          "请选择一个结论。每人只有一票；选择其他结论会移动你的投票。",
+        )}
+      </p>
       <div
         className="verdict-field"
-        data-activation="pointer"
+        data-activation="vote"
         data-verdict-field=""
+        onPointerLeave={() => setPreviewZone(null)}
       >
         <div className="verdict-field-caption" aria-hidden="true">
           <span>
             {pick(
               language,
-              "37 REPLAY RECEIPTS / INTERACTIVE DEMO",
-              "37 份回放回执 / 交互演示",
+              `${totalVotes} DEMO VOTES / INTERACTIVE POLL`,
+              `${totalVotes} 张演示票 / 互动投票`,
             )}
           </span>
           <span>
             {pick(
               language,
-              "MOVE THE POINTER TO EXPLORE",
-              "移动指针，查看结论",
+              "ONE PERSON / ONE VOTE · CLICK TO MOVE",
+              "一人一票 · 点击改投",
             )}
           </span>
         </div>
@@ -155,11 +177,11 @@ export function VerdictActions({ language }: { language: Language }) {
         />
 
         <div className="verdict-dot-layer" aria-hidden="true">
-          {RECEIPT_DOTS.map((dot) => (
+          {DEMO_VOTE_DOTS.map((dot) => (
             <span
-              className="verdict-receipt-dot"
-              data-receipt-dot=""
-              data-selected={dot.zone === selectedZone ? "true" : undefined}
+              className="verdict-vote-dot"
+              data-selected={dot.zone === activeZone ? "true" : undefined}
+              data-vote-dot=""
               data-zone={dot.zone}
               key={dot.id}
               style={
@@ -172,30 +194,54 @@ export function VerdictActions({ language }: { language: Language }) {
               }
             />
           ))}
+          {selectedZone ? (
+            <span
+              className="verdict-vote-dot"
+              data-selected={selectedZone === activeZone ? "true" : undefined}
+              data-user-vote=""
+              data-vote-dot=""
+              data-zone={selectedZone}
+              style={
+                {
+                  "--dot-delay": "0s",
+                  "--dot-size": "20px",
+                  "--dot-x": `${USER_VOTE_POSITION[selectedZone].x}%`,
+                  "--dot-y": `${USER_VOTE_POSITION[selectedZone].y}%`,
+                } as CSSProperties
+              }
+            />
+          ) : null}
         </div>
 
         {QUADRANTS.map((quadrant) => {
           const selected = quadrant.zone === selectedZone;
+          const active = quadrant.zone === activeZone;
           const interactionHandlers = createVerdictInteractionHandlers(
             quadrant.zone,
+            setPreviewZone,
             setSelectedZone,
           );
           return (
             <button
+              aria-describedby="verdict-vote-instructions"
               aria-pressed={selected}
               className="verdict-quadrant"
-              data-current-action={selected ? "true" : undefined}
+              data-current-action={active ? "true" : undefined}
               data-verdict-choice=""
               data-verdict-tone={quadrant.tone}
               data-zone={quadrant.zone}
               key={quadrant.index}
+              onBlur={() => setPreviewZone(null)}
+              onClick={interactionHandlers.onClick}
               onFocus={interactionHandlers.onFocus}
               onPointerDown={interactionHandlers.onPointerDown}
               onPointerEnter={interactionHandlers.onPointerEnter}
               type="button"
             >
               <div className="verdict-quadrant-meta">
-                <span>{quadrant.index}</span>
+                <span>
+                  {voteCount(quadrant.zone)} {pick(language, "VOTES", "票")}
+                </span>
                 <b>{pick(language, quadrant.note[0], quadrant.note[1])}</b>
               </div>
               <h3>{pick(language, quadrant.label[0], quadrant.label[1])}</h3>
@@ -206,19 +252,29 @@ export function VerdictActions({ language }: { language: Language }) {
 
         <div
           className="verdict-field-center"
-          data-tone={selectedQuadrant.tone}
+          data-tone={activeQuadrant?.tone}
           data-verdict-center=""
         >
-          <span>{pick(language, "SELECTED FIELD", "当前判读")}</span>
+          <span>
+            {activeQuadrant
+              ? selectedZone === activeZone
+                ? pick(language, "YOUR ONLY VOTE", "你的唯一一票")
+                : pick(language, "PREVIEW", "预览")
+              : pick(language, "CAST YOUR VOTE", "投下你的选择")}
+          </span>
           <i aria-hidden="true" />
           <strong>
-            {DOT_COUNTS[selectedZone]} / 37
+            {activeZone
+              ? `${voteCount(activeZone)} / ${totalVotes}`
+              : totalVotes}
             <small>
-              {pick(
-                language,
-                selectedQuadrant.label[0],
-                selectedQuadrant.label[1],
-              )}
+              {activeQuadrant
+                ? pick(
+                    language,
+                    activeQuadrant.label[0],
+                    activeQuadrant.label[1],
+                  )
+                : pick(language, "CHOOSE A VERDICT", "选择一个结论")}
             </small>
           </strong>
         </div>

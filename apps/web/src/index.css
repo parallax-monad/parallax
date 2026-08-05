@@ -457,33 +457,34 @@
     z-index: 1;
     display: block;
     pointer-events: none;
+    filter: drop-shadow(0 0 7px rgba(182, 168, 255, 0.18));
   }
   .verdict-field-axis-x {
     top: 50%;
     right: 0;
     left: 0;
-    height: 1px;
+    height: 2px;
     background: linear-gradient(
       90deg,
-      transparent,
-      rgba(197, 190, 224, 0.22) 12% 44%,
+      rgba(197, 190, 224, 0.08),
+      rgba(197, 190, 224, 0.42) 10% 46%,
       transparent 49.3% 50.7%,
-      rgba(197, 190, 224, 0.22) 56% 88%,
-      transparent
+      rgba(197, 190, 224, 0.42) 54% 90%,
+      rgba(197, 190, 224, 0.08)
     );
   }
   .verdict-field-axis-y {
     top: 0;
     bottom: 0;
     left: 50%;
-    width: 1px;
+    width: 2px;
     background: linear-gradient(
       180deg,
-      transparent,
-      rgba(197, 190, 224, 0.22) 12% 44%,
+      rgba(197, 190, 224, 0.08),
+      rgba(197, 190, 224, 0.42) 10% 46%,
       transparent 49.3% 50.7%,
-      rgba(197, 190, 224, 0.22) 56% 88%,
-      transparent
+      rgba(197, 190, 224, 0.42) 54% 90%,
+      rgba(197, 190, 224, 0.08)
     );
   }
   .verdict-dot-layer {
@@ -492,7 +493,7 @@
     z-index: 1;
     pointer-events: none;
   }
-  .verdict-receipt-dot {
+  .verdict-vote-dot {
     --verdict-color: #836ef9;
     position: absolute;
     top: var(--dot-y);
@@ -508,6 +509,8 @@
       0 3px 10px color-mix(in srgb, var(--verdict-color) 16%, transparent);
     opacity: 0.42;
     transition:
+      top 520ms cubic-bezier(0.2, 0.9, 0.2, 1),
+      left 520ms cubic-bezier(0.2, 0.9, 0.2, 1),
       transform 460ms cubic-bezier(0.2, 0.8, 0.2, 1),
       opacity 360ms ease,
       background-color 360ms ease,
@@ -515,7 +518,7 @@
     animation: verdict-dot-drift 4s ease-in-out var(--dot-delay) infinite
       alternate;
   }
-  .verdict-receipt-dot[data-selected="true"] {
+  .verdict-vote-dot[data-selected="true"] {
     transform: translate(-50%, -50%) scale(1.08);
     border-color: color-mix(in srgb, var(--verdict-color) 82%, white 18%);
     background: color-mix(in srgb, var(--verdict-color) 82%, transparent);
@@ -525,16 +528,16 @@
       0 0 0 4px color-mix(in srgb, var(--verdict-color) 9%, transparent);
     opacity: 0.92;
   }
-  .verdict-receipt-dot[data-zone="northwest"] {
+  .verdict-vote-dot[data-zone="northwest"] {
     --verdict-color: #b6a8ff;
   }
-  .verdict-receipt-dot[data-zone="northeast"] {
+  .verdict-vote-dot[data-zone="northeast"] {
     --verdict-color: #75e6b1;
   }
-  .verdict-receipt-dot[data-zone="southwest"] {
+  .verdict-vote-dot[data-zone="southwest"] {
     --verdict-color: #ff7d8a;
   }
-  .verdict-receipt-dot[data-zone="southeast"] {
+  .verdict-vote-dot[data-zone="southeast"] {
     --verdict-color: #f4bd63;
   }
   @keyframes verdict-dot-drift {
@@ -543,6 +546,15 @@
     }
     to {
       margin-top: 3px;
+    }
+  }
+  .verdict-vote-dot[data-user-vote] {
+    animation: verdict-vote-cast 520ms cubic-bezier(0.2, 0.9, 0.2, 1) both;
+  }
+  @keyframes verdict-vote-cast {
+    from {
+      transform: translate(-50%, -50%) scale(2.4);
+      opacity: 0;
     }
   }
   .verdict-quadrant {
@@ -609,6 +621,7 @@
     color: var(--verdict-color);
   }
   .verdict-quadrant h3 {
+    color: color-mix(in srgb, var(--verdict-color) 58%, #d8d4e2 42%);
     max-width: 11ch;
     margin: auto 0 1.5rem;
     font-size: clamp(34px, 4vw, 58px);
@@ -618,9 +631,6 @@
     transition:
       color 220ms ease,
       transform 220ms ease;
-  }
-  .verdict-quadrant h3 {
-    color: color-mix(in srgb, var(--verdict-color) 58%, #d8d4e2 42%);
   }
   .verdict-quadrant[data-current-action="true"] h3 {
     color: var(--verdict-color);
@@ -786,7 +796,7 @@ html[lang="zh-CN"] .verdict-quadrant h3 {
   .verdict-quadrant h3 {
     transition-duration: 1ms;
   }
-  .verdict-receipt-dot {
+  .verdict-vote-dot {
     animation: none;
     transition-duration: 1ms;
   }
@@ -887,7 +897,7 @@ html[lang="zh-CN"] .verdict-quadrant h3 {
   .verdict-field-center small {
     font-size: 4px;
   }
-  .verdict-receipt-dot {
+  .verdict-vote-dot {
     width: calc(var(--dot-size) * 0.72);
     height: calc(var(--dot-size) * 0.72);
   }

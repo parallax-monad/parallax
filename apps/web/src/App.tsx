@@ -29,7 +29,7 @@ const DIMENSIONS: Dimension[] = [
   {
     key: "Cause",
     displayKey: { en: "Cause", zh: "原因" },
-    accent: "#836ef9",
+    accent: "#ff8ea1",
     title: { en: "What happened", zh: "发生了什么" },
     body: {
       en: "Moss runs quote, action, and simulation to show the real execution result of this intent.",
@@ -322,19 +322,19 @@ function Home({ language }: { language: Language }) {
           <section className="mt-24 border-t border-line py-20 sm:mt-32 sm:py-28">
             <div className="text-center">
               <span className="eyebrow">
-                {pick(language, "Verdict language", "判读逻辑")}
+                {pick(language, "Audience verdict", "观众投票")}
               </span>
               <h2
                 data-section-heading=""
-                className="m-0 whitespace-nowrap text-[clamp(32px,5.5vw,76px)] font-extrabold uppercase leading-[0.92] tracking-[-0.05em]"
+                className="m-0 text-[clamp(32px,5.5vw,76px)] font-extrabold uppercase leading-[0.92] tracking-[-0.05em]"
               >
-                {pick(language, "Read the verdict.", "结论，一目了然")}
+                {pick(language, "What would you do next?", "下一步你会怎么做")}
               </h2>
               <p className="mx-auto mt-6 max-w-[680px] text-[15px] leading-[1.75] text-faint sm:text-[16px]">
                 {pick(
                   language,
-                  "Each dot is an illustrative replay result. Explore the field to see how evidence maps to a signing action.",
-                  "每枚圆片代表一份演示用回放结果。探索不同区域，看看证据会把签署决策引向何处。",
+                  "If this were your transaction, review the evidence and choose one outcome below. One person, one vote—change your choice and the same dot moves with you.",
+                  "如果这是你的交易，看完证据后从下方四个结论中选择一个。一人一票；改变选择时，同一枚圆点会随之移动，不会重复计票。",
                 )}
               </p>
             </div>

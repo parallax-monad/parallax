@@ -8,6 +8,11 @@ describe("HeroEvidenceReceipt", () => {
 
     expect(html).toContain("EVIDENCE RECEIPT");
     expect(html).toContain("REPLAY FIXTURE");
+    expect(html).toContain("DEMO NETWORK");
+    expect(html).toContain("SAMPLE BLOCK");
+    expect(html).toContain("MOSS REPLAY / FIXTURE");
+    expect(html).not.toContain("13,842,911");
+    expect(html).not.toContain("v0.4");
     expect(html.match(/data-evidence-row/g)).toHaveLength(6);
     expect(html).toContain("Economic boundary");
     expect(html).toContain("91.77 USDC");

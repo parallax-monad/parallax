@@ -1,5 +1,7 @@
 import type { Language } from "../lib/i18n";
 
+export const AMBIENT_STAR_COLORS = ["#ffffff", "#eeeaff"] as const;
+
 export const EVIDENCE_TRACE_MARKERS = [
   { label: "Kuru", color: "#59e1c2" },
   { label: "PancakeSwap V2 / V3", color: "#9d8cff" },
