@@ -208,7 +208,11 @@ export function WalletResult({
         <button type="button" className="btn btn-monad" onClick={onKeep}>
           {say(language, PRIMARY_ACTION[verdict])}
         </button>
-        <button type="button" className="btn btn-monad-outline" onClick={onDiscard}>
+        <button
+          type="button"
+          className="btn btn-monad-outline"
+          onClick={onDiscard}
+        >
           {say(language, DISCARD_ACTION)}
         </button>
       </div>

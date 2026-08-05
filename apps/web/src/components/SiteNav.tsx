@@ -53,7 +53,9 @@ export function SiteNav({
             its own copy, so the two never overlap and never both show. */}
         <LanguageSwitch
           className={`pointer-events-auto ${
-            minimal ? "hidden md:flex" : "border-l border-line-strong pl-4 sm:pl-[30px]"
+            minimal
+              ? "hidden md:flex"
+              : "border-l border-line-strong pl-4 sm:pl-[30px]"
           }`}
           language={language}
           tone={minimal ? "monad" : "accent"}

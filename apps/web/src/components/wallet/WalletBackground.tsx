@@ -168,6 +168,7 @@ export function WalletBackground({
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: visitKey intentionally forces re-run on home return
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
