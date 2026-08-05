@@ -1,4 +1,5 @@
 import type { ServerType } from "@hono/node-server";
+import type { KuruLiveRunner } from "@parallax/orchestrator/agent-flow";
 import { describe, expect, it } from "vitest";
 import { bootstrapBackendApp, startBackendServer } from "./backend.js";
 
@@ -66,6 +67,41 @@ describe("backend Node runtime", () => {
         code: "UNSUPPORTED",
         message: "Live Agent Flow is not available in this runtime",
       },
+    });
+  });
+
+  it("selects the configured live flow and invokes its injected runner", async () => {
+    const calls: Parameters<KuruLiveRunner>[0][] = [];
+    const app = bootstrapBackendApp({
+      environment: {
+        ...environment,
+        MOSS_RUNTIME_PATH: "/tmp/moss-runtime",
+      },
+      tokenRegistry,
+      liveRunner: async (input) => {
+        calls.push(input);
+        throw new Error("runner invoked");
+      },
+    });
+
+    const response = await app.fetch(
+      new Request("https://api.example.test/api/check", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(checkRequest()),
+      }),
+    );
+
+    expect(response.status).toBe(502);
+    await expect(response.json()).resolves.toMatchObject({
+      error: { code: "AGENT_FLOW_ERROR" },
+    });
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toMatchObject({
+      rpcUrl: environment.MONAD_RPC_URL,
+      runtimePath: "/tmp/moss-runtime",
+      runtimeVersion: environment.MOSS_RUNTIME_VERSION,
+      runtimeRevision: environment.MOSS_RUNTIME_REVISION,
     });
   });
 

@@ -1,5 +1,6 @@
 import { type ServerType, serve as serveNode } from "@hono/node-server";
 import { serializeJson } from "@parallax/contracts";
+import type { KuruLiveRunner } from "@parallax/orchestrator/agent-flow";
 import { KuruLiveAgentFlow } from "@parallax/orchestrator/agent-flow";
 import type { ReplayFixtureRepository } from "@parallax/orchestrator/application";
 import { ReplayApplicationService } from "@parallax/orchestrator/application";
@@ -66,6 +67,7 @@ export type BackendAppDependencies = {
   runtime: BackendRuntime;
   corsOrigin?: string;
   agentFlow?: AgentFlowPort;
+  liveRunner?: KuruLiveRunner;
   store?: RunStore;
   replayRepository?: ReplayFixtureRepository;
 };
@@ -76,7 +78,8 @@ export function createBackendApp(dependencies: BackendAppDependencies): Hono {
     runtime: dependencies.runtime,
     store: dependencies.store ?? new InMemoryRunStore(),
     agentFlow:
-      dependencies.agentFlow ?? createConfiguredAgentFlow(dependencies.runtime),
+      dependencies.agentFlow ??
+      createConfiguredAgentFlow(dependencies.runtime, dependencies.liveRunner),
   });
   const replayService = new ReplayApplicationService({
     repository:
@@ -106,12 +109,15 @@ export function createBackendApp(dependencies: BackendAppDependencies): Hono {
   return app;
 }
 
-function createConfiguredAgentFlow(runtime: BackendRuntime): AgentFlowPort {
+function createConfiguredAgentFlow(
+  runtime: BackendRuntime,
+  liveRunner?: KuruLiveRunner,
+): AgentFlowPort {
   if (runtime.config.moss.runtimePath === undefined) {
     return new UnavailableAgentFlow();
   }
 
-  return new KuruLiveAgentFlow();
+  return new KuruLiveAgentFlow(liveRunner);
 }
 
 export type BootstrapBackendAppOptions = {
@@ -119,6 +125,7 @@ export type BootstrapBackendAppOptions = {
   tokenRegistry: unknown;
   corsOrigin?: string;
   agentFlow?: AgentFlowPort;
+  liveRunner?: KuruLiveRunner;
   store?: RunStore;
   replayRepository?: ReplayFixtureRepository;
 };
@@ -136,6 +143,7 @@ export function bootstrapBackendApp(options: BootstrapBackendAppOptions): Hono {
     runtime,
     corsOrigin: options.corsOrigin ?? serverEnvironment.CORS_ORIGIN,
     agentFlow: options.agentFlow,
+    liveRunner: options.liveRunner,
     store: options.store,
     replayRepository: options.replayRepository,
   });

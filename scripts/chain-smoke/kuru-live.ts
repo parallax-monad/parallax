@@ -41,7 +41,7 @@ import {
 import { expect, test } from "vitest";
 import { bootstrapBackendApp } from "../../apps/api/src/bootstrap/backend.js";
 import { runResultSchema } from "../../packages/contracts/src/index.js";
-import { KuruLiveAgentFlow } from "../../packages/orchestrator/agent-flow/index.js";
+import type { KuruLiveRunner } from "../../packages/orchestrator/agent-flow/index.js";
 
 const rpcUrl = process.env.MOSS_RPC_URL;
 const runtimePath = process.env.MOSS_RUNTIME_PATH;
@@ -212,18 +212,19 @@ test("kuru live smoke: MON -> USDC", async () => {
   let apiResponseStatus: number | undefined;
   let apiResponseBody: unknown;
   try {
-    // Exercise the real HTTP application boundary. The injected runner is
-    // still the real Moss adapter; it only lets this smoke persist the raw
-    // adapter result alongside the public /api/check response.
+    // Exercise the real configured Agent Flow selection and HTTP application
+    // boundary. The injected runner is still the real Moss adapter; it only
+    // lets this smoke persist the raw adapter result alongside the public
+    // /api/check response without replacing the Agent Flow under test.
     let captured: Awaited<ReturnType<typeof runKuruLiveSwap>> | undefined;
-    const agentFlow = new KuruLiveAgentFlow(async (adapterInput) => {
+    const liveRunner: KuruLiveRunner = async (adapterInput) => {
       const live = await runKuruLiveSwap({
         ...adapterInput,
         logger: (line) => console.log(line),
       });
       captured = live;
       return live;
-    });
+    };
     const app = bootstrapBackendApp({
       environment: {
         MONAD_RPC_URL: rpcUrl,
@@ -232,7 +233,7 @@ test("kuru live smoke: MON -> USDC", async () => {
         MOSS_RUNTIME_REVISION: runtimeRevision,
       },
       tokenRegistry: apiTokenRegistry,
-      agentFlow,
+      liveRunner,
     });
     const response = await app.fetch(
       new Request("https://smoke.local/api/check", {
