@@ -63,7 +63,7 @@ export function EvidenceDrawer({
           en: "Technical evidence",
           zh: "技术证据",
         })}
-        className="relative flex h-full w-full max-w-[560px] flex-col overflow-y-auto border-l border-line bg-ink-elev px-6 py-6"
+        className="no-scrollbar relative flex h-full w-full max-w-[560px] flex-col overflow-y-auto border-l border-line bg-ink-elev px-6 py-6"
       >
         <div className="flex items-start justify-between gap-4">
           <div>

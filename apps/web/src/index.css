@@ -93,4 +93,17 @@
   .mono {
     @apply break-all font-mono text-[13px];
   }
+  /**
+   * Hides the scrollbar while keeping the area scrollable, for the wallet app
+   * frame. A visible track breaks the illusion of a phone screen, and the frame
+   * is a fixed-height panel rather than the page, so no scrollbar is lost as a
+   * page-level affordance.
+   */
+  .no-scrollbar {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
 }

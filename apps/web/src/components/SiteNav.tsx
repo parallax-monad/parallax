@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { LanguageSwitch } from "@/components/LanguageSwitch";
 import { LANGUAGE_STORAGE_KEY, type Language, pick } from "@/lib/i18n";
 
 export function SiteNav({
@@ -17,11 +18,6 @@ export function SiteNav({
     document.documentElement.lang = language;
     window.localStorage.setItem(LANGUAGE_STORAGE_KEY, language);
   }, [language]);
-
-  const languageTone = (selected: boolean) =>
-    `px-2 py-2 text-[13px] font-bold uppercase tracking-[0.08em] transition-colors ${
-      minimal ? "hover:text-monad-dim" : "hover:text-accent"
-    } ${selected ? (minimal ? "text-monad-dim" : "text-accent") : "text-dim"}`;
 
   return (
     <nav
@@ -52,37 +48,17 @@ export function SiteNav({
             {pick(language, "Analyze", "分析")}
           </a>
         )}
-        <div
-          className={`pointer-events-auto flex items-center ${
-            minimal ? "" : "border-l border-line-strong pl-4 sm:pl-[30px]"
+        {/* On the wallet route this switch only exists at widths where the frame
+            tucks under the nav. Narrower than that, the wallet header renders
+            its own copy, so the two never overlap and never both show. */}
+        <LanguageSwitch
+          className={`pointer-events-auto ${
+            minimal ? "hidden md:flex" : "border-l border-line-strong pl-4 sm:pl-[30px]"
           }`}
-        >
-          <button
-            type="button"
-            onClick={() => onLanguageChange("zh-CN")}
-            aria-pressed={language === "zh-CN"}
-            aria-label={pick(
-              language,
-              "Switch to Simplified Chinese",
-              "切换为简体中文",
-            )}
-            className={languageTone(language === "zh-CN")}
-          >
-            简中
-          </button>
-          <span aria-hidden="true" className="text-line-strong">
-            /
-          </span>
-          <button
-            type="button"
-            onClick={() => onLanguageChange("en")}
-            aria-pressed={language === "en"}
-            aria-label={pick(language, "Switch to English", "切换为英文")}
-            className={languageTone(language === "en")}
-          >
-            EN
-          </button>
-        </div>
+          language={language}
+          tone={minimal ? "monad" : "accent"}
+          onLanguageChange={onLanguageChange}
+        />
       </div>
     </nav>
   );

@@ -1,5 +1,6 @@
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { EvidenceDrawer } from "@/components/analyze/EvidenceDrawer";
+import { LanguageSwitch } from "@/components/LanguageSwitch";
 import { WalletBackground } from "@/components/wallet/WalletBackground";
 import {
   WALLET_STAGE_COUNT,
@@ -48,7 +49,13 @@ function ScreenTransition({ children }: { children: ReactNode }) {
   );
 }
 
-export function WalletApp({ language }: { language: Language }) {
+export function WalletApp({
+  language,
+  onLanguageChange,
+}: {
+  language: Language;
+  onLanguageChange: (language: Language) => void;
+}) {
   const [screen, setScreen] = useState<Screen>("home");
   const [form, setForm] = useState<FormState>(INITIAL_FORM);
   const [stage, setStage] = useState(0);
@@ -112,6 +119,9 @@ export function WalletApp({ language }: { language: Language }) {
   const flags = result ? flaggedFields(result) : [];
 
   return (
+    // Tucked under the site nav at every width, so no empty band sits above the
+    // frame. Safe now that the nav hides its own language switch below md and the
+    // wallet header carries that switch instead.
     <div className="relative mx-auto -mt-[var(--header-h)] flex w-[92vw] flex-col pb-6 pt-4 md:w-[45vw]">
       <WalletBackground
         verdict={screen === "result" ? result?.verdict : undefined}
@@ -119,8 +129,18 @@ export function WalletApp({ language }: { language: Language }) {
       />
       {/* Translucent so the starfield reads behind the wallet, with a blur to
           keep body text legible over moving particles. */}
+      {/* The 2.5rem matches this wrapper's own pt-4 + pb-6, so the frame fills the
+          viewport exactly rather than overflowing it. */}
       <div className="relative z-10 flex h-[calc(100vh-2.5rem)] flex-col overflow-hidden border border-line bg-ink-elev/85 backdrop-blur-md">
         <header className="relative flex items-center justify-center px-5 py-3">
+          {/* Only below md, where the nav's own switch is hidden. Placed left so
+              it stays clear of the close button on the right. */}
+          <LanguageSwitch
+            className="absolute left-3 md:hidden"
+            language={language}
+            tone="monad"
+            onLanguageChange={onLanguageChange}
+          />
           <span className="text-[15px] font-extrabold tracking-[-0.05em] text-monad-dim">
             PARAL<span className="text-white">LAX</span>
           </span>
@@ -138,7 +158,7 @@ export function WalletApp({ language }: { language: Language }) {
 
         {/* x is clipped because the screen transition slides in from the right;
             leaving it visible would resolve to auto and flash a scrollbar. */}
-        <div className="flex flex-1 flex-col overflow-y-auto overflow-x-hidden">
+        <div className="no-scrollbar flex flex-1 flex-col overflow-y-auto overflow-x-hidden">
           <ScreenTransition key={screen}>
             <div className="flex w-full flex-1 flex-col">
               {screen === "home" && (
