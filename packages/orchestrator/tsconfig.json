@@ -3,5 +3,5 @@
   "compilerOptions": {
     "rootDir": "."
   },
-  "include": ["application/**/*.ts"]
+  "include": ["agent-flow/**/*.ts", "application/**/*.ts"]
 }

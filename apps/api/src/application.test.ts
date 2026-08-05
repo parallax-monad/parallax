@@ -44,6 +44,8 @@ const runtime: BackendRuntime = {
   tokenRegistry: createTrustedTokenRegistry(tokenRegistryConfig),
 };
 
+const simulatorPinnedBlock = "92820000";
+
 type CompletedRunResult = Extract<RunResult, { status: "completed" }>;
 
 function publicRequest(
@@ -104,6 +106,7 @@ function evidenceRef(evidence: EvidenceItem): EvidenceRef {
     source: evidence.source,
     stage: evidence.stage,
     blockNumber: evidence.blockNumber,
+    simulatorPinnedBlock: evidence.simulatorPinnedBlock,
     runtimeVersion: evidence.runtimeVersion,
     runtimeRevision: evidence.runtimeRevision,
     fixtureId: evidence.fixtureId,
@@ -125,6 +128,7 @@ function completedRunResult(
     runId,
     replayMode: false,
     intent,
+    simulatorPinnedBlock,
     status: "completed",
     systemStatus: "OK",
     verdict: "UNKNOWN",
@@ -149,6 +153,7 @@ function completedRouteResult(
     source: "quote" as const,
     stage: "QUOTE" as const,
     blockNumber: "12345",
+    simulatorPinnedBlock,
     runtimeVersion,
     runtimeRevision,
     reproducibility: "REPRODUCIBLE" as const,
@@ -207,6 +212,7 @@ function completedEvidenceResult(
     source: "derived" as const,
     stage: "SIMULATE" as const,
     blockNumber: "12345",
+    simulatorPinnedBlock,
     runtimeVersion,
     runtimeRevision,
     coreRole: "EVIDENCE_COMPLETENESS" as const,
@@ -272,6 +278,7 @@ function completedEconomicResult(
     source: "moss" as const,
     stage: "SIMULATE" as const,
     blockNumber: "12345",
+    simulatorPinnedBlock,
     runtimeVersion,
     runtimeRevision,
     simulationInputRole: "SIMULATION_RECEIPT" as const,
@@ -287,6 +294,7 @@ function completedEconomicResult(
     source: "derived" as const,
     stage: "SIMULATE" as const,
     blockNumber: "12345",
+    simulatorPinnedBlock,
     runtimeVersion,
     runtimeRevision,
     reproducibility: "REPRODUCIBLE" as const,
@@ -933,6 +941,133 @@ describe("CheckApplicationService", () => {
       status: "completed",
       result: response.body,
     });
+  });
+
+  it("rejects a completed live result without simulator pinned-block provenance", async () => {
+    const service = createService({
+      async check(input) {
+        const result = completedRouteResult(input.runId, input.intent);
+        const { simulatorPinnedBlock: _simulatorPinnedBlock, ...withoutBlock } =
+          result;
+        return withoutBlock;
+      },
+    });
+
+    const response = await service.check(publicRequest());
+
+    expect(response).toMatchObject({
+      status: 502,
+      body: { error: { code: "INVALID_AGENT_FLOW_RESPONSE" } },
+    });
+  });
+
+  it("closes an unattested ADJUST verdict to STOP", async () => {
+    const service = createService({
+      async check(input) {
+        return {
+          ...completedRouteResult(input.runId, input.intent),
+          verdict: "ADJUST" as const,
+          summary: "Adjustment candidate",
+          recommendedActions: [],
+        };
+      },
+    });
+
+    const response = await service.check(publicRequest());
+
+    expect(response).toMatchObject({
+      status: 200,
+      body: {
+        verdict: "STOP",
+        recommendedActions: [],
+        summary:
+          "No verified child Run and Action Gate attestation is available",
+      },
+    });
+  });
+
+  it("strips an unverified public transaction Action before failing closed", async () => {
+    const service = createService({
+      async check(input) {
+        return {
+          ...completedRouteResult(input.runId, input.intent),
+          verdict: "ADJUST" as const,
+          summary: "Adjustment candidate",
+          recommendedActions: [
+            {
+              id: "unverified-protocol-change",
+              action: {
+                kind: "TRANSACTION_ADJUSTMENT" as const,
+                field: "protocol" as const,
+              },
+              relevance: "RELEVANT" as const,
+              recommendable: true,
+              actionReasonCode: "ALTERNATIVE_PATH_VERIFIED" as const,
+              evidenceRefs: [],
+              proposedChange: {
+                field: "protocol" as const,
+                before: "kuru",
+                after: "pancake",
+              },
+            },
+          ],
+        };
+      },
+    });
+
+    const response = await service.check(publicRequest());
+
+    expect(response).toMatchObject({
+      status: 200,
+      body: {
+        verdict: "STOP",
+        recommendedActions: [],
+      },
+    });
+  });
+
+  it("preserves simulator pinned-block provenance through the API Run and Evidence", async () => {
+    const store = new InMemoryRunStore();
+    const service = createService(
+      {
+        async check(input) {
+          const candidate = completedRouteResult(input.runId, input.intent);
+          const route = candidate.route;
+          if (route === undefined || route.availability !== "available") {
+            throw new Error("expected an available route fixture");
+          }
+          const simulatorPinnedBlock = "92820000";
+          const evidence = candidate.evidence.map((item) => ({
+            ...item,
+            simulatorPinnedBlock,
+          }));
+          return {
+            ...candidate,
+            simulatorPinnedBlock,
+            evidence,
+            route: {
+              ...route,
+              evidenceRef: {
+                ...route.evidenceRef,
+                simulatorPinnedBlock,
+              },
+            },
+          };
+        },
+      },
+      store,
+    );
+
+    const response = await service.check(publicRequest());
+
+    expect(response.status).toBe(200);
+    if (response.status !== 200) return;
+    expect(response.body.simulatorPinnedBlock).toBe("92820000");
+    expect(response.body.evidence).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ simulatorPinnedBlock: "92820000" }),
+      ]),
+    );
   });
 
   it("rejects stale runtime identity on core Rule Evidence", async () => {

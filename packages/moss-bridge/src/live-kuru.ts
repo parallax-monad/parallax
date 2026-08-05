@@ -1,6 +1,8 @@
+import { execFile } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
+import { promisify } from "node:util";
 import { classifyLiveError, StageTimeoutError } from "./errors.js";
 import { normalizeLiveKuruEvidence } from "./normalize.js";
 import { toJsonValue } from "./serialize.js";
@@ -33,30 +35,30 @@ import type {
  * Provenance trust levels (kept deliberately separate):
  *   1. Smoke configuration inputs: the smoke harness receives
  *      MOSS_RUNTIME_PATH / MOSS_RUNTIME_VERSION / MOSS_RUNTIME_REVISION from
- *      the operator. The current harness does not independently attest the
- *      checkout Git revision, every loaded `@themoss/*` package identity, the
- *      RPC chain ID, or the simulator's pinned block; full runtime
- *      verification remains downstream.
- *   2. Adapter caller-declared runtime provenance: `runtimeVersion` and
- *      `runtimeRevision` are provided by the caller of `runKuruLiveSwap`.
- *      The adapter fail-closes when the loaded `@themoss/core` version
- *      disagrees with `runtimeVersion`, but it does not independently prove
- *      the checkout Git revision or the identity of every loaded package; the
- *      declared identity is recorded as provenance only.
- *   3. RPC-observed chain and stage blocks: `chainId` is read from the RPC
- *      client and recorded (not enforced to equal 143), and each stage's
- *      `blockNumber` is the block observed through RPC immediately before the
- *      stage call. It is not the block internally pinned by the Moss
- *      simulator (not exposed by the runtime API, Moss ADR 0002), so it must
- *      not be described as the exact simulator block.
- * A consumer must independently re-verify the Moss Git revision, every
- * package identity, the RPC chain ID, and simulator block consistency before
- * interpreting the result as P0_LIVE_READY, authoritative Live Evidence, or
- * production Agent Flow input; it is not authoritative unless re-verified.
+ *      the operator.
+ *   2. Adapter-verified runtime provenance: the adapter reads the checkout Git
+ *      HEAD, reads every loaded `@themoss/*` package manifest, and fails closed
+ *      when those identities do not match the configured revision/version.
+ *   3. RPC-observed chain and stage blocks: `chainId` is read from the RPC and
+ *      returned to the Agent Flow, which enforces Chain ID 143. Each stage's
+ *      `blockNumber` is the block observed immediately before the stage call.
+ *      The simulator's exact pinned block is a separate field exposed only by
+ *      runtimes implementing getPinnedBlockNumber().
+ * Consumers must still not describe the observed stage block as the exact
+ * simulator block, and should independently verify any stronger deployment
+ * or production-readiness claim.
  */
 
 const DEFAULT_STAGE_TIMEOUT_MS = 30_000;
 const DEFAULT_OVERALL_TIMEOUT_MS = 90_000;
+const execFileAsync = promisify(execFile);
+const REQUIRED_MOSS_PACKAGES = [
+  "@themoss/core",
+  "@themoss/erc",
+  "@themoss/protocol-kuru",
+  "@themoss/simulator",
+  "@themoss/system",
+] as const;
 
 const PACKAGE_DIST_CANDIDATES: Record<string, string[]> = {
   "@themoss/core": ["packages/core/dist/index.js"],
@@ -88,7 +90,24 @@ export type MossRuntimeBundle = {
   simulator: Record<string, unknown>;
   system: Record<string, unknown>;
   packageVersions: Record<string, string>;
+  checkoutRevision?: string;
 };
+
+async function readCheckoutRevision(
+  runtimePath: string,
+): Promise<string | undefined> {
+  try {
+    const { stdout } = await execFileAsync(
+      "git",
+      ["-C", runtimePath, "rev-parse", "HEAD"],
+      { encoding: "utf8", timeout: 2_000 },
+    );
+    const revision = stdout.trim();
+    return /^[0-9a-f]{40}$/i.test(revision) ? revision : undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 function firstExisting(runtimePath: string, candidates: string[]): string {
   for (const candidate of candidates) {
@@ -156,7 +175,15 @@ export async function loadMossRuntime(
     };
     packageVersions[manifest.name ?? name] = manifest.version ?? "unknown";
   }
-  return { core, erc, kuru, simulator, system, packageVersions };
+  return {
+    core,
+    erc,
+    kuru,
+    simulator,
+    system,
+    packageVersions,
+    checkoutRevision: await readCheckoutRevision(runtimePath),
+  };
 }
 
 type MossRegistry = {
@@ -174,6 +201,8 @@ type MossRegistry = {
 
 type MossSimulator = {
   simulate(root: unknown): Promise<unknown>;
+  /** Explicit Moss API for the simulator's internally pinned block. */
+  getPinnedBlockNumber?: () => unknown | Promise<unknown>;
 };
 
 type LiveContext = {
@@ -273,6 +302,42 @@ async function recordStage(
   }
 }
 
+function blockNumberString(value: unknown): string | undefined {
+  if (typeof value === "bigint")
+    return value >= 0n ? value.toString() : undefined;
+  if (typeof value === "number" && Number.isSafeInteger(value) && value >= 0) {
+    return String(value);
+  }
+  if (typeof value === "string" && /^\d+$/.test(value)) return value;
+  return undefined;
+}
+
+async function readSimulatorPinnedBlock(
+  simulator: MossSimulator,
+): Promise<string | undefined> {
+  try {
+    if (typeof simulator.getPinnedBlockNumber !== "function") return undefined;
+    const value = await simulator.getPinnedBlockNumber();
+    return blockNumberString(value);
+  } catch {
+    return undefined;
+  }
+}
+
+function assertPackageVersions(
+  packageVersions: Record<string, string>,
+  expectedVersion: string,
+): void {
+  const mismatches = REQUIRED_MOSS_PACKAGES.filter(
+    (name) => packageVersions[name] !== expectedVersion,
+  ).map((name) => `${name}=${packageVersions[name] ?? "missing"}`);
+  if (mismatches.length > 0) {
+    throw new Error(
+      `MOSS package version mismatch: expected ${expectedVersion}; ${mismatches.join(", ")}`,
+    );
+  }
+}
+
 function stageKey(stage: StageName): keyof RawKuruEvidence {
   if (stage === "DISCOVER") return "discover";
   if (stage === "LOAD") return "load";
@@ -285,9 +350,9 @@ function stageKey(stage: StageName): keyof RawKuruEvidence {
  * Run the full Kuru MON -> USDC live chain:
  * discover -> load -> quote -> action -> simulate.
  *
- * The caller supplies a pinned `runtimeRevision` (Moss git commit or verifiable
- * package identity). If the loaded packages disagree with `runtimeVersion`, the
- * run fails closed with a structured integration error.
+ * The caller supplies a pinned Moss git commit and package version. If the
+ * checkout or loaded package manifests disagree with those identities, the run
+ * fails closed with a structured integration error.
  */
 export async function runKuruLiveSwap(
   input: LiveKuruAdapterInput,
@@ -321,13 +386,18 @@ export async function runKuruLiveSwapWithBundle(
       );
     }
 
-    // Caller-declared runtime provenance: recorded as provenance, not proven
-    // here. A loaded @themoss/core version disagreement fails closed above;
-    // the checkout Git revision and full package identity verification remain
-    // a downstream/operator responsibility, not an adapter check.
+    assertPackageVersions(bundle.packageVersions, input.runtimeVersion);
+
+    if (bundle.checkoutRevision !== input.runtimeRevision) {
+      throw new Error(
+        `MOSS runtime revision mismatch: expected ${input.runtimeRevision}, loaded ${bundle.checkoutRevision ?? "unknown"}`,
+      );
+    }
+
     const identity: RuntimeIdentity = {
       runtimeVersion: input.runtimeVersion,
       runtimeRevision: input.runtimeRevision,
+      checkoutRevision: bundle.checkoutRevision,
       packageVersions: bundle.packageVersions,
     };
 
@@ -352,9 +422,6 @@ export async function runKuruLiveSwapWithBundle(
     };
     const mossRuntime = await createRuntime({ rpcUrl: input.rpcUrl });
     const client = mossRuntime.client;
-    // chainId is observed (read) from the RPC client, not enforced by the
-    // adapter; the Smoke Harness and any authoritative consumer must confirm
-    // the RPC is on Chain ID 143 before trusting the run.
     const chainId = await client.getChainId().catch(() => undefined);
     const readBlock = async (): Promise<string> =>
       (await client.getBlockNumber()).toString();
@@ -381,6 +448,8 @@ export async function runKuruLiveSwapWithBundle(
       receipt: (capability, changes) =>
         registry.parseReceipt(capability, changes),
     });
+    const simulatorPinnedBlockBefore =
+      await readSimulatorPinnedBlock(simulator);
     const context: LiveContext = {
       registry,
       simulator,
@@ -466,6 +535,13 @@ export async function runKuruLiveSwapWithBundle(
       );
     }
 
+    const simulatorPinnedBlockAfter = await readSimulatorPinnedBlock(simulator);
+    const simulatorPinnedBlock =
+      simulatorPinnedBlockBefore !== undefined &&
+      simulatorPinnedBlockBefore === simulatorPinnedBlockAfter
+        ? simulatorPinnedBlockBefore
+        : undefined;
+
     const evidence = normalizeLiveKuruEvidence({
       intent: input.intent,
       raw: {
@@ -476,9 +552,18 @@ export async function runKuruLiveSwapWithBundle(
       fetchedAt,
       stages,
       initialBlock,
+      simulatorPinnedBlock,
     });
 
-    return { runId: input.runId, evidence, raw, stages, runtime: identity };
+    return {
+      runId: input.runId,
+      evidence,
+      raw,
+      stages,
+      runtime: identity,
+      ...(chainId === undefined ? {} : { observedChainId: chainId }),
+      ...(simulatorPinnedBlock === undefined ? {} : { simulatorPinnedBlock }),
+    };
   };
 
   return withTimeout(execute(), overallTimeoutMs, "OVERALL");

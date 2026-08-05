@@ -104,6 +104,12 @@ importers:
       '@parallax/contracts':
         specifier: workspace:*
         version: link:../contracts
+      '@parallax/moss-bridge':
+        specifier: workspace:*
+        version: link:../moss-bridge
+      '@parallax/risk':
+        specifier: workspace:*
+        version: link:../risk
 
   packages/risk:
     dependencies:

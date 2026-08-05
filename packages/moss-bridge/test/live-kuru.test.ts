@@ -68,6 +68,7 @@ function fakeBundle(
     coreVersion?: string;
     blockNumber?: bigint;
     quoteHang?: boolean;
+    withoutPinnedBlock?: boolean;
   } = {},
 ): MossRuntimeBundle {
   const { createRuntime, Registry } = fakeCore(overrides);
@@ -82,6 +83,11 @@ function fakeBundle(
     simulator: {
       version: "0.1.0",
       createTraceSimulator: () => ({
+        ...(overrides.withoutPinnedBlock
+          ? { pinnedBlockNumber: overrides.blockNumber ?? 100n }
+          : {
+              getPinnedBlockNumber: () => overrides.blockNumber ?? 100n,
+            }),
         simulate: async () => {
           if (overrides.simulateError) throw overrides.simulateError;
           return (
@@ -124,6 +130,7 @@ function fakeBundle(
       "@themoss/simulator": "0.1.0",
       "@themoss/system": "0.1.0",
     },
+    checkoutRevision: "d09b38cbc44ee7f5722c5d09e7224f7750187762",
   };
 }
 
@@ -271,6 +278,7 @@ describe("kuru live adapter", () => {
     expect(evidence.executionStatus).toBe("SUCCESS");
     expect(evidence.simulationCoverage.value?.complete).toBe(true);
     expect(evidence.simulationCoverage.value?.expectedTransactions).toBe(1);
+    expect(evidence.simulatorPinnedBlock).toBe("100");
   });
 
   it("fails closed on runtime version mismatch", async () => {
@@ -278,6 +286,14 @@ describe("kuru live adapter", () => {
     await expect(
       runKuruLiveSwapWithBundle(input({ runtimeVersion: "9.9.9" }), bundle),
     ).rejects.toThrow(/MOSS runtime mismatch/);
+  });
+
+  it("fails closed on a non-core Moss package version mismatch", async () => {
+    const bundle = fakeBundle();
+    bundle.packageVersions["@themoss/simulator"] = "9.9.9";
+    await expect(runKuruLiveSwapWithBundle(input(), bundle)).rejects.toThrow(
+      /MOSS package version mismatch.*@themoss\/simulator=9\.9\.9/,
+    );
   });
 
   it("keeps FlipOrderUpdated warnings and returns UNKNOWN, not success", async () => {
@@ -416,6 +432,25 @@ describe("kuru live adapter", () => {
       expect(stage.blockNumber).toBe("91383505");
     }
     expect(result.evidence.blockNumber.value).toBe("91383505");
+  });
+
+  it("records the simulator pinned block when the runtime exposes it", async () => {
+    const result = await runKuruLiveSwapWithBundle(
+      input(),
+      fakeBundle({ blockNumber: 91383505n }),
+    );
+    expect(result.simulatorPinnedBlock).toBe("91383505");
+    expect(result.evidence.simulatorPinnedBlock).toBe("91383505");
+  });
+
+  it("does not trust an incidental pinnedBlockNumber property", async () => {
+    const result = await runKuruLiveSwapWithBundle(
+      input(),
+      fakeBundle({ withoutPinnedBlock: true }),
+    );
+
+    expect(result.simulatorPinnedBlock).toBeUndefined();
+    expect(result.evidence.simulatorPinnedBlock).toBeUndefined();
   });
 
   it("maps a hanging stage to TIMEOUT and keeps structured evidence", async () => {

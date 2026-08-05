@@ -148,6 +148,7 @@ const evidenceRefFields = [
   "source",
   "stage",
   "blockNumber",
+  "simulatorPinnedBlock",
   "runtimeVersion",
   "runtimeRevision",
   "fixtureId",
@@ -201,6 +202,7 @@ function evidenceRefIdentity(reference: EvidenceRef) {
     reference.source,
     reference.stage,
     reference.blockNumber,
+    reference.simulatorPinnedBlock,
     reference.runtimeVersion,
     reference.runtimeRevision,
     reference.fixtureId,
@@ -256,6 +258,7 @@ function hasMatchingRouteEvidenceContext(
     inputEvidence.stage === routeEvidence.stage &&
     inputEvidence.runtimeVersion === routeEvidence.runtimeVersion &&
     inputEvidence.runtimeRevision === routeEvidence.runtimeRevision &&
+    inputEvidence.simulatorPinnedBlock === routeEvidence.simulatorPinnedBlock &&
     inputEvidence.isReplay === routeEvidence.isReplay &&
     (!routeEvidence.isReplay ||
       (routeEvidence.fixtureId !== undefined &&
@@ -1182,7 +1185,8 @@ function validateEconomicBoundary(
         input.isReplay === simulatedOutput.isReplay &&
         input.reproducibility === simulatedOutput.reproducibility &&
         input.runtimeVersion === simulatedOutput.runtimeVersion &&
-        input.runtimeRevision === simulatedOutput.runtimeRevision,
+        input.runtimeRevision === simulatedOutput.runtimeRevision &&
+        input.simulatorPinnedBlock === simulatedOutput.simulatorPinnedBlock,
     )
   ) {
     context.addIssue({
@@ -1234,6 +1238,7 @@ function validateEconomicBoundary(
 export const completedRunResultSchema = runIdentitySchema
   .extend({
     status: z.literal("completed"),
+    simulatorPinnedBlock: z.string().regex(/^\d+$/).optional(),
     systemStatus: z.literal("OK"),
     verdict: verdictSchema,
     summary: z.string().trim().min(1),
@@ -1329,6 +1334,7 @@ export const integrationErrorSchema = z
 export const failedRunResultSchema = runIdentitySchema
   .extend({
     status: z.literal("integration_error"),
+    simulatorPinnedBlock: z.string().regex(/^\d+$/).optional(),
     systemStatus: z.literal("INTEGRATION_ERROR"),
     verdict: z.literal("UNKNOWN"),
     summary: z.string().trim().min(1),
@@ -1339,6 +1345,7 @@ export const failedRunResultSchema = runIdentitySchema
     irrelevantActions: z.array(actionEvaluationSchema).max(0),
     evidence: z.array(evidenceItemSchema),
     scope: scopeDisclosureSchema,
+    route: routeSchema.optional(),
   })
   .strict()
   .superRefine((result, context) => {
@@ -1354,7 +1361,7 @@ export const failedRunResultSchema = runIdentitySchema
       result.ruleResults,
       evidenceByKey,
       result.runId,
-      undefined,
+      result.route,
       context,
     );
     validatePublicActions(
@@ -1370,14 +1377,24 @@ export const failedRunResultSchema = runIdentitySchema
       "integration_error",
       context,
     );
+    if (result.route !== undefined) {
+      validateAvailableRoute(
+        result as {
+          intent: z.infer<typeof normalizedSwapIntentSchema>;
+          route: z.infer<typeof routeSchema>;
+        },
+        evidenceByKey,
+        context,
+      );
+    }
     validateEconomicBoundary(result, evidenceByKey, false, context, true);
 
     result.ruleResults.forEach((ruleResult, index) => {
-      if (ruleResult.status === "PASS" || ruleResult.status === "FAIL") {
+      if (ruleResult.status === "FAIL") {
         context.addIssue({
           code: z.ZodIssueCode.custom,
           message:
-            "Integration errors cannot generate protocol-risk or transaction-risk PASS/FAIL",
+            "Integration errors cannot generate protocol-risk or transaction-risk FAIL",
           path: ["ruleResults", index, "status"],
         });
       }

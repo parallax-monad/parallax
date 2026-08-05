@@ -1,5 +1,6 @@
 import { type ServerType, serve as serveNode } from "@hono/node-server";
 import { serializeJson } from "@parallax/contracts";
+import { KuruLiveAgentFlow } from "@parallax/orchestrator/agent-flow";
 import type { ReplayFixtureRepository } from "@parallax/orchestrator/application";
 import { ReplayApplicationService } from "@parallax/orchestrator/application";
 import { Hono } from "hono";
@@ -52,9 +53,8 @@ const listenerConfigSchema = z.object({
 });
 
 /**
- * Explicitly fails live checks until the Moss/Risk Agent Flow is injected.
- * This keeps the Node server runnable without turning replay data into a
- * fabricated live success.
+ * Explicit fallback when no pinned Moss runtime path is configured. Replay
+ * remains a separate endpoint and is never used as a fabricated live result.
  */
 export class UnavailableAgentFlow implements AgentFlowPort {
   public async check(): Promise<never> {
@@ -75,7 +75,8 @@ export function createBackendApp(dependencies: BackendAppDependencies): Hono {
   const checkService = new CheckApplicationService({
     runtime: dependencies.runtime,
     store: dependencies.store ?? new InMemoryRunStore(),
-    agentFlow: dependencies.agentFlow ?? new UnavailableAgentFlow(),
+    agentFlow:
+      dependencies.agentFlow ?? createConfiguredAgentFlow(dependencies.runtime),
   });
   const replayService = new ReplayApplicationService({
     repository:
@@ -103,6 +104,14 @@ export function createBackendApp(dependencies: BackendAppDependencies): Hono {
   );
 
   return app;
+}
+
+function createConfiguredAgentFlow(runtime: BackendRuntime): AgentFlowPort {
+  if (runtime.config.moss.runtimePath === undefined) {
+    return new UnavailableAgentFlow();
+  }
+
+  return new KuruLiveAgentFlow();
 }
 
 export type BootstrapBackendAppOptions = {
