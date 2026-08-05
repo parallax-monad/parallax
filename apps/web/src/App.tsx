@@ -147,6 +147,10 @@ function moveSurfaceGlow(event: ReactPointerEvent<HTMLElement>) {
   surface.style.setProperty("--pointer-y", `${event.clientY - bounds.top}px`);
 }
 
+function readRoute() {
+  return window.location.hash === "#/analyze" ? "analyze" : "home";
+}
+
 export default function App() {
   const [language, setLanguage] = useState<Language>(getInitialLanguage);
   const [route, setRoute] = useState(readRoute);
