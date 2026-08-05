@@ -1,6 +1,6 @@
 # Moss Kuru Live Runtime (Reproducible Environment Contract)
 
-Status: REPRODUCIBLE RUNTIME LOCKED; LIVE ACCEPTANCE PENDING REQUIRED ENVIRONMENT
+Status: REPRODUCIBLE RUNTIME LOCKED; LIVE ACCEPTANCE NOT CLAIMED — BLOCKED BY REQUIRED ENVIRONMENT AND CURRENT PINNED RUNTIME
 
 This document pins the exact Moss runtime that the Kuru MON → USDC live adapter
 (`packages/moss-bridge/src/live-kuru.ts`) targets, and the exact environment
@@ -84,10 +84,11 @@ Moss git commit, not a workspace label.
 
 ## How to reproduce
 
-These steps are operator actions performed once before a run. The adapter and
-smoke still independently verify the configured checkout, package versions,
-RPC Chain ID, and simulator pinned block before treating the result as live
-acceptance evidence.
+These steps are operator actions performed once before a run. The adapter
+verifies the checkout revision and package identity/version; Agent Flow
+enforces Chain 143 and valid `simulatorPinnedBlock` provenance; and the smoke
+acceptance gate verifies the public `/api/check` result and its provenance
+before treating it as live acceptance evidence.
 
 The backend bootstrap performs the same runtime provenance preflight before it
 composes the application or opens a listener. `MOSS_RUNTIME_PATH` must
@@ -156,11 +157,11 @@ production-readiness claim.
 - The action stage only constructs unsigned calldata (`from`/`to`/`data`/`value`).
 - `MOSS_RPC_URL` is read from the environment and never printed; RPC userinfo
   and query secrets are redacted by `redact()` before any payload is persisted.
-- Recorded Replay remains a separate demo/fallback path. The live POST
-  `/api/check` consumes Agent Flow results only when `MOSS_RUNTIME_PATH` is
-  configured; a missing path stays explicitly `UNSUPPORTED`, and a live
-  result that lacks trustworthy evidence remains `UNKNOWN` rather than being
-  upgraded from Replay.
+- Recorded Replay remains a separate demo path and is never used as a fallback
+  for POST `/api/check`. The live endpoint consumes Agent Flow results only
+  when `MOSS_RUNTIME_PATH` is configured; a missing path stays explicitly
+  `UNSUPPORTED`, and a live result that lacks trustworthy evidence remains
+  `UNKNOWN` rather than being upgraded from Replay.
 
 ## Known limitations
 
