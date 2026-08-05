@@ -121,6 +121,7 @@ export default function App() {
       <SiteNav
         active={route === "analyze" ? "analyze" : "home"}
         language={language}
+        minimal={route === "analyze"}
         onLanguageChange={setLanguage}
       />
       {route === "analyze" ? (

@@ -184,7 +184,7 @@ export function WalletResult({
       </dl>
 
       <section className="border border-line bg-ink-rail p-4">
-        <strong className="block text-[13px] font-bold uppercase tracking-[0.08em] text-dim">
+        <strong className="block text-[13px] font-bold uppercase tracking-[0.08em] text-monad-dim">
           {say(language, { en: "What to do next", zh: "下一步做什么" })}
         </strong>
         <p className="mt-1.5 text-[14px] leading-[1.6] text-white">
@@ -208,7 +208,7 @@ export function WalletResult({
         <button type="button" className="btn btn-monad" onClick={onKeep}>
           {say(language, PRIMARY_ACTION[verdict])}
         </button>
-        <button type="button" className="btn" onClick={onDiscard}>
+        <button type="button" className="btn btn-monad-outline" onClick={onDiscard}>
           {say(language, DISCARD_ACTION)}
         </button>
       </div>

@@ -39,14 +39,14 @@ function ActionRow({
           aria-hidden="true"
           className={`inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border text-[11px] font-bold ${
             relevant
-              ? "border-accent text-accent"
+              ? "border-monad text-monad-dim"
               : "border-line-strong text-faint"
           }`}
         >
           {relevant ? "!" : "="}
         </span>
         <strong
-          className={`text-[15px] font-bold ${relevant ? "text-accent" : "text-dim"}`}
+          className={`text-[15px] font-bold ${relevant ? "text-monad-dim" : "text-dim"}`}
         >
           {say(language, FIELD_LABEL[suggestion.field])}
         </strong>
@@ -115,14 +115,14 @@ export function ActionsCard({
 
   return (
     <div className="card">
-      <span className="eyebrow">
+      <span className="eyebrow-monad">
         {say(language, { en: "What to do next", zh: "下一步做什么" })}
       </span>
 
       {hasActions ? (
         <div className="mt-3 grid grid-cols-1 gap-7 lg:grid-cols-2">
           <div>
-            <h3 className="m-0 mb-1 text-[13px] font-extrabold uppercase tracking-[0.04em] text-accent">
+            <h3 className="m-0 mb-1 text-[13px] font-extrabold uppercase tracking-[0.04em] text-monad-dim">
               {say(language, { en: "Worth changing", zh: "值得修改" })}
             </h3>
             <p className="m-0 mb-2 text-[14px] leading-[1.6] text-dim">

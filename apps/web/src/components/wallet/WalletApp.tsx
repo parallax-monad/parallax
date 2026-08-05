@@ -1,52 +1,24 @@
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { EvidenceDrawer } from "@/components/analyze/EvidenceDrawer";
+import { WalletBackground } from "@/components/wallet/WalletBackground";
 import {
   WALLET_STAGE_COUNT,
   WalletChecking,
 } from "@/components/wallet/WalletChecking";
 import { WalletHome } from "@/components/wallet/WalletHome";
-import {
-  ActivityIcon,
-  BackIcon,
-  CloseIcon,
-  HomeIcon,
-  ShieldIcon,
-} from "@/components/wallet/WalletIcons";
+import { CloseIcon } from "@/components/wallet/WalletIcons";
 import { WalletResult } from "@/components/wallet/WalletResult";
 import { WalletSwap } from "@/components/wallet/WalletSwap";
-import { DEMO_ADDRESS } from "@/components/wallet/walletData";
 import { flaggedFields } from "@/lib/analyze/fields";
 import { type FormState, INITIAL_FORM, toInput } from "@/lib/analyze/form";
 import { checkSwap } from "@/lib/analyze/service";
 import type { CheckSwapResult } from "@/lib/analyze/types";
-import { type Copy, type Language, say } from "@/lib/i18n";
+import type { Language } from "@/lib/i18n";
 
 /** Milliseconds per simulated Moss stage, tuned for a sub-minute demo. */
 const STAGE_MS = 380;
 
 type Screen = "home" | "swap" | "checking" | "result";
-
-const TITLE: Record<Screen, Copy> = {
-  home: { en: "Parallax Wallet", zh: "Parallax 钱包" },
-  swap: { en: "Swap", zh: "兑换" },
-  checking: { en: "Pre-sign check", zh: "签名前检查" },
-  result: { en: "Pre-sign result", zh: "检查结果" },
-};
-
-/**
- * Bottom chrome, so the frame reads as an app rather than a page with empty
- * space below the fold. Only Wallet is a real destination in this MVP; the rest
- * are rendered as inert labels rather than buttons that would do nothing.
- */
-const TABS = [
-  { key: "home", label: { en: "Wallet", zh: "钱包" }, icon: HomeIcon },
-  { key: "checks", label: { en: "Checks", zh: "检查" }, icon: ShieldIcon },
-  {
-    key: "activity",
-    label: { en: "Activity", zh: "活动" },
-    icon: ActivityIcon,
-  },
-] satisfies { key: string; label: Copy; icon: typeof HomeIcon }[];
 
 /**
  * Slides a whole screen in. The caller passes the screen name as `key`, so a
@@ -82,6 +54,8 @@ export function WalletApp({ language }: { language: Language }) {
   const [stage, setStage] = useState(0);
   const [result, setResult] = useState<CheckSwapResult | undefined>(undefined);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  /** Bumped on every return home, so the background replays its entrance. */
+  const [homeVisit, setHomeVisit] = useState(0);
   const timersRef = useRef<number[]>([]);
 
   const clearTimers = () => {
@@ -130,61 +104,36 @@ export function WalletApp({ language }: { language: Language }) {
     setDrawerOpen(false);
     setForm(INITIAL_FORM);
     setScreen("home");
+    setHomeVisit((visit) => visit + 1);
   };
 
   // Flags come from the current result only, so they clear the moment a new run
   // starts rather than pointing at conditions the user already changed.
   const flags = result ? flaggedFields(result) : [];
 
-  const canGoBack = screen === "swap" || screen === "result";
-
   return (
-    <div className="mx-auto flex w-[92vw] flex-col pb-6 pt-4 md:w-[50vw]">
-      <div className="flex h-[calc(100vh-var(--header-h)-2.5rem)] flex-col overflow-hidden border border-line bg-ink-elev">
-        <header className="border-b border-line px-5 py-3">
-          <div className="flex items-center gap-3">
-            {canGoBack ? (
-              <button
-                type="button"
-                aria-label={say(language, { en: "Back", zh: "返回" })}
-                className="text-dim transition-colors hover:text-monad-dim"
-                onClick={() => setScreen(screen === "result" ? "swap" : "home")}
-              >
-                <BackIcon size={20} />
-              </button>
-            ) : (
-              <span className="text-[15px] font-extrabold tracking-[-0.05em] text-monad-dim">
-                PARAL<span className="text-white">LAX</span>
-              </span>
-            )}
-
-            <div className="min-w-0 flex-1 text-center">
-              <strong className="block truncate text-[14px] font-bold">
-                {say(language, TITLE[screen])}
-              </strong>
-              <span className="mono block truncate text-[11px] text-dim">
-                Monad · {DEMO_ADDRESS}
-              </span>
-            </div>
-
-            {screen === "home" ? (
-              <span className="pill shrink-0">
-                {say(language, { en: "Demo", zh: "演示" })}
-              </span>
-            ) : (
-              <button
-                type="button"
-                aria-label={say(language, {
-                  en: "Close and return to wallet",
-                  zh: "关闭并返回钱包",
-                })}
-                className="text-dim transition-colors hover:text-monad-dim"
-                onClick={discard}
-              >
-                <CloseIcon size={20} />
-              </button>
-            )}
-          </div>
+    <div className="relative mx-auto -mt-[var(--header-h)] flex w-[92vw] flex-col pb-6 pt-4 md:w-[45vw]">
+      <WalletBackground
+        verdict={screen === "result" ? result?.verdict : undefined}
+        visitKey={homeVisit}
+      />
+      {/* Translucent so the starfield reads behind the wallet, with a blur to
+          keep body text legible over moving particles. */}
+      <div className="relative z-10 flex h-[calc(100vh-2.5rem)] flex-col overflow-hidden border border-line bg-ink-elev/85 backdrop-blur-md">
+        <header className="relative flex items-center justify-center px-5 py-3">
+          <span className="text-[15px] font-extrabold tracking-[-0.05em] text-monad-dim">
+            PARAL<span className="text-white">LAX</span>
+          </span>
+          {screen !== "home" && (
+            <button
+              type="button"
+              aria-label="Return to wallet home"
+              className="absolute right-5 text-dim transition-colors hover:text-monad-dim"
+              onClick={discard}
+            >
+              <CloseIcon size={20} />
+            </button>
+          )}
         </header>
 
         {/* x is clipped because the screen transition slides in from the right;
@@ -222,33 +171,6 @@ export function WalletApp({ language }: { language: Language }) {
             </div>
           </ScreenTransition>
         </div>
-
-        <nav
-          aria-label={say(language, { en: "Wallet sections", zh: "钱包分区" })}
-          className="border-t border-line px-5 py-2.5"
-        >
-          <ul className="m-0 flex list-none justify-around p-0">
-            {TABS.map((tab) => {
-              const Icon = tab.icon;
-              const current = tab.key === "home" && screen === "home";
-              return (
-                <li key={tab.key}>
-                  <span
-                    aria-current={current ? "page" : undefined}
-                    className={`flex flex-col items-center gap-1 px-3 ${
-                      current ? "text-monad-dim" : "text-faint"
-                    }`}
-                  >
-                    <Icon size={19} />
-                    <span className="text-[11px] font-bold uppercase tracking-[0.06em]">
-                      {say(language, tab.label)}
-                    </span>
-                  </span>
-                </li>
-              );
-            })}
-          </ul>
-        </nav>
       </div>
 
       {result && drawerOpen && (

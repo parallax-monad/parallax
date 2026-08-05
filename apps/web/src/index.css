@@ -53,6 +53,9 @@
   .btn-monad {
     @apply border-monad bg-monad text-monad-ink hover:border-monad-bright hover:bg-monad-bright hover:text-white;
   }
+  .btn-monad-outline {
+    @apply border-monad text-monad-dim hover:border-monad-bright hover:bg-monad/[0.08] hover:text-monad-bright disabled:hover:border-monad disabled:hover:bg-transparent disabled:hover:text-monad-dim;
+  }
   .eyebrow-monad {
     @apply mb-2 block text-[12px] font-bold uppercase tracking-[0.13em] text-monad-dim;
   }

@@ -20,7 +20,7 @@ export function DiffCard({
 }) {
   return (
     <div className="card">
-      <span className="eyebrow">
+      <span className="eyebrow-monad">
         {say(language, { en: "Previous vs new", zh: "前后对比" })}
       </span>
       <h2 className="m-0 mb-1.5 text-[20px] font-extrabold tracking-[-0.03em]">

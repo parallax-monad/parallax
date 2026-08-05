@@ -67,7 +67,7 @@ export function EvidenceDrawer({
       >
         <div className="flex items-start justify-between gap-4">
           <div>
-            <span className="eyebrow">
+            <span className="eyebrow-monad">
               {say(language, { en: "Technical evidence", zh: "技术证据" })}
             </span>
             <h2 className="mono m-0 text-[15px] font-extrabold">
@@ -77,7 +77,7 @@ export function EvidenceDrawer({
           <button
             ref={closeRef}
             type="button"
-            className="btn"
+            className="btn btn-monad-outline"
             onClick={onClose}
           >
             {say(language, { en: "Close", zh: "关闭" })}
