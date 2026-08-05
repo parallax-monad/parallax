@@ -1,6 +1,15 @@
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { ServerType } from "@hono/node-server";
+import type { KuruLiveRunner } from "@parallax/orchestrator/agent-flow";
 import { describe, expect, it } from "vitest";
-import { bootstrapBackendApp, startBackendServer } from "./backend.js";
+import { bootstrapBackendRuntime } from "../runtime-config.js";
+import {
+  bootstrapBackendApp,
+  createBackendApp,
+  startBackendServer,
+} from "./backend.js";
 
 const sender = "0x1111111111111111111111111111111111111111";
 const usdcAddress = "0xabcdefabcdefabcdefabcdefabcdefabcdefabcd";
@@ -69,6 +78,60 @@ describe("backend Node runtime", () => {
     });
   });
 
+  it("selects the configured live flow and invokes its injected runner", async () => {
+    const calls: Parameters<KuruLiveRunner>[0][] = [];
+    const runtime = bootstrapBackendRuntime({
+      environment: {
+        ...environment,
+        MOSS_RUNTIME_PATH: "/tmp/moss-runtime",
+      },
+      tokenRegistry,
+    });
+    const app = createBackendApp({
+      runtime,
+      liveRunner: async (input) => {
+        calls.push(input);
+        throw new Error("runner invoked");
+      },
+    });
+
+    const response = await app.fetch(
+      new Request("https://api.example.test/api/check", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(checkRequest()),
+      }),
+    );
+
+    expect(response.status).toBe(502);
+    await expect(response.json()).resolves.toMatchObject({
+      error: { code: "AGENT_FLOW_ERROR" },
+    });
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toMatchObject({
+      rpcUrl: environment.MONAD_RPC_URL,
+      runtimePath: "/tmp/moss-runtime",
+      runtimeVersion: environment.MOSS_RUNTIME_VERSION,
+      runtimeRevision: environment.MOSS_RUNTIME_REVISION,
+    });
+  });
+
+  it("rejects an invalid Moss runtime during backend bootstrap", () => {
+    const invalidRuntimePath = mkdtempSync(
+      join(tmpdir(), "parallax-invalid-moss-bootstrap-"),
+    );
+
+    expect(() =>
+      bootstrapBackendApp({
+        environment: {
+          ...environment,
+          MOSS_RUNTIME_PATH: invalidRuntimePath,
+        },
+        tokenRegistry,
+      }),
+    ).toThrow(/does not contain a Moss checkout/);
+  });
+
   it("returns a stable JSON error when the configured Replay Fixture is unavailable", async () => {
     const app = bootstrapBackendApp({
       environment,
@@ -123,6 +186,30 @@ describe("backend Node runtime", () => {
         tokenRegistry,
       }),
     ).toThrow();
+  });
+
+  it("rejects an invalid Moss runtime before opening a socket", () => {
+    let serverFactoryCalls = 0;
+    const invalidRuntimePath = mkdtempSync(
+      join(tmpdir(), "parallax-invalid-moss-runtime-"),
+    );
+
+    expect(() =>
+      startBackendServer({
+        environment: {
+          ...environment,
+          MOSS_RUNTIME_PATH: invalidRuntimePath,
+        },
+        tokenRegistry,
+        hostname: "127.0.0.1",
+        port: 9000,
+        serverFactory: () => {
+          serverFactoryCalls += 1;
+          return { close: () => undefined } as never;
+        },
+      }),
+    ).toThrow(/does not contain a Moss checkout/);
+    expect(serverFactoryCalls).toBe(0);
   });
 
   it.each(["", "   "])(

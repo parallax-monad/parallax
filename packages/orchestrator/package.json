@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./agent-flow": "./agent-flow/index.ts",
     "./application": "./application/index.ts"
   },
   "scripts": {
@@ -11,6 +12,8 @@
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
-    "@parallax/contracts": "workspace:*"
+    "@parallax/contracts": "workspace:*",
+    "@parallax/moss-bridge": "workspace:*",
+    "@parallax/risk": "workspace:*"
   }
 }

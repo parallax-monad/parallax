@@ -22,8 +22,10 @@ export {
 export {
   loadMossRuntime,
   type MossRuntimeBundle,
+  type MossRuntimeExpectation,
   runKuruLiveSwap,
   runKuruLiveSwapWithBundle,
+  validateMossRuntimePathSync,
 } from "./live-kuru.js";
 export {
   normalizeLiveKuruEvidence,

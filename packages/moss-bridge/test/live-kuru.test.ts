@@ -1,4 +1,5 @@
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -9,6 +10,7 @@ import {
   normalizeLiveKuruEvidence,
   redact,
   runKuruLiveSwapWithBundle,
+  validateMossRuntimePathSync,
 } from "../src/index.js";
 
 const SENDER = "0xcccccccccccccccccccccccccccccccccccccccc";
@@ -68,6 +70,7 @@ function fakeBundle(
     coreVersion?: string;
     blockNumber?: bigint;
     quoteHang?: boolean;
+    withoutPinnedBlock?: boolean;
   } = {},
 ): MossRuntimeBundle {
   const { createRuntime, Registry } = fakeCore(overrides);
@@ -82,6 +85,11 @@ function fakeBundle(
     simulator: {
       version: "0.1.0",
       createTraceSimulator: () => ({
+        ...(overrides.withoutPinnedBlock
+          ? { pinnedBlockNumber: overrides.blockNumber ?? 100n }
+          : {
+              getPinnedBlockNumber: () => overrides.blockNumber ?? 100n,
+            }),
         simulate: async () => {
           if (overrides.simulateError) throw overrides.simulateError;
           return (
@@ -124,6 +132,7 @@ function fakeBundle(
       "@themoss/simulator": "0.1.0",
       "@themoss/system": "0.1.0",
     },
+    checkoutRevision: "d09b38cbc44ee7f5722c5d09e7224f7750187762",
   };
 }
 
@@ -271,6 +280,7 @@ describe("kuru live adapter", () => {
     expect(evidence.executionStatus).toBe("SUCCESS");
     expect(evidence.simulationCoverage.value?.complete).toBe(true);
     expect(evidence.simulationCoverage.value?.expectedTransactions).toBe(1);
+    expect(evidence.simulatorPinnedBlock).toBe("100");
   });
 
   it("fails closed on runtime version mismatch", async () => {
@@ -278,6 +288,14 @@ describe("kuru live adapter", () => {
     await expect(
       runKuruLiveSwapWithBundle(input({ runtimeVersion: "9.9.9" }), bundle),
     ).rejects.toThrow(/MOSS runtime mismatch/);
+  });
+
+  it("fails closed on a non-core Moss package version mismatch", async () => {
+    const bundle = fakeBundle();
+    bundle.packageVersions["@themoss/simulator"] = "9.9.9";
+    await expect(runKuruLiveSwapWithBundle(input(), bundle)).rejects.toThrow(
+      /MOSS package version mismatch.*@themoss\/simulator=9\.9\.9/,
+    );
   });
 
   it("keeps FlipOrderUpdated warnings and returns UNKNOWN, not success", async () => {
@@ -418,6 +436,25 @@ describe("kuru live adapter", () => {
     expect(result.evidence.blockNumber.value).toBe("91383505");
   });
 
+  it("records the simulator pinned block when the runtime exposes it", async () => {
+    const result = await runKuruLiveSwapWithBundle(
+      input(),
+      fakeBundle({ blockNumber: 91383505n }),
+    );
+    expect(result.simulatorPinnedBlock).toBe("91383505");
+    expect(result.evidence.simulatorPinnedBlock).toBe("91383505");
+  });
+
+  it("does not trust an incidental pinnedBlockNumber property", async () => {
+    const result = await runKuruLiveSwapWithBundle(
+      input(),
+      fakeBundle({ withoutPinnedBlock: true }),
+    );
+
+    expect(result.simulatorPinnedBlock).toBeUndefined();
+    expect(result.evidence.simulatorPinnedBlock).toBeUndefined();
+  });
+
   it("maps a hanging stage to TIMEOUT and keeps structured evidence", async () => {
     const bundle = fakeBundle({ quoteHang: true });
     const result = await runKuruLiveSwapWithBundle(
@@ -457,41 +494,74 @@ describe("kuru live adapter", () => {
 });
 
 describe("loadMossRuntime", () => {
-  it("reads exact package versions from a pinned Moss checkout", async () => {
+  const createMossRuntimeFixture = (
+    overrides: {
+      coreSource?: string;
+      versions?: Record<string, string>;
+      withGit?: boolean;
+    } = {},
+  ) => {
     const dir = mkdtempSync(join(tmpdir(), "moss-runtime-"));
-    const { mkdirSync } = await import("node:fs");
     writeFileSync(
       join(dir, "package.json"),
       JSON.stringify({ name: "moss", version: "0.0.0" }),
     );
     const packages = [
-      { rel: "packages/core", name: "@themoss/core", version: "0.1.0" },
-      { rel: "packages/erc", name: "@themoss/erc", version: "0.1.0" },
+      { rel: "packages/core", name: "@themoss/core" },
+      { rel: "packages/erc", name: "@themoss/erc" },
       {
         rel: "packages/protocols/kuru",
         name: "@themoss/protocol-kuru",
-        version: "0.1.0",
       },
-      {
-        rel: "packages/simulator",
-        name: "@themoss/simulator",
-        version: "0.1.0",
-      },
-      { rel: "packages/system", name: "@themoss/system", version: "0.1.0" },
+      { rel: "packages/simulator", name: "@themoss/simulator" },
+      { rel: "packages/system", name: "@themoss/system" },
     ];
-    for (const { rel, name, version } of packages) {
+    for (const { rel, name } of packages) {
       const distDir = join(dir, rel, "dist");
       mkdirSync(distDir, { recursive: true });
       writeFileSync(
         join(dir, rel, "package.json"),
-        JSON.stringify({ name, version }),
+        JSON.stringify({
+          name,
+          version: overrides.versions?.[name] ?? "0.1.0",
+        }),
       );
       writeFileSync(
         join(distDir, "index.js"),
-        "export const marker = 'stub';\n",
+        name === "@themoss/core"
+          ? (overrides.coreSource ?? "export const marker = 'stub';\n")
+          : "export const marker = 'stub';\n",
       );
     }
-    const bundle = await loadMossRuntime(dir);
+    let revision = "0".repeat(40);
+    if (overrides.withGit !== false) {
+      execFileSync("git", ["init", "-q", dir]);
+      execFileSync("git", ["-C", dir, "add", "."]);
+      execFileSync("git", [
+        "-C",
+        dir,
+        "-c",
+        "user.name=Moss Test",
+        "-c",
+        "user.email=moss-test@example.invalid",
+        "commit",
+        "-q",
+        "-m",
+        "fixture",
+      ]);
+      revision = execFileSync("git", ["-C", dir, "rev-parse", "HEAD"], {
+        encoding: "utf8",
+      }).trim();
+    }
+    return { dir, revision };
+  };
+
+  it("reads exact package versions from a pinned Moss checkout", async () => {
+    const { dir, revision } = createMossRuntimeFixture();
+    const bundle = await loadMossRuntime(dir, {
+      runtimeVersion: "0.1.0",
+      runtimeRevision: revision,
+    });
     expect(bundle.packageVersions["@themoss/core"]).toBe("0.1.0");
     expect(bundle.packageVersions["@themoss/erc"]).toBe("0.1.0");
     expect(bundle.packageVersions["@themoss/protocol-kuru"]).toBe("0.1.0");
@@ -501,9 +571,70 @@ describe("loadMossRuntime", () => {
     expect(bundle.kuru.marker).toBe("stub");
   });
 
+  it("rejects a package version mismatch before importing any bundle", async () => {
+    const marker = "__parallax_moss_bundle_imported__";
+    const { dir, revision } = createMossRuntimeFixture({
+      coreSource: `globalThis[${JSON.stringify(marker)}] = true;\nexport const marker = 'stub';\n`,
+      versions: { "@themoss/core": "0.2.0" },
+    });
+    const globalState = globalThis as Record<string, unknown>;
+    delete globalState[marker];
+
+    try {
+      await expect(
+        loadMossRuntime(dir, {
+          runtimeVersion: "0.1.0",
+          runtimeRevision: revision,
+        }),
+      ).rejects.toThrow(/MOSS package version mismatch/);
+      expect(globalState[marker]).toBeUndefined();
+    } finally {
+      delete globalState[marker];
+    }
+  });
+
+  it("rejects a revision mismatch before importing any bundle", async () => {
+    const marker = "__parallax_moss_bundle_imported__";
+    const { dir } = createMossRuntimeFixture({
+      coreSource: `globalThis[${JSON.stringify(marker)}] = true;\nexport const marker = 'stub';\n`,
+    });
+    const globalState = globalThis as Record<string, unknown>;
+    delete globalState[marker];
+
+    try {
+      await expect(
+        loadMossRuntime(dir, {
+          runtimeVersion: "0.1.0",
+          runtimeRevision: "0".repeat(40),
+        }),
+      ).rejects.toThrow(/MOSS runtime revision mismatch/);
+      expect(globalState[marker]).toBeUndefined();
+    } finally {
+      delete globalState[marker];
+    }
+  });
+
+  it("reports a non-Git checkout separately from a revision mismatch", async () => {
+    const { dir, revision } = createMossRuntimeFixture({ withGit: false });
+    const expected = {
+      runtimeVersion: "0.1.0",
+      runtimeRevision: revision,
+    };
+
+    await expect(loadMossRuntime(dir, expected)).rejects.toThrow(
+      /not a readable Git checkout/,
+    );
+    expect(() => validateMossRuntimePathSync(dir, expected)).toThrow(
+      /not a readable Git checkout/,
+    );
+  });
+
   it("rejects a path that is not a Moss checkout", async () => {
     await expect(
-      loadMossRuntime(join(tmpdir(), "definitely-not-moss")),
+      loadMossRuntime(join(tmpdir(), "definitely-not-moss"), {
+        runtimeVersion: "0.1.0",
+        runtimeRevision: "0".repeat(40),
+      }),
     ).rejects.toThrow(/does not contain a Moss checkout/);
   });
 });
@@ -821,7 +952,10 @@ describe.skipIf(!process.env.MOSS_RUNTIME_PATH)(
     const runtimePath = process.env.MOSS_RUNTIME_PATH as string;
 
     it("loads the exact recorded baseline package versions", async () => {
-      const bundle = await loadMossRuntime(runtimePath);
+      const bundle = await loadMossRuntime(runtimePath, {
+        runtimeVersion: "0.1.0",
+        runtimeRevision: "d09b38cbc44ee7f5722c5d09e7224f7750187762",
+      });
       expect(bundle.packageVersions["@themoss/core"]).toBe("0.1.0");
       expect(bundle.packageVersions["@themoss/erc"]).toBe("0.1.0");
       expect(bundle.packageVersions["@themoss/protocol-kuru"]).toBe("0.1.0");

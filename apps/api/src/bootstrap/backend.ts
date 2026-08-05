@@ -1,5 +1,8 @@
 import { type ServerType, serve as serveNode } from "@hono/node-server";
 import { serializeJson } from "@parallax/contracts";
+import { validateMossRuntimePathSync } from "@parallax/moss-bridge";
+import type { KuruLiveRunner } from "@parallax/orchestrator/agent-flow";
+import { KuruLiveAgentFlow } from "@parallax/orchestrator/agent-flow";
 import type { ReplayFixtureRepository } from "@parallax/orchestrator/application";
 import { ReplayApplicationService } from "@parallax/orchestrator/application";
 import { Hono } from "hono";
@@ -52,9 +55,8 @@ const listenerConfigSchema = z.object({
 });
 
 /**
- * Explicitly fails live checks until the Moss/Risk Agent Flow is injected.
- * This keeps the Node server runnable without turning replay data into a
- * fabricated live success.
+ * Explicit fallback when no pinned Moss runtime path is configured. Replay
+ * remains a separate endpoint and is never used as a fabricated live result.
  */
 export class UnavailableAgentFlow implements AgentFlowPort {
   public async check(): Promise<never> {
@@ -66,6 +68,7 @@ export type BackendAppDependencies = {
   runtime: BackendRuntime;
   corsOrigin?: string;
   agentFlow?: AgentFlowPort;
+  liveRunner?: KuruLiveRunner;
   store?: RunStore;
   replayRepository?: ReplayFixtureRepository;
 };
@@ -75,7 +78,9 @@ export function createBackendApp(dependencies: BackendAppDependencies): Hono {
   const checkService = new CheckApplicationService({
     runtime: dependencies.runtime,
     store: dependencies.store ?? new InMemoryRunStore(),
-    agentFlow: dependencies.agentFlow ?? new UnavailableAgentFlow(),
+    agentFlow:
+      dependencies.agentFlow ??
+      createConfiguredAgentFlow(dependencies.runtime, dependencies.liveRunner),
   });
   const replayService = new ReplayApplicationService({
     repository:
@@ -105,11 +110,23 @@ export function createBackendApp(dependencies: BackendAppDependencies): Hono {
   return app;
 }
 
+function createConfiguredAgentFlow(
+  runtime: BackendRuntime,
+  liveRunner?: KuruLiveRunner,
+): AgentFlowPort {
+  if (runtime.config.moss.runtimePath === undefined) {
+    return new UnavailableAgentFlow();
+  }
+
+  return new KuruLiveAgentFlow(liveRunner);
+}
+
 export type BootstrapBackendAppOptions = {
   environment?: unknown;
   tokenRegistry: unknown;
   corsOrigin?: string;
   agentFlow?: AgentFlowPort;
+  liveRunner?: KuruLiveRunner;
   store?: RunStore;
   replayRepository?: ReplayFixtureRepository;
 };
@@ -122,11 +139,18 @@ export function bootstrapBackendApp(options: BootstrapBackendAppOptions): Hono {
     environment,
     tokenRegistry: options.tokenRegistry,
   });
+  if (runtime.config.moss.runtimePath !== undefined) {
+    validateMossRuntimePathSync(runtime.config.moss.runtimePath, {
+      runtimeVersion: runtime.config.moss.runtimeVersion,
+      runtimeRevision: runtime.config.moss.runtimeRevision,
+    });
+  }
 
   return createBackendApp({
     runtime,
     corsOrigin: options.corsOrigin ?? serverEnvironment.CORS_ORIGIN,
     agentFlow: options.agentFlow,
+    liveRunner: options.liveRunner,
     store: options.store,
     replayRepository: options.replayRepository,
   });

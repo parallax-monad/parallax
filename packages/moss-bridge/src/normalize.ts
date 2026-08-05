@@ -144,6 +144,7 @@ export function normalizeLiveKuruEvidence(input: {
   fetchedAt: string;
   stages: import("./types.js").StageRecord[];
   initialBlock?: string;
+  simulatorPinnedBlock?: string;
 }): NormalizedKuruEvidence {
   const errors = normalizedErrors(input.raw.errors);
   const integrationStatus = aggregateIntegrationStatus("OK", errors);
@@ -257,7 +258,7 @@ export function normalizeLiveKuruEvidence(input: {
       blockNumber,
       blockNumber ? "rpc" : "unknown",
       live,
-      "Latest block read across live stages; the simulator pins its own block internally (Moss ADR 0002) that the runtime API does not expose.",
+      "Latest block read across live stages; simulatorPinnedBlock records the simulator's exact pinned block when the runtime exposes it.",
       "REPRODUCIBLE",
     ),
     mossVersion: `@themoss/protocol-kuru@${
@@ -267,6 +268,9 @@ export function normalizeLiveKuruEvidence(input: {
     mossCommit: input.runtime.runtimeRevision,
     runtimeVersion: input.runtime.runtimeVersion,
     runtimeRevision: input.runtime.runtimeRevision,
+    ...(input.simulatorPinnedBlock
+      ? { simulatorPinnedBlock: input.simulatorPinnedBlock }
+      : {}),
     fetchedAt: input.fetchedAt,
     isReplay: false,
     isMock: false,
@@ -337,8 +341,8 @@ function reproducibilityOf(
 }
 
 function queryData(value: JsonValue | null): JsonValue | null {
-  if (!record(value)) return null;
-  return record(value.data) ? value.data : null;
+  if (!isRecord(value)) return null;
+  return isRecord(value.data) ? value.data : null;
 }
 
 function assessAssetChanges(changes: JsonValue[]): AssetChangeAssessment {
@@ -353,7 +357,7 @@ function approvalStatus(
   value: JsonValue | null,
   tokenIn: string,
 ): "REQUIRED" | "NOT_APPLICABLE" | "UNKNOWN" {
-  if (!record(value)) return "UNKNOWN";
+  if (!isRecord(value)) return "UNKNOWN";
   if (tokenIn === "MON" || tokenIn === "native") return "NOT_APPLICABLE";
   return capabilityNodes(value).some(
     (node) => node.protocol === "erc20" && node.method === "approve",
@@ -376,7 +380,7 @@ function simulationSummary(
   unsupportedReceipt: boolean;
   coverage: import("./types.js").SimulationCoverage;
 } {
-  if (!record(value) || !Array.isArray(value.results)) {
+  if (!isRecord(value) || !Array.isArray(value.results)) {
     return {
       receipt: null,
       outcome: null,
@@ -389,17 +393,17 @@ function simulationSummary(
       coverage: coverageSummary(transactions, [], false, undefined),
     };
   }
-  const results = value.results.filter(record);
+  const results = value.results.filter(isRecord);
   const halted = value.halted !== undefined && value.halted !== false;
   const haltReason = haltReasonOf(value.halted);
   const warnings = results.flatMap((result) =>
     Array.isArray(result.warnings) ? result.warnings : [],
   );
   const receipt =
-    [...results].reverse().find((result) => record(result.receipt))?.receipt ??
-    null;
+    [...results].reverse().find((result) => isRecord(result.receipt))
+      ?.receipt ?? null;
   const outcome =
-    record(receipt) && receipt.outcome !== undefined ? receipt.outcome : null;
+    isRecord(receipt) && receipt.outcome !== undefined ? receipt.outcome : null;
   const assetChanges = results.flatMap((result) =>
     Array.isArray(result.changes) ? result.changes : [],
   );
@@ -447,7 +451,7 @@ function executionStatus(
 function capabilityNodes(
   value: JsonValue,
 ): Array<{ protocol: string; method: string }> {
-  if (!record(value)) return [];
+  if (!isRecord(value)) return [];
   const own =
     typeof value.protocol === "string" && typeof value.method === "string"
       ? [{ protocol: value.protocol, method: value.method }]
@@ -475,12 +479,12 @@ function transactionNodes(
     method: "unknown",
   },
 ): TransactionNode[] {
-  if (!record(value)) return [];
+  if (!isRecord(value)) return [];
   const protocol =
     typeof value.protocol === "string" ? value.protocol : parent.protocol;
   const method =
     typeof value.method === "string" ? value.method : parent.method;
-  const transaction = record(value.transaction) ? value.transaction : null;
+  const transaction = isRecord(value.transaction) ? value.transaction : null;
   const own = transaction
     ? [
         {
@@ -565,7 +569,7 @@ function resultMatchesTransaction(
   result: Record<string, JsonValue> | undefined,
   transaction: TransactionNode | undefined,
 ): boolean {
-  if (!result || !transaction || !record(result.transaction)) return false;
+  if (!result || !transaction || !isRecord(result.transaction)) return false;
   const resultTransaction = result.transaction;
   const keys = ["from", "to", "data", "value"] as const;
   return keys.every((key) => {
@@ -582,7 +586,7 @@ function comparable(value: JsonValue | undefined): string | null {
 }
 
 function haltReasonOf(value: JsonValue | undefined): string | undefined {
-  if (!record(value)) return undefined;
+  if (!isRecord(value)) return undefined;
   return typeof value.reason === "string" ? value.reason : undefined;
 }
 
@@ -610,7 +614,7 @@ function parseStructuredError(
   value: JsonValue,
   fallbackStage?: NormalizedMossError["stage"],
 ): NormalizedMossError | null {
-  if (!record(value)) return null;
+  if (!isRecord(value)) return null;
   if (typeof value.message !== "string") return null;
 
   const code = normalizeErrorCode(value.code);
@@ -703,7 +707,7 @@ function normalizeErrorSource(value: JsonValue): NormalizedMossError["source"] {
 function errorMessages(value: JsonValue): string[] {
   if (typeof value === "string") return [value];
   if (Array.isArray(value)) return value.flatMap(errorMessages);
-  if (!record(value)) return [JSON.stringify(value)];
+  if (!isRecord(value)) return [JSON.stringify(value)];
   if (typeof value.message === "string") return [value.message];
   if (typeof value.error === "string") return [value.error];
   return [JSON.stringify(value)];
@@ -802,6 +806,6 @@ function sourcedFields(
   ];
 }
 
-function record(value: unknown): value is Record<string, JsonValue> {
+function isRecord(value: unknown): value is Record<string, JsonValue> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }

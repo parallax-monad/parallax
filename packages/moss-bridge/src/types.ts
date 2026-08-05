@@ -122,11 +122,13 @@ export type NormalizedKuruEvidence = {
   limitations: string[];
   /**
    * Live-only runtime provenance (absent on recorded fixtures). `runtimeRevision`
-   * must be an immutable identity: a Moss git commit or a verifiable package
-   * integrity/version identity - never "latest", "main", or "workspace baseline".
+   * must be an immutable Moss git checkout identity - never "latest", "main",
+   * or "workspace baseline". Package versions are verified separately.
    */
   runtimeVersion?: string;
   runtimeRevision?: string;
+  /** Exact simulator base block exposed by the live Moss runtime. */
+  simulatorPinnedBlock?: string;
   fetchedAt?: string;
   isReplay?: boolean;
   isMock?: boolean;
@@ -147,6 +149,8 @@ export type StageName = "DISCOVER" | "LOAD" | "QUOTE" | "ACTION" | "SIMULATE";
 export type RuntimeIdentity = {
   runtimeVersion: string;
   runtimeRevision: string;
+  /** Git checkout revision independently observed by the adapter. */
+  checkoutRevision?: string;
   packageVersions: Record<string, string>;
 };
 
@@ -189,4 +193,8 @@ export type LiveKuruResult = {
   raw: RawKuruEvidence;
   stages: StageRecord[];
   runtime: RuntimeIdentity;
+  /** Chain ID read from the configured RPC before running the stages. */
+  observedChainId?: number;
+  /** Exact simulator base block when the pinned runtime exposes it. */
+  simulatorPinnedBlock?: string;
 };

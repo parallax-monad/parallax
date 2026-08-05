@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import {
+  type ActionVerificationEvidence,
   checkSwapRequestSchema,
   type EvidenceRef,
   type FailedRunResult,
@@ -119,6 +120,16 @@ export class CheckApplicationService {
       candidate = await this.dependencies.agentFlow.check({
         runId,
         intent: normalized.intent,
+        tokenInDecimals: tokenDecimals(
+          this.dependencies.runtime,
+          normalized.intent.tokenIn,
+          normalized.intent.chainId,
+        ),
+        tokenOutDecimals: tokenDecimals(
+          this.dependencies.runtime,
+          normalized.intent.tokenOut,
+          normalized.intent.chainId,
+        ),
         moss: this.dependencies.runtime.config.moss,
       });
     } catch (error) {
@@ -135,10 +146,17 @@ export class CheckApplicationService {
             : "Agent Flow could not complete the check",
         },
         error,
+        partialRunResultFrom(error),
       );
     }
 
-    const parsedResult = runResultSchema.safeParse(candidate);
+    let parsedResult = runResultSchema.safeParse(candidate);
+    if (!parsedResult.success) {
+      const failClosedCandidate = failClosedAdjustCandidate(candidate);
+      if (failClosedCandidate !== undefined) {
+        parsedResult = runResultSchema.safeParse(failClosedCandidate);
+      }
+    }
     if (!parsedResult.success) {
       return this.recordFailure(
         runId,
@@ -195,14 +213,18 @@ export class CheckApplicationService {
       ...result,
       ...childFields,
     });
+    const gatedResult = closeUnverifiedAdjust(
+      resultWithRerun,
+      this.dependencies.store,
+    );
 
     try {
-      await this.dependencies.store.complete(resultWithRerun);
+      await this.dependencies.store.complete(gatedResult);
     } catch {
       return storeErrorResponse();
     }
 
-    return { status: 200, body: resultWithRerun };
+    return { status: 200, body: gatedResult };
   }
 
   private async recordFailure(
@@ -212,14 +234,23 @@ export class CheckApplicationService {
     childFields: ChildRunFields | undefined,
     apiError: CheckApiErrorBody["error"],
     cause?: unknown,
+    partialRunResult?: FailedRunResult,
   ): Promise<CheckApplicationResponse> {
-    const result = createIntegrationErrorResult(
-      runId,
-      intent,
-      failure,
-      childFields,
-      cause,
-    );
+    const result =
+      partialRunResult === undefined
+        ? createIntegrationErrorResult(
+            runId,
+            intent,
+            failure,
+            childFields,
+            cause,
+          )
+        : failedRunResultSchema.parse({
+            ...partialRunResult,
+            runId,
+            intent,
+            ...(childFields ?? {}),
+          });
     try {
       await this.dependencies.store.fail(runId, failure, result);
     } catch {
@@ -242,6 +273,49 @@ function childRunFields(context: RerunContext): ChildRunFields | undefined {
   return context.kind === "child"
     ? { parentRunId: context.parentRunId, diff: context.diff }
     : undefined;
+}
+
+function tokenDecimals(
+  runtime: BackendRuntime,
+  asset: Parameters<BackendRuntime["tokenRegistry"]["resolve"]>[1],
+  chainId: number,
+): number {
+  const metadata = runtime.tokenRegistry.resolve(chainId, asset);
+  if (metadata === undefined) {
+    throw new Error("Normalized Intent token metadata is no longer available");
+  }
+  return metadata.decimals;
+}
+
+function partialRunResultFrom(error: unknown): FailedRunResult | undefined {
+  const candidate = asRecord(error)?.partialRunResult;
+  const parsed = failedRunResultSchema.safeParse(candidate);
+  return parsed.success ? parsed.data : undefined;
+}
+
+function failClosedAdjustCandidate(candidate: unknown): unknown | undefined {
+  const value = asRecord(candidate);
+  if (
+    value?.status !== "completed" ||
+    value.verdict !== "ADJUST" ||
+    !Array.isArray(value.recommendedActions) ||
+    value.recommendedActions.length === 0 ||
+    !value.recommendedActions.every(isTransactionAdjustmentCandidate)
+  ) {
+    return undefined;
+  }
+
+  return {
+    ...value,
+    verdict: "STOP",
+    summary: "No verified child Run and Action Gate attestation is available",
+    recommendedActions: [],
+  };
+}
+
+function isTransactionAdjustmentCandidate(value: unknown): boolean {
+  const action = asRecord(asRecord(value)?.action);
+  return action?.kind === "TRANSACTION_ADJUSTMENT";
 }
 
 function createIntegrationErrorResult(
@@ -403,8 +477,23 @@ function hasMismatchedAuthoritativeRuntime(
   result.ruleResults.forEach((ruleResult) => {
     if (ruleResult.status === "PASS" || ruleResult.status === "FAIL") {
       ruleResult.evidenceRefs.forEach(addReference);
+      ruleResult.actionEvaluations.forEach((evaluation) => {
+        evaluation.evidenceRefs.forEach(addReference);
+      });
     }
   });
+
+  result.recommendedActions.forEach((evaluation) => {
+    evaluation.evidenceRefs.forEach(addReference);
+  });
+  result.irrelevantActions.forEach((evaluation) => {
+    evaluation.evidenceRefs.forEach(addReference);
+  });
+  if (result.status === "completed") {
+    result.evidence.forEach((evidence) => {
+      addReference(evidence);
+    });
+  }
 
   if (
     result.status === "completed" &&
@@ -414,19 +503,116 @@ function hasMismatchedAuthoritativeRuntime(
     result.route.inputEvidenceRefs?.forEach(addReference);
   }
 
-  for (const key of authoritativeKeys) {
-    const evidence = evidenceByKey.get(key);
-    if (evidence?.kind === "simulated_token_out") {
-      evidence.inputEvidenceRefs.forEach(addReference);
-    }
+  if (
+    result.status === "completed" &&
+    !isBlockNumber(result.simulatorPinnedBlock)
+  ) {
+    return true;
   }
 
-  return [...authoritativeKeys].some((key) => {
+  const visited = new Set<string>();
+  const visit = (key: string): boolean => {
+    if (visited.has(key)) return false;
+    visited.add(key);
+
     const evidence = evidenceByKey.get(key);
-    return (
+    if (
       evidence === undefined ||
       evidence.runtimeVersion !== runtime.runtimeVersion ||
       evidence.runtimeRevision !== runtime.runtimeRevision
+    ) {
+      return true;
+    }
+
+    if (
+      result.status === "completed" &&
+      evidence.source !== "external" &&
+      evidence.simulatorPinnedBlock !== result.simulatorPinnedBlock
+    ) {
+      return true;
+    }
+
+    if (evidence.kind === "simulated_token_out") {
+      return evidence.inputEvidenceRefs.some((reference) => {
+        addReference(reference);
+        return visit(reference.key);
+      });
+    }
+
+    return false;
+  };
+
+  return [...authoritativeKeys].some((key) => visit(key));
+}
+
+function isBlockNumber(value: string | undefined): boolean {
+  return /^\d+$/.test(value ?? "");
+}
+
+function closeUnverifiedAdjust(result: RunResult, store: RunStore): RunResult {
+  if (
+    result.status !== "completed" ||
+    result.verdict !== "ADJUST" ||
+    hasVerifiedActionGate(result, store)
+  ) {
+    return result;
+  }
+
+  return runResultSchema.parse({
+    ...result,
+    verdict: "STOP",
+    summary: "No verified child Run and Action Gate attestation is available",
+    recommendedActions: [],
+  });
+}
+
+function hasVerifiedActionGate(
+  result: Extract<RunResult, { status: "completed" }>,
+  store: RunStore,
+): boolean {
+  if (result.recommendedActions.length === 0) return false;
+
+  return result.recommendedActions.every((evaluation) => {
+    if (
+      evaluation.action.kind !== "TRANSACTION_ADJUSTMENT" ||
+      evaluation.proposedChange === undefined
+    ) {
+      return false;
+    }
+
+    const field = evaluation.action.field;
+    const attestation = result.evidence.find(
+      (evidence): evidence is ActionVerificationEvidence =>
+        evidence.kind === "action_verification" &&
+        evidence.baselineRunId === result.runId &&
+        evidence.verificationRunId !== result.runId &&
+        evidence.field === field &&
+        evidence.actionReasonCode === evaluation.actionReasonCode &&
+        evidence.beforeValue === evaluation.proposedChange?.before &&
+        evidence.afterValue === evaluation.proposedChange?.after &&
+        evaluation.evidenceRefs.some(
+          (reference) => reference.key === evidence.key,
+        ),
+    );
+    if (attestation === undefined) return false;
+
+    const childRecord = store.get(attestation.verificationRunId);
+    if (
+      childRecord?.status !== "completed" ||
+      childRecord.result.status !== "completed" ||
+      childRecord.result.parentRunId !== result.runId ||
+      childRecord.result.replayMode ||
+      childRecord.result.systemStatus !== "OK" ||
+      childRecord.result.scope.some((item) => item.status === "unknown")
+    ) {
+      return false;
+    }
+
+    return ["P0-EVIDENCE-001", "P0-EXECUTION-001", "P0-ECONOMIC-001"].every(
+      (ruleId) =>
+        childRecord.result.ruleResults.some(
+          (rule) => rule.ruleId === ruleId && rule.status === "PASS",
+        ),
     );
   });
 }
