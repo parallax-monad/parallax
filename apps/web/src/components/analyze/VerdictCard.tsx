@@ -24,7 +24,7 @@ const BOUNDARY_LABEL: Record<BoundarySource, Copy> = {
 
 /** Plain-language names, since the raw verdict words assume swap literacy. */
 const VERDICT_PLAIN: Record<Verdict, Copy> = {
-  PROCEED: { en: "Looks clear to sign", zh: "可以签名" },
+  PROCEED: { en: "No blocking evidence found", zh: "未发现阻断证据" },
   ADJUST: { en: "Change something first", zh: "先改一个条件" },
   STOP: { en: "Do not sign this", zh: "不要签名" },
   UNKNOWN: { en: "Not enough evidence", zh: "证据不足" },
@@ -66,7 +66,7 @@ export function VerdictCard({
         </span>
         {result.replayMode && (
           <span className="pill">
-            {say(language, { en: "Replay fixture", zh: "录制回放" })}
+            {say(language, { en: "Demo preset", zh: "演示预设" })}
           </span>
         )}
         {result.systemStatus === "INTEGRATION_ERROR" && (

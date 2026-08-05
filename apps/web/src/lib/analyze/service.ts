@@ -75,6 +75,7 @@ const VERDICT_RANK = { STOP: 0, ADJUST: 1, UNKNOWN: 2, PROCEED: 3 };
 
 const DIFF_FIELD = {
   verdict: { en: "Verdict", zh: "结论" },
+  amountIn: { en: "Amount in", zh: "输入数量" },
   expectedOutput: { en: "Expected output", zh: "预期输出" },
   route: { en: "Route", zh: "路径" },
 } satisfies Record<string, Copy>;
@@ -132,7 +133,8 @@ export type CheckOptions = { previous?: CheckSwapResult };
 
 /**
  * Runs the full pipeline: intent → evidence → normalization → rules → decision.
- * Mirrors POST /api/check so the UI can swap in a real endpoint unchanged.
+ * This is a mock service generating demo results from fixtures. An adapter is
+ * required to integrate with the real /api/check endpoint.
  */
 export function checkSwap(
   input: CheckSwapInput,
