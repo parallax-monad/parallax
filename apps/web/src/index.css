@@ -52,17 +52,8 @@
         rgba(70, 91, 167, 0.12),
         transparent 29%
       ),
-      radial-gradient(
-        circle at 18% 24%,
-        rgba(255, 255, 255, 0.42) 0 0.7px,
-        transparent 1.2px
-      ),
       linear-gradient(145deg, #030308, #080713 52%, #04040a);
-    background-size:
-      auto,
-      auto,
-      72px 72px,
-      auto;
+    background-size: auto, auto, auto;
   }
   .hero-monad-light {
     background:
@@ -76,18 +67,12 @@
         rgba(64, 82, 148, 0.14),
         transparent 31%
       ),
-      radial-gradient(
-        circle at 24% 26%,
-        rgba(255, 255, 255, 0.5) 0 0.65px,
-        transparent 1.15px
-      ),
       linear-gradient(rgba(153, 147, 168, 0.05) 1px, transparent 1px),
       linear-gradient(90deg, rgba(153, 147, 168, 0.05) 1px, transparent 1px),
       linear-gradient(145deg, #030308, #080713 50%, #04040a);
     background-size:
       auto,
       auto,
-      58px 58px,
       65px 65px,
       65px 65px,
       auto;
@@ -132,29 +117,6 @@
   .hero-route-trace {
     overflow: hidden;
     opacity: 0.72;
-  }
-  .hero-route-trace::before {
-    position: absolute;
-    top: 18%;
-    left: max(24px, calc((100vw - 1260px) / 2));
-    z-index: 2;
-    padding-left: 2.2rem;
-    color: rgba(185, 173, 255, 0.76);
-    content: "PROTOCOL ROUTE / REPLAY 0042";
-    font-family: "IBM Plex Mono", monospace;
-    font-size: 8px;
-    font-weight: 700;
-    letter-spacing: 0.16em;
-  }
-  .hero-route-trace::after {
-    position: absolute;
-    top: calc(18% + 4px);
-    left: max(24px, calc((100vw - 1260px) / 2));
-    z-index: 2;
-    width: 1.55rem;
-    height: 1px;
-    content: "";
-    background: rgba(131, 110, 249, 0.62);
   }
   .route-graph-monad-light {
     background: transparent;
@@ -372,11 +334,6 @@
         rgba(73, 102, 178, 0.11),
         transparent 32%
       ),
-      radial-gradient(
-        circle at 18% 26%,
-        rgba(255, 255, 255, 0.34) 0 0.55px,
-        transparent 1px
-      ),
       linear-gradient(180deg, #05050a, #080712 48%, #05050a);
   }
   .landing-space-background::before,
@@ -480,20 +437,6 @@
         transparent 32%
       ),
       linear-gradient(135deg, rgba(20, 18, 31, 0.88), rgba(5, 5, 10, 0.48));
-  }
-  .verdict-field::before {
-    position: absolute;
-    inset: 0;
-    z-index: -1;
-    content: "";
-    background-image: radial-gradient(
-      circle,
-      rgba(224, 219, 255, 0.22) 0 0.65px,
-      transparent 0.8px
-    );
-    background-size: 24px 24px;
-    mask-image: radial-gradient(circle at center, black, transparent 82%);
-    opacity: 0.38;
   }
   .verdict-field-caption {
     position: absolute;

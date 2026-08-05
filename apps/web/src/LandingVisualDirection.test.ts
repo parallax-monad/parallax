@@ -14,6 +14,9 @@ describe("landing visual direction", () => {
     expect(css).toContain("--space-black: #05050a");
     expect(css).toContain("color-scheme: dark");
     expect(css).not.toContain("linear-gradient(180deg, #fafafa");
+    expect(css).not.toContain('content: "PROTOCOL ROUTE / REPLAY 0042"');
+    expect(css).not.toMatch(/rgba\(255, 255, 255, 0\.\d+\) 0 0\.\d+px/);
+    expect(css).not.toContain("background-image: radial-gradient(");
   });
 
   test("keeps ambient stars white while route markers use restrained colors", () => {
@@ -35,12 +38,15 @@ describe("landing visual direction", () => {
     expect(graph).toContain(
       'marker.kind === "protocol" ? lerp(1, edgeScale, 0.45) : 1',
     );
+    expect(graph).toMatch(
+      /marker\.kind === "protocol"\s+\? smoothstep\(0\.02, 0\.58, expansion\)\s+: markerExpansion/,
+    );
     expect(graph).toContain(
-      "group.position.x *= lerp(1, markerEdgeScale, markerExpansion)",
+      "group.position.x *= lerp(1, markerEdgeScale, positionExpansion)",
     );
     expect(graph).toContain("label.position.set(0, config.size * 1.15, 0)");
     expect(graph).toMatch(
-      /getProtocolLabelOffset\(\s*marker\.config\.dispersed\[0\],\s*marker\.config\.size,\s*marker\.label\.scale\.x,\s*markerExpansion,?\s*\)/,
+      /getProtocolLabelOffset\(\s*marker\.config\.dispersed\[0\],\s*marker\.config\.size,\s*marker\.label\.scale\.x,\s*positionExpansion,?\s*\)/,
     );
     expect(graph).not.toContain('new THREE.Color("#ccff00")');
   });

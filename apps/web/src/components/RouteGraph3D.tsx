@@ -1448,6 +1448,10 @@ export function RouteGraph3D({
       const introPathAmount = 1 - introEmphasis;
       for (const marker of markers) {
         const { config, group } = marker;
+        const positionExpansion =
+          marker.kind === "protocol"
+            ? smoothstep(0.02, 0.58, expansion)
+            : markerExpansion;
         if (marker.kind === "protocol" && introEmphasis > 0) {
           setQuadraticBezier3(
             group.position,
@@ -1469,21 +1473,21 @@ export function RouteGraph3D({
           );
         } else {
           group.position.set(
-            lerp(config.compact[0], config.dispersed[0], markerExpansion),
-            lerp(config.compact[1], config.dispersed[1], markerExpansion),
-            lerp(config.compact[2], config.dispersed[2], markerExpansion),
+            lerp(config.compact[0], config.dispersed[0], positionExpansion),
+            lerp(config.compact[1], config.dispersed[1], positionExpansion),
+            lerp(config.compact[2], config.dispersed[2], positionExpansion),
           );
         }
         const markerEdgeScale =
           marker.kind === "protocol" ? lerp(1, edgeScale, 0.45) : 1;
-        group.position.x *= lerp(1, markerEdgeScale, markerExpansion);
+        group.position.x *= lerp(1, markerEdgeScale, positionExpansion);
 
         if (marker.kind === "protocol") {
           marker.label.position.x = getProtocolLabelOffset(
             marker.config.dispersed[0],
             marker.config.size,
             marker.label.scale.x,
-            markerExpansion,
+            positionExpansion,
           );
           if (!reduceMotion) {
             const depthResponse = clamp(
