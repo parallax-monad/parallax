@@ -66,3 +66,51 @@ Use MON to USDC as the recorded baseline. Preserve USDC to MON bidirectional con
 | 2 | Team contracts | Frozen evidence and reason-action contract | Clare and Rei | One reviewed interface | Shared schema decision | Small | OPEN |
 | 3 | Sender or chained state | Bidirectional simulation gate | Receipt support and state evidence | Reproducible USDC path | ERC-20 prestate | Medium | OPEN |
 | 4 | Vertical slice | Intent to verdict re-run flow | API and web owners | Before/after evidence view | Cross-module integration | Medium | OPEN |
+
+## Re-verification (2026-08-03)
+
+Both old claims were re-checked against the live remotes and are confirmed:
+
+- Published `@themoss/*@0.1.0` uses a Plan-based API (`plan`/`finalizePlan`/
+  `computePlanHash`/`Event`) that does not match the recorded Capability/Receipt
+  baseline. It is not a usable runtime for this adapter.
+- Moss PR #138 (`55f7ad9` + `d3b1695`) handles `FlipOrderUpdated`, but it is
+  still not merged into `upstream/main` (`2e7c1db`) and not published.
+
+The pinned runtime is now the local fork `main` commit
+`d09b38cbc44ee7f5722c5d09e7224f7750187762` (exact `@themoss/*@0.1.0`
+workspace, reproducible via frozen lockfile under Node 22 / pnpm 11.10.0).
+On that runtime, `FlipOrderUpdated` still halts the receipt path, so the live
+P0 status is `P0_LIVE_BLOCKED_SIMULATION`. Details, the runtime matrix, and the
+raw→normalized mapping live in
+[docs/integration/moss-kuru-live-runtime.md](moss-kuru-live-runtime.md).
+`pnpm smoke:kuru:live` replaces the previous unconditional `UNAVAILABLE` smoke:
+it is a real live smoke that reports `LIVE_SMOKE_NOT_RUN` until `MOSS_RPC_URL`
+is configured, and fails non-zero if a live run does not pass acceptance.
+
+### Provenance boundaries (2026-08-04)
+
+Runtime, RPC, and block provenance carry three distinct trust levels and must
+not be conflated:
+
+1. **Smoke execution environment inputs** — the smoke harness receives
+   `MOSS_RUNTIME_PATH`, `MOSS_RUNTIME_VERSION`, and `MOSS_RUNTIME_REVISION`
+   from the operator. The current harness does not independently attest the
+   checkout: it does not prove the Git revision, verify every loaded
+   `@themoss/*` package identity, confirm the RPC chain ID, or observe the
+   simulator's internally pinned block.
+2. **Adapter caller-declared runtime provenance** — `runKuruLiveSwap`
+   receives `runtimeVersion`/`runtimeRevision` from the caller and records
+   them as provenance; it fails closed on a loaded `@themoss/core` version
+   mismatch but does not itself prove the checkout Git revision or the
+   identity of every loaded package. These are caller-declared/observed
+   values, not an independently verified immutable identity.
+3. **RPC-observed chain and stage blocks** — `chainId` is read from the RPC
+   client and recorded, not enforced to equal 143 by the adapter. Each stage
+   block is observed through RPC before the call; it is not the Moss
+   simulator's internally pinned block (Moss ADR 0002).
+
+A consumer must independently re-verify the Moss Git revision, every Moss
+package identity, the RPC chain ID, and simulator block consistency before
+interpreting the result as P0_LIVE_READY, authoritative Live Evidence, or
+production Agent Flow input.
