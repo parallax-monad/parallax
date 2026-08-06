@@ -6,8 +6,8 @@ Owner: Clare (backend / `apps/api`)
 Command: `pnpm test:acceptance`
 
 This is the delivery-facing backend acceptance entry. It does not replace unit
-tests. It organizes the P0 API / Run lifecycle claims that backend can prove
-without a frontend owner and without a live Moss SUCCESS fixture.
+tests. It organizes the P0 Check Application / Run lifecycle claims that backend
+can prove without a frontend owner and without a live Moss SUCCESS fixture.
 
 ## Scope
 
@@ -39,7 +39,7 @@ Expected public outcome column.
 | A2 | `STOP` | Completed Run, `verdict = STOP` (unattested ADJUST fail-closed only) | `p0-acceptance` A2 | `agent-flow` NO_ROUTE → STOP |
 | A3 | `UNKNOWN` | Completed Run, `verdict = UNKNOWN` | `p0-acceptance` A3 | recorded Replay fixtures |
 | A4 | Integration Error | Response body `status = integration_error`, `verdict = UNKNOWN` (store record may be `completed` when the error Run was stored successfully) | `p0-acceptance` A4 | moss-bridge / agent-flow |
-| A5 | Stage evidence preserved | `QUOTE` / `ACTION` / `SIMULATE` Evidence stages round-trip through the API | `p0-acceptance` A5 | `agent-flow`, moss-bridge live adapter for real stage execution |
+| A5 | Stage evidence preserved | `QUOTE` / `ACTION` / `SIMULATE` Evidence stages round-trip through Check Application | `p0-acceptance` A5 | `agent-flow`, moss-bridge live adapter for real stage execution |
 | A6 | Timeout | `error.code = TIMEOUT`, `retryable = true` | `p0-acceptance` A6 | moss-bridge errors |
 | A7 | RPC unavailable | `error.code = RPC_UNAVAILABLE`, `retryable = true` | `p0-acceptance` A7 | agent-flow RPC mapping |
 | A8 | Moss unavailable | `error.code = MOSS_UNAVAILABLE`, `retryable = true` | `p0-acceptance` A8 | agent-flow Moss mapping; public `error.stage` mapping for non-QUOTE/ACTION/SIMULATE stages is unresolved |
