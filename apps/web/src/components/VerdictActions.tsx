@@ -21,19 +21,19 @@ const QUADRANTS: VerdictQuadrant[] = [
     label: ["MORE EVIDENCE NEEDED", "证据尚不足"],
     note: ["EVIDENCE UNRESOLVED", "尚无法定论"],
     body: [
-      "Collect the missing evidence before deciding whether to sign.",
-      "先补齐缺失证据，再决定是否签署。",
+      "Collect the missing evidence before drawing a conclusion.",
+      "先补齐缺失证据，再形成结论。",
     ],
   },
   {
     index: "01",
     zone: "northeast",
     tone: "ready",
-    label: ["READY TO SIGN", "可以签署"],
-    note: ["NO BLOCKING EVIDENCE", "未发现阻断证据"],
+    label: ["NO BLOCKING EVIDENCE", "未发现阻断证据"],
+    note: ["IN THIS DEMO SCOPE", "演示范围内"],
     body: [
-      "No blocking evidence was found in this replay scope. This is not a safety guarantee.",
-      "本次回放范围内未发现阻断证据；这并不代表安全保证。",
+      "No blocking evidence was found in this demo scope. This evidence assessment is not a safety guarantee.",
+      "演示范围内未发现阻断证据；本次证据判断并不代表安全保证。",
     ],
   },
   {
@@ -54,8 +54,8 @@ const QUADRANTS: VerdictQuadrant[] = [
     label: ["REVISE & RERUN", "调整后重跑"],
     note: ["CURRENT VERDICT", "当前判定"],
     body: [
-      "Revise the evidence-identified condition, then rerun before signing.",
-      "按证据指向调整交易条件，并在签署前重新回放。",
+      "Revise the evidence-identified condition, then rerun the assessment.",
+      "按证据指向调整交易条件，再重新进行判断。",
     ],
   },
 ];

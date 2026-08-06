@@ -21,7 +21,8 @@ describe("VerdictActions", () => {
     expect(html.match(/data-vote-dot=/g)).toHaveLength(37);
     expect(html).toContain("37 DEMO VOTES / INTERACTIVE POLL");
     expect(html).toContain("ONE PERSON / ONE VOTE");
-    expect(html).toContain("READY TO SIGN");
+    expect(html).not.toContain("READY TO SIGN");
+    expect(html).toContain("IN THIS DEMO SCOPE");
     expect(html).toContain("REVISE &amp; RERUN");
     expect(html).toContain("DO NOT SIGN");
     expect(html).toContain("MORE EVIDENCE NEEDED");
@@ -47,20 +48,20 @@ describe("VerdictActions", () => {
     expect(html).not.toContain('data-tone="rerun"');
   });
 
-  test("states the signing action before qualification", () => {
+  test("frames the landing demo as an evidence assessment", () => {
     const html = renderToStaticMarkup(<VerdictActions language="en" />);
 
     expect(html).toContain(
-      "Collect the missing evidence before deciding whether to sign.",
+      "Collect the missing evidence before drawing a conclusion.",
     );
     expect(html).toContain(
-      "No blocking evidence was found in this replay scope. This is not a safety guarantee.",
+      "No blocking evidence was found in this demo scope. This evidence assessment is not a safety guarantee.",
     );
     expect(html).toContain(
       "Do not sign: the route cannot execute or meet the stated limits.",
     );
     expect(html).toContain(
-      "Revise the evidence-identified condition, then rerun before signing.",
+      "Revise the evidence-identified condition, then rerun the assessment.",
     );
   });
 
@@ -135,12 +136,13 @@ describe("VerdictActions", () => {
     const html = renderToStaticMarkup(<VerdictActions language="zh-CN" />);
 
     expect(html).toContain("证据尚不足");
-    expect(html).toContain("可以签署");
+    expect(html).not.toContain("可以签署");
+    expect(html).toContain("演示范围内");
     expect(html).toContain("请勿签署");
     expect(html).toContain("调整后重跑");
     expect(html).toContain("一人一票 · 点击改投");
     expect(html).toContain("一人一票");
-    expect(html).toContain("先补齐缺失证据，再决定是否签署");
+    expect(html).toContain("先补齐缺失证据，再形成结论");
     expect(html).toContain("请勿签署：当前路径无法执行");
     expect(html).not.toContain("需要更多证据");
   });
