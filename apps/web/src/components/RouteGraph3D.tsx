@@ -1,7 +1,13 @@
 import { useEffect, useRef } from "react";
 import * as THREE from "three";
 import type { Language } from "@/lib/i18n";
-import { pick } from "@/lib/i18n";
+import {
+  AMBIENT_STAR_COLORS,
+  EVIDENCE_TRACE_MARKERS,
+  getEvidenceTraceAriaLabel,
+  getExpandedMarkerEdgeScale,
+  getProtocolLabelOffset,
+} from "./evidenceTrace";
 
 type HeroProgressRef = { current: number };
 type MarkerBaseConfig = {
@@ -108,14 +114,13 @@ const SIGNAL_FOCUS_Z_OFFSET = 3;
 const DRAG_YAW_SENSITIVITY = 0.0052;
 const DRAG_PITCH_SENSITIVITY = 0.0042;
 const DRAG_PITCH_LIMIT = 0.65;
-
 const MARKERS: MarkerConfig[] = [
   {
-    label: "Kuru",
-    color: "#20e7b0",
-    coreColor: "#42ffd0",
-    highlightColor: "#f4ffff",
-    rimColor: "#3ddcff",
+    label: EVIDENCE_TRACE_MARKERS[0].label,
+    color: EVIDENCE_TRACE_MARKERS[0].color,
+    coreColor: "#75e6b1",
+    highlightColor: "#ffffff",
+    rimColor: "#c2fff1",
     role: "protocol",
     size: 8.4,
     phase: 0.2,
@@ -126,11 +131,11 @@ const MARKERS: MarkerConfig[] = [
     dispersed: [-82, 30, 8],
   },
   {
-    label: "PancakeSwap V2 / V3",
-    color: "#a66bff",
-    coreColor: "#c58bff",
-    highlightColor: "#fff7ff",
-    rimColor: "#7d8cff",
+    label: EVIDENCE_TRACE_MARKERS[1].label,
+    color: EVIDENCE_TRACE_MARKERS[1].color,
+    coreColor: "#836ef9",
+    highlightColor: "#ffffff",
+    rimColor: "#c4baff",
     role: "protocol",
     size: 7.8,
     phase: 2.4,
@@ -141,8 +146,8 @@ const MARKERS: MarkerConfig[] = [
     dispersed: [88, -34, -4],
   },
   {
-    label: "WMON",
-    color: "#ccff00",
+    label: EVIDENCE_TRACE_MARKERS[2].label,
+    color: EVIDENCE_TRACE_MARKERS[2].color,
     role: "signal",
     size: 3.8,
     phase: 1.1,
@@ -150,8 +155,8 @@ const MARKERS: MarkerConfig[] = [
     dispersed: [-114, -39, -32],
   },
   {
-    label: "ERC-20 / native MON",
-    color: "#69d7ff",
+    label: EVIDENCE_TRACE_MARKERS[3].label,
+    color: EVIDENCE_TRACE_MARKERS[3].color,
     role: "signal",
     size: 3.4,
     phase: 3.3,
@@ -159,8 +164,8 @@ const MARKERS: MarkerConfig[] = [
     dispersed: [116, 48, -42],
   },
   {
-    label: "ERC-721",
-    color: "#7e8cff",
+    label: EVIDENCE_TRACE_MARKERS[4].label,
+    color: EVIDENCE_TRACE_MARKERS[4].color,
     role: "signal",
     size: 3,
     phase: 4.4,
@@ -168,8 +173,8 @@ const MARKERS: MarkerConfig[] = [
     dispersed: [-122, 56, -64],
   },
   {
-    label: "ERC-1155",
-    color: "#b99aff",
+    label: EVIDENCE_TRACE_MARKERS[5].label,
+    color: EVIDENCE_TRACE_MARKERS[5].color,
     role: "signal",
     size: 3,
     phase: 5.2,
@@ -179,11 +184,11 @@ const MARKERS: MarkerConfig[] = [
 ];
 
 const PALETTE = [
-  new THREE.Color("#f7fbff"),
-  new THREE.Color("#9ddfff"),
-  new THREE.Color("#6c7dff"),
-  new THREE.Color("#9b7cff"),
-  new THREE.Color("#ccff00"),
+  new THREE.Color("#ffffff"),
+  new THREE.Color("#f4f1ff"),
+  new THREE.Color("#e3e6ff"),
+  new THREE.Color("#d2d7f2"),
+  new THREE.Color("#bfc6e2"),
 ];
 
 const VERTEX_SHADER = `
@@ -497,13 +502,7 @@ function createAmbientMicroStars(
   const alphas = new Float32Array(count);
   const depthLayers = new Float32Array(count);
   const random = createSeededRandom(0x414d4249);
-  const palette = [
-    new THREE.Color("#eef8ff"),
-    new THREE.Color("#a8dcff"),
-    new THREE.Color("#9d8cff"),
-    new THREE.Color("#81f3ff"),
-    new THREE.Color("#ccff00"),
-  ];
+  const palette = AMBIENT_STAR_COLORS.map((color) => new THREE.Color(color));
   const boundedAspect = clamp(aspect, 0.6, 2.2);
   const halfFovTangent = Math.tan(THREE.MathUtils.degToRad(54 * 0.5));
   for (let index = 0; index < count; index += 1) {
@@ -755,15 +754,17 @@ function createLabelTexture(config: MarkerConfig) {
   const canvas = document.createElement("canvas");
   const context = canvas.getContext("2d");
   if (!context) throw new Error("Unable to create marker label");
-  const fontSize = config.role === "protocol" ? 28 : 23;
+  const fontSize = config.role === "protocol" ? 22 : 18;
   const weight = config.role === "protocol" ? 700 : 600;
-  context.font = `${weight} ${fontSize}px Inter, sans-serif`;
+  context.font = `${weight} ${fontSize}px "IBM Plex Mono", monospace`;
   canvas.width = Math.ceil(context.measureText(config.label).width) + 36;
   canvas.height = 52;
-  context.font = `${weight} ${fontSize}px Inter, sans-serif`;
+  context.font = `${weight} ${fontSize}px "IBM Plex Mono", monospace`;
   context.textAlign = "center";
   context.textBaseline = "middle";
   context.fillStyle = config.color;
+  context.shadowColor = "rgba(0, 0, 0, 0.82)";
+  context.shadowBlur = 8;
   context.fillText(config.label, canvas.width / 2, canvas.height / 2);
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
@@ -1081,13 +1082,14 @@ function createMarker(
     new THREE.SpriteMaterial({
       map: labelTexture,
       transparent: true,
-      opacity: config.role === "protocol" ? 0.84 : 0.34,
+      opacity: config.role === "protocol" ? 0.68 : 0.3,
       depthWrite: false,
     }),
   );
+  const labelScale = config.role === "protocol" ? 9.4 : 8.2;
   label.scale.set(
-    labelTexture.image.width / 7,
-    labelTexture.image.height / 7,
+    labelTexture.image.width / labelScale,
+    labelTexture.image.height / 8.2,
     1,
   );
   label.position.set(0, config.size * 1.15, 0);
@@ -1441,9 +1443,14 @@ export function RouteGraph3D({
       camera.rotation.y = -passivePointerX * 0.018;
 
       const markerExpansion = smoothstep(0.12, 0.9, expansion);
+      const edgeScale = getExpandedMarkerEdgeScale(container.clientWidth);
       const introPathAmount = 1 - introEmphasis;
       for (const marker of markers) {
         const { config, group } = marker;
+        const positionExpansion =
+          marker.kind === "protocol"
+            ? smoothstep(0.02, 0.58, expansion)
+            : markerExpansion;
         if (marker.kind === "protocol" && introEmphasis > 0) {
           setQuadraticBezier3(
             group.position,
@@ -1465,13 +1472,22 @@ export function RouteGraph3D({
           );
         } else {
           group.position.set(
-            lerp(config.compact[0], config.dispersed[0], markerExpansion),
-            lerp(config.compact[1], config.dispersed[1], markerExpansion),
-            lerp(config.compact[2], config.dispersed[2], markerExpansion),
+            lerp(config.compact[0], config.dispersed[0], positionExpansion),
+            lerp(config.compact[1], config.dispersed[1], positionExpansion),
+            lerp(config.compact[2], config.dispersed[2], positionExpansion),
           );
         }
+        const markerEdgeScale =
+          marker.kind === "protocol" ? lerp(1, edgeScale, 0.45) : 1;
+        group.position.x *= lerp(1, markerEdgeScale, positionExpansion);
 
         if (marker.kind === "protocol") {
+          marker.label.position.x = getProtocolLabelOffset(
+            marker.config.dispersed[0],
+            marker.config.size,
+            marker.label.scale.x,
+            positionExpansion,
+          );
           if (!reduceMotion) {
             const depthResponse = clamp(
               (group.position.z + 45) / 90,
@@ -1690,12 +1706,8 @@ export function RouteGraph3D({
   return (
     <div
       role="img"
-      aria-label={pick(
-        language,
-        "Monad DeFi ecosystem visualization; drag to rotate",
-        "Monad DeFi 生态系统可视化；可拖动旋转",
-      )}
-      className="absolute inset-0 overflow-hidden bg-[#02030a]"
+      aria-label={getEvidenceTraceAriaLabel(language)}
+      className="route-graph-monad-light absolute inset-0 overflow-hidden bg-transparent"
     >
       <div
         aria-hidden="true"
