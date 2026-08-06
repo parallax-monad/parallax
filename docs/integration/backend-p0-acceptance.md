@@ -42,11 +42,11 @@ Expected public outcome column.
 | A5 | Stage evidence preserved | `QUOTE` / `ACTION` / `SIMULATE` Evidence stages round-trip through Check Application | `p0-acceptance` A5 | `agent-flow`, moss-bridge live adapter for real stage execution |
 | A6 | Timeout | `error.code = TIMEOUT`, `retryable = true` | `p0-acceptance` A6 | moss-bridge errors |
 | A7 | RPC unavailable | `error.code = RPC_UNAVAILABLE`, `retryable = true` | `p0-acceptance` A7 | agent-flow RPC mapping |
-| A8 | Moss unavailable | `error.code = MOSS_UNAVAILABLE`, `retryable = true` | `p0-acceptance` A8 | agent-flow Moss mapping; public `error.stage` mapping for non-QUOTE/ACTION/SIMULATE stages is unresolved |
+| A8 | Moss unavailable | `error.code = MOSS_UNAVAILABLE`, `error.stage = unknown`, `retryable = true` | `p0-acceptance` A8 | agent-flow Moss mapping; public `error.stage` mapping for non-QUOTE/ACTION/SIMULATE stages is unresolved |
 | A9 | Unsupported live runtime | `error.code = UNSUPPORTED`, `retryable = false` | `p0-acceptance` A9 | bootstrap / server integration |
-| A10 | Live provenance | simulator pinned-block required and preserved on completed live Runs | `p0-acceptance` A10 | agent-flow provenance fail-closed |
-| A11 | Replay / Live separation | Replay Run cannot be a Re-run baseline; live Agent Flow cannot return `replayMode` | `p0-acceptance` A11 | `application/replay` |
-| A12 | Re-run one condition | Multi-field Intent change rejected as `INVALID_RERUN` | `p0-acceptance` A12 | `application/rerun` |
+| A10 | Provenance | deterministic gate requires and preserves simulator pinned-block fields | `p0-acceptance` A10 | agent-flow provenance fail-closed |
+| A11 | Replay / Live separation | run-level Replay rejection: Replay Run cannot be a Re-run baseline; live Agent Flow cannot return `replayMode` | `p0-acceptance` A11 | `application/replay` |
+| A12 | Re-run one condition | Multi-field Intent change rejected as `INVALID_RERUN` with `reason: NOT_EXACTLY_ONE_CHANGE` | `p0-acceptance` A12 | `application/rerun` |
 | A13 | Child Run failure | Failed child still keeps `parentRunId` and `diff` | `p0-acceptance` A13 | API application Re-run tests |
 
 ## How to run

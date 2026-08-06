@@ -195,7 +195,7 @@ function completedProceedResult(
 
   return completedRunResult(runId, intent, {
     verdict: "PROCEED",
-    summary: "Live Evidence satisfied the checked P0 scope",
+    summary: "P0 Evidence completeness is verified",
     ruleResults: [
       {
         ruleId: "P0-EVIDENCE-001",
@@ -546,6 +546,7 @@ describe("Backend P0 acceptance matrix", () => {
       },
       expected: {
         code: "MOSS_UNAVAILABLE",
+        stage: "unknown",
         retryable: true,
       },
     },
@@ -601,7 +602,7 @@ describe("Backend P0 acceptance matrix", () => {
   });
 
   // Replay rejection on the live path is A11, not this row.
-  it("A10 Live provenance: requires and preserves simulator pinned-block", async () => {
+  it("A10 Provenance: requires and preserves simulator pinned-block", async () => {
     const preserved = await createService({
       async check(input) {
         return completedUnknownResult(input.runId, input.intent);
@@ -714,13 +715,19 @@ describe("Backend P0 acceptance matrix", () => {
       publicRequest({
         parentRunId: "run-1",
         amountIn: "2",
-        sender: "0x2222222222222222222222222222222222222222",
+        protocol: "pancake",
       }),
     );
 
     expect(response).toMatchObject({
       status: 400,
-      body: { error: { code: "INVALID_RERUN" } },
+      body: {
+        error: {
+          code: "INVALID_RERUN",
+          reason: "NOT_EXACTLY_ONE_CHANGE",
+          message: "A Re-run must change exactly one supported Intent field",
+        },
+      },
     });
     expect(store.get("run-2")).toBeUndefined();
   });
