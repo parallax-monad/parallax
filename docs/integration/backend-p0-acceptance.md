@@ -1,6 +1,6 @@
 # Backend P0 Acceptance Matrix
 
-Status: DELIVERY GATE FOR FIXTURE / DETERMINISTIC PATHS — LIVE SUCCESS REMAINS MOSS-BLOCKED
+Status: DELIVERY GATE FOR DETERMINISTIC CHECK APPLICATION / RUN LIFECYCLE PATHS — LIVE SUCCESS REMAINS MOSS-BLOCKED
 
 Owner: Clare (backend / `apps/api`)
 Command: `pnpm test:acceptance`
@@ -13,7 +13,7 @@ without a frontend owner and without a live Moss SUCCESS fixture.
 
 In scope:
 
-- `POST /api/check` application boundary outcomes
+- Check Application outcomes backing `POST /api/check`
 - Integration Error classification and retryability
 - Live vs Replay provenance separation
 - Re-run single-condition and Child Run failure preservation
