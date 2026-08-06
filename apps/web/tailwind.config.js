@@ -5,26 +5,25 @@ export default {
     extend: {
       colors: {
         ink: {
-          DEFAULT: "#000000",
-          elev: "#111111",
-          elev2: "#141414",
-          rail: "#0a0a0a",
+          DEFAULT: "#05050a",
+          elev: "#0c0b12",
+          elev2: "#12111a",
+          rail: "#171521",
         },
         line: {
-          DEFAULT: "#1e1e1e",
-          strong: "#2a2a2a",
+          DEFAULT: "#29253a",
+          strong: "#4a435f",
         },
-        // Raised from #a2a2a2 / #777777. The old faint grey sat near 4:1 on the
-        // rail background, which is under the 4.5:1 minimum for body text.
-        dim: "#b9b9b9",
-        faint: "#9b9b9b",
+        dim: "#d8d4e2",
+        faint: "#9993a8",
         accent: {
-          DEFAULT: "#ccff00",
-          ink: "#080a00",
-          bright: "#e0ff4d",
+          DEFAULT: "#836ef9",
+          ink: "#08070d",
+          bright: "#9d8cff",
         },
-        // Monad brand violet, used by the wallet demo. The landing page keeps
-        // the acid-green accent, so the two surfaces stay distinguishable.
+        // Monad brand violet, used by the wallet demo. Kept separate from
+        // `accent` so wallet chrome tracks the brand swatch exactly even if the
+        // landing accent is retuned.
         monad: {
           DEFAULT: "#6E56F8",
           ink: "#ffffff",
@@ -32,16 +31,16 @@ export default {
           dim: "#A996FF",
         },
         risk: {
-          low: "#22c55e",
-          moderate: "#eab308",
-          elevated: "#f97316",
-          high: "#ef4444",
-          info: "#888888",
+          low: "#75e6b1",
+          moderate: "#f4bd63",
+          elevated: "#91b8ff",
+          high: "#ff7d8a",
+          info: "#aaa3b8",
         },
       },
       fontFamily: {
-        sans: ["Inter", "PingFang TC", "Microsoft JhengHei", "sans-serif"],
-        mono: ["SFMono-Regular", "Consolas", "monospace"],
+        sans: ["Archivo", "PingFang SC", "Microsoft YaHei", "sans-serif"],
+        mono: ["IBM Plex Mono", "SFMono-Regular", "Consolas", "monospace"],
       },
       keyframes: {
         "flow-reveal": {
