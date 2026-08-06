@@ -56,7 +56,12 @@ Use MON to USDC as the recorded baseline. Preserve USDC to MON bidirectional con
 
 ## Evidence and reproduction commands
 
-`pnpm test` replays recorded evidence. `pnpm smoke:kuru:live` is the live path; it requires all Moss/RPC inputs, exercises the real POST `/api/check` boundary, and fails closed when acceptance is incomplete. It must not be represented as a live smoke success until the full gate passes.
+`pnpm test` replays recorded evidence. `pnpm test:acceptance` is the
+delivery-facing backend P0 acceptance gate for deterministic API / Run
+lifecycle claims. `pnpm smoke:kuru:live` is the live path; it requires all
+Moss/RPC inputs, exercises the real POST `/api/check` boundary, and fails
+closed when acceptance is incomplete. It must not be represented as a live
+smoke success until the full gate passes.
 
 ## Delivery stages
 

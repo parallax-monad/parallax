@@ -1,0 +1,72 @@
+# Backend P0 Acceptance Matrix
+
+Status: DELIVERY GATE FOR FIXTURE / DETERMINISTIC PATHS — LIVE SUCCESS REMAINS MOSS-BLOCKED
+
+Owner: Clare (backend / `apps/api`)
+Command: `pnpm test:acceptance`
+
+This is the delivery-facing backend acceptance entry. It does not replace unit
+tests. It organizes the P0 API / Run lifecycle claims that backend can prove
+without a frontend owner and without a live Moss SUCCESS fixture.
+
+## Scope
+
+In scope:
+
+- `POST /api/check` application boundary outcomes
+- Integration Error classification and retryability
+- Live vs Replay provenance separation
+- Re-run single-condition and Child Run failure preservation
+- Fail-closed unverified `ADJUST`
+
+Out of scope for this gate:
+
+- Frontend Analyze UI and CTA routing
+- Live Kuru MON → USDC SUCCESS evidence (`pnpm smoke:kuru:live`)
+- Database, SSE, Queue, signing, or PancakeSwap
+
+## Matrix
+
+This gate asserts the Check Application boundary with deterministic stubs. It
+does not execute Moss `discover → load → action → simulate`, and it does not
+claim recorded-fixture or live SUCCESS coverage. Rows below match
+`p0-acceptance.test.ts` one-to-one; do not read more into a row than its
+Expected public outcome column.
+
+| ID | Criterion | Expected public outcome | Acceptance test | Deeper coverage |
+| --- | --- | --- | --- | --- |
+| A1 | `PROCEED` | Completed Run, `verdict = PROCEED`, stored | `p0-acceptance` A1 | `agent-flow` live Evidence → PROCEED |
+| A2 | `STOP` | Completed Run, `verdict = STOP` (unattested ADJUST fail-closed only) | `p0-acceptance` A2 | `agent-flow` NO_ROUTE → STOP |
+| A3 | `UNKNOWN` | Completed Run, `verdict = UNKNOWN` | `p0-acceptance` A3 | recorded Replay fixtures |
+| A4 | Integration Error | Response body `status = integration_error`, `verdict = UNKNOWN` (store record may be `completed` when the error Run was stored successfully) | `p0-acceptance` A4 | moss-bridge / agent-flow |
+| A5 | Stage evidence preserved | `QUOTE` / `ACTION` / `SIMULATE` Evidence stages round-trip through the API | `p0-acceptance` A5 | `agent-flow`, moss-bridge live adapter for real stage execution |
+| A6 | Timeout | `error.code = TIMEOUT`, `retryable = true` | `p0-acceptance` A6 | moss-bridge errors |
+| A7 | RPC unavailable | `error.code = RPC_UNAVAILABLE`, `retryable = true` | `p0-acceptance` A7 | agent-flow RPC mapping |
+| A8 | Moss unavailable | `error.code = MOSS_UNAVAILABLE`, `retryable = true` | `p0-acceptance` A8 | agent-flow Moss mapping; public `error.stage` mapping for non-QUOTE/ACTION/SIMULATE stages is unresolved |
+| A9 | Unsupported live runtime | `error.code = UNSUPPORTED`, `retryable = false` | `p0-acceptance` A9 | bootstrap / server integration |
+| A10 | Live provenance | simulator pinned-block required and preserved on completed live Runs | `p0-acceptance` A10 | agent-flow provenance fail-closed |
+| A11 | Replay / Live separation | Replay Run cannot be a Re-run baseline; live Agent Flow cannot return `replayMode` | `p0-acceptance` A11 | `application/replay` |
+| A12 | Re-run one condition | Multi-field Intent change rejected as `INVALID_RERUN` | `p0-acceptance` A12 | `application/rerun` |
+| A13 | Child Run failure | Failed child still keeps `parentRunId` and `diff` | `p0-acceptance` A13 | API application Re-run tests |
+
+## How to run
+
+```bash
+pnpm test:acceptance
+```
+
+Companion commands (not part of this gate):
+
+```bash
+pnpm test                 # full deterministic suite
+pnpm test:integration     # real Node listener
+pnpm smoke:kuru:live      # live Moss/RPC; success not claimed here
+```
+
+## Live SUCCESS note
+
+`pnpm smoke:kuru:live` remains the live path. Until Moss Owner provides a
+runtime that parses `FlipOrderUpdated` and exposes simulator pinned-block
+provenance, backend acceptance does not claim live SUCCESS. Failures and
+configuration artifacts under `.smoke-live/` are diagnostic, not delivery
+success evidence.
