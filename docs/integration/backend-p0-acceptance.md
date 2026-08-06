@@ -31,7 +31,8 @@ This gate asserts the Check Application boundary with deterministic stubs. It
 does not execute Moss `discover → load → action → simulate`, and it does not
 claim recorded-fixture or live SUCCESS coverage. Rows below match
 `p0-acceptance.test.ts` one-to-one; do not read more into a row than its
-Expected public outcome column.
+Expected public outcome column. Public outcomes may surface under transport-level
+`body.error` or Run-level `body` / `body.run.error`; see Frontend consumer notes.
 
 | ID | Criterion | Expected public outcome | Acceptance test | Deeper coverage |
 | --- | --- | --- | --- | --- |
@@ -47,7 +48,27 @@ Expected public outcome column.
 | A10 | Provenance | deterministic gate requires and preserves simulator pinned-block fields | `p0-acceptance` A10 | agent-flow provenance fail-closed |
 | A11 | Replay / Live separation | run-level Replay rejection: Replay Run cannot be a Re-run baseline; live Agent Flow cannot return `replayMode` | `p0-acceptance` A11 | `application/replay` |
 | A12 | Re-run one condition | Multi-field Intent change rejected as `INVALID_RERUN` with `reason: NOT_EXACTLY_ONE_CHANGE` | `p0-acceptance` A12 | `application/rerun` |
-| A13 | Child Run failure | Failed child still keeps `parentRunId` and `diff` | `p0-acceptance` A13 | API application Re-run tests |
+| A13 | Child Run failure | Failed child still keeps `parentRunId` and `diff` with atomic `amountInAtomic` before/after | `p0-acceptance` A13 | API application Re-run tests |
+
+## Frontend consumer notes
+
+Recorded from API-consumption review; not additional gate rows.
+
+1. **Two Integration Error envelopes.** A4 returns HTTP 200 with
+   `body.status = integration_error`. A6–A9 return HTTP 502 with nested
+   `body.run` plus top-level `body.error`. Unification is out of scope for this
+   gate; frontend Analyze must branch on both shapes.
+2. **Two error-code namespaces.** Run integration errors use
+   `integrationErrorSchema.code` (`TIMEOUT`, `MOSS_UNAVAILABLE`, … on the Run).
+   Transport/application failures use top-level `body.error.code`
+   (`INVALID_RERUN`, `INVALID_AGENT_FLOW_RESPONSE`, …). A10/A11 enforce
+   provenance via transport-level `INVALID_AGENT_FLOW_RESPONSE`, not a Run
+   integration code.
+3. **`error.stage` is not yet a reliable diagnostic.** A8 pins LOAD-stage Moss
+   failure to `stage: "unknown"`. Do not surface stage as the primary
+   user-facing failure cause until Contracts expands the enum.
+4. **Re-run Diff values are atomic.** A13 pins `amountInAtomic` before/after as
+   atomic strings; display-unit formatting is frontend work.
 
 ## How to run
 
