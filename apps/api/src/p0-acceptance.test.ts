@@ -19,6 +19,10 @@ import { normalizeCheckSwapRequest } from "./normalization.js";
 import { type AgentFlowPort, UnsupportedAgentFlowError } from "./ports.js";
 import type { BackendRuntime } from "./runtime-config.js";
 import { InMemoryRunStore, type RunStore } from "./store.js";
+import {
+  economicFailStopResult,
+  economicPassChildResult,
+} from "@parallax/orchestrator/application/action-gate-fixtures";
 import { createTrustedTokenRegistry } from "./trusted-token-registry.js";
 
 const sender = "0x1111111111111111111111111111111111111111";
@@ -51,6 +55,15 @@ const runtime: BackendRuntime = {
     },
   },
   tokenRegistry: createTrustedTokenRegistry(tokenRegistryConfig),
+};
+
+const actionGateAssets = {
+  sender,
+  mon,
+  usdc,
+  simulatorPinnedBlock,
+  runtimeVersion: runtime.config.moss.runtimeVersion,
+  runtimeRevision: runtime.config.moss.runtimeRevision,
 };
 
 type CompletedRunResult = Extract<RunResult, { status: "completed" }>;
@@ -788,6 +801,73 @@ describe("Backend P0 acceptance matrix", () => {
           previousRunId: "run-1",
         },
       },
+    });
+  });
+
+  it("A14 ADJUST: publishes verified amountIn Action Gate Actions", async () => {
+    const store = new InMemoryRunStore();
+    let nextId = 1;
+    const response = await createService(
+      {
+        async check(input) {
+          if (input.runId === "run-1") {
+            return economicFailStopResult(
+              actionGateAssets,
+              input.runId,
+              input.intent,
+            );
+          }
+          return economicPassChildResult(
+            actionGateAssets,
+            input.runId,
+            input.intent,
+          );
+        },
+      },
+      store,
+      () => `run-${nextId++}`,
+    ).check(
+      publicRequest({
+        economicBoundary: {
+          availability: "available",
+          minimumReceived: "0.02",
+          source: "user_declared",
+        },
+      }),
+    );
+
+    expect(response).toMatchObject({
+      status: 200,
+      body: {
+        runId: "run-1",
+        status: "completed",
+        verdict: "ADJUST",
+        recommendedActions: [
+          {
+            action: { kind: "TRANSACTION_ADJUSTMENT", field: "amountIn" },
+            recommendable: true,
+            actionReasonCode: "OUTPUT_IMPROVEMENT_VERIFIED",
+            proposedChange: {
+              field: "amountIn",
+              before: "1500000000000000000",
+              after: "1000000000000000000",
+            },
+          },
+        ],
+      },
+    });
+    expect(
+      response.status === 200 &&
+        response.body.status === "completed" &&
+        response.body.evidence.some(
+          (item) =>
+            item.kind === "action_verification" &&
+            item.verificationRunId === "run-2",
+        ),
+    ).toBe(true);
+    expect(store.get("run-2")).toMatchObject({
+      status: "completed",
+      parentRunId: "run-1",
     });
   });
 });

@@ -11,6 +11,10 @@ import { normalizeCheckSwapRequest } from "./normalization.js";
 import { type AgentFlowPort, UnsupportedAgentFlowError } from "./ports.js";
 import type { BackendRuntime } from "./runtime-config.js";
 import { InMemoryRunStore, type RunStore } from "./store.js";
+import {
+  economicFailStopResult,
+  economicPassChildResult,
+} from "@parallax/orchestrator/application/action-gate-fixtures";
 import { createTrustedTokenRegistry } from "./trusted-token-registry.js";
 
 const sender = "0x1111111111111111111111111111111111111111";
@@ -45,6 +49,15 @@ const runtime: BackendRuntime = {
 };
 
 const simulatorPinnedBlock = "92820000";
+
+const actionGateAssets = {
+  sender,
+  mon,
+  usdc,
+  simulatorPinnedBlock,
+  runtimeVersion: runtime.config.moss.runtimeVersion,
+  runtimeRevision: runtime.config.moss.runtimeRevision,
+};
 
 type CompletedRunResult = Extract<RunResult, { status: "completed" }>;
 
@@ -1024,6 +1037,298 @@ describe("CheckApplicationService", () => {
         recommendedActions: [],
       },
     });
+  });
+
+  it("preserves a verified ADJUST verdict when Action Gate attestation is present", async () => {
+    const store = new InMemoryRunStore();
+    let nextId = 1;
+    const service = createService(
+      {
+        async check(input) {
+          if (input.runId === "run-1") {
+            return economicFailStopResult(
+              actionGateAssets,
+              input.runId,
+              input.intent,
+            );
+          }
+          return economicPassChildResult(
+            actionGateAssets,
+            input.runId,
+            input.intent,
+          );
+        },
+      },
+      store,
+      () => `run-${nextId++}`,
+    );
+
+    const response = await service.check(
+      publicRequest({
+        economicBoundary: {
+          availability: "available",
+          minimumReceived: "0.02",
+          source: "user_declared",
+        },
+      }),
+    );
+
+    expect(response).toMatchObject({
+      status: 200,
+      body: {
+        runId: "run-1",
+        verdict: "ADJUST",
+        recommendedActions: [
+          {
+            action: { kind: "TRANSACTION_ADJUSTMENT", field: "amountIn" },
+            recommendable: true,
+            actionReasonCode: "OUTPUT_IMPROVEMENT_VERIFIED",
+            proposedChange: {
+              field: "amountIn",
+              before: "1500000000000000000",
+              after: "1000000000000000000",
+            },
+          },
+        ],
+      },
+    });
+    expect(store.get("run-2")).toMatchObject({
+      status: "completed",
+      parentRunId: "run-1",
+      result: {
+        parentRunId: "run-1",
+        status: "completed",
+        systemStatus: "OK",
+      },
+    });
+  });
+
+  it("keeps STOP when the Action Gate verification child fails required rules", async () => {
+    const store = new InMemoryRunStore();
+    let nextId = 1;
+    const service = createService(
+      {
+        async check(input) {
+          if (input.runId === "run-1") {
+            return economicFailStopResult(
+              actionGateAssets,
+              input.runId,
+              input.intent,
+            );
+          }
+          return economicFailStopResult(
+            actionGateAssets,
+            input.runId,
+            input.intent,
+          );
+        },
+      },
+      store,
+      () => `run-${nextId++}`,
+    );
+
+    const response = await service.check(
+      publicRequest({
+        economicBoundary: {
+          availability: "available",
+          minimumReceived: "0.02",
+          source: "user_declared",
+        },
+      }),
+    );
+
+    expect(response).toMatchObject({
+      status: 200,
+      body: {
+        runId: "run-1",
+        verdict: "STOP",
+        recommendedActions: [],
+      },
+    });
+    expect(store.get("run-2")).toMatchObject({
+      status: "completed",
+      parentRunId: "run-1",
+      result: {
+        parentRunId: "run-1",
+        status: "completed",
+        verdict: "STOP",
+      },
+    });
+  });
+
+  it("stores a terminal verification child when Agent Flow throws", async () => {
+    const store = new InMemoryRunStore();
+    let nextId = 1;
+    const service = createService(
+      {
+        async check(input) {
+          if (input.runId === "run-1") {
+            return economicFailStopResult(
+              actionGateAssets,
+              input.runId,
+              input.intent,
+            );
+          }
+          throw {
+            code: "TIMEOUT",
+            stage: "SIMULATE",
+            integrationStatus: "TIMEOUT",
+          };
+        },
+      },
+      store,
+      () => `run-${nextId++}`,
+    );
+
+    const response = await service.check(
+      publicRequest({
+        economicBoundary: {
+          availability: "available",
+          minimumReceived: "0.02",
+          source: "user_declared",
+        },
+      }),
+    );
+
+    expect(response).toMatchObject({
+      status: 200,
+      body: {
+        runId: "run-1",
+        verdict: "STOP",
+        recommendedActions: [],
+      },
+    });
+    expect(store.get("run-2")).toMatchObject({
+      status: "failed",
+      parentRunId: "run-1",
+      result: {
+        parentRunId: "run-1",
+        status: "integration_error",
+        error: { code: "TIMEOUT", retryable: true },
+      },
+    });
+  });
+
+  it("fail-closes to STOP when child complete fails but fail terminalizes the child", async () => {
+    const inner = new InMemoryRunStore();
+    const store: RunStore = {
+      start: (runId, intent, parentRunId) =>
+        inner.start(runId, intent, parentRunId),
+      complete: async (result) => {
+        if (result.parentRunId !== undefined) {
+          throw new Error("child complete unavailable");
+        }
+        await inner.complete(result);
+      },
+      fail: (runId, failure, result) => inner.fail(runId, failure, result),
+      get: (runId) => inner.get(runId),
+    };
+    let nextId = 1;
+    const service = createService(
+      {
+        async check(input) {
+          if (input.runId === "run-1") {
+            return economicFailStopResult(
+              actionGateAssets,
+              input.runId,
+              input.intent,
+            );
+          }
+          return economicPassChildResult(
+            actionGateAssets,
+            input.runId,
+            input.intent,
+          );
+        },
+      },
+      store,
+      () => `run-${nextId++}`,
+    );
+
+    const response = await service.check(
+      publicRequest({
+        economicBoundary: {
+          availability: "available",
+          minimumReceived: "0.02",
+          source: "user_declared",
+        },
+      }),
+    );
+
+    expect(response).toMatchObject({
+      status: 200,
+      body: {
+        runId: "run-1",
+        verdict: "STOP",
+        recommendedActions: [],
+      },
+    });
+    expect(store.get("run-2")).toMatchObject({
+      status: "failed",
+      parentRunId: "run-1",
+      result: { status: "integration_error" },
+    });
+  });
+
+  it("blocks baseline finalize when the verification child cannot reach a terminal store state", async () => {
+    const inner = new InMemoryRunStore();
+    const store: RunStore = {
+      start: (runId, intent, parentRunId) =>
+        inner.start(runId, intent, parentRunId),
+      complete: async (result) => {
+        if (result.parentRunId !== undefined) {
+          throw new Error("child complete unavailable");
+        }
+        await inner.complete(result);
+      },
+      fail: async () => {
+        throw new Error("child fail unavailable");
+      },
+      get: (runId) => inner.get(runId),
+    };
+    let nextId = 1;
+    const service = createService(
+      {
+        async check(input) {
+          if (input.runId === "run-1") {
+            return economicFailStopResult(
+              actionGateAssets,
+              input.runId,
+              input.intent,
+            );
+          }
+          return economicPassChildResult(
+            actionGateAssets,
+            input.runId,
+            input.intent,
+          );
+        },
+      },
+      store,
+      () => `run-${nextId++}`,
+    );
+
+    const response = await service.check(
+      publicRequest({
+        economicBoundary: {
+          availability: "available",
+          minimumReceived: "0.02",
+          source: "user_declared",
+        },
+      }),
+    );
+
+    expect(response).toEqual({
+      status: 500,
+      body: {
+        error: {
+          code: "RUN_STORE_ERROR",
+          message: "The check run lifecycle could not be stored",
+        },
+      },
+    });
+    expect(store.get("run-1")).toMatchObject({ status: "started" });
+    expect(store.get("run-2")).toMatchObject({ status: "started" });
   });
 
   it("preserves simulator pinned-block provenance through the API Run and Evidence", async () => {

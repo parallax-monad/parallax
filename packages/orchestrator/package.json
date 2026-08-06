@@ -5,7 +5,8 @@
   "type": "module",
   "exports": {
     "./agent-flow": "./agent-flow/index.ts",
-    "./application": "./application/index.ts"
+    "./application": "./application/index.ts",
+    "./application/action-gate-fixtures": "./application/action-gate-fixtures.ts"
   },
   "scripts": {
     "test": "vitest run",

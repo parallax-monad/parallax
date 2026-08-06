@@ -31,7 +31,7 @@ Out of scope:
 - SSE / Job polling / run-by-id history API
 - Durable Run persistence (process-memory store only)
 - Signing, broadcast, wallet custody
-- Verified public `ADJUST` / Action Gate Actions (unattested candidates fail closed to `STOP`)
+- Non-`amountIn` Action Gate fields (protocol / tokenPair / slippage) beyond the fixture path
 - Claiming Live Kuru MON → USDC SUCCESS (Moss-blocked; see live runtime doc)
 
 ## 2. Startup runbook
@@ -126,8 +126,10 @@ Body is a `RunResult`. Two terminal shapes:
 
 1. **`status: "completed"`** — `systemStatus: "OK"`, `verdict` in
    `PROCEED | ADJUST | STOP | UNKNOWN`.
-   Today, unattested `ADJUST` candidates are **fail-closed to `STOP`** with empty
-   `recommendedActions` (no verified Action Gate yet).
+   Unattested `ADJUST` candidates are **fail-closed to `STOP`** with empty
+   `recommendedActions`. A verified fixture Action Gate may publish
+   `verdict = ADJUST` with recommendable `amountIn` Actions when attestation and a
+   completed verification child Run are present (acceptance row A14).
 2. **`status: "integration_error"`** — `systemStatus: "INTEGRATION_ERROR"`,
    `verdict: "UNKNOWN"`, structured `error` on the Run (`code`, `stage`,
    `message`, `retryable`).
