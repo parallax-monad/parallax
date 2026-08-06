@@ -169,6 +169,15 @@ Illustrative completed skeleton (fields truncated):
 
 Branch UI on **`error.code`** (and Re-run **`error.reason`**), never on English `message`.
 
+**Two code namespaces.** Transport failures expose top-level `body.error.code`
+(for example `INVALID_RERUN`, `INVALID_AGENT_FLOW_RESPONSE`, `UNSUPPORTED`).
+Run integration failures expose `body.error.code` on an HTTP 200
+`integration_error` body, or `body.run.error.code` when HTTP 502 carries a
+failed Run envelope. These enums are not interchangeable: provenance /
+replay-mode rejection (`INVALID_AGENT_FLOW_RESPONSE`, A10/A11) is
+**transport-only** and is not a member of the Run `integrationErrorSchema.code`
+set (`TIMEOUT`, `MOSS_UNAVAILABLE`, …).
+
 ### Integration Error on the Run (retryable map)
 
 When a Run carries `error` (either as HTTP 200 `integration_error` body or
@@ -186,12 +195,16 @@ nested under a 502 `run` envelope), public codes include:
 `error.stage` is a closed set: `quote` | `action` | `simulation` |
 `normalization` | `unknown`. Stages such as Moss `LOAD` / `DISCOVER` currently
 map to `unknown` until a Contracts decision expands the enum — do not infer
-protocol risk from `unknown`.
+protocol risk from `unknown`. **Do not surface `error.stage` as the primary
+user-facing failure cause** until LOAD/DISCOVER map to distinct values; a LOAD
+failure and a genuinely unattributable failure are indistinguishable today
+(acceptance row A8 pins `stage: "unknown"` for LOAD).
 
-**Two product paths exist** for integration failures: a validated
-`integration_error` Run returned as HTTP 200, versus a mapped Agent Flow throw
-returned as HTTP 502 with a `run` envelope. Treat both as Integration Error for
-CTA purposes; prefer `run.error.retryable` when present.
+**Two Integration Error envelopes.** A validated Agent Flow may return HTTP 200
+with `body.status = "integration_error"` (acceptance row A4), or the listener
+may map a thrown Agent Flow failure to HTTP 502 with both top-level
+`body.error` and nested `body.run` (rows A6–A9). Treat both as Integration
+Error for CTA purposes; prefer `run.error.retryable` when present.
 
 ## 4. Re-run (`POST /api/check` + `parentRunId`)
 
@@ -238,7 +251,9 @@ chain/sender, and Economic Boundary checks run before the exactly-one-change
 diff. A request that changes both sender and amount returns
 `CHAIN_OR_SENDER_CHANGED`, not `NOT_EXACTLY_ONE_CHANGE`.
 
-Diff display: `amountInAtomic` is atomic units; `tokenPair` uses
+Diff display: `amountInAtomic` is atomic units (for example
+`1500000000000000000` → `2000000000000000000` in acceptance row A13); format
+human amounts from the normalized Intent + token registry. `tokenPair` uses
 `native` / `erc20:<lowercase-address>`. Render human copy from full Intent +
 token registry, not by reverse-engineering Diff strings.
 
