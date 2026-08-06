@@ -14,9 +14,8 @@ Related:
 
 - Runtime env and Moss pin: [moss-kuru-live-runtime.md](./moss-kuru-live-runtime.md)
 - Re-run lifecycle: [ADR 0002](../adr/0002-rerun-lifecycle-scope.md)
-- Deterministic backend acceptance gate: tracked as PR
-  [`test/api-p0-acceptance`](https://github.com/parallax-monad/parallax/pull/17)
-  (`docs/integration/backend-p0-acceptance.md` once merged)
+- Deterministic backend acceptance gate:
+  [backend-p0-acceptance.md](./backend-p0-acceptance.md) (`pnpm test:acceptance`)
 
 ## 1. Scope
 
