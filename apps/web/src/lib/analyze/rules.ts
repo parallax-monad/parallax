@@ -9,7 +9,7 @@ import type {
 } from "./types";
 
 export const RULE_VERSION = "p0.1.0";
-export const MOSS_VERSION = "moss-replay-2026.08";
+export const MOSS_VERSION = "local-demo-rules-2026.08";
 
 export type RuleInput = {
   evidence: NormalizedEvidence;

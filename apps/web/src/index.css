@@ -723,7 +723,7 @@
   .btn-primary {
     @apply border-accent bg-accent text-accent-ink hover:border-accent-bright hover:bg-accent-bright hover:text-white;
   }
-  /* Wallet demo primary. Monad violet instead of the landing page's acid green. */
+  /* Wallet demo primary. Pinned to the Monad brand swatch rather than `accent`. */
   .btn-monad {
     @apply border-monad bg-monad text-monad-ink hover:border-monad-bright hover:bg-monad-bright hover:text-white;
   }

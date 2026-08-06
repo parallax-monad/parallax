@@ -11,7 +11,13 @@ import { CloseIcon } from "@/components/wallet/WalletIcons";
 import { WalletResult } from "@/components/wallet/WalletResult";
 import { WalletSwap } from "@/components/wallet/WalletSwap";
 import { flaggedFields } from "@/lib/analyze/fields";
-import { type FormState, INITIAL_FORM, toInput } from "@/lib/analyze/form";
+import {
+  type FormFieldErrors,
+  type FormState,
+  INITIAL_FORM,
+  planSubmission,
+  toInput,
+} from "@/lib/analyze/form";
 import { checkSwap } from "@/lib/analyze/service";
 import { createStageScheduler } from "@/lib/analyze/stageScheduler";
 import type { CheckSwapResult } from "@/lib/analyze/types";
@@ -58,6 +64,8 @@ export function WalletApp({
 }) {
   const [screen, setScreen] = useState<Screen>("home");
   const [form, setForm] = useState<FormState>(INITIAL_FORM);
+  const [submittedForm, setSubmittedForm] = useState<FormState | undefined>();
+  const [formErrors, setFormErrors] = useState<FormFieldErrors>({});
   const [stage, setStage] = useState(0);
   const [result, setResult] = useState<CheckSwapResult | undefined>(undefined);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -72,8 +80,18 @@ export function WalletApp({
     return () => scheduler.cancel();
   }, []);
 
-  const runCheck = () => {
+  const runCheck = (allowUnchanged = false) => {
+    const plan = planSubmission(form, result ? submittedForm : undefined, {
+      allowUnchanged,
+    });
+    if (!plan.allowed) {
+      setFormErrors(plan.errors);
+      return;
+    }
+
     const parent = result;
+    const submitted = plan.submitted;
+    setFormErrors({});
     setResult(undefined);
     setDrawerOpen(false);
     setStage(0);
@@ -85,8 +103,9 @@ export function WalletApp({
       onStage: setStage,
       onSettle: () => {
         setResult(
-          checkSwap(toInput(form, parent?.runId), { previous: parent }),
+          checkSwap(toInput(submitted, parent?.runId), { previous: parent }),
         );
+        setSubmittedForm(submitted);
         setScreen("result");
       },
     });
@@ -95,6 +114,8 @@ export function WalletApp({
   const discard = () => {
     schedulerRef.current.cancel();
     setResult(undefined);
+    setSubmittedForm(undefined);
+    setFormErrors({});
     setDrawerOpen(false);
     setForm(INITIAL_FORM);
     setScreen("home");
@@ -156,10 +177,14 @@ export function WalletApp({
               )}
               {screen === "swap" && (
                 <WalletSwap
+                  errors={formErrors}
                   flags={flags}
                   form={form}
                   language={language}
-                  onChange={setForm}
+                  onChange={(nextForm) => {
+                    setForm(nextForm);
+                    if (Object.keys(formErrors).length > 0) setFormErrors({});
+                  }}
                   onSubmit={runCheck}
                 />
               )}
@@ -171,6 +196,7 @@ export function WalletApp({
                   language={language}
                   result={result}
                   onDiscard={discard}
+                  onRetry={() => runCheck(true)}
                   onKeep={() => setScreen("swap")}
                   onOpenEvidence={() => setDrawerOpen(true)}
                 />

@@ -116,7 +116,7 @@ export function ActionsCard({
   return (
     <div className="card">
       <span className="eyebrow-monad">
-        {say(language, { en: "What to do next", zh: "下一步做什么" })}
+        {say(language, { en: "Demo suggestions", zh: "演示建议" })}
       </span>
 
       {hasActions ? (

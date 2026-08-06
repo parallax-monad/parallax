@@ -1,5 +1,6 @@
 import type { Copy } from "@/lib/i18n";
 import { runEvidence } from "./fixtures";
+import { validateForm } from "./form";
 import { decide, MOSS_VERSION, RULE_VERSION } from "./rules";
 import type { CheckSwapInput, CheckSwapResult, RunDiff } from "./types";
 
@@ -59,6 +60,7 @@ function integrationError(
         reason: message,
       },
     ],
+    productRunMode: "DEMO",
     replayMode: false,
     intent: {
       tokenIn: input.tokenIn,
@@ -160,29 +162,33 @@ export function checkSwap(
   input: CheckSwapInput,
   options: CheckOptions = {},
 ): CheckSwapResult {
-  const amountIn = Number(input.amountIn);
-  if (!Number.isFinite(amountIn) || amountIn <= 0) {
-    return integrationError(input, {
-      en: "amount must be a positive number",
-      zh: "输入数量必须是大于 0 的数字",
-    });
+  const validation = validateForm({
+    protocol: input.protocol,
+    tokenIn: input.tokenIn,
+    tokenOut: input.tokenOut,
+    amountIn: input.amountIn,
+    slippage: input.slippage ?? "",
+    minimumReceived: input.minimumReceived ?? "",
+  });
+  if (!validation.valid) {
+    const message = validation.errors.amountIn ??
+      validation.errors.slippage ??
+      validation.errors.minimumReceived ?? {
+        en: "form input is invalid",
+        zh: "表单输入无效",
+      };
+    return integrationError(input, message);
   }
 
-  const parsedSlippage = Number(input.slippage ?? "0.5");
+  const { amountIn, slippage, minimumReceived } = validation.values;
   const evidence = runEvidence({
     protocol: input.protocol,
     tokenIn: input.tokenIn,
     tokenOut: input.tokenOut,
     amountIn,
-    slippage: Number.isFinite(parsedSlippage) ? parsedSlippage : 0.5,
+    slippage,
   });
 
-  const declared =
-    input.minimumReceived === undefined || input.minimumReceived === ""
-      ? undefined
-      : Number(input.minimumReceived);
-  const minimumReceived =
-    declared !== undefined && Number.isFinite(declared) ? declared : undefined;
   const minimumReceivedSource =
     minimumReceived === undefined
       ? "unavailable"
@@ -208,7 +214,9 @@ export function checkSwap(
     evidence: evidence.items,
     ruleResults: decision.ruleResults,
     unknowns: decision.unknowns,
-    replayMode: evidence.origin === "replay",
+    productRunMode: "DEMO",
+    // Local deterministic demo logic is not recorded replay evidence.
+    replayMode: false,
     intent: {
       tokenIn: input.tokenIn,
       tokenOut: input.tokenOut,

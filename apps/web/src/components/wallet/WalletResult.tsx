@@ -36,22 +36,32 @@ const PRIMARY_ACTION: Record<Verdict, Copy> = {
 /** Abandoning the intent is the same choice under every verdict. */
 const DISCARD_ACTION: Copy = { en: "Discard this swap", zh: "放弃这笔兑换" };
 
+const INTEGRATION_ERROR_COPY = {
+  title: { en: "Check could not be completed", zh: "检查无法完成" },
+  explanation: {
+    en: "No transaction conclusion was produced. Retry the check or view technical details.",
+    zh: "本次没有生成交易结论。请重试检查或查看技术详情。",
+  },
+  retry: { en: "Retry", zh: "重试" },
+  details: { en: "View details", zh: "查看详情" },
+} satisfies Record<string, Copy>;
+
 const NEXT_STEP: Record<Verdict, Copy> = {
   PROCEED: {
-    en: "No blocking evidence was identified in the checked scope. This is not a safety guarantee.",
-    zh: "在已检查的范围内没有发现阻断性证据。这不等于安全保证。",
+    en: "The demo found no blocking condition in its limited scope. This is not a verified recommendation or safety guarantee.",
+    zh: "演示在有限范围内未发现阻断条件。这不是经验证的建议，也不构成安全保证。",
   },
   ADJUST: {
-    en: "A transaction condition needs to change, then run the check again.",
-    zh: "需要修改一个交易条件，然后重新检查。",
+    en: "The demo suggests changing one transaction condition, then running it again.",
+    zh: "演示建议修改一个交易条件，然后重新运行。",
   },
   STOP: {
-    en: "Blocking evidence was identified. Do not continue without reviewing it.",
-    zh: "已发现阻断性证据。在查看之前不要继续。",
+    en: "The demo found a blocking condition. Review the details before deciding what to do.",
+    zh: "演示发现了阻断条件。决定下一步之前请查看详情。",
   },
   UNKNOWN: {
-    en: "There is not enough evidence to make a reliable decision. Unknown is never a pass.",
-    zh: "证据不足以作出可靠决策。Unknown 不等于通过。",
+    en: "The demo did not have enough information for a transaction conclusion. Unknown is never a pass.",
+    zh: "演示没有足够信息得出交易结论。Unknown 不等于通过。",
   },
 };
 
@@ -91,12 +101,14 @@ export function WalletResult({
   result,
   language,
   onKeep,
+  onRetry,
   onDiscard,
   onOpenEvidence,
 }: {
   result: CheckSwapResult;
   language: Language;
   onKeep: () => void;
+  onRetry?: () => void;
   onDiscard: () => void;
   onOpenEvidence: () => void;
 }) {
@@ -105,20 +117,92 @@ export function WalletResult({
   const unresolved = quote.expectedOutput === "unavailable";
   const amountIn = Number(intent.amountIn);
 
+  if (result.systemStatus === "INTEGRATION_ERROR") {
+    return (
+      <div className="flex flex-col gap-4 px-5 pb-6 pt-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="eyebrow-monad m-0">
+            {say(language, { en: "Before you sign", zh: "签名之前" })}
+          </span>
+          <span className="pill border-risk-elevated/50 text-risk-elevated">
+            {say(language, { en: "Integration error", zh: "集成错误" })}
+          </span>
+        </div>
+
+        <section className="flex items-start gap-3 border border-risk-elevated/50 bg-risk-elevated/10 p-4 text-risk-elevated">
+          <VerdictIcon
+            className="mt-0.5 shrink-0"
+            size={30}
+            verdict="UNKNOWN"
+          />
+          <div className="min-w-0">
+            <strong className="block text-[22px] font-extrabold leading-[1.1] tracking-[-0.04em]">
+              {say(language, INTEGRATION_ERROR_COPY.title)}
+            </strong>
+            <p className="mt-1.5 text-[14px] leading-[1.6] text-white">
+              {say(language, INTEGRATION_ERROR_COPY.explanation)}
+            </p>
+            <p className="mt-2 text-[13px] leading-[1.6] text-dim">
+              {say(language, result.summary)}
+            </p>
+          </div>
+        </section>
+
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            className="btn btn-monad"
+            onClick={onRetry ?? onKeep}
+          >
+            {say(language, INTEGRATION_ERROR_COPY.retry)}
+          </button>
+          <button
+            type="button"
+            className="btn btn-monad-outline"
+            onClick={onOpenEvidence}
+          >
+            {say(language, INTEGRATION_ERROR_COPY.details)}
+          </button>
+        </div>
+
+        <button
+          type="button"
+          className="btn btn-monad-outline w-full"
+          onClick={onDiscard}
+        >
+          {say(language, DISCARD_ACTION)}
+        </button>
+
+        <p className="text-center text-[12px] leading-[1.5] text-dim">
+          {say(language, {
+            en: "Nothing was signed or broadcast. No transaction conclusion was produced.",
+            zh: "没有签名，也没有广播。本次未生成交易结论。",
+          })}
+        </p>
+      </div>
+    );
+  }
+
+  const scope = {
+    checked: result.checked.length,
+    unknown: result.unknowns.length,
+    notChecked: result.notChecked.length,
+  };
+
   return (
     <div className="flex flex-col gap-4 px-5 pb-6 pt-2">
       <div className="flex flex-wrap items-center gap-2">
         <span className="eyebrow-monad m-0">
           {say(language, { en: "Before you sign", zh: "签名之前" })}
         </span>
-        {result.replayMode && (
+        {result.productRunMode === "DEMO" && (
           <span className="pill">
-            {say(language, { en: "Demo preset", zh: "演示预设" })}
+            {say(language, { en: "Demo", zh: "演示" })}
           </span>
         )}
-        {result.systemStatus === "INTEGRATION_ERROR" && (
-          <span className="pill border-risk-elevated/50 text-risk-elevated">
-            {say(language, { en: "Integration error", zh: "集成错误" })}
+        {result.productRunMode === "RECORDED_REPLAY" && (
+          <span className="pill">
+            {say(language, { en: "Recorded replay", zh: "录制回放" })}
           </span>
         )}
       </div>
@@ -136,6 +220,24 @@ export function WalletResult({
           </p>
         </div>
       </section>
+
+      <fieldset className="flex flex-wrap items-center gap-x-3 gap-y-1 border border-line bg-ink-rail px-4 py-2.5 text-[12px] font-bold uppercase tracking-[0.04em] text-dim">
+        <legend className="sr-only">
+          {say(language, { en: "Check scope", zh: "检查范围" })}
+        </legend>
+        <span>
+          {say(language, { en: "Checked", zh: "已检查" })}: {scope.checked}
+        </span>
+        <span aria-hidden="true">·</span>
+        <span>
+          {say(language, { en: "Unknown", zh: "未知" })}: {scope.unknown}
+        </span>
+        <span aria-hidden="true">·</span>
+        <span>
+          {say(language, { en: "Not checked", zh: "未检查" })}:{" "}
+          {scope.notChecked}
+        </span>
+      </fieldset>
 
       <section className="flex items-stretch gap-2 border border-line bg-ink-rail p-4">
         <Side
@@ -185,7 +287,7 @@ export function WalletResult({
 
       <section className="border border-line bg-ink-rail p-4">
         <strong className="block text-[13px] font-bold uppercase tracking-[0.08em] text-monad-dim">
-          {say(language, { en: "What to do next", zh: "下一步做什么" })}
+          {say(language, { en: "Demo suggestions", zh: "演示建议" })}
         </strong>
         <p className="mt-1.5 text-[14px] leading-[1.6] text-white">
           {say(language, NEXT_STEP[verdict])}

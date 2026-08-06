@@ -1,5 +1,13 @@
 import type { Copy } from "@/lib/i18n";
-import type { EvidenceItem, Protocol } from "./types";
+import type { EvidenceItem, EvidenceOrigin, Protocol } from "./types";
+
+/**
+ * Provenance of everything this module produces. The values below are computed
+ * from local rate and balance tables rather than read from a recorded fixture,
+ * so they are `mock`. Marking them `replay` would claim recorded provenance the
+ * data does not have. Loading real fixtures is what earns `replay`.
+ */
+const DEMO_ORIGIN: EvidenceOrigin = "mock";
 
 export const TOKENS = ["MON", "WMON", "USDC", "USDT", "WETH", "SHMON"] as const;
 
@@ -34,7 +42,7 @@ export type NormalizedEvidence = {
   warnings: Copy[];
   /** Technical field names the run could not resolve; drives UNKNOWN (PRD 10.3). */
   missingFields: string[];
-  origin: "live" | "replay";
+  origin: EvidenceOrigin;
   items: EvidenceItem[];
 };
 
@@ -83,7 +91,7 @@ function stageItems(
   status: ExecutionStatus,
   blockNumber: string,
 ): EvidenceItem[] {
-  const origin = "replay" as const;
+  const origin = DEMO_ORIGIN;
   return [
     {
       id: "discover",
@@ -130,13 +138,14 @@ export type EvidenceRequest = {
 };
 
 /**
- * Produces normalized evidence from the recorded fixture set. Every item is
- * marked `replay` so the UI can never present it as a live call (FR-10).
+ * Produces normalized demo evidence from deterministic local tables. Every item
+ * is marked `mock`: this module does not load a recorded fixture and therefore
+ * cannot claim replay provenance.
  */
 export function runEvidence(request: EvidenceRequest): NormalizedEvidence {
   const { protocol, tokenIn, tokenOut, amountIn, slippage } = request;
   const pair = `${tokenIn}>${tokenOut}`;
-  const blockNumber = "12874503";
+  const blockNumber = "unavailable";
   const pairs = protocol === "kuru" ? KURU_PAIRS : PANCAKE_PAIRS;
   const venue = protocol === "kuru" ? "Kuru" : "PancakeSwap V3";
   const route: Copy = {
@@ -159,7 +168,7 @@ export function runEvidence(request: EvidenceRequest): NormalizedEvidence {
       blockNumber,
       warnings: [],
       missingFields: [],
-      origin: "replay",
+      origin: DEMO_ORIGIN,
       items: stageItems(
         protocol,
         `no_route ${tokenIn}/${tokenOut} on ${venue}`,
@@ -177,7 +186,7 @@ export function runEvidence(request: EvidenceRequest): NormalizedEvidence {
       stage: "rpc",
       label: STAGE_LABELS.balance,
       value: `${balance} ${tokenIn} available, ${amountIn} requested`,
-      origin: "replay",
+      origin: DEMO_ORIGIN,
       blockNumber,
     });
     return {
@@ -192,7 +201,7 @@ export function runEvidence(request: EvidenceRequest): NormalizedEvidence {
         },
       ],
       missingFields: [],
-      origin: "replay",
+      origin: DEMO_ORIGIN,
       items,
     };
   }
@@ -206,7 +215,7 @@ export function runEvidence(request: EvidenceRequest): NormalizedEvidence {
     stage: "load",
     label: STAGE_LABELS.quote,
     value: `${expectedOutput.toFixed(4)} ${tokenOut}`,
-    origin: "replay",
+    origin: DEMO_ORIGIN,
     blockNumber,
   });
 
@@ -220,7 +229,7 @@ export function runEvidence(request: EvidenceRequest): NormalizedEvidence {
         ? [{ en: "thin liquidity on this pool", zh: "该资金池流动性偏低" }]
         : [],
     missingFields: protocol === "pancake" ? ["priceImpact"] : [],
-    origin: "replay",
+    origin: DEMO_ORIGIN,
     items,
   };
 }

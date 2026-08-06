@@ -1,4 +1,5 @@
 import { runEvidence } from "@/lib/analyze/fixtures";
+import { validateForm } from "@/lib/analyze/form";
 import type { Protocol } from "@/lib/analyze/types";
 
 /** Fixed demo identity. No key material exists anywhere in this flow. */
@@ -53,16 +54,18 @@ export function estimateOutput(request: {
   amountIn: string;
   slippage: string;
 }): number | undefined {
-  const amountIn = Number(request.amountIn);
-  if (!Number.isFinite(amountIn) || amountIn <= 0) return undefined;
+  const validation = validateForm({
+    ...request,
+    minimumReceived: "",
+  });
+  if (!validation.valid) return undefined;
 
-  const slippage = Number(request.slippage);
   const evidence = runEvidence({
     protocol: request.protocol,
     tokenIn: request.tokenIn,
     tokenOut: request.tokenOut,
-    amountIn,
-    slippage: Number.isFinite(slippage) ? slippage : 0.5,
+    amountIn: validation.values.amountIn,
+    slippage: validation.values.slippage,
   });
 
   return evidence.executionStatus === "SUCCESS"

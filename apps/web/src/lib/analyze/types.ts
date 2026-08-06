@@ -10,6 +10,18 @@ export type Protocol = "kuru" | "pancake";
 
 export type SystemStatus = "OK" | "INTEGRATION_ERROR";
 
+/**
+ * How the product presented this run, which is deliberately not the same axis as
+ * evidence provenance.
+ *
+ * `DEMO` means the result was produced by local demo logic: it may be shown as a
+ * preset, but it must never claim recorded or live provenance. `RECORDED_REPLAY`
+ * is only valid when an actual recorded fixture was loaded and its real verdict
+ * and provenance are preserved end to end. A single result carries exactly one
+ * of these, so demo and recorded semantics can never be mixed.
+ */
+export type ProductRunMode = "DEMO" | "RECORDED_REPLAY";
+
 export type Verdict = "PROCEED" | "ADJUST" | "STOP" | "UNKNOWN";
 
 export type AdjustableField =
@@ -44,14 +56,22 @@ export type CheckSwapInput = {
   slippage?: string;
 };
 
+/**
+ * Where a single piece of evidence actually came from. Provenance only: it never
+ * encodes how the product framed the run. `replay` is reserved for data read out
+ * of a recorded fixture, so locally computed demo data must use `mock` rather
+ * than borrowing recorded credibility.
+ */
+export type EvidenceOrigin = "live" | "replay" | "derived" | "mock";
+
 export type EvidenceItem = {
   id: string;
   stage: "discover" | "load" | "action" | "simulate" | "rpc";
   label: Copy;
   /** Raw data (routes, amounts, status codes), so it stays language-neutral. */
   value: string;
-  /** Replay and derived data must never look like a live call. */
-  origin: "live" | "replay" | "derived" | "mock";
+  /** Replay, derived, and mock data must never look like a live call. */
+  origin: EvidenceOrigin;
   blockNumber?: string;
 };
 
@@ -84,6 +104,10 @@ export type RunDiff = {
   direction: "improved" | "worsened" | "changed";
 }[];
 
+type ResultRunMode =
+  | { productRunMode: "DEMO"; replayMode: false }
+  | { productRunMode: "RECORDED_REPLAY"; replayMode: true };
+
 export type CheckSwapResult = {
   runId: string;
   parentRunId?: string;
@@ -99,10 +123,9 @@ export type CheckSwapResult = {
   unknowns: UnknownItem[];
   intent: IntentSummary;
   diff?: RunDiff;
-  replayMode: boolean;
   quote: { expectedOutput: string; route: Copy; blockNumber: string };
   minimumReceivedSource: BoundarySource;
   createdAt: string;
   ruleVersion: string;
   mossVersion: string;
-};
+} & ResultRunMode;

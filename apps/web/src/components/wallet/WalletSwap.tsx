@@ -12,7 +12,7 @@ import {
   SUPPORTED_TOKENS_IN,
   SUPPORTED_TOKENS_OUT,
 } from "@/lib/analyze/fixtures";
-import type { FormState } from "@/lib/analyze/form";
+import type { FormFieldErrors, FormState } from "@/lib/analyze/form";
 import { type Language, say } from "@/lib/i18n";
 
 /** A token side of the swap. Locked when the fixture set offers one option. */
@@ -74,12 +74,14 @@ function FlagNote({ flag, language }: { flag: FieldFlag; language: Language }) {
 export function WalletSwap({
   form,
   language,
+  errors = {},
   flags = [],
   onChange,
   onSubmit,
 }: {
   form: FormState;
   language: Language;
+  errors?: FormFieldErrors;
   /** Inputs the last run said are worth changing. Empty before the first run. */
   flags?: FieldFlag[];
   onChange: (form: FormState) => void;
@@ -102,6 +104,9 @@ export function WalletSwap({
     slippage: form.slippage,
   });
   const amountFlag = flagFor("amountIn");
+  const amountError = errors.amountIn;
+  const slippageError = errors.slippage;
+  const minimumReceivedError = errors.minimumReceived;
 
   return (
     <form
@@ -123,11 +128,17 @@ export function WalletSwap({
         </div>
         <div className="mt-3 flex items-center gap-3">
           <input
-            aria-describedby={amountFlag ? "swap-amount-flag" : undefined}
-            aria-invalid={amountFlag ? true : undefined}
+            aria-describedby={
+              amountError
+                ? "swap-amount-error"
+                : amountFlag
+                  ? "swap-amount-flag"
+                  : undefined
+            }
+            aria-invalid={amountError || amountFlag ? true : undefined}
             aria-label={say(language, { en: "Amount to pay", zh: "支付数量" })}
             className={`min-w-0 flex-1 border-0 bg-transparent px-0 text-[30px] font-extrabold tracking-[-0.04em] hover:border-0 ${
-              amountFlag ? "text-risk-high" : "text-white"
+              amountError || amountFlag ? "text-risk-high" : "text-white"
             }`}
             inputMode="decimal"
             placeholder="0"
@@ -148,7 +159,15 @@ export function WalletSwap({
         >
           {say(language, { en: "Use max", zh: "使用全部" })}
         </button>
-        {amountFlag && (
+        {amountError && (
+          <p
+            id="swap-amount-error"
+            className="mt-2 text-[13px] leading-[1.5] text-risk-high"
+          >
+            {say(language, amountError)}
+          </p>
+        )}
+        {!amountError && amountFlag && (
           <span id="swap-amount-flag">
             <FlagNote flag={amountFlag} language={language} />
           </span>
@@ -184,8 +203,8 @@ export function WalletSwap({
         </div>
         <p className="mt-2 text-[12px] leading-[1.5] text-dim">
           {say(language, {
-            en: "Estimated from recorded Kuru evidence, not a live quote.",
-            zh: "基于录制的 Kuru 证据估算，并非实时报价。",
+            en: "Estimated by deterministic demo logic, not a live or recorded quote.",
+            zh: "由确定性的演示逻辑估算，并非实时或录制报价。",
           })}
         </p>
       </section>
@@ -211,9 +230,14 @@ export function WalletSwap({
             <label>
               <span>{say(language, { en: "Slippage %", zh: "滑点 %" })}</span>
               <input
-                aria-invalid={flagFor("slippage") ? true : undefined}
+                aria-describedby={
+                  slippageError ? "swap-slippage-error" : undefined
+                }
+                aria-invalid={
+                  slippageError || flagFor("slippage") ? true : undefined
+                }
                 className={
-                  flagFor("slippage")
+                  slippageError || flagFor("slippage")
                     ? "border-risk-high"
                     : "border-line-strong"
                 }
@@ -221,11 +245,20 @@ export function WalletSwap({
                 value={form.slippage}
                 onChange={(event) => set("slippage", event.target.value)}
               />
-              {flagFor("slippage") && (
-                <FlagNote
-                  flag={flagFor("slippage") as FieldFlag}
-                  language={language}
-                />
+              {slippageError ? (
+                <p
+                  id="swap-slippage-error"
+                  className="mt-2 text-[13px] leading-[1.5] text-risk-high"
+                >
+                  {say(language, slippageError)}
+                </p>
+              ) : (
+                flagFor("slippage") && (
+                  <FlagNote
+                    flag={flagFor("slippage") as FieldFlag}
+                    language={language}
+                  />
+                )
               )}
             </label>
 
@@ -237,9 +270,18 @@ export function WalletSwap({
                 })}
               </span>
               <input
-                aria-invalid={flagFor("minimumReceived") ? true : undefined}
+                aria-describedby={
+                  minimumReceivedError
+                    ? "swap-minimum-received-error"
+                    : undefined
+                }
+                aria-invalid={
+                  minimumReceivedError || flagFor("minimumReceived")
+                    ? true
+                    : undefined
+                }
                 className={
-                  flagFor("minimumReceived")
+                  minimumReceivedError || flagFor("minimumReceived")
                     ? "border-risk-high"
                     : "border-line-strong"
                 }
@@ -251,11 +293,20 @@ export function WalletSwap({
                 value={form.minimumReceived}
                 onChange={(event) => set("minimumReceived", event.target.value)}
               />
-              {flagFor("minimumReceived") && (
-                <FlagNote
-                  flag={flagFor("minimumReceived") as FieldFlag}
-                  language={language}
-                />
+              {minimumReceivedError ? (
+                <p
+                  id="swap-minimum-received-error"
+                  className="mt-2 text-[13px] leading-[1.5] text-risk-high"
+                >
+                  {say(language, minimumReceivedError)}
+                </p>
+              ) : (
+                flagFor("minimumReceived") && (
+                  <FlagNote
+                    flag={flagFor("minimumReceived") as FieldFlag}
+                    language={language}
+                  />
+                )
               )}
             </label>
 
@@ -288,6 +339,15 @@ export function WalletSwap({
           </div>
         )}
       </section>
+
+      {errors.form && (
+        <p
+          role="alert"
+          className="border border-risk-high/50 bg-risk-high/10 px-3 py-2.5 text-[13px] leading-[1.5] text-risk-high"
+        >
+          {say(language, errors.form)}
+        </p>
+      )}
 
       <button type="submit" className="btn btn-monad mt-1 w-full">
         {say(language, {

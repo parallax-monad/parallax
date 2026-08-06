@@ -155,7 +155,8 @@ export function EvidenceDrawer({
               ["verdict", result.verdict],
               ["blockNumber", result.quote.blockNumber],
               ["minimumReceivedSource", result.minimumReceivedSource],
-              ["replayMode", String(result.replayMode)],
+              ["productRunMode", result.productRunMode],
+              ["evidenceReplayMode", String(result.replayMode)],
               ["ruleVersion", result.ruleVersion],
               ["mossVersion", result.mossVersion],
               ["createdAt", result.createdAt],
@@ -167,10 +168,18 @@ export function EvidenceDrawer({
             ))}
           </dl>
           <p className="mt-4 text-[12px] leading-[1.6] text-dim">
-            {say(language, {
-              en: "Replay evidence is recorded, not a live call. Nothing here is signed or broadcast.",
-              zh: "回放证据来自录制，并非实时调用。这里不会签名，也不会广播。",
-            })}
+            {say(
+              language,
+              result.productRunMode === "RECORDED_REPLAY"
+                ? {
+                    en: "This run loaded recorded replay evidence. Nothing here is signed or broadcast.",
+                    zh: "本次运行加载了录制回放证据。这里不会签名，也不会广播。",
+                  }
+                : {
+                    en: "This demo uses deterministic local data, not recorded or live evidence. Nothing here is signed or broadcast.",
+                    zh: "本演示使用确定性的本地数据，并非录制或实时证据。这里不会签名，也不会广播。",
+                  },
+            )}
           </p>
         </section>
       </div>
