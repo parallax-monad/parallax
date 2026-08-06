@@ -2,7 +2,7 @@
 
 Status: BACKEND HANDOFF FOR ANALYZE 联调 — LIVE SUCCESS NOT CLAIMED
 
-Owner: Clare (`apps/api`)  
+Owner: Clare (`apps/api`)
 Consumers: Antony (`apps/web`)
 
 This page is the single backend handoff for frontend Analyze. It documents the
@@ -43,7 +43,7 @@ cp .env.example .env
 pnpm --filter @parallax/api start
 ```
 
-Default listener: `HOST=127.0.0.1`, `PORT=8787`.
+Required listener values in `.env.example`: `HOST=127.0.0.1`, `PORT=8787`.
 
 ### Environment (names only)
 
@@ -121,12 +121,12 @@ Notes:
 }
 ```
 
-### Success: HTTP 200
+### HTTP 200 Run responses
 
 Body is a `RunResult`. Two terminal shapes:
 
 1. **`status: "completed"`** — `systemStatus: "OK"`, `verdict` in
-   `PROCEED | ADJUST | STOP | UNKNOWN`.  
+   `PROCEED | ADJUST | STOP | UNKNOWN`.
    Today, unattested `ADJUST` candidates are **fail-closed to `STOP`** with empty
    `recommendedActions` (no verified Action Gate yet).
 2. **`status: "integration_error"`** — `systemStatus: "INTEGRATION_ERROR"`,
@@ -233,6 +233,11 @@ Successful child responses include `parentRunId` and `diff` (machine-normalized
 | `BOUNDARY_CHANGED` / `BOUNDARY_ASSET_CHANGED` | Economic Boundary must stay unchanged |
 | `NOT_EXACTLY_ONE_CHANGE` | Zero or multiple Intent condition changes |
 
+Reason precedence: parent existence/completion, Replay baseline, chaining,
+chain/sender, and Economic Boundary checks run before the exactly-one-change
+diff. A request that changes both sender and amount returns
+`CHAIN_OR_SENDER_CHANGED`, not `NOT_EXACTLY_ONE_CHANGE`.
+
 Diff display: `amountInAtomic` is atomic units; `tokenPair` uses
 `native` / `erc20:<lowercase-address>`. Render human copy from full Intent +
 token registry, not by reverse-engineering Diff strings.
@@ -245,12 +250,19 @@ token registry, not by reverse-engineering Diff strings.
 | `usdc-to-mon` | `fixtures/replay-data/usdc-to-mon.json` |
 
 - Method: **GET** only.
-- Unknown id → `REPLAY_NOT_FOUND` (404).
 - Body is a frozen `RunResult` with `replayMode: true` and Evidence
   `isReplay: true` / `fixtureId` set.
 - Recorded Replay **must not** be labeled Live.
 - Replay **cannot** be a Re-run `parentRunId` baseline (`PARENT_IS_REPLAY`).
 - Live Check **never** falls back to Replay.
+
+| HTTP | `error.code` | Meaning |
+| --- | --- | --- |
+| 404 | `REPLAY_NOT_FOUND` | Unknown fixture id |
+| 405 | `METHOD_NOT_ALLOWED` | Non-GET request |
+| 500 | `REPLAY_STORE_ERROR` | Fixture could not be loaded |
+| 500 | `INVALID_REPLAY_FIXTURE` | Fixture failed trusted schema or identity validation |
+| 500 | `INTERNAL_ERROR` | Unexpected replay transport failure |
 
 Example:
 
