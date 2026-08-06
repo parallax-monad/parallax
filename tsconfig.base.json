@@ -1,6 +1,7 @@
 {
   "include": [
     "vitest.config.ts",
+    "vitest.acceptance.config.ts",
     "apps/api/**/*.ts",
     "packages/**/*.ts",
     "packages/**/*.tsx",
