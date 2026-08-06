@@ -79,6 +79,11 @@ Without that path, `POST /api/check` returns HTTP 502 with
 `UNKNOWN`, rather than a fake success. Recorded replay data is available only
 through `/api/replay/:id` and is never used as a live Check fallback.
 
+Frontend Analyze consumers should start from
+[`docs/integration/api-frontend-handoff.md`](docs/integration/api-frontend-handoff.md)
+for request/response samples, error/`retryable` maps, provenance fields, CORS,
+and the startup runbook.
+
 ## Collaboration
 
 - `main` is the shared integration branch.
