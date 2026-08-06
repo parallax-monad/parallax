@@ -1,0 +1,241 @@
+import type { Copy } from "@/lib/i18n";
+import { runEvidence } from "./fixtures";
+import { validateForm } from "./form";
+import { decide, MOSS_VERSION, RULE_VERSION } from "./rules";
+import type { CheckSwapInput, CheckSwapResult, RunDiff } from "./types";
+
+let runCounter = 0;
+
+function nextRunId() {
+  runCounter += 1;
+  return `run_${runCounter.toString().padStart(4, "0")}`;
+}
+
+const NOT_CHECKED: Copy[] = [
+  { en: "Full protocol security review", zh: "完整的协议安全审计" },
+  { en: "Complete malicious token coverage", zh: "全部恶意代币的覆盖" },
+  { en: "All asset semantics", zh: "所有资产的语义差异" },
+  { en: "Future market movement", zh: "未来的市场波动" },
+];
+
+const UNAVAILABLE: Copy = { en: "unavailable", zh: "无法取得" };
+
+/**
+ * Quote amounts are numeric strings except for the "unavailable" sentinel, so
+ * only that sentinel needs translating.
+ */
+const amountCopy = (value: string): Copy =>
+  value === "unavailable" ? UNAVAILABLE : { en: value, zh: value };
+
+/** Amounts carry their token symbol so a diff row is readable on its own. */
+const amountWithUnit = (amount: string, symbol: string): Copy => ({
+  en: `${amount} ${symbol}`,
+  zh: `${amount} ${symbol}`,
+});
+
+/** Integration faults surface as INTEGRATION_ERROR, never protocol risk (FR-09). */
+function integrationError(
+  input: CheckSwapInput,
+  message: Copy,
+): CheckSwapResult {
+  return {
+    runId: nextRunId(),
+    parentRunId: input.parentRunId,
+    systemStatus: "INTEGRATION_ERROR",
+    verdict: "UNKNOWN",
+    summary: {
+      en: `The check did not complete: ${message.en}. This says nothing about the transaction itself.`,
+      zh: `检查没有完成：${message.zh}。这不代表交易本身有问题。`,
+    },
+    recommendedActions: [],
+    irrelevantActions: [],
+    checked: [],
+    notChecked: NOT_CHECKED,
+    evidence: [],
+    ruleResults: [],
+    unknowns: [
+      {
+        id: "run",
+        label: { en: "Check did not complete", zh: "检查没有完成" },
+        reason: message,
+      },
+    ],
+    productRunMode: "DEMO",
+    replayMode: false,
+    intent: {
+      tokenIn: input.tokenIn,
+      tokenOut: input.tokenOut,
+      amountIn: input.amountIn,
+    },
+    quote: {
+      expectedOutput: "unavailable",
+      route: UNAVAILABLE,
+      blockNumber: "unavailable",
+    },
+    minimumReceivedSource: input.minimumReceivedSource ?? "unavailable",
+    createdAt: new Date().toISOString(),
+    ruleVersion: RULE_VERSION,
+    mossVersion: MOSS_VERSION,
+  };
+}
+
+const VERDICT_RANK = { STOP: 0, ADJUST: 1, UNKNOWN: 2, PROCEED: 3 };
+
+const DIFF_FIELD = {
+  verdict: { en: "Verdict", zh: "结论" },
+  amountIn: { en: "Amount in", zh: "输入数量" },
+  expectedOutput: { en: "Expected output", zh: "预期输出" },
+  route: { en: "Route", zh: "路径" },
+} satisfies Record<string, Copy>;
+
+/** Previous vs New comparison (FR-07). Only fields that moved are listed. */
+function buildDiff(
+  previous: CheckSwapResult,
+  next: CheckSwapResult,
+): RunDiff | undefined {
+  const rows: RunDiff = [];
+
+  if (previous.verdict !== next.verdict) {
+    rows.push({
+      field: DIFF_FIELD.verdict,
+      previous: { en: previous.verdict, zh: previous.verdict },
+      next: { en: next.verdict, zh: next.verdict },
+      direction:
+        VERDICT_RANK[next.verdict] > VERDICT_RANK[previous.verdict]
+          ? "improved"
+          : "worsened",
+    });
+  }
+
+  // Compares the requested input, not the quote, so a rerun that only changed
+  // the amount still reports the condition the user actually edited.
+  if (previous.intent.amountIn !== next.intent.amountIn) {
+    rows.push({
+      field: DIFF_FIELD.amountIn,
+      previous: amountWithUnit(
+        previous.intent.amountIn,
+        previous.intent.tokenIn,
+      ),
+      next: amountWithUnit(next.intent.amountIn, next.intent.tokenIn),
+      direction: "changed",
+    });
+  }
+
+  if (previous.quote.expectedOutput !== next.quote.expectedOutput) {
+    const before = Number(previous.quote.expectedOutput);
+    const after = Number(next.quote.expectedOutput);
+    const comparable = Number.isFinite(before) && Number.isFinite(after);
+    rows.push({
+      field: DIFF_FIELD.expectedOutput,
+      previous: amountCopy(previous.quote.expectedOutput),
+      next: amountCopy(next.quote.expectedOutput),
+      direction: comparable
+        ? after > before
+          ? "improved"
+          : "worsened"
+        : "changed",
+    });
+  }
+
+  // Compared by content, not identity: route is a fresh Copy object each run,
+  // so `!==` on the object would report a change on every single check.
+  if (previous.quote.route.en !== next.quote.route.en) {
+    rows.push({
+      field: DIFF_FIELD.route,
+      previous: previous.quote.route,
+      next: next.quote.route,
+      direction: "changed",
+    });
+  }
+
+  return rows.length > 0 ? rows : undefined;
+}
+
+export type CheckOptions = { previous?: CheckSwapResult };
+
+/**
+ * Runs the full pipeline: intent → evidence → normalization → rules → decision.
+ * This is a mock service generating demo results from fixtures. An adapter is
+ * required to integrate with the real /api/check endpoint.
+ */
+export function checkSwap(
+  input: CheckSwapInput,
+  options: CheckOptions = {},
+): CheckSwapResult {
+  const validation = validateForm({
+    protocol: input.protocol,
+    tokenIn: input.tokenIn,
+    tokenOut: input.tokenOut,
+    amountIn: input.amountIn,
+    slippage: input.slippage ?? "",
+    minimumReceived: input.minimumReceived ?? "",
+  });
+  if (!validation.valid) {
+    const message = validation.errors.amountIn ??
+      validation.errors.slippage ??
+      validation.errors.minimumReceived ?? {
+        en: "form input is invalid",
+        zh: "表单输入无效",
+      };
+    return integrationError(input, message);
+  }
+
+  const { amountIn, slippage, minimumReceived } = validation.values;
+  const evidence = runEvidence({
+    protocol: input.protocol,
+    tokenIn: input.tokenIn,
+    tokenOut: input.tokenOut,
+    amountIn,
+    slippage,
+  });
+
+  const minimumReceivedSource =
+    minimumReceived === undefined
+      ? "unavailable"
+      : (input.minimumReceivedSource ?? "user_declared");
+
+  const decision = decide({
+    evidence,
+    minimumReceived,
+    minimumReceivedSource,
+    tokenOut: input.tokenOut,
+  });
+
+  const result: CheckSwapResult = {
+    runId: nextRunId(),
+    parentRunId: input.parentRunId,
+    systemStatus: "OK",
+    verdict: decision.verdict,
+    summary: decision.summary,
+    recommendedActions: decision.recommendedActions,
+    irrelevantActions: decision.irrelevantActions,
+    checked: decision.checked,
+    notChecked: decision.notChecked,
+    evidence: evidence.items,
+    ruleResults: decision.ruleResults,
+    unknowns: decision.unknowns,
+    productRunMode: "DEMO",
+    // Local deterministic demo logic is not recorded replay evidence.
+    replayMode: false,
+    intent: {
+      tokenIn: input.tokenIn,
+      tokenOut: input.tokenOut,
+      amountIn: input.amountIn,
+    },
+    quote: {
+      expectedOutput:
+        evidence.executionStatus === "SUCCESS"
+          ? evidence.expectedOutput.toFixed(4)
+          : "unavailable",
+      route: evidence.route,
+      blockNumber: evidence.blockNumber,
+    },
+    minimumReceivedSource,
+    createdAt: new Date().toISOString(),
+    ruleVersion: RULE_VERSION,
+    mossVersion: MOSS_VERSION,
+  };
+
+  const previous = options.previous;
+  return previous ? { ...result, diff: buildDiff(previous, result) } : result;
+}

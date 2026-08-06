@@ -9,6 +9,7 @@ import { HeroEvidenceReceipt } from "@/components/HeroEvidenceReceipt";
 import { RouteGraph } from "@/components/RouteGraph";
 import { SiteNav } from "@/components/SiteNav";
 import { VerdictActions } from "@/components/VerdictActions";
+import { WalletApp } from "@/components/wallet/WalletApp";
 import {
   type Copy,
   getInitialLanguage,
@@ -76,13 +77,33 @@ function moveSurfaceGlow(event: ReactPointerEvent<HTMLElement>) {
   surface.style.setProperty("--pointer-y", `${event.clientY - bounds.top}px`);
 }
 
+function readRoute() {
+  return window.location.hash === "#/analyze" ? "analyze" : "home";
+}
+
 export default function App() {
   const [language, setLanguage] = useState<Language>(getInitialLanguage);
+  const [route, setRoute] = useState(readRoute);
+
+  useEffect(() => {
+    const sync = () => setRoute(readRoute());
+    window.addEventListener("hashchange", sync);
+    return () => window.removeEventListener("hashchange", sync);
+  }, []);
 
   return (
     <div className="min-h-[calc(100vh-65px)]">
-      <SiteNav language={language} onLanguageChange={setLanguage} />
-      <Home language={language} />
+      <SiteNav
+        active={route === "analyze" ? "analyze" : "home"}
+        language={language}
+        minimal={route === "analyze"}
+        onLanguageChange={setLanguage}
+      />
+      {route === "analyze" ? (
+        <WalletApp language={language} onLanguageChange={setLanguage} />
+      ) : (
+        <Home language={language} />
+      )}
     </div>
   );
 }

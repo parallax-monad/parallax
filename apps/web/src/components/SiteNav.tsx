@@ -1,11 +1,17 @@
 import { useEffect } from "react";
+import { LanguageSwitch } from "@/components/LanguageSwitch";
 import { LANGUAGE_STORAGE_KEY, type Language, pick } from "@/lib/i18n";
 
 export function SiteNav({
   language,
+  active = "home",
+  minimal = false,
   onLanguageChange,
 }: {
   language: Language;
+  active?: "home" | "analyze";
+  /** Wallet route only: drop the brand and Analyze link, keep the languages. */
+  minimal?: boolean;
   onLanguageChange: (language: Language) => void;
 }) {
   useEffect(() => {
@@ -16,46 +22,45 @@ export function SiteNav({
   return (
     <nav
       aria-label={pick(language, "Primary navigation", "主导航")}
-      className="relative z-20 flex min-h-[var(--header-h)] items-center gap-6 bg-transparent px-[max(5vw,18px)] sm:gap-11"
+      className={`relative z-20 flex min-h-[var(--header-h)] items-center gap-6 bg-transparent px-[max(5vw,18px)] sm:gap-11 ${
+        // The wallet is pulled up under this bar, so a minimal nav must not
+        // swallow clicks; only the language switch stays interactive.
+        minimal ? "pointer-events-none" : ""
+      }`}
     >
-      <a
-        href="#/"
-        className="text-[25px] font-extrabold tracking-[-0.07em] text-accent no-underline sm:text-[29px]"
-      >
-        PARAL<span className="text-white">LAX</span>
-      </a>
+      {!minimal && (
+        <a
+          href="#/"
+          className="text-[25px] font-extrabold tracking-[-0.07em] text-accent no-underline sm:text-[29px]"
+        >
+          PARAL<span className="text-white">LAX</span>
+        </a>
+      )}
       <div className="ml-auto flex items-center gap-4 sm:gap-[30px]">
-        <div className="flex items-center border-l border-line-strong pl-4 sm:pl-[30px]">
-          <button
-            type="button"
-            onClick={() => onLanguageChange("zh-CN")}
-            aria-pressed={language === "zh-CN"}
-            aria-label={pick(
-              language,
-              "Switch to Simplified Chinese",
-              "切换为简体中文",
-            )}
-            className={`px-2 py-2 text-[10px] font-bold uppercase tracking-[0.08em] transition-colors hover:text-accent ${
-              language === "zh-CN" ? "text-accent" : "text-faint"
+        {!minimal && (
+          <a
+            href="#/analyze"
+            aria-current={active === "analyze" ? "page" : undefined}
+            className={`text-[13px] font-bold uppercase tracking-[0.08em] no-underline transition-colors hover:text-accent sm:text-[15px] ${
+              active === "analyze" ? "text-accent" : "text-dim"
             }`}
           >
-            简中
-          </button>
-          <span aria-hidden="true" className="text-line-strong">
-            /
-          </span>
-          <button
-            type="button"
-            onClick={() => onLanguageChange("en")}
-            aria-pressed={language === "en"}
-            aria-label={pick(language, "Switch to English", "切换为英文")}
-            className={`px-2 py-2 text-[10px] font-bold uppercase tracking-[0.08em] transition-colors hover:text-accent ${
-              language === "en" ? "text-accent" : "text-faint"
-            }`}
-          >
-            EN
-          </button>
-        </div>
+            {pick(language, "Analyze", "分析")}
+          </a>
+        )}
+        {/* On the wallet route this switch only exists at widths where the frame
+            tucks under the nav. Narrower than that, the wallet header renders
+            its own copy, so the two never overlap and never both show. */}
+        <LanguageSwitch
+          className={`pointer-events-auto ${
+            minimal
+              ? "hidden md:flex"
+              : "border-l border-line-strong pl-4 sm:pl-[30px]"
+          }`}
+          language={language}
+          tone={minimal ? "monad" : "accent"}
+          onLanguageChange={onLanguageChange}
+        />
       </div>
     </nav>
   );

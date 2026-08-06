@@ -21,6 +21,15 @@ export default {
           ink: "#08070d",
           bright: "#9d8cff",
         },
+        // Monad brand violet, used by the wallet demo. Kept separate from
+        // `accent` so wallet chrome tracks the brand swatch exactly even if the
+        // landing accent is retuned.
+        monad: {
+          DEFAULT: "#6E56F8",
+          ink: "#ffffff",
+          bright: "#8B75FF",
+          dim: "#A996FF",
+        },
         risk: {
           low: "#75e6b1",
           moderate: "#f4bd63",
@@ -41,10 +50,15 @@ export default {
         "flow-pulse": {
           "50%": { transform: "translateY(5px)", opacity: "0.45" },
         },
+        "flow-nudge": {
+          "0%, 100%": { transform: "translateY(-2px)", opacity: "0.55" },
+          "50%": { transform: "translateY(3px)", opacity: "1" },
+        },
       },
       animation: {
         "flow-reveal": "flow-reveal .5s ease both",
         "flow-pulse": "flow-pulse 1.5s ease-in-out infinite",
+        "flow-nudge": "flow-nudge 1.8s ease-in-out infinite",
       },
     },
   },
