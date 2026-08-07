@@ -131,7 +131,8 @@ type DiffResult =
   | { success: true; value: RunDiff }
   | { success: false; message: string };
 
-function buildRunDiff(
+/** Exact single-field Intent Diff used by Re-run and Action Gate children. */
+export function buildRunDiff(
   previous: RunResult,
   nextIntent: NormalizedSwapIntent,
 ): DiffResult {

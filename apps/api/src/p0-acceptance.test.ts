@@ -13,6 +13,10 @@ import type {
   NormalizedSwapIntent,
   RunResult,
 } from "@parallax/contracts";
+import {
+  economicFailStopResult,
+  economicPassChildResult,
+} from "@parallax/orchestrator/application/action-gate-fixtures";
 import { describe, expect, it } from "vitest";
 import { CheckApplicationService } from "./application.js";
 import { normalizeCheckSwapRequest } from "./normalization.js";
@@ -51,6 +55,15 @@ const runtime: BackendRuntime = {
     },
   },
   tokenRegistry: createTrustedTokenRegistry(tokenRegistryConfig),
+};
+
+const actionGateAssets = {
+  sender,
+  mon,
+  usdc,
+  simulatorPinnedBlock,
+  runtimeVersion: runtime.config.moss.runtimeVersion,
+  runtimeRevision: runtime.config.moss.runtimeRevision,
 };
 
 type CompletedRunResult = Extract<RunResult, { status: "completed" }>;
@@ -788,6 +801,112 @@ describe("Backend P0 acceptance matrix", () => {
           previousRunId: "run-1",
         },
       },
+    });
+  });
+
+  it("A14 ADJUST: publishes verified amountIn Action Gate Actions", async () => {
+    const store = new InMemoryRunStore();
+    let nextId = 1;
+    const response = await createService(
+      {
+        async check(input) {
+          if (input.runId === "run-1") {
+            return economicFailStopResult(
+              actionGateAssets,
+              input.runId,
+              input.intent,
+            );
+          }
+          return economicPassChildResult(
+            actionGateAssets,
+            input.runId,
+            input.intent,
+          );
+        },
+      },
+      store,
+      () => `run-${nextId++}`,
+    ).check(
+      publicRequest({
+        economicBoundary: {
+          availability: "available",
+          minimumReceived: "0.02",
+          source: "user_declared",
+        },
+      }),
+    );
+
+    expect(response).toMatchObject({
+      status: 200,
+      body: {
+        runId: "run-1",
+        status: "completed",
+        verdict: "ADJUST",
+        intent: {
+          economicBoundary: {
+            availability: "available",
+            minimumReceivedAtomic: "20000",
+            source: "user_declared",
+          },
+        },
+        recommendedActions: [
+          {
+            action: { kind: "TRANSACTION_ADJUSTMENT", field: "amountIn" },
+            recommendable: true,
+            actionReasonCode: "OUTPUT_IMPROVEMENT_VERIFIED",
+            proposedChange: {
+              field: "amountIn",
+              before: "1500000000000000000",
+              after: "1000000000000000000",
+            },
+          },
+        ],
+      },
+    });
+    if (response.status !== 200 || response.body.status !== "completed") {
+      throw new Error("expected completed ADJUST Run");
+    }
+
+    const action = response.body.recommendedActions[0];
+    expect(action).toBeDefined();
+    const attestation = response.body.evidence.find(
+      (item) => item.kind === "action_verification",
+    );
+    expect(attestation).toMatchObject({
+      kind: "action_verification",
+      field: "amountIn",
+      actionReasonCode: "OUTPUT_IMPROVEMENT_VERIFIED",
+      baselineRunId: "run-1",
+      verificationRunId: "run-2",
+      beforeValue: "1500000000000000000",
+      afterValue: "1000000000000000000",
+      baselineBoundaryAtomic: "20000",
+      verificationBoundaryAtomic: "20000",
+      resultEvidenceKey: "verified-output-improvement",
+    });
+    if (attestation?.kind !== "action_verification" || action === undefined) {
+      throw new Error("expected Action Gate attestation and Action");
+    }
+
+    const verifiedOutput = response.body.evidence.find(
+      (item) => item.key === attestation.resultEvidenceKey,
+    );
+    expect(verifiedOutput).toMatchObject({
+      kind: "simulated_token_out",
+      key: "verified-output-improvement",
+    });
+    expect(action.evidenceRefs.map((reference) => reference.key)).toEqual([
+      attestation.key,
+      attestation.resultEvidenceKey,
+    ]);
+    expect(action.proposedChange).toEqual({
+      field: "amountIn",
+      before: attestation.beforeValue,
+      after: attestation.afterValue,
+    });
+    expect(store.get("run-2")).toMatchObject({
+      status: "completed",
+      parentRunId: "run-1",
     });
   });
 });
