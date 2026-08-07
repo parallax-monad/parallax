@@ -58,15 +58,19 @@ export function isActionGateCandidate(
 }
 
 /** Deterministic fixture adjustment: reduce amountIn by one third. */
-export function proposeAmountInAdjustment(
-  intent: NormalizedSwapIntent,
-): { before: string; after: string; nextIntent: NormalizedSwapIntent } {
+export function proposeAmountInAdjustment(intent: NormalizedSwapIntent): {
+  before: string;
+  after: string;
+  nextIntent: NormalizedSwapIntent;
+} {
   const before = intent.amountInAtomic;
   const current = BigInt(before);
   const after = current <= 1n ? before : ((current * 2n) / 3n).toString();
 
   if (after === before) {
-    throw new Error("Action Gate fixture adjustment must change amountInAtomic");
+    throw new Error(
+      "Action Gate fixture adjustment must change amountInAtomic",
+    );
   }
 
   return {
@@ -168,8 +172,7 @@ export function buildVerifiedAdjustBaseline(
     kind: "simulated_token_out",
     key: verifiedOutputKey,
     status: "confirmed",
-    summary:
-      "Verified simulated output after the proposed amountIn adjustment",
+    summary: "Verified simulated output after the proposed amountIn adjustment",
     source: "derived",
     stage: "SIMULATE",
     blockNumber: childOutput.blockNumber,

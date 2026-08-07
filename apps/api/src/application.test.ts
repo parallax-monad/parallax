@@ -5,16 +5,16 @@ import type {
   NormalizedSwapIntent,
   RunResult,
 } from "@parallax/contracts";
+import {
+  economicFailStopResult,
+  economicPassChildResult,
+} from "@parallax/orchestrator/application/action-gate-fixtures";
 import { describe, expect, it } from "vitest";
 import { CheckApplicationService } from "./application.js";
 import { normalizeCheckSwapRequest } from "./normalization.js";
 import { type AgentFlowPort, UnsupportedAgentFlowError } from "./ports.js";
 import type { BackendRuntime } from "./runtime-config.js";
 import { InMemoryRunStore, type RunStore } from "./store.js";
-import {
-  economicFailStopResult,
-  economicPassChildResult,
-} from "@parallax/orchestrator/application/action-gate-fixtures";
 import { createTrustedTokenRegistry } from "./trusted-token-registry.js";
 
 const sender = "0x1111111111111111111111111111111111111111";

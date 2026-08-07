@@ -46,10 +46,23 @@ const availableIntent: NormalizedSwapIntent = {
 
 type Completed = Extract<RunResult, { status: "completed" }>;
 
+function ruleById(
+  result: Completed,
+  ruleId: Completed["ruleResults"][number]["ruleId"],
+): Completed["ruleResults"][number] {
+  const rule = result.ruleResults.find((item) => item.ruleId === ruleId);
+  if (rule === undefined) {
+    throw new Error(`expected ${ruleId} in fixture ruleResults`);
+  }
+  return rule;
+}
+
 describe("Action Gate fixture helpers", () => {
   it("recognizes an economic FAIL STOP baseline as a Gate candidate", () => {
     expect(
-      isActionGateCandidate(economicFailStopResult(assets, "run-1", availableIntent)),
+      isActionGateCandidate(
+        economicFailStopResult(assets, "run-1", availableIntent),
+      ),
     ).toBe(true);
   });
 
@@ -89,19 +102,20 @@ describe("Action Gate fixture helpers", () => {
 
   it("rejects baselines with blocking UNKNOWN Rule Results", () => {
     const baseline = economicFailStopResult(assets, "run-1", availableIntent);
+    const execution = ruleById(baseline, "P0-EXECUTION-001");
     expect(
       isActionGateCandidate({
         ...baseline,
         ruleResults: [
-          baseline.ruleResults[0]!,
+          ruleById(baseline, "P0-EVIDENCE-001"),
           {
             ruleId: "P0-EXECUTION-001",
             status: "UNKNOWN",
             reasonCode: "RULE_CLASSIFICATION_NOT_VERIFIED",
-            evidenceRefs: baseline.ruleResults[1]!.evidenceRefs,
+            evidenceRefs: execution.evidenceRefs,
             actionEvaluations: [],
           },
-          baseline.ruleResults[2]!,
+          ruleById(baseline, "P0-ECONOMIC-001"),
         ],
       }),
     ).toBe(false);
@@ -178,19 +192,20 @@ describe("Action Gate fixture helpers", () => {
       "run-2",
       adjustment.nextIntent,
     );
+    const economic = ruleById(childBase, "P0-ECONOMIC-001");
     const failingChild: Completed = {
       ...childBase,
       parentRunId: "run-1",
       verdict: "STOP",
       summary: "Adjusted Intent still misses the Economic Boundary",
       ruleResults: [
-        childBase.ruleResults[0]!,
-        childBase.ruleResults[1]!,
+        ruleById(childBase, "P0-EVIDENCE-001"),
+        ruleById(childBase, "P0-EXECUTION-001"),
         {
           ruleId: "P0-ECONOMIC-001",
           status: "FAIL",
           reasonCode: "OUTPUT_BELOW_BOUNDARY",
-          evidenceRefs: childBase.ruleResults[2]!.evidenceRefs,
+          evidenceRefs: economic.evidenceRefs,
           actionEvaluations: [],
         },
       ],

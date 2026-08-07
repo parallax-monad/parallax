@@ -316,9 +316,7 @@ export class CheckApplicationService {
   private async invokeAgentFlowCheck(
     runId: string,
     intent: Parameters<AgentFlowPort["check"]>[0]["intent"],
-  ): Promise<
-    { ok: true; candidate: unknown } | { ok: false; error: unknown }
-  > {
+  ): Promise<{ ok: true; candidate: unknown } | { ok: false; error: unknown }> {
     try {
       const candidate = await this.dependencies.agentFlow.check({
         runId,
@@ -504,9 +502,7 @@ type InterpretAgentFlowOptions = {
 function interpretAgentFlowCandidate(
   candidate: unknown,
   options: InterpretAgentFlowOptions,
-):
-  | { ok: true; result: RunResult }
-  | { ok: false; message: string } {
+): { ok: true; result: RunResult } | { ok: false; message: string } {
   let parsedResult = runResultSchema.safeParse(candidate);
   if (!parsedResult.success && options.applyFailClosedAdjust) {
     const failClosedCandidate = failClosedAdjustCandidate(candidate);
