@@ -46,6 +46,7 @@ import {
   apiCheckAcceptanceOf,
   apiCheckProvenanceMatchesOf,
 } from "./live-smoke-acceptance.js";
+import { formatRepositoryJson } from "./repository-json.js";
 
 const rpcUrl = process.env.MOSS_RPC_URL;
 const runtimePath = process.env.MOSS_RUNTIME_PATH;
@@ -94,10 +95,10 @@ const apiCheckRequest = {
 
 function writeJson(dir: string, name: string, value: unknown): void {
   mkdirSync(dir, { recursive: true });
-  writeFileSync(
-    join(dir, name),
-    `${JSON.stringify(toJsonValue(value), null, 2)}\n`,
-  );
+  // Deterministic Biome-compatible repository JSON (see repository-json.ts) so
+  // generated evidence artifacts pass `pnpm lint` without a formatting
+  // subprocess. Serialization order is the parsed object's own order.
+  writeFileSync(join(dir, name), formatRepositoryJson(toJsonValue(value)));
 }
 
 function baseMetadata(
