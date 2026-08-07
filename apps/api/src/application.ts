@@ -3,6 +3,7 @@ import { isDeepStrictEqual } from "node:util";
 import {
   type ActionVerificationEvidence,
   checkSwapRequestSchema,
+  completedRunResultSchema,
   type EvidenceRef,
   type FailedRunResult,
   failedRunResultSchema,
@@ -11,6 +12,11 @@ import {
   runResultSchema,
 } from "@parallax/contracts";
 import {
+  buildRunDiff,
+  buildVerifiedAdjustBaseline,
+  childRunPassesActionGate,
+  isActionGateCandidate,
+  proposeAmountInAdjustment,
   type RerunContext,
   resolveRerun,
 } from "@parallax/orchestrator/application";
@@ -115,25 +121,9 @@ export class CheckApplicationService {
       return storeErrorResponse();
     }
 
-    let candidate: unknown;
-    try {
-      candidate = await this.dependencies.agentFlow.check({
-        runId,
-        intent: normalized.intent,
-        tokenInDecimals: tokenDecimals(
-          this.dependencies.runtime,
-          normalized.intent.tokenIn,
-          normalized.intent.chainId,
-        ),
-        tokenOutDecimals: tokenDecimals(
-          this.dependencies.runtime,
-          normalized.intent.tokenOut,
-          normalized.intent.chainId,
-        ),
-        moss: this.dependencies.runtime.config.moss,
-      });
-    } catch (error) {
-      const unsupported = isUnsupportedAgentFlowError(error);
+    const invoked = await this.invokeAgentFlowCheck(runId, normalized.intent);
+    if (!invoked.ok) {
+      const unsupported = isUnsupportedAgentFlowError(invoked.error);
       return this.recordFailure(
         runId,
         unsupported ? "UNSUPPORTED" : "AGENT_FLOW_ERROR",
@@ -145,19 +135,18 @@ export class CheckApplicationService {
             ? "Live Agent Flow is not available in this runtime"
             : "Agent Flow could not complete the check",
         },
-        error,
-        partialRunResultFrom(error),
+        invoked.error,
+        partialRunResultFrom(invoked.error),
       );
     }
 
-    let parsedResult = runResultSchema.safeParse(candidate);
-    if (!parsedResult.success) {
-      const failClosedCandidate = failClosedAdjustCandidate(candidate);
-      if (failClosedCandidate !== undefined) {
-        parsedResult = runResultSchema.safeParse(failClosedCandidate);
-      }
-    }
-    if (!parsedResult.success) {
+    const interpreted = interpretAgentFlowCandidate(invoked.candidate, {
+      runId,
+      intent: normalized.intent,
+      moss: this.dependencies.runtime.config.moss,
+      applyFailClosedAdjust: true,
+    });
+    if (!interpreted.ok) {
       return this.recordFailure(
         runId,
         "INVALID_AGENT_FLOW_RESPONSE",
@@ -165,66 +154,271 @@ export class CheckApplicationService {
         childFields,
         {
           code: "INVALID_AGENT_FLOW_RESPONSE",
-          message: "Agent Flow returned an invalid RunResult",
-        },
-      );
-    }
-
-    const result = parsedResult.data;
-    if (
-      result.runId !== runId ||
-      result.replayMode ||
-      !isDeepStrictEqual(result.intent, normalized.intent) ||
-      result.parentRunId !== undefined ||
-      result.diff !== undefined
-    ) {
-      return this.recordFailure(
-        runId,
-        "INVALID_AGENT_FLOW_RESPONSE",
-        normalized.intent,
-        childFields,
-        {
-          code: "INVALID_AGENT_FLOW_RESPONSE",
-          message:
-            "Agent Flow returned a result for the wrong run ID, mode, or intent",
-        },
-      );
-    }
-
-    if (
-      hasMismatchedAuthoritativeRuntime(
-        result,
-        this.dependencies.runtime.config.moss,
-      )
-    ) {
-      return this.recordFailure(
-        runId,
-        "INVALID_AGENT_FLOW_RESPONSE",
-        normalized.intent,
-        childFields,
-        {
-          code: "INVALID_AGENT_FLOW_RESPONSE",
-          message: "Agent Flow returned Evidence from a different Moss runtime",
+          message: interpreted.message,
         },
       );
     }
 
     const resultWithRerun = runResultSchema.parse({
-      ...result,
+      ...interpreted.result,
       ...childFields,
     });
-    const gatedResult = closeUnverifiedAdjust(
-      resultWithRerun,
-      this.dependencies.store,
-    );
+    if (resultWithRerun.status === "completed") {
+      const gated = await this.maybeApplyVerifiedActionGate(resultWithRerun);
+      if (gated.kind === "blocked") {
+        return storeErrorResponse();
+      }
+      const gatedResult = closeUnverifiedAdjust(
+        gated.result,
+        this.dependencies.store,
+      );
+      try {
+        await this.dependencies.store.complete(gatedResult);
+      } catch {
+        return storeErrorResponse();
+      }
+      return { status: 200, body: gatedResult };
+    }
 
     try {
-      await this.dependencies.store.complete(gatedResult);
+      await this.dependencies.store.complete(resultWithRerun);
     } catch {
       return storeErrorResponse();
     }
 
-    return { status: 200, body: gatedResult };
+    return { status: 200, body: resultWithRerun };
+  }
+
+  private async maybeApplyVerifiedActionGate(
+    baseline: Extract<RunResult, { status: "completed" }>,
+  ): Promise<
+    | { kind: "result"; result: Extract<RunResult, { status: "completed" }> }
+    | { kind: "blocked" }
+  > {
+    if (!isActionGateCandidate(baseline)) {
+      return { kind: "result", result: baseline };
+    }
+
+    let adjustment: ReturnType<typeof proposeAmountInAdjustment>;
+    try {
+      adjustment = proposeAmountInAdjustment(baseline.intent);
+    } catch {
+      return { kind: "result", result: baseline };
+    }
+
+    const diff = buildRunDiff(baseline, adjustment.nextIntent);
+    if (!diff.success) {
+      return { kind: "result", result: baseline };
+    }
+
+    const childRunId = this.createRunId();
+    const childFields: ChildRunFields = {
+      parentRunId: baseline.runId,
+      diff: diff.value,
+    };
+
+    const invoked = await this.invokeAgentFlowCheck(
+      childRunId,
+      adjustment.nextIntent,
+    );
+    if (!invoked.ok) {
+      const persisted = await this.persistVerificationChildFailure(
+        childRunId,
+        adjustment.nextIntent,
+        childFields,
+        "AGENT_FLOW_ERROR",
+        invoked.error,
+      );
+      return persisted === "non_terminal"
+        ? { kind: "blocked" }
+        : { kind: "result", result: baseline };
+    }
+
+    const interpreted = interpretAgentFlowCandidate(invoked.candidate, {
+      runId: childRunId,
+      intent: adjustment.nextIntent,
+      moss: this.dependencies.runtime.config.moss,
+      applyFailClosedAdjust: false,
+    });
+    if (!interpreted.ok) {
+      const persisted = await this.persistVerificationChildFailure(
+        childRunId,
+        adjustment.nextIntent,
+        childFields,
+        "INVALID_AGENT_FLOW_RESPONSE",
+      );
+      return persisted === "non_terminal"
+        ? { kind: "blocked" }
+        : { kind: "result", result: baseline };
+    }
+
+    const child = interpreted.result;
+    if (child.status === "integration_error") {
+      const persisted = await this.persistVerificationChildResult(
+        childRunId,
+        adjustment.nextIntent,
+        failedRunResultSchema.parse({
+          ...child,
+          ...childFields,
+        }),
+      );
+      return persisted === "non_terminal"
+        ? { kind: "blocked" }
+        : { kind: "result", result: baseline };
+    }
+
+    if (child.status !== "completed") {
+      const persisted = await this.persistVerificationChildFailure(
+        childRunId,
+        adjustment.nextIntent,
+        childFields,
+        "INVALID_AGENT_FLOW_RESPONSE",
+      );
+      return persisted === "non_terminal"
+        ? { kind: "blocked" }
+        : { kind: "result", result: baseline };
+    }
+
+    const childWithParent = completedRunResultSchema.parse({
+      ...child,
+      ...childFields,
+    });
+    const persisted = await this.persistVerificationChildResult(
+      childRunId,
+      adjustment.nextIntent,
+      childWithParent,
+    );
+    if (persisted === "non_terminal") {
+      return { kind: "blocked" };
+    }
+    if (persisted !== "stored") {
+      return { kind: "result", result: baseline };
+    }
+
+    if (!childRunPassesActionGate(childWithParent, baseline.runId)) {
+      return { kind: "result", result: baseline };
+    }
+
+    try {
+      return {
+        kind: "result",
+        result: buildVerifiedAdjustBaseline(
+          baseline,
+          childWithParent,
+          adjustment,
+        ),
+      };
+    } catch {
+      return { kind: "result", result: baseline };
+    }
+  }
+
+  private async invokeAgentFlowCheck(
+    runId: string,
+    intent: Parameters<AgentFlowPort["check"]>[0]["intent"],
+  ): Promise<{ ok: true; candidate: unknown } | { ok: false; error: unknown }> {
+    try {
+      const candidate = await this.dependencies.agentFlow.check({
+        runId,
+        intent,
+        tokenInDecimals: tokenDecimals(
+          this.dependencies.runtime,
+          intent.tokenIn,
+          intent.chainId,
+        ),
+        tokenOutDecimals: tokenDecimals(
+          this.dependencies.runtime,
+          intent.tokenOut,
+          intent.chainId,
+        ),
+        moss: this.dependencies.runtime.config.moss,
+      });
+      return { ok: true, candidate };
+    } catch (error) {
+      return { ok: false, error };
+    }
+  }
+
+  /**
+   * Persist a verification child Receipt.
+   * - `stored`: child completed as provided
+   * - `terminal_error`: child never started, or was failed after a failed complete
+   * - `non_terminal`: child left in `started` (baseline must not become a public Receipt)
+   */
+  private async persistVerificationChildResult(
+    childRunId: string,
+    intent: Parameters<AgentFlowPort["check"]>[0]["intent"],
+    result: RunResult,
+  ): Promise<"stored" | "terminal_error" | "non_terminal"> {
+    try {
+      await this.dependencies.store.start(
+        childRunId,
+        intent,
+        result.parentRunId,
+      );
+    } catch {
+      return "terminal_error";
+    }
+
+    try {
+      await this.dependencies.store.complete(result);
+      return "stored";
+    } catch {
+      if (result.parentRunId === undefined || result.diff === undefined) {
+        return "non_terminal";
+      }
+      const failed = createIntegrationErrorResult(
+        childRunId,
+        intent,
+        "INVALID_AGENT_FLOW_RESPONSE",
+        {
+          parentRunId: result.parentRunId,
+          diff: result.diff,
+        },
+      );
+      try {
+        await this.dependencies.store.fail(
+          childRunId,
+          "INVALID_AGENT_FLOW_RESPONSE",
+          failed,
+        );
+        return "terminal_error";
+      } catch {
+        return "non_terminal";
+      }
+    }
+  }
+
+  private async persistVerificationChildFailure(
+    childRunId: string,
+    intent: Parameters<AgentFlowPort["check"]>[0]["intent"],
+    childFields: ChildRunFields,
+    failure: CheckRunFailureCode,
+    cause?: unknown,
+  ): Promise<"terminal_error" | "non_terminal"> {
+    const result = createIntegrationErrorResult(
+      childRunId,
+      intent,
+      failure,
+      childFields,
+      cause,
+    );
+    try {
+      await this.dependencies.store.start(
+        childRunId,
+        intent,
+        childFields.parentRunId,
+      );
+    } catch {
+      return "terminal_error";
+    }
+
+    try {
+      await this.dependencies.store.fail(childRunId, failure, result);
+      return "terminal_error";
+    } catch {
+      return "non_terminal";
+    }
   }
 
   private async recordFailure(
@@ -291,6 +485,61 @@ function partialRunResultFrom(error: unknown): FailedRunResult | undefined {
   const candidate = asRecord(error)?.partialRunResult;
   const parsed = failedRunResultSchema.safeParse(candidate);
   return parsed.success ? parsed.data : undefined;
+}
+
+type InterpretAgentFlowOptions = {
+  runId: string;
+  intent: Parameters<AgentFlowPort["check"]>[0]["intent"];
+  moss: BackendRuntime["config"]["moss"];
+  applyFailClosedAdjust: boolean;
+};
+
+/**
+ * Shared parse + identity validation for primary checks and Action Gate
+ * verification children. Fail-closed ADJUST stripping applies only to the
+ * primary path (children must stay raw so Gate attestation can evaluate them).
+ */
+function interpretAgentFlowCandidate(
+  candidate: unknown,
+  options: InterpretAgentFlowOptions,
+): { ok: true; result: RunResult } | { ok: false; message: string } {
+  let parsedResult = runResultSchema.safeParse(candidate);
+  if (!parsedResult.success && options.applyFailClosedAdjust) {
+    const failClosedCandidate = failClosedAdjustCandidate(candidate);
+    if (failClosedCandidate !== undefined) {
+      parsedResult = runResultSchema.safeParse(failClosedCandidate);
+    }
+  }
+  if (!parsedResult.success) {
+    return {
+      ok: false,
+      message: "Agent Flow returned an invalid RunResult",
+    };
+  }
+
+  const result = parsedResult.data;
+  if (
+    result.runId !== options.runId ||
+    result.replayMode ||
+    !isDeepStrictEqual(result.intent, options.intent) ||
+    result.parentRunId !== undefined ||
+    result.diff !== undefined
+  ) {
+    return {
+      ok: false,
+      message:
+        "Agent Flow returned a result for the wrong run ID, mode, or intent",
+    };
+  }
+
+  if (hasMismatchedAuthoritativeRuntime(result, options.moss)) {
+    return {
+      ok: false,
+      message: "Agent Flow returned Evidence from a different Moss runtime",
+    };
+  }
+
+  return { ok: true, result };
 }
 
 function failClosedAdjustCandidate(candidate: unknown): unknown | undefined {
@@ -597,22 +846,10 @@ function hasVerifiedActionGate(
     if (attestation === undefined) return false;
 
     const childRecord = store.get(attestation.verificationRunId);
-    if (
-      childRecord?.status !== "completed" ||
-      childRecord.result.status !== "completed" ||
-      childRecord.result.parentRunId !== result.runId ||
-      childRecord.result.replayMode ||
-      childRecord.result.systemStatus !== "OK" ||
-      childRecord.result.scope.some((item) => item.status === "unknown")
-    ) {
-      return false;
-    }
-
-    return ["P0-EVIDENCE-001", "P0-EXECUTION-001", "P0-ECONOMIC-001"].every(
-      (ruleId) =>
-        childRecord.result.ruleResults.some(
-          (rule) => rule.ruleId === ruleId && rule.status === "PASS",
-        ),
+    return (
+      childRecord?.status === "completed" &&
+      childRecord.result.status === "completed" &&
+      childRunPassesActionGate(childRecord.result, result.runId)
     );
   });
 }
