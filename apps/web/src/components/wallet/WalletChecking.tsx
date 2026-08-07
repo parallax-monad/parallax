@@ -28,8 +28,8 @@ export function WalletChecking({
     >
       <span className="eyebrow-monad">
         {say(language, {
-          en: "Parallax · Simulated demo",
-          zh: "Parallax · 模拟演示",
+          en: "Parallax · Live backend check",
+          zh: "Parallax · 实时后端检查",
         })}
       </span>
       <h2 className="m-0 text-[24px] font-extrabold leading-[1.15] tracking-[-0.04em]">

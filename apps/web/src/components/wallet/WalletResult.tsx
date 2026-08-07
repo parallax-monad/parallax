@@ -48,20 +48,20 @@ const INTEGRATION_ERROR_COPY = {
 
 const NEXT_STEP: Record<Verdict, Copy> = {
   PROCEED: {
-    en: "The demo found no blocking condition in its limited scope. This is not a verified recommendation or safety guarantee.",
-    zh: "演示在有限范围内未发现阻断条件。这不是经验证的建议，也不构成安全保证。",
+    en: "The backend found no blocking condition in its checked scope. This is not a safety guarantee.",
+    zh: "后端在已检查范围内未发现阻断条件。这不构成安全保证。",
   },
   ADJUST: {
-    en: "The demo suggests changing one transaction condition, then running it again.",
-    zh: "演示建议修改一个交易条件，然后重新运行。",
+    en: "The backend suggests changing one verified transaction condition, then running it again.",
+    zh: "后端建议修改一个已验证的交易条件，然后重新运行。",
   },
   STOP: {
-    en: "The demo found a blocking condition. Review the details before deciding what to do.",
-    zh: "演示发现了阻断条件。决定下一步之前请查看详情。",
+    en: "The backend found a blocking condition. Review the details before deciding what to do.",
+    zh: "后端发现了阻断条件。决定下一步之前请查看详情。",
   },
   UNKNOWN: {
-    en: "The demo did not have enough information for a transaction conclusion. Unknown is never a pass.",
-    zh: "演示没有足够信息得出交易结论。Unknown 不等于通过。",
+    en: "The backend did not have enough information for a transaction conclusion. Unknown is never a pass.",
+    zh: "后端没有足够信息得出交易结论。Unknown 不等于通过。",
   },
 };
 
@@ -140,22 +140,68 @@ export function WalletResult({
               {say(language, INTEGRATION_ERROR_COPY.title)}
             </strong>
             <p className="mt-1.5 text-[14px] leading-[1.6] text-white">
-              {say(language, INTEGRATION_ERROR_COPY.explanation)}
+              {say(
+                language,
+                result.apiFailure?.retryable
+                  ? INTEGRATION_ERROR_COPY.explanation
+                  : {
+                      en: "No transaction conclusion was produced. This error cannot be retried as-is; view technical details or discard this check.",
+                      zh: "本次没有生成交易结论。此错误无法原样重试；请查看技术详情或放弃本次检查。",
+                    },
+              )}
             </p>
             <p className="mt-2 text-[13px] leading-[1.6] text-dim">
               {say(language, result.summary)}
             </p>
+            {result.apiFailure && (
+              <dl className="mt-3 border-t border-risk-elevated/30 pt-2 text-[12px]">
+                <div className="flex justify-between gap-3 py-1">
+                  <dt className="font-bold uppercase tracking-[0.06em]">
+                    error.code
+                  </dt>
+                  <dd className="mono m-0 text-right text-white">
+                    {result.apiFailure.code}
+                  </dd>
+                </div>
+                {result.apiFailure.reason && (
+                  <div className="flex justify-between gap-3 py-1">
+                    <dt className="font-bold uppercase tracking-[0.06em]">
+                      error.reason
+                    </dt>
+                    <dd className="mono m-0 text-right text-white">
+                      {result.apiFailure.reason}
+                    </dd>
+                  </div>
+                )}
+                <div className="flex justify-between gap-3 py-1">
+                  <dt className="font-bold uppercase tracking-[0.06em]">
+                    retryable
+                  </dt>
+                  <dd className="mono m-0 text-right text-white">
+                    {String(result.apiFailure.retryable)}
+                  </dd>
+                </div>
+              </dl>
+            )}
           </div>
         </section>
 
-        <div className="grid grid-cols-2 gap-2">
-          <button
-            type="button"
-            className="btn btn-monad"
-            onClick={onRetry ?? onKeep}
-          >
-            {say(language, INTEGRATION_ERROR_COPY.retry)}
-          </button>
+        <div
+          className={
+            result.apiFailure?.retryable
+              ? "grid grid-cols-2 gap-2"
+              : "grid grid-cols-1 gap-2"
+          }
+        >
+          {result.apiFailure?.retryable && (
+            <button
+              type="button"
+              className="btn btn-monad"
+              onClick={onRetry ?? onKeep}
+            >
+              {say(language, INTEGRATION_ERROR_COPY.retry)}
+            </button>
+          )}
           <button
             type="button"
             className="btn btn-monad-outline"
@@ -195,9 +241,9 @@ export function WalletResult({
         <span className="eyebrow-monad m-0">
           {say(language, { en: "Before you sign", zh: "签名之前" })}
         </span>
-        {result.productRunMode === "DEMO" && (
-          <span className="pill">
-            {say(language, { en: "Demo", zh: "演示" })}
+        {result.productRunMode === "LIVE" && (
+          <span className="pill border-risk-low/50 text-risk-low">
+            {say(language, { en: "Live check", zh: "实时检查" })}
           </span>
         )}
         {result.productRunMode === "RECORDED_REPLAY" && (
@@ -287,7 +333,7 @@ export function WalletResult({
 
       <section className="border border-line bg-ink-rail p-4">
         <strong className="block text-[13px] font-bold uppercase tracking-[0.08em] text-monad-dim">
-          {say(language, { en: "Demo suggestions", zh: "演示建议" })}
+          {say(language, { en: "Backend actions", zh: "后端操作建议" })}
         </strong>
         <p className="mt-1.5 text-[14px] leading-[1.6] text-white">
           {say(language, NEXT_STEP[verdict])}

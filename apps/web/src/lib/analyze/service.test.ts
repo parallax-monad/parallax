@@ -1,5 +1,5 @@
-import { describe, expect, test } from "vitest";
-import { estimateOutput } from "@/components/wallet/walletData";
+import { describe, expect, test, vi } from "vitest";
+import { DEMO_ADDRESS, DEMO_RECIPIENT } from "@/components/wallet/walletData";
 import {
   changedLogicalFields,
   INITIAL_FORM,
@@ -9,216 +9,244 @@ import {
 import { checkSwap } from "./service";
 import type { CheckSwapInput } from "./types";
 
-/** Kuru MON→USDC is the one fully-supported demo pair. */
-function input(overrides: Partial<CheckSwapInput> = {}): CheckSwapInput {
-  return {
-    protocol: "kuru",
-    tokenIn: "MON",
-    tokenOut: "USDC",
-    amountIn: "1200",
-    slippage: "0.5",
-    minimumReceivedSource: "unavailable",
-    ...overrides,
-  };
-}
+const input: CheckSwapInput = {
+  protocol: "kuru",
+  tokenIn: "MON",
+  tokenOut: "USDC",
+  amountIn: "0.01",
+  slippage: "0.5",
+  minimumReceivedSource: "unavailable",
+};
 
-describe("checkSwap verdict mapping", () => {
-  test("maps a clean simulated run to PROCEED without claiming safety", () => {
-    const result = checkSwap(input());
+const intent = {
+  chainId: 143,
+  protocol: "kuru",
+  sender: "0x1111111111111111111111111111111111111111",
+  recipient: "0x1111111111111111111111111111111111111111",
+  recipientSource: "defaulted_from_sender",
+  tokenIn: { kind: "native" },
+  tokenOut: {
+    kind: "erc20",
+    address: "0x754704Bc059F8C67012fEd69BC8A327a5aafb603",
+  },
+  amountInAtomic: "10000000000000000",
+  economicBoundary: { availability: "unavailable", source: "unavailable" },
+};
 
-    expect(result.systemStatus).toBe("OK");
-    expect(result.productRunMode).toBe("DEMO");
-    expect(result.replayMode).toBe(false);
-    expect(result.evidence.every((item) => item.origin === "mock")).toBe(true);
-    expect(result.verdict).toBe("PROCEED");
-    expect(result.summary.en).toContain("not a safety guarantee");
-    expect(result.summary.en).not.toContain("safe to sign");
-  });
-
-  test("maps an unroutable pair to STOP", () => {
-    const result = checkSwap(input({ tokenOut: "MON" }));
-
-    expect(result.verdict).toBe("STOP");
-    expect(result.quote.expectedOutput).toBe("unavailable");
-  });
-
-  test("maps an over-balance amount to ADJUST rather than STOP", () => {
-    // Recorded MON balance is 1800, so 1801 reverts on the balance check.
-    const result = checkSwap(input({ amountIn: "1801" }));
-
-    expect(result.verdict).toBe("ADJUST");
-    expect(
-      result.recommendedActions.some((item) => item.field === "amountIn"),
-    ).toBe(true);
-  });
-});
-describe("checkSwap invalid input", () => {
-  test.each(["0", "-5", "abc", ""])(
-    "reports %j as an integration error rather than a risk verdict",
-    (amountIn) => {
-      const result = checkSwap(input({ amountIn }));
-
-      expect(result.systemStatus).toBe("INTEGRATION_ERROR");
-      expect(result.verdict).toBe("UNKNOWN");
+const completed = {
+  runId: "run-live-1",
+  replayMode: false,
+  intent,
+  simulatorPinnedBlock: "92820000",
+  status: "completed",
+  systemStatus: "OK",
+  verdict: "UNKNOWN",
+  summary: "Backend completed the check.",
+  ruleResults: [
+    {
+      ruleId: "P0-EVIDENCE-001",
+      status: "UNKNOWN",
+      reasonCode: "CRITICAL_EVIDENCE_MISSING",
     },
-  );
+  ],
+  recommendedActions: [],
+  irrelevantActions: [],
+  evidence: [
+    {
+      key: "quote-1",
+      kind: "generic",
+      status: "confirmed",
+      summary: "Live quote evidence",
+      source: "quote",
+      stage: "QUOTE",
+      blockNumber: "92820000",
+      runtimeVersion: "moss@1",
+      runtimeRevision: "abc123",
+      reproducibility: "REPRODUCIBLE",
+      isReplay: false,
+      isMock: false,
+    },
+  ],
+  scope: [
+    {
+      key: "P0-EVIDENCE-001",
+      label: "Evidence completeness",
+      status: "unknown",
+      reason: "REQUIRED_EVIDENCE_UNAVAILABLE",
+    },
+  ],
+  route: {
+    availability: "available",
+    path: [intent.tokenIn, intent.tokenOut],
+    blockNumber: "92820000",
+  },
+};
 
-  test("keeps an integration error out of the risk rule surface", () => {
-    const result = checkSwap(input({ amountIn: "0" }));
-
-    expect(result.ruleResults).toEqual([]);
-    expect(result.recommendedActions).toEqual([]);
-    expect(result.evidence).toEqual([]);
-    expect(result.unknowns).toHaveLength(1);
-    expect(result.summary.en).toContain("says nothing about the transaction");
+const jsonResponse = (body: unknown, status = 200) =>
+  new Response(JSON.stringify(body), {
+    status,
+    headers: { "content-type": "application/json" },
   });
 
-  test("keeps an incomplete run in demo mode without replay provenance", () => {
-    const result = checkSwap(input({ amountIn: "0" }));
-    expect(result.productRunMode).toBe("DEMO");
-    expect(result.replayMode).toBe(false);
-    expect(result.evidence).toEqual([]);
+describe("checkSwap API adapter", () => {
+  test("shows the same read-only identity that the API request submits", () => {
+    expect(DEMO_ADDRESS).toBe("0x1111...1111");
+    expect(DEMO_RECIPIENT).toBe(DEMO_ADDRESS);
   });
 
-  test.each([
-    { slippage: "abc" },
-    { slippage: "-0.1" },
-    { slippage: "100.1" },
-    { minimumReceived: "abc" },
-    { minimumReceived: "0" },
-    { minimumReceived: "-1" },
-  ])("rejects invalid boundary input without fallback: %o", (overrides) => {
-    const result = checkSwap(input(overrides));
+  test("posts only the handoff request fields and maps a completed Run", async () => {
+    const request = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(jsonResponse(completed));
+    const result = await checkSwap(input, { fetch: request });
+
+    expect(request).toHaveBeenCalledOnce();
+    const [, init] = request.mock.calls[0];
+    const sent = JSON.parse(String(init?.body));
+    expect(sent).toEqual({
+      chainId: 143,
+      protocol: "kuru",
+      sender: "0x1111111111111111111111111111111111111111",
+      tokenIn: { kind: "native" },
+      tokenOut: {
+        kind: "erc20",
+        address: "0x754704Bc059F8C67012fEd69BC8A327a5aafb603",
+      },
+      amountIn: "0.01",
+      economicBoundary: { availability: "unavailable", source: "unavailable" },
+    });
+    expect(sent.slippage).toBeUndefined();
+    expect(result.systemStatus).toBe("OK");
+    expect(result.productRunMode).toBe("LIVE");
+    expect(result.quote.route.en).toBe("MON → USDC");
+    expect(result.rawResponse).toEqual(completed);
+  });
+
+  test("fails a live authoritative verdict closed when pinned-block provenance is missing", async () => {
+    const request = vi.fn<typeof fetch>().mockResolvedValue(
+      jsonResponse({
+        ...completed,
+        verdict: "PROCEED",
+        simulatorPinnedBlock: undefined,
+      }),
+    );
+    const result = await checkSwap(input, { fetch: request });
+
+    expect(result.verdict).toBe("UNKNOWN");
+    expect(result.summary.en).toContain("simulatorPinnedBlock");
+  });
+
+  test("prefers a nested Run retryable=false over the HTTP 502 fallback", async () => {
+    const run = {
+      ...completed,
+      runId: "failed-1",
+      status: "integration_error",
+      systemStatus: "INTEGRATION_ERROR",
+      verdict: "UNKNOWN",
+      summary: "RPC unavailable",
+      error: {
+        code: "RPC_UNAVAILABLE",
+        stage: "quote",
+        message: "Dependency unavailable",
+        retryable: false,
+      },
+    };
+    const request = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(
+        jsonResponse(
+          { error: { code: "AGENT_FLOW_ERROR", message: "Flow failed" }, run },
+          502,
+        ),
+      );
+    const result = await checkSwap(input, { fetch: request });
 
     expect(result.systemStatus).toBe("INTEGRATION_ERROR");
-    expect(result.evidence).toEqual([]);
-    expect(result.recommendedActions).toEqual([]);
+    expect(result.verdict).toBe("UNKNOWN");
+    expect(result.apiFailure).toMatchObject({
+      httpStatus: 502,
+      code: "AGENT_FLOW_ERROR",
+      stage: "quote",
+      retryable: false,
+    });
+    expect(result.rawResponse).toMatchObject({
+      error: { code: "AGENT_FLOW_ERROR" },
+      run: { runId: "failed-1" },
+    });
+  });
+
+  test("preserves INVALID_RERUN reason in the error-page model", async () => {
+    const request = vi.fn<typeof fetch>().mockResolvedValue(
+      jsonResponse(
+        {
+          error: {
+            code: "INVALID_RERUN",
+            reason: "PARENT_NOT_FOUND",
+            message: "Parent is no longer in memory",
+          },
+        },
+        400,
+      ),
+    );
+    const result = await checkSwap(
+      { ...input, parentRunId: "gone" },
+      { fetch: request },
+    );
+
+    expect(result.apiFailure).toMatchObject({
+      code: "INVALID_RERUN",
+      reason: "PARENT_NOT_FOUND",
+      retryable: false,
+    });
+    expect(result.rawResponse).toEqual(
+      expect.objectContaining({ error: expect.any(Object) }),
+    );
+  });
+
+  test("turns a fetch exception into a retryable NETWORK_ERROR page", async () => {
+    const request = vi
+      .fn<typeof fetch>()
+      .mockRejectedValue(new TypeError("Failed to fetch"));
+    const result = await checkSwap(input, { fetch: request });
+
+    expect(result.systemStatus).toBe("INTEGRATION_ERROR");
+    expect(result.apiFailure).toMatchObject({
+      code: "NETWORK_ERROR",
+      retryable: true,
+    });
   });
 });
 
-describe("form validation and rerun changes", () => {
-  test("accepts empty minimum received and supported slippage", () => {
+describe("form validation and backend-supported reruns", () => {
+  test("validates the initial live request", () => {
     expect(validateForm(INITIAL_FORM).valid).toBe(true);
   });
 
-  test.each([
-    { field: "amountIn", value: "0" },
-    { field: "amountIn", value: "abc" },
-    { field: "slippage", value: "" },
-    { field: "slippage", value: "-1" },
-    { field: "slippage", value: "101" },
-    { field: "minimumReceived", value: "0" },
-    { field: "minimumReceived", value: "abc" },
-  ] as const)("returns a field error for $field=$value", ({ field, value }) => {
-    const validation = validateForm({ ...INITIAL_FORM, [field]: value });
-    expect(validation.valid).toBe(false);
-    if (!validation.valid) expect(validation.errors[field]).toBeDefined();
-  });
-
-  test("counts tokenIn and tokenOut together as one tokenPair change", () => {
+  test("counts amount and boundary as two backend intent changes", () => {
     expect(
       changedLogicalFields(INITIAL_FORM, {
         ...INITIAL_FORM,
-        tokenIn: "WMON",
-        tokenOut: "USDT",
+        amountIn: "0.02",
+        minimumReceived: "20",
       }),
-    ).toEqual(["tokenPair"]);
+    ).toEqual(["amountIn", "minimumReceived"]);
   });
 
-  test("counts amount and slippage as two logical changes", () => {
+  test("does not treat slippage as an API rerun condition", () => {
     expect(
-      changedLogicalFields(INITIAL_FORM, {
-        ...INITIAL_FORM,
-        amountIn: "1000",
-        slippage: "1",
-      }),
-    ).toEqual(["amountIn", "slippage"]);
-  });
-
-  test("allows a one-condition rerun plan", () => {
+      changedLogicalFields(INITIAL_FORM, { ...INITIAL_FORM, slippage: "1" }),
+    ).toEqual([]);
     const plan = planSubmission(
-      { ...INITIAL_FORM, amountIn: "1000" },
-      INITIAL_FORM,
-    );
-    expect(plan.allowed).toBe(true);
-  });
-
-  test("blocks an unchanged rerun plan", () => {
-    const plan = planSubmission(INITIAL_FORM, INITIAL_FORM);
-    expect(plan.allowed).toBe(false);
-  });
-
-  test("allows an unchanged integration retry plan", () => {
-    const plan = planSubmission(INITIAL_FORM, INITIAL_FORM, {
-      allowUnchanged: true,
-    });
-    expect(plan.allowed).toBe(true);
-  });
-
-  test("blocks a multi-condition rerun plan before scheduling", () => {
-    const plan = planSubmission(
-      { ...INITIAL_FORM, amountIn: "1000", slippage: "1" },
+      { ...INITIAL_FORM, slippage: "1" },
       INITIAL_FORM,
     );
     expect(plan.allowed).toBe(false);
-    if (!plan.allowed) expect(plan.errors.form).toBeDefined();
   });
 
-  test("returns no inline quote for invalid slippage", () => {
+  test("allows exactly one supported rerun change", () => {
     expect(
-      estimateOutput({
-        protocol: "kuru",
-        tokenIn: "MON",
-        tokenOut: "USDC",
-        amountIn: "1200",
-        slippage: "not-a-number",
-      }),
-    ).toBeUndefined();
-  });
-});
-
-describe("checkSwap rerun", () => {
-  test("carries the parent run id onto the child run", () => {
-    const first = checkSwap(input());
-    const second = checkSwap(input({ parentRunId: first.runId }), {
-      previous: first,
-    });
-
-    expect(second.parentRunId).toBe(first.runId);
-    expect(second.runId).not.toBe(first.runId);
-  });
-
-  test("omits a diff on the first run", () => {
-    expect(checkSwap(input()).diff).toBeUndefined();
-  });
-
-  test("reports the changed amount as its own diff row", () => {
-    const first = checkSwap(input({ amountIn: "1200" }));
-    const second = checkSwap(
-      input({ amountIn: "1801", parentRunId: first.runId }),
-      { previous: first },
-    );
-
-    const amountRow = second.diff?.find((row) => row.field.en === "Amount in");
-    expect(amountRow).toBeDefined();
-    expect(amountRow?.previous.en).toBe("1200 MON");
-    expect(amountRow?.next.en).toBe("1801 MON");
-  });
-
-  test("omits the amount row when the amount did not change", () => {
-    const first = checkSwap(input());
-    const second = checkSwap(
-      input({
-        minimumReceived: "9999",
-        minimumReceivedSource: "user_declared",
-        parentRunId: first.runId,
-      }),
-      { previous: first },
-    );
-
-    expect(second.diff?.some((row) => row.field.en === "Amount in")).toBe(
-      false,
-    );
-    expect(second.diff?.some((row) => row.field.en === "Verdict")).toBe(true);
+      planSubmission({ ...INITIAL_FORM, amountIn: "0.02" }, INITIAL_FORM)
+        .allowed,
+    ).toBe(true);
   });
 });

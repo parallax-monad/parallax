@@ -4,7 +4,6 @@ import { ChevronDownIcon, SwapIcon } from "@/components/wallet/WalletIcons";
 import {
   balanceOf,
   DEMO_RECIPIENT,
-  estimateOutput,
   formatAmount,
 } from "@/components/wallet/walletData";
 import type { FieldFlag } from "@/lib/analyze/fields";
@@ -96,13 +95,7 @@ export function WalletSwap({
     flags.find((flag) => flag.field === key);
 
   const balance = balanceOf(form.tokenIn);
-  const estimate = estimateOutput({
-    protocol: form.protocol,
-    tokenIn: form.tokenIn,
-    tokenOut: form.tokenOut,
-    amountIn: form.amountIn,
-    slippage: form.slippage,
-  });
+  const estimate = undefined;
   const amountFlag = flagFor("amountIn");
   const amountError = errors.amountIn;
   const slippageError = errors.slippage;
@@ -203,8 +196,8 @@ export function WalletSwap({
         </div>
         <p className="mt-2 text-[12px] leading-[1.5] text-dim">
           {say(language, {
-            en: "Estimated by deterministic demo logic, not a live or recorded quote.",
-            zh: "由确定性的演示逻辑估算，并非实时或录制报价。",
+            en: "The live backend response supplies the quote after submission. No local quote is invented.",
+            zh: "提交后由实时后端响应提供报价。前端不会编造本地报价。",
           })}
         </p>
       </section>
@@ -325,8 +318,8 @@ export function WalletSwap({
               </span>
               <span className="field-control text-white">
                 {say(language, {
-                  en: "Kuru (demo default)",
-                  zh: "Kuru（演示默认）",
+                  en: "Kuru (live API)",
+                  zh: "Kuru（实时 API）",
                 })}
               </span>
               {flagFor("protocol") && (
@@ -351,8 +344,8 @@ export function WalletSwap({
 
       <button type="submit" className="btn btn-monad mt-1 w-full">
         {say(language, {
-          en: "Simulate before signing",
-          zh: "签名前先模拟",
+          en: "Submit live check",
+          zh: "提交实时检查",
         })}
       </button>
       <p className="text-center text-[12px] leading-[1.5] text-dim">

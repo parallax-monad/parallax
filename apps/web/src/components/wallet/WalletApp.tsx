@@ -89,7 +89,7 @@ export function WalletApp({
       return;
     }
 
-    const parent = result;
+    const parent = result?.systemStatus === "OK" ? result : undefined;
     const submitted = plan.submitted;
     setFormErrors({});
     setResult(undefined);
@@ -101,10 +101,9 @@ export function WalletApp({
       stageCount: WALLET_STAGE_COUNT,
       stageMs: STAGE_MS,
       onStage: setStage,
-      onSettle: () => {
-        setResult(
-          checkSwap(toInput(submitted, parent?.runId), { previous: parent }),
-        );
+      onSettle: async () => {
+        const nextResult = await checkSwap(toInput(submitted, parent?.runId));
+        setResult(nextResult);
         setSubmittedForm(submitted);
         setScreen("result");
       },

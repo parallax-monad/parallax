@@ -1,67 +1,186 @@
-import type { Copy } from "@/lib/i18n";
-import { runEvidence } from "./fixtures";
 import { validateForm } from "./form";
-import { decide, MOSS_VERSION, RULE_VERSION } from "./rules";
-import type { CheckSwapInput, CheckSwapResult, RunDiff } from "./types";
+import type {
+  ActionSuggestion,
+  ApiFailure,
+  CheckSwapInput,
+  CheckSwapResult,
+  EvidenceItem,
+  RuleResult,
+  RunDiff,
+  Verdict,
+} from "./types";
 
-let runCounter = 0;
+export const DEFAULT_SENDER = "0x1111111111111111111111111111111111111111";
+export const MONAD_USDC_ADDRESS = "0x754704Bc059F8C67012fEd69BC8A327a5aafb603";
+const API_BASE = "";
+const cp = (value: string) => ({ en: value, zh: value });
+const obj = (value: unknown): Record<string, unknown> | undefined =>
+  typeof value === "object" && value !== null
+    ? (value as Record<string, unknown>)
+    : undefined;
+const str = (value: unknown) => (typeof value === "string" ? value : undefined);
+const arr = (value: unknown): unknown[] => (Array.isArray(value) ? value : []);
+const unavailable = cp("unavailable");
 
-function nextRunId() {
-  runCounter += 1;
-  return `run_${runCounter.toString().padStart(4, "0")}`;
+function symbol(value: unknown): string {
+  const asset = obj(value);
+  if (asset?.kind === "native") return "MON";
+  const address = str(asset?.address)?.toLowerCase();
+  if (address === MONAD_USDC_ADDRESS.toLowerCase()) return "USDC";
+  return address ? `${address.slice(0, 6)}…${address.slice(-4)}` : "unknown";
 }
 
-const NOT_CHECKED: Copy[] = [
-  { en: "Full protocol security review", zh: "完整的协议安全审计" },
-  { en: "Complete malicious token coverage", zh: "全部恶意代币的覆盖" },
-  { en: "All asset semantics", zh: "所有资产的语义差异" },
-  { en: "Future market movement", zh: "未来的市场波动" },
-];
+function asset(value: string) {
+  if (value === "MON") return { kind: "native" };
+  if (value === "USDC") return { kind: "erc20", address: MONAD_USDC_ADDRESS };
+  throw new Error(`Unsupported token: ${value}`);
+}
 
-const UNAVAILABLE: Copy = { en: "unavailable", zh: "无法取得" };
+function decimal(value: unknown, decimals: number): string {
+  const atomic = str(value);
+  if (!atomic || !/^\d+$/.test(atomic)) return "unavailable";
+  const padded = atomic.padStart(decimals + 1, "0");
+  const fraction = padded.slice(-decimals).replace(/0+$/, "");
+  return `${padded.slice(0, -decimals)}${fraction ? `.${fraction}` : ""}`;
+}
 
-/**
- * Quote amounts are numeric strings except for the "unavailable" sentinel, so
- * only that sentinel needs translating.
- */
-const amountCopy = (value: string): Copy =>
-  value === "unavailable" ? UNAVAILABLE : { en: value, zh: value };
+function suggestion(value: unknown): ActionSuggestion | undefined {
+  const evaluation = obj(value);
+  const action = obj(evaluation?.action);
+  const field = str(action?.field);
+  const relevance = str(evaluation?.relevance);
+  if (
+    !field ||
+    !relevance ||
+    !["amountIn", "tokenPair", "protocol", "minimumReceived"].includes(field)
+  )
+    return;
+  return {
+    field: field as ActionSuggestion["field"],
+    category:
+      action?.kind === "ACCEPTANCE_BOUNDARY_CHANGE"
+        ? "ACCEPTANCE_BOUNDARY"
+        : "TRANSACTION_CONDITION",
+    relevance: relevance as ActionSuggestion["relevance"],
+    reason: cp(
+      (str(evaluation?.actionReasonCode) ?? "unknown")
+        .replaceAll("_", " ")
+        .toLowerCase(),
+    ),
+  };
+}
 
-/** Amounts carry their token symbol so a diff row is readable on its own. */
-const amountWithUnit = (amount: string, symbol: string): Copy => ({
-  en: `${amount} ${symbol}`,
-  zh: `${amount} ${symbol}`,
-});
+function rule(value: unknown): RuleResult | undefined {
+  const item = obj(value);
+  const id = str(item?.ruleId);
+  const status = str(item?.status);
+  if (!id || !status) return;
+  return {
+    id,
+    group: id.includes("ECONOMIC")
+      ? "economicBoundary"
+      : id.includes("EVIDENCE")
+        ? "evidenceCompleteness"
+        : "execution",
+    label: cp(id),
+    outcome:
+      status === "NOT_APPLICABLE"
+        ? "SKIPPED"
+        : (status as RuleResult["outcome"]),
+    detail: cp(
+      str(item?.reasonCode) ??
+        str(item?.applicabilityReasonCode) ??
+        "No reason provided",
+    ),
+  };
+}
 
-/** Integration faults surface as INTEGRATION_ERROR, never protocol risk (FR-09). */
-function integrationError(
+function evidence(value: unknown, replay: boolean): EvidenceItem | undefined {
+  const item = obj(value);
+  const id = str(item?.key);
+  if (!id) return;
+  const rawStage = str(item?.stage)?.toLowerCase();
+  const stage =
+    rawStage &&
+    ["discover", "load", "quote", "action", "simulate"].includes(rawStage)
+      ? (rawStage as EvidenceItem["stage"])
+      : "unknown";
+  const source = str(item?.source);
+  const isMock = item?.isMock === true;
+  return {
+    id,
+    stage,
+    label: cp(str(item?.summary) ?? id),
+    value: JSON.stringify(item, null, 2),
+    origin: replay
+      ? "replay"
+      : isMock
+        ? "mock"
+        : source === "derived"
+          ? "derived"
+          : "live",
+    blockNumber: str(item?.blockNumber) ?? str(item?.simulatorPinnedBlock),
+    runtimeVersion: str(item?.runtimeVersion),
+    runtimeRevision: str(item?.runtimeRevision),
+    fixtureId: str(item?.fixtureId),
+    reproducibility: str(item?.reproducibility),
+    isMock,
+  };
+}
+
+function diff(value: unknown): RunDiff | undefined {
+  const rows = arr(obj(value)?.changedFields).flatMap((raw) => {
+    const item = obj(raw);
+    const field = str(item?.field);
+    const before = str(item?.before);
+    const after = str(item?.after);
+    return field && before !== undefined && after !== undefined
+      ? [
+          {
+            field: cp(field),
+            previous: cp(before),
+            next: cp(after),
+            direction: "changed" as const,
+          },
+        ]
+      : [];
+  });
+  return rows.length ? rows : undefined;
+}
+
+function failureCopy(failure: ApiFailure) {
+  const label = failure.code.replaceAll("_", " ").toLowerCase();
+  const reason = failure.reason ? ` (${failure.reason})` : "";
+  return {
+    en: `The check failed with ${label}${reason}. This is a system result, not a transaction-risk verdict.`,
+    zh: `检查因 ${label}${reason} 失败。这是系统结果，不是交易风险结论。`,
+  };
+}
+
+function failed(
   input: CheckSwapInput,
-  message: Copy,
+  apiFailure: ApiFailure,
+  rawResponse: unknown,
 ): CheckSwapResult {
   return {
-    runId: nextRunId(),
+    runId: `request-${Date.now()}`,
     parentRunId: input.parentRunId,
     systemStatus: "INTEGRATION_ERROR",
     verdict: "UNKNOWN",
-    summary: {
-      en: `The check did not complete: ${message.en}. This says nothing about the transaction itself.`,
-      zh: `检查没有完成：${message.zh}。这不代表交易本身有问题。`,
-    },
+    summary: failureCopy(apiFailure),
     recommendedActions: [],
     irrelevantActions: [],
     checked: [],
-    notChecked: NOT_CHECKED,
+    notChecked: [],
     evidence: [],
     ruleResults: [],
     unknowns: [
       {
-        id: "run",
-        label: { en: "Check did not complete", zh: "检查没有完成" },
-        reason: message,
+        id: "request",
+        label: cp("Check interrupted"),
+        reason: failureCopy(apiFailure),
       },
     ],
-    productRunMode: "DEMO",
-    replayMode: false,
     intent: {
       tokenIn: input.tokenIn,
       tokenOut: input.tokenOut,
@@ -69,173 +188,295 @@ function integrationError(
     },
     quote: {
       expectedOutput: "unavailable",
-      route: UNAVAILABLE,
+      route: unavailable,
       blockNumber: "unavailable",
     },
-    minimumReceivedSource: input.minimumReceivedSource ?? "unavailable",
+    minimumReceivedSource: input.minimumReceived
+      ? "user_declared"
+      : "unavailable",
     createdAt: new Date().toISOString(),
-    ruleVersion: RULE_VERSION,
-    mossVersion: MOSS_VERSION,
+    ruleVersion: "unavailable",
+    mossVersion: "unavailable",
+    productRunMode: "LIVE",
+    replayMode: false,
+    apiFailure,
+    rawResponse,
   };
 }
 
-const VERDICT_RANK = { STOP: 0, ADJUST: 1, UNKNOWN: 2, PROCEED: 3 };
-
-const DIFF_FIELD = {
-  verdict: { en: "Verdict", zh: "结论" },
-  amountIn: { en: "Amount in", zh: "输入数量" },
-  expectedOutput: { en: "Expected output", zh: "预期输出" },
-  route: { en: "Route", zh: "路径" },
-} satisfies Record<string, Copy>;
-
-/** Previous vs New comparison (FR-07). Only fields that moved are listed. */
-function buildDiff(
-  previous: CheckSwapResult,
-  next: CheckSwapResult,
-): RunDiff | undefined {
-  const rows: RunDiff = [];
-
-  if (previous.verdict !== next.verdict) {
-    rows.push({
-      field: DIFF_FIELD.verdict,
-      previous: { en: previous.verdict, zh: previous.verdict },
-      next: { en: next.verdict, zh: next.verdict },
-      direction:
-        VERDICT_RANK[next.verdict] > VERDICT_RANK[previous.verdict]
-          ? "improved"
-          : "worsened",
-    });
-  }
-
-  // Compares the requested input, not the quote, so a rerun that only changed
-  // the amount still reports the condition the user actually edited.
-  if (previous.intent.amountIn !== next.intent.amountIn) {
-    rows.push({
-      field: DIFF_FIELD.amountIn,
-      previous: amountWithUnit(
-        previous.intent.amountIn,
-        previous.intent.tokenIn,
-      ),
-      next: amountWithUnit(next.intent.amountIn, next.intent.tokenIn),
-      direction: "changed",
-    });
-  }
-
-  if (previous.quote.expectedOutput !== next.quote.expectedOutput) {
-    const before = Number(previous.quote.expectedOutput);
-    const after = Number(next.quote.expectedOutput);
-    const comparable = Number.isFinite(before) && Number.isFinite(after);
-    rows.push({
-      field: DIFF_FIELD.expectedOutput,
-      previous: amountCopy(previous.quote.expectedOutput),
-      next: amountCopy(next.quote.expectedOutput),
-      direction: comparable
-        ? after > before
-          ? "improved"
-          : "worsened"
-        : "changed",
-    });
-  }
-
-  // Compared by content, not identity: route is a fresh Copy object each run,
-  // so `!==` on the object would report a change on every single check.
-  if (previous.quote.route.en !== next.quote.route.en) {
-    rows.push({
-      field: DIFF_FIELD.route,
-      previous: previous.quote.route,
-      next: next.quote.route,
-      direction: "changed",
-    });
-  }
-
-  return rows.length > 0 ? rows : undefined;
+function mapRun(
+  raw: unknown,
+  transportFailure?: ApiFailure,
+  rawResponse: unknown = raw,
+): CheckSwapResult | undefined {
+  const run = obj(raw);
+  const intent = obj(run?.intent);
+  const runId = str(run?.runId);
+  const systemStatus = str(run?.systemStatus);
+  const verdict = str(run?.verdict) as Verdict | undefined;
+  if (!runId || !intent || !systemStatus || !verdict) return;
+  const replayMode = run?.replayMode === true;
+  const runError = obj(run?.error);
+  const apiFailure: ApiFailure | undefined =
+    systemStatus === "INTEGRATION_ERROR"
+      ? {
+          httpStatus: transportFailure?.httpStatus,
+          code:
+            transportFailure?.code ??
+            str(runError?.code) ??
+            "INTEGRATION_ERROR",
+          reason: transportFailure?.reason,
+          stage: str(runError?.stage),
+          retryable:
+            typeof runError?.retryable === "boolean"
+              ? runError.retryable
+              : (transportFailure?.retryable ?? false),
+          message: str(runError?.message) ?? transportFailure?.message,
+        }
+      : undefined;
+  const mappedEvidence = arr(run?.evidence)
+    .map((item) => evidence(item, replayMode))
+    .filter((item): item is EvidenceItem => !!item);
+  const scope = arr(run?.scope)
+    .map(obj)
+    .filter((item): item is Record<string, unknown> => !!item);
+  const route = obj(run?.route);
+  const routePath = arr(route?.path).map(symbol).join(" → ");
+  const output = arr(run?.evidence)
+    .map(obj)
+    .find((item) => item?.kind === "simulated_token_out");
+  const tokenIn = symbol(intent?.tokenIn);
+  const tokenOut = symbol(intent?.tokenOut);
+  const boundary = obj(intent?.economicBoundary);
+  const effectiveVerdict: Verdict =
+    !replayMode && !str(run?.simulatorPinnedBlock) && verdict !== "UNKNOWN"
+      ? "UNKNOWN"
+      : verdict;
+  const provenanceFailedClosed = effectiveVerdict !== verdict;
+  return {
+    runId,
+    parentRunId: str(run?.parentRunId),
+    systemStatus: systemStatus as CheckSwapResult["systemStatus"],
+    verdict: effectiveVerdict,
+    summary: provenanceFailedClosed
+      ? {
+          en: "Live provenance is incomplete because simulatorPinnedBlock is missing. The UI has failed closed to UNKNOWN.",
+          zh: "实时来源信息不完整：缺少 simulatorPinnedBlock。UI 已保守降级为 UNKNOWN。",
+        }
+      : cp(
+          str(run?.summary) ??
+            (apiFailure ? failureCopy(apiFailure).en : "No summary provided"),
+        ),
+    recommendedActions: arr(run?.recommendedActions)
+      .map(suggestion)
+      .filter((item): item is ActionSuggestion => !!item),
+    irrelevantActions: arr(run?.irrelevantActions)
+      .map(suggestion)
+      .filter((item): item is ActionSuggestion => !!item),
+    checked: scope
+      .filter((item) => item.status === "checked")
+      .map((item) => cp(str(item.label) ?? str(item.key) ?? "Checked")),
+    notChecked: scope
+      .filter((item) => item.status === "not_checked")
+      .map((item) => cp(str(item.label) ?? str(item.key) ?? "Not checked")),
+    unknowns: scope
+      .filter((item) => item.status === "unknown")
+      .map((item, index) => ({
+        id: str(item.key) ?? `unknown-${index}`,
+        label: cp(str(item.label) ?? "Unknown"),
+        reason: cp(str(item.reason) ?? "No reason provided"),
+      })),
+    evidence: mappedEvidence,
+    ruleResults: arr(run?.ruleResults)
+      .map(rule)
+      .filter((item): item is RuleResult => !!item),
+    intent: {
+      tokenIn,
+      tokenOut,
+      amountIn: decimal(intent?.amountInAtomic, tokenIn === "USDC" ? 6 : 18),
+    },
+    diff: diff(run?.diff),
+    quote: {
+      expectedOutput: output
+        ? decimal(output.amountReceivedAtomic, tokenOut === "USDC" ? 6 : 18)
+        : "unavailable",
+      route: routePath ? cp(routePath) : unavailable,
+      blockNumber:
+        str(route?.blockNumber) ??
+        str(run?.simulatorPinnedBlock) ??
+        "unavailable",
+    },
+    minimumReceivedSource: (str(boundary?.source) ??
+      "unavailable") as CheckSwapResult["minimumReceivedSource"],
+    createdAt: new Date().toISOString(),
+    ruleVersion:
+      arr(run?.ruleResults)
+        .map(obj)
+        .map((item) => str(item?.ruleId))
+        .filter(Boolean)
+        .join(", ") || "unavailable",
+    mossVersion:
+      mappedEvidence.find((item) => item.runtimeVersion)?.runtimeVersion ??
+      "unavailable",
+    productRunMode: replayMode ? "RECORDED_REPLAY" : "LIVE",
+    replayMode,
+    simulatorPinnedBlock: str(run?.simulatorPinnedBlock),
+    apiFailure,
+    rawResponse,
+  };
 }
 
-export type CheckOptions = { previous?: CheckSwapResult };
+function body(input: CheckSwapInput) {
+  return {
+    ...(input.parentRunId ? { parentRunId: input.parentRunId } : {}),
+    chainId: 143,
+    protocol: input.protocol,
+    sender: input.sender ?? DEFAULT_SENDER,
+    tokenIn: asset(input.tokenIn),
+    tokenOut: asset(input.tokenOut),
+    amountIn: input.amountIn,
+    economicBoundary: input.minimumReceived
+      ? {
+          availability: "available",
+          minimumReceived: input.minimumReceived,
+          source: "user_declared",
+        }
+      : { availability: "unavailable", source: "unavailable" },
+  };
+}
 
-/**
- * Runs the full pipeline: intent → evidence → normalization → rules → decision.
- * This is a mock service generating demo results from fixtures. An adapter is
- * required to integrate with the real /api/check endpoint.
- */
-export function checkSwap(
+export type CheckOptions = { fetch?: typeof fetch; signal?: AbortSignal };
+
+export async function checkSwap(
   input: CheckSwapInput,
   options: CheckOptions = {},
-): CheckSwapResult {
+): Promise<CheckSwapResult> {
   const validation = validateForm({
     protocol: input.protocol,
     tokenIn: input.tokenIn,
     tokenOut: input.tokenOut,
     amountIn: input.amountIn,
-    slippage: input.slippage ?? "",
+    slippage: input.slippage ?? "0.5",
     minimumReceived: input.minimumReceived ?? "",
   });
-  if (!validation.valid) {
-    const message = validation.errors.amountIn ??
-      validation.errors.slippage ??
-      validation.errors.minimumReceived ?? {
-        en: "form input is invalid",
-        zh: "表单输入无效",
-      };
-    return integrationError(input, message);
+  if (!validation.valid)
+    return failed(
+      input,
+      { code: "INVALID_REQUEST", retryable: false },
+      { errors: validation.errors },
+    );
+  let response: Response;
+  try {
+    response = await (options.fetch ?? fetch)(`${API_BASE}/api/check`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body(input)),
+      signal: options.signal,
+    });
+  } catch (error) {
+    const aborted =
+      error instanceof DOMException && error.name === "AbortError";
+    return failed(
+      input,
+      {
+        code: aborted ? "REQUEST_ABORTED" : "NETWORK_ERROR",
+        retryable: !aborted,
+        message: error instanceof Error ? error.message : undefined,
+      },
+      null,
+    );
   }
-
-  const { amountIn, slippage, minimumReceived } = validation.values;
-  const evidence = runEvidence({
-    protocol: input.protocol,
-    tokenIn: input.tokenIn,
-    tokenOut: input.tokenOut,
-    amountIn,
-    slippage,
-  });
-
-  const minimumReceivedSource =
-    minimumReceived === undefined
-      ? "unavailable"
-      : (input.minimumReceivedSource ?? "user_declared");
-
-  const decision = decide({
-    evidence,
-    minimumReceived,
-    minimumReceivedSource,
-    tokenOut: input.tokenOut,
-  });
-
-  const result: CheckSwapResult = {
-    runId: nextRunId(),
-    parentRunId: input.parentRunId,
-    systemStatus: "OK",
-    verdict: decision.verdict,
-    summary: decision.summary,
-    recommendedActions: decision.recommendedActions,
-    irrelevantActions: decision.irrelevantActions,
-    checked: decision.checked,
-    notChecked: decision.notChecked,
-    evidence: evidence.items,
-    ruleResults: decision.ruleResults,
-    unknowns: decision.unknowns,
-    productRunMode: "DEMO",
-    // Local deterministic demo logic is not recorded replay evidence.
-    replayMode: false,
-    intent: {
-      tokenIn: input.tokenIn,
-      tokenOut: input.tokenOut,
-      amountIn: input.amountIn,
-    },
-    quote: {
-      expectedOutput:
-        evidence.executionStatus === "SUCCESS"
-          ? evidence.expectedOutput.toFixed(4)
-          : "unavailable",
-      route: evidence.route,
-      blockNumber: evidence.blockNumber,
-    },
-    minimumReceivedSource,
-    createdAt: new Date().toISOString(),
-    ruleVersion: RULE_VERSION,
-    mossVersion: MOSS_VERSION,
+  let payload: unknown;
+  try {
+    payload = await response.json();
+  } catch {
+    return failed(
+      input,
+      {
+        httpStatus: response.status,
+        code: "INVALID_JSON_RESPONSE",
+        retryable: response.status >= 500,
+      },
+      null,
+    );
+  }
+  if (response.ok)
+    return (
+      mapRun(payload) ??
+      failed(
+        input,
+        {
+          httpStatus: response.status,
+          code: "INVALID_RESPONSE",
+          retryable: false,
+        },
+        payload,
+      )
+    );
+  const envelope = obj(payload);
+  const error = obj(envelope?.error);
+  const apiFailure = {
+    httpStatus: response.status,
+    code: str(error?.code) ?? `HTTP_${response.status}`,
+    reason: str(error?.reason),
+    retryable: response.status >= 500,
+    message: str(error?.message),
   };
+  return (
+    mapRun(envelope?.run, apiFailure, payload) ??
+    failed(input, apiFailure, payload)
+  );
+}
 
-  const previous = options.previous;
-  return previous ? { ...result, diff: buildDiff(previous, result) } : result;
+export async function loadReplay(
+  fixtureId: "mon-to-usdc" | "usdc-to-mon",
+  options: CheckOptions = {},
+): Promise<CheckSwapResult> {
+  const input: CheckSwapInput = {
+    protocol: "kuru",
+    tokenIn: fixtureId === "mon-to-usdc" ? "MON" : "USDC",
+    tokenOut: fixtureId === "mon-to-usdc" ? "USDC" : "MON",
+    amountIn: "unavailable",
+  };
+  try {
+    const response = await (options.fetch ?? fetch)(
+      `${API_BASE}/api/replay/${fixtureId}`,
+      { signal: options.signal },
+    );
+    const payload: unknown = await response.json();
+    if (response.ok)
+      return (
+        mapRun(payload) ??
+        failed(
+          input,
+          {
+            httpStatus: response.status,
+            code: "INVALID_RESPONSE",
+            retryable: false,
+          },
+          payload,
+        )
+      );
+    const error = obj(obj(payload)?.error);
+    return failed(
+      input,
+      {
+        httpStatus: response.status,
+        code: str(error?.code) ?? `HTTP_${response.status}`,
+        retryable: response.status >= 500,
+        message: str(error?.message),
+      },
+      payload,
+    );
+  } catch (error) {
+    return failed(
+      input,
+      {
+        code: "NETWORK_ERROR",
+        retryable: true,
+        message: error instanceof Error ? error.message : undefined,
+      },
+      null,
+    );
+  }
 }

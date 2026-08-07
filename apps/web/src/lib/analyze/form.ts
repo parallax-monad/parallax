@@ -85,7 +85,6 @@ export function validateForm(form: FormState): FormValidation {
 
 export type LogicalFormChange =
   | "amountIn"
-  | "slippage"
   | "minimumReceived"
   | "tokenPair"
   | "protocol";
@@ -97,7 +96,6 @@ export function changedLogicalFields(
 ): LogicalFormChange[] {
   const changes: LogicalFormChange[] = [];
   if (previous.amountIn !== current.amountIn) changes.push("amountIn");
-  if (previous.slippage !== current.slippage) changes.push("slippage");
   if (previous.minimumReceived !== current.minimumReceived) {
     changes.push("minimumReceived");
   }
@@ -129,6 +127,25 @@ export function planSubmission(
   if (!validation.valid) return { allowed: false, errors: validation.errors };
 
   if (previousSubmitted) {
+    if (
+      previousSubmitted.amountIn === form.amountIn &&
+      previousSubmitted.minimumReceived === form.minimumReceived &&
+      previousSubmitted.tokenIn === form.tokenIn &&
+      previousSubmitted.tokenOut === form.tokenOut &&
+      previousSubmitted.protocol === form.protocol &&
+      previousSubmitted.slippage !== form.slippage
+    ) {
+      return {
+        allowed: false,
+        errors: {
+          form: {
+            en: "Slippage is not part of the /api/check contract. Change one supported intent condition instead.",
+            zh: "滑点不属于 /api/check 契约。请改动一个受支持的意图条件。",
+          },
+        },
+      };
+    }
+
     const changes = changedLogicalFields(previousSubmitted, form);
     if (
       (changes.length === 0 && !options.allowUnchanged) ||
@@ -139,8 +156,8 @@ export function planSubmission(
         allowed: false,
         errors: {
           form: {
-            en: "Change exactly one supported condition before rerunning. The token pair counts as one condition.",
-            zh: "重新检查前必须只修改一个支持的条件。代币对视为一个条件。",
+            en: "Change exactly one backend-supported condition before rerunning. Slippage is not part of the /api/check contract.",
+            zh: "重新检查前必须只修改一个后端支持的条件。滑点不属于 /api/check 契约。",
           },
         },
       };
@@ -154,7 +171,7 @@ export const INITIAL_FORM: FormState = {
   protocol: DEMO_PROTOCOL,
   tokenIn: "MON",
   tokenOut: "USDC",
-  amountIn: "1200",
+  amountIn: "0.01",
   slippage: DEMO_SLIPPAGE,
   minimumReceived: "",
 };
