@@ -69,6 +69,8 @@ function fakeBundle(
     simulate?: unknown;
     coreVersion?: string;
     blockNumber?: bigint;
+    pinnedBlock?: bigint | string;
+    statefulPinnedBlock?: string;
     quoteHang?: boolean;
     withoutPinnedBlock?: boolean;
   } = {},
@@ -84,45 +86,55 @@ function fakeBundle(
     kuru: { version: "0.1.0" },
     simulator: {
       version: "0.1.0",
-      createTraceSimulator: () => ({
-        ...(overrides.withoutPinnedBlock
-          ? { pinnedBlockNumber: overrides.blockNumber ?? 100n }
-          : {
-              getPinnedBlockNumber: () => overrides.blockNumber ?? 100n,
-            }),
-        simulate: async () => {
-          if (overrides.simulateError) throw overrides.simulateError;
-          return (
-            overrides.simulate ?? {
-              results: [
-                {
-                  protocol: "kuru",
-                  method: "swap",
-                  transaction: TRANSACTION,
-                  reverted: false,
-                  receipt: {
-                    kind: "receipt",
-                    outcome: {
-                      operation: "swap",
-                      protocol: "kuru",
-                      sender: SENDER,
-                      tokenIn: "native",
-                      tokenOut: TOKEN_OUT,
-                      amountIn: "10000000000000000",
-                      amountOut: "223000000000000",
-                    },
-                    text: "Kuru Swap verified",
-                    changes: [],
-                  },
-                  changes: [],
-                  warnings: [],
-                  gas: "1",
-                },
-              ],
+      createTraceSimulator: () => {
+        let stateful: string | undefined =
+          overrides.statefulPinnedBlock === undefined ? undefined : undefined;
+        return {
+          ...(overrides.withoutPinnedBlock
+            ? { pinnedBlockNumber: overrides.blockNumber ?? 100n }
+            : {
+                getPinnedBlockNumber: () =>
+                  overrides.statefulPinnedBlock !== undefined
+                    ? stateful
+                    : (overrides.pinnedBlock ?? overrides.blockNumber ?? 100n),
+              }),
+          simulate: async () => {
+            if (overrides.simulateError) throw overrides.simulateError;
+            if (overrides.statefulPinnedBlock !== undefined) {
+              stateful = overrides.statefulPinnedBlock;
             }
-          );
-        },
-      }),
+            return (
+              overrides.simulate ?? {
+                results: [
+                  {
+                    protocol: "kuru",
+                    method: "swap",
+                    transaction: TRANSACTION,
+                    reverted: false,
+                    receipt: {
+                      kind: "receipt",
+                      outcome: {
+                        operation: "swap",
+                        protocol: "kuru",
+                        sender: SENDER,
+                        tokenIn: "native",
+                        tokenOut: TOKEN_OUT,
+                        amountIn: "10000000000000000",
+                        amountOut: "223000000000000",
+                      },
+                      text: "Kuru Swap verified",
+                      changes: [],
+                    },
+                    changes: [],
+                    warnings: [],
+                    gas: "1",
+                  },
+                ],
+              }
+            );
+          },
+        };
+      },
     },
     system: { version: "0.1.0" },
     packageVersions: {
@@ -281,6 +293,33 @@ describe("kuru live adapter", () => {
     expect(evidence.simulationCoverage.value?.complete).toBe(true);
     expect(evidence.simulationCoverage.value?.expectedTransactions).toBe(1);
     expect(evidence.simulatorPinnedBlock).toBe("100");
+  });
+
+  it("normalizes a Moss Hex pinned block to decimal for acceptance", async () => {
+    const result = await runKuruLiveSwapWithBundle(
+      input(),
+      fakeBundle({ pinnedBlock: "0x64" }),
+    );
+    expect(result.evidence.simulatorPinnedBlock).toBe("100");
+    expect(result.simulatorPinnedBlock).toBe("100");
+  });
+
+  it("consumes the post-simulate pin on a fresh simulator (Moss getter semantics)", async () => {
+    const result = await runKuruLiveSwapWithBundle(
+      input(),
+      fakeBundle({ statefulPinnedBlock: "0x588a" }),
+    );
+    expect(result.evidence.simulatorPinnedBlock).toBe("22666");
+    expect(result.simulatorPinnedBlock).toBe("22666");
+  });
+
+  it("fails closed on a malformed pinned block value", async () => {
+    const result = await runKuruLiveSwapWithBundle(
+      input(),
+      fakeBundle({ pinnedBlock: "0xzz" }),
+    );
+    expect(result.evidence.simulatorPinnedBlock).toBeUndefined();
+    expect(result.simulatorPinnedBlock).toBeUndefined();
   });
 
   it("fails closed on runtime version mismatch", async () => {
