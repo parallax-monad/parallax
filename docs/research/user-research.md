@@ -22,6 +22,15 @@ This research therefore focuses on the user decision before signing or retrying 
 
 ---
 
+## Related documents
+
+- [Product Requirements Document](../product/prd.md) — converts the research findings into the current P0 product decisions.
+- [Competitive Analysis](https://github.com/parallax-monad/parallax/pull/20) — evaluates whether existing products already address the observed user problems. The expected final repository location is `docs/research/competitive-analysis.md`.
+
+PR #20 has not yet been merged, so this document links to the open pull request rather than a repository file that does not exist on this branch.
+
+---
+
 ## 2. Research Scope and Evidence Standard
 
 ### 2.1 Included evidence
@@ -196,7 +205,7 @@ A 2024 Consensys/YouGov survey covered 18,652 respondents across 18 countries. I
 
 - Crypto familiarity should not be equated with transaction-level comprehension.
 - A user may know tokens, wallets, and major brands while still lacking a reliable model of calldata, approvals, routes, execution evidence, or failure causes.
-- Parallax should not position itself as introductory crypto education. The narrower problem is helping a user make one transaction decision safely.
+- Parallax should not position itself as introductory crypto education. The narrower problem is helping a user make one transaction decision with clearer, evidence-backed reasoning.
 
 **Caveat:** These surveys are broad crypto studies, not Monad swap studies, and do not prove demand for Parallax.
 
