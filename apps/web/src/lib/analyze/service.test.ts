@@ -314,21 +314,6 @@ describe("loadReplay", () => {
     expect(result.intent.amountIn).toBe("0.01");
   });
 
-  test("displayAmountIn overrides the shown amount without touching Evidence", async () => {
-    const request = vi
-      .fn<typeof fetch>()
-      .mockResolvedValue(jsonResponse(recorded));
-    const result = await loadReplay("mon-to-usdc", {
-      fetch: request,
-      displayAmountIn: "100",
-    });
-
-    expect(result.intent.amountIn).toBe("100");
-    // The Evidence still describes the recorded run, not the shown amount.
-    expect(result.productRunMode).toBe("RECORDED_REPLAY");
-    expect(result.evidence[0]?.id).toBe("mon-to-usdc:quote");
-  });
-
   test("keeps a replay transport failure as an error page", async () => {
     const request = vi
       .fn<typeof fetch>()
@@ -340,7 +325,6 @@ describe("loadReplay", () => {
       );
     const result = await loadReplay("mon-to-usdc", {
       fetch: request,
-      displayAmountIn: "100",
     });
 
     expect(result.systemStatus).toBe("INTEGRATION_ERROR");

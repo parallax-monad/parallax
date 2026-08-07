@@ -77,6 +77,7 @@ export function WalletSwap({
   flags = [],
   onChange,
   onSubmit,
+  onReplay,
 }: {
   form: FormState;
   language: Language;
@@ -85,6 +86,7 @@ export function WalletSwap({
   flags?: FieldFlag[];
   onChange: (form: FormState) => void;
   onSubmit: () => void;
+  onReplay: () => void;
 }) {
   const [advancedOpen, setAdvancedOpen] = useState(false);
 
@@ -346,6 +348,16 @@ export function WalletSwap({
         {say(language, {
           en: "Submit live check",
           zh: "提交实时检查",
+        })}
+      </button>
+      <button
+        type="button"
+        className="btn btn-monad-outline mt-2 w-full"
+        onClick={onReplay}
+      >
+        {say(language, {
+          en: "Load recorded replay",
+          zh: "载入录制回放",
         })}
       </button>
       <p className="text-center text-[12px] leading-[1.5] text-dim">

@@ -102,19 +102,29 @@ export function WalletApp({
       stageMs: STAGE_MS,
       onStage: setStage,
       onSettle: async () => {
-        const live = await checkSwap(toInput(submitted, parent?.runId));
-        // Demo affordance: this runtime has no Moss engine, so a live check
-        // cannot produce a conclusion. Replay keeps the result screen
-        // reviewable and stays labelled RECORDED_REPLAY by the mapper.
-        const nextResult =
-          live.systemStatus === "INTEGRATION_ERROR" &&
-          live.apiFailure?.code === "UNSUPPORTED"
-            ? await loadReplay("mon-to-usdc", {
-                displayAmountIn: submitted.amountIn,
-              })
-            : live;
+        const nextResult = await checkSwap(toInput(submitted, parent?.runId));
         setResult(nextResult);
         setSubmittedForm(submitted);
+        setScreen("result");
+      },
+    });
+  };
+
+  const runReplay = () => {
+    setFormErrors({});
+    setResult(undefined);
+    setDrawerOpen(false);
+    setStage(0);
+    setScreen("checking");
+
+    schedulerRef.current.run({
+      stageCount: WALLET_STAGE_COUNT,
+      stageMs: STAGE_MS,
+      onStage: setStage,
+      onSettle: async () => {
+        const nextResult = await loadReplay("mon-to-usdc");
+        setResult(nextResult);
+        setSubmittedForm(form);
         setScreen("result");
       },
     });
@@ -195,6 +205,7 @@ export function WalletApp({
                     if (Object.keys(formErrors).length > 0) setFormErrors({});
                   }}
                   onSubmit={runCheck}
+                  onReplay={runReplay}
                 />
               )}
               {screen === "checking" && (
