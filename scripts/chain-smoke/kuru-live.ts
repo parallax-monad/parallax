@@ -42,6 +42,10 @@ import { expect, test } from "vitest";
 import { bootstrapBackendApp } from "../../apps/api/src/bootstrap/backend.js";
 import { runResultSchema } from "../../packages/contracts/src/index.js";
 import type { KuruLiveRunner } from "../../packages/orchestrator/agent-flow/index.js";
+import {
+  apiCheckAcceptanceOf,
+  apiCheckProvenanceMatchesOf,
+} from "./live-smoke-acceptance.js";
 
 const rpcUrl = process.env.MOSS_RPC_URL;
 const runtimePath = process.env.MOSS_RUNTIME_PATH;
@@ -149,25 +153,6 @@ function stageStatus(
       : null,
     error: stage.error ? toJsonValue(stage.error) : null,
   }));
-}
-
-function apiCheckAcceptanceOf(
-  value: unknown,
-  expected: { runId: string; simulatorPinnedBlock: string },
-): boolean {
-  const parsed = runResultSchema.safeParse(value);
-  if (!parsed.success || parsed.data.status !== "completed") return false;
-
-  return (
-    parsed.data.runId === expected.runId &&
-    parsed.data.systemStatus === "OK" &&
-    parsed.data.verdict === "PROCEED" &&
-    parsed.data.simulatorPinnedBlock === expected.simulatorPinnedBlock &&
-    parsed.data.scope.every((item) => item.status !== "unknown") &&
-    parsed.data.evidence.every(
-      (item) => item.isReplay === false && item.isMock === false,
-    )
-  );
 }
 
 test("kuru live smoke: MON -> USDC", async () => {
@@ -304,26 +289,37 @@ test("kuru live smoke: MON -> USDC", async () => {
     runtimeVersion,
     runtimeRevision,
   });
-  const apiCheckAcceptance = apiCheckAcceptanceOf(apiResponseBody, {
-    runId,
-    simulatorPinnedBlock: result.simulatorPinnedBlock ?? "",
-  });
+  const apiCheckAcceptance = apiCheckAcceptanceOf(apiResponseBody);
   const apiCheck = runResultSchema.safeParse(apiResponseBody);
-  const apiCheckProvenanceMatches =
-    apiCheck.success &&
-    apiCheck.data.runId === runId &&
-    apiCheck.data.simulatorPinnedBlock === result.simulatorPinnedBlock;
+  const apiCheckProvenanceMatches = apiCheckProvenanceMatchesOf(
+    apiResponseBody,
+    {
+      simulatorPinnedBlock: result.simulatorPinnedBlock,
+      observedChainId: result.observedChainId,
+      evidence: {
+        runtimeVersion: result.evidence.runtimeVersion,
+        runtimeRevision: result.evidence.runtimeRevision,
+      },
+    },
+  );
   const liveSuccess =
     apiResponseStatus === 200 &&
     apiCheckAcceptance &&
     apiCheckProvenanceMatches &&
     liveSuccessOf(acceptance);
+  const apiVerdict = apiCheck.success ? apiCheck.data.verdict : undefined;
+  // The full technical Live gate passed; the canonical Verdict may
+  // legitimately be a fail-closed UNKNOWN (no economic boundary provided).
+  // PROCEED is a business verdict and is never manufactured by the smoke.
+  const productProceed = liveSuccess && apiVerdict === "PROCEED";
   const adapterDecision = p0DecisionCandidate(result, {
     runtimeVersion,
     runtimeRevision,
   });
   const decision = liveSuccess
-    ? "P0_LIVE_READY"
+    ? productProceed
+      ? "P0_LIVE_READY"
+      : "VALID_LIVE_UNKNOWN"
     : adapterDecision === "P0_LIVE_READY"
       ? "P0_LIVE_BLOCKED_SIMULATION"
       : adapterDecision;
@@ -335,7 +331,9 @@ test("kuru live smoke: MON -> USDC", async () => {
       : failedStage
         ? "PARTIALLY_VERIFIED"
         : liveSuccess
-          ? "PARTIALLY_VERIFIED"
+          ? productProceed
+            ? "PARTIALLY_VERIFIED"
+            : "VALID_LIVE_UNKNOWN"
           : "FAILED";
   const metadata = {
     ...baseMetadata(runId, startedAt),
@@ -349,6 +347,7 @@ test("kuru live smoke: MON -> USDC", async () => {
     p0DecisionCandidate: decision,
     apiCheckStatus: apiResponseStatus ?? null,
     apiCheckSchemaValid: apiCheck.success,
+    apiVerdict: apiVerdict ?? null,
     apiCheckAcceptance,
     apiCheckProvenanceMatches,
     observedChainId: result.observedChainId ?? null,
@@ -381,6 +380,17 @@ test("kuru live smoke: MON -> USDC", async () => {
       process.exit(1);
     }
     expect(false, JSON.stringify({ acceptance }, null, 2)).toBe(true);
+    return;
+  }
+
+  if (!productProceed) {
+    // The full technical Live gate passed but the canonical Verdict is a
+    // legitimate non-PROCEED (e.g. UNKNOWN without an economic boundary). This
+    // is a completed authoritative Live UNKNOWN, never a green PROCEED result
+    // and not an integration failure.
+    console.log(
+      `LIVE_SMOKE_VALID_UNKNOWN execution=${evidence.executionStatus} integration=${evidence.integrationStatus} verdict=${apiVerdict} artifact=${artifactDir}`,
+    );
     return;
   }
 

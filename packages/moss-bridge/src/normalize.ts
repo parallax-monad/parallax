@@ -33,7 +33,11 @@ export function normalizeRecordedKuruEvidence(input: {
   const action = transactions.length === 0 ? null : transactions.map(summary);
   const simulation = simulationSummary(input.raw.simulation, transactions);
   const approval = approvalStatus(input.raw.action, input.intent.tokenIn);
-  const assetChangeAssessment = assessAssetChanges(simulation.assetChanges);
+  const assetChangeAssessment = assessAssetChanges(simulation.assetChanges, {
+    intent: input.intent,
+    quote,
+    outcome: simulation.outcome,
+  });
   const limitations = [
     "Recorded simulation synthetic-prefunds native MON only and does not prove ERC-20 affordability.",
     "No signing, broadcast, custody, or wallet mutation occurred while recording this evidence.",
@@ -153,7 +157,11 @@ export function normalizeLiveKuruEvidence(input: {
   const action = transactions.length === 0 ? null : transactions.map(summary);
   const simulation = simulationSummary(input.raw.simulation, transactions);
   const approval = approvalStatus(input.raw.action, input.intent.tokenIn);
-  const assetChangeAssessment = assessAssetChanges(simulation.assetChanges);
+  const assetChangeAssessment = assessAssetChanges(simulation.assetChanges, {
+    intent: input.intent,
+    quote,
+    outcome: simulation.outcome,
+  });
   const blockNumber = liveBlockNumber(input.stages, input.initialBlock);
   const live: {
     blockNumber: string | null;
@@ -345,12 +353,245 @@ function queryData(value: JsonValue | null): JsonValue | null {
   return isRecord(value.data) ? value.data : null;
 }
 
-function assessAssetChanges(changes: JsonValue[]): AssetChangeAssessment {
+function assessAssetChanges(
+  changes: JsonValue[],
+  input: {
+    intent: { sender: string; tokenIn: string; tokenOut: string };
+    quote: JsonValue | null;
+    outcome: JsonValue | null;
+  },
+): AssetChangeAssessment {
   if (changes.length === 0) return "NOT_APPLICABLE";
-  // P0: a full asset-change predicate is not yet available. Any non-empty
-  // recorded change set is treated as unknown until it can be explicitly
-  // explained against the expected swap intent.
+
+  // Authoritative swap accounting must come from the simulated outcome, never
+  // from a Quote. Without it the value movements cannot be proven.
+  const outcome = parseSwapOutcome(input.outcome);
+  if (!outcome) return "UNKNOWN";
+
+  const sender = input.intent.sender.toLowerCase();
+  const tokenIn = tokenKey(input.intent.tokenIn);
+  const tokenOut = tokenKey(input.intent.tokenOut);
+  if (
+    outcome.sender.toLowerCase() !== sender ||
+    tokenKey(outcome.tokenIn) !== tokenIn ||
+    tokenKey(outcome.tokenOut) !== tokenOut ||
+    outcome.amountOut === 0n
+  ) {
+    return "UNKNOWN";
+  }
+
+  // Asset universe: the quoted route path when available; otherwise the
+  // intended input/output assets. Any value movement outside this universe is
+  // an unexpected third asset.
+  const universe = assetUniverse(input.quote, tokenIn, tokenOut);
+  if (!universe) return "UNKNOWN";
+
+  const movements: ValueMovement[] = [];
+  for (const change of changes) {
+    const parsed = parseValueMovement(change);
+    if (parsed === "UNKNOWN") return "UNKNOWN";
+    if (parsed === null) continue;
+    movements.push(parsed);
+  }
+  if (movements.length === 0) return "UNKNOWN";
+
+  for (const movement of movements) {
+    if (!universe.has(movement.asset)) return "UNKNOWN";
+  }
+
+  if (!conservesAcrossExpectedAssets(movements, [...universe], sender)) {
+    return "UNKNOWN";
+  }
+
+  if (netFlow(movements, tokenIn, sender) !== -outcome.amountIn) {
+    return "UNKNOWN";
+  }
+  if (netFlow(movements, tokenOut, sender) !== outcome.amountOut) {
+    return "UNKNOWN";
+  }
+
+  return "EXPLAINED";
+}
+
+/** ERC20 Transfer(address,address,uint256) topic — asset-bearing value movement. */
+const ERC20_TRANSFER_TOPIC =
+  "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
+
+/** Kuru order-book / router events carrying no asset value (corroborating only). */
+const KURU_NON_VALUE_TOPICS = new Set([
+  "0xf16924fba1c18c108912fcacaac7450c98eb3f2d8c0a3cdf3df7066c08f21581", // Trade
+  "0xb74e966bc873b8c144fab39c9981210f50130885e89caf4556c0840cec741dcd", // FlipOrderUpdated
+  "0x49496a41b922bdba3ff7f57bb0992ab1a1a3ee95b5ae5bd7271c67861f018352", // FlippedOrderCreated
+  "0xae71e8ae9695e4f3523d27453a24d99edc4738fea8130c1cb33eb9ef95f53354", // KuruRouterSwap
+]);
+
+type ValueMovement = {
+  asset: string;
+  from: string;
+  to: string;
+  amount: bigint;
+};
+
+type SwapOutcome = {
+  sender: string;
+  tokenIn: string;
+  tokenOut: string;
+  amountIn: bigint;
+  amountOut: bigint;
+};
+
+function parseSwapOutcome(value: JsonValue | null): SwapOutcome | null {
+  if (!isRecord(value)) return null;
+  const sender = value.sender;
+  const tokenIn = value.tokenIn;
+  const tokenOut = value.tokenOut;
+  const amountIn = atomicAmount(value.amountIn);
+  const amountOut = atomicAmount(value.amountOut);
+  if (
+    typeof sender !== "string" ||
+    typeof tokenIn !== "string" ||
+    typeof tokenOut !== "string" ||
+    amountIn === null ||
+    amountOut === null
+  ) {
+    return null;
+  }
+  return { sender, tokenIn, tokenOut, amountIn, amountOut };
+}
+
+function atomicAmount(value: JsonValue): bigint | null {
+  if (typeof value !== "string" || !/^\d+$/.test(value)) return null;
+  return BigInt(value);
+}
+
+function tokenKey(value: string): string {
+  return value === "native" ? "native" : value.toLowerCase();
+}
+
+function topicAddress(topic: JsonValue): string | null {
+  if (typeof topic !== "string" || !/^0x[0-9a-fA-F]{64}$/.test(topic)) {
+    return null;
+  }
+  return `0x${topic.slice(-40).toLowerCase()}`;
+}
+
+function hexUint256(value: string): bigint | null {
+  if (!/^0x[0-9a-fA-F]{64}$/.test(value)) return null;
+  return BigInt(value);
+}
+
+/**
+ * Classify one structured Moss change:
+ * - an asset-bearing ValueMovement (native transfer, ERC-20 Transfer),
+ * - null for a recognized non-value Kuru event (corroborating only), or
+ * - "UNKNOWN" for anything malformed or not provably value-irrelevant.
+ */
+function parseValueMovement(
+  change: JsonValue,
+): ValueMovement | "UNKNOWN" | null {
+  if (!isRecord(change)) return "UNKNOWN";
+  if (change.kind === "nativeTransfer") {
+    const from = change.from;
+    const to = change.to;
+    const amount = atomicAmount(change.value);
+    if (typeof from !== "string" || typeof to !== "string" || amount === null) {
+      return "UNKNOWN";
+    }
+    return {
+      asset: "native",
+      from: from.toLowerCase(),
+      to: to.toLowerCase(),
+      amount,
+    };
+  }
+  if (change.kind === "event") {
+    const address = change.address;
+    const topics = change.topics;
+    const data = change.data;
+    if (
+      typeof address !== "string" ||
+      !Array.isArray(topics) ||
+      topics.some((topic) => typeof topic !== "string") ||
+      typeof data !== "string"
+    ) {
+      return "UNKNOWN";
+    }
+    const topic0 = topics[0] as string;
+    if (topic0 === ERC20_TRANSFER_TOPIC) {
+      const from = topicAddress(topics[1]);
+      const to = topicAddress(topics[2]);
+      const amount = hexUint256(data);
+      if (from === null || to === null || amount === null) return "UNKNOWN";
+      if (!/^0x[0-9a-fA-F]{40}$/.test(address)) return "UNKNOWN";
+      return { asset: address.toLowerCase(), from, to, amount };
+    }
+    if (KURU_NON_VALUE_TOPICS.has(topic0)) return null;
+    return "UNKNOWN";
+  }
   return "UNKNOWN";
+}
+
+function assetUniverse(
+  quote: JsonValue | null,
+  tokenIn: string,
+  tokenOut: string,
+): Set<string> | null {
+  const universe = new Set<string>([tokenIn, tokenOut]);
+  if (!isRecord(quote) || !Array.isArray(quote.path)) return universe;
+  for (const entry of quote.path) {
+    if (
+      typeof entry !== "string" ||
+      (entry !== "native" && !/^0x[0-9a-fA-F]{40}$/.test(entry))
+    ) {
+      return null;
+    }
+    universe.add(tokenKey(entry));
+  }
+  return universe;
+}
+
+function netFlow(
+  movements: ValueMovement[],
+  asset: string,
+  address: string,
+): bigint {
+  let net = 0n;
+  for (const movement of movements) {
+    if (movement.asset !== asset) continue;
+    if (movement.to === address) net += movement.amount;
+    if (movement.from === address) net -= movement.amount;
+  }
+  return net;
+}
+
+/**
+ * Conservation: within each expected asset, every non-sender address with a
+ * net outflow must be an exchange counterparty backed by a net inflow of
+ * another expected asset (a maker naturally exchanges one asset for another).
+ * Any other net outflow is an unexplained mint/shortfall.
+ */
+function conservesAcrossExpectedAssets(
+  movements: ValueMovement[],
+  expectedAssets: readonly string[],
+  sender: string,
+): boolean {
+  for (const asset of expectedAssets) {
+    const debtors = new Set<string>();
+    for (const movement of movements) {
+      if (movement.asset !== asset) continue;
+      if (netFlow(movements, asset, movement.from) < 0n) {
+        debtors.add(movement.from);
+      }
+    }
+    for (const address of debtors) {
+      if (address === sender) continue;
+      const backedByAnotherAsset = expectedAssets.some(
+        (other) => other !== asset && netFlow(movements, other, address) > 0n,
+      );
+      if (!backedByAnotherAsset) return false;
+    }
+  }
+  return true;
 }
 
 function approvalStatus(
