@@ -136,6 +136,57 @@ describe("checkSwap API adapter", () => {
     expect(result.summary.en).toContain("simulatorPinnedBlock");
   });
 
+  test("maps a verified ADJUST Action into display units, not atomic values", async () => {
+    const adjust = {
+      ...completed,
+      verdict: "ADJUST",
+      summary: "A verified amount adjustment can satisfy the Economic Boundary",
+      intent: {
+        ...intent,
+        amountInAtomic: "1500000000000000000",
+        economicBoundary: {
+          availability: "available",
+          minimumReceivedAtomic: "20000",
+          source: "user_declared",
+        },
+      },
+      recommendedActions: [
+        {
+          id: "verified-amount-in-adjustment",
+          action: { kind: "TRANSACTION_ADJUSTMENT", field: "amountIn" },
+          relevance: "RELEVANT",
+          recommendable: true,
+          actionReasonCode: "OUTPUT_IMPROVEMENT_VERIFIED",
+          proposedChange: {
+            field: "amountIn",
+            before: "1500000000000000000",
+            after: "1000000000000000000",
+          },
+        },
+      ],
+    };
+    const request = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(jsonResponse(adjust));
+    const result = await checkSwap(input, { fetch: request });
+
+    expect(result.verdict).toBe("ADJUST");
+    const action = result.recommendedActions[0];
+    expect(action).toMatchObject({
+      field: "amountIn",
+      category: "TRANSACTION_CONDITION",
+      recommendable: true,
+    });
+    // 1.5 MON → 1 MON, converted with 18 decimals rather than shown raw.
+    expect(action?.proposedChange).toEqual({
+      before: "1.5",
+      after: "1",
+      unit: "MON",
+    });
+    expect(action?.reason.en).toContain("not an optimal amount");
+    expect(action?.reason.en).not.toContain("OUTPUT_IMPROVEMENT_VERIFIED");
+  });
+
   test("prefers a nested Run retryable=false over the HTTP 502 fallback", async () => {
     const run = {
       ...completed,

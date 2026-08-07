@@ -22,7 +22,10 @@ export type ActionSuggestion = {
   field: AdjustableField;
   category: "TRANSACTION_CONDITION" | "ACCEPTANCE_BOUNDARY";
   relevance: "RELEVANT" | "IRRELEVANT" | "UNKNOWN";
+  recommendable: boolean;
+  reasonCode?: string;
   reason: Copy;
+  proposedChange?: { before: string; after: string; unit: string };
 };
 
 export type CheckSwapInput = {

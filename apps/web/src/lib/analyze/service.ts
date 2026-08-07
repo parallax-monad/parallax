@@ -1,3 +1,4 @@
+import type { Copy } from "@/lib/i18n";
 import { validateForm } from "./form";
 import type {
   ActionSuggestion,
@@ -44,7 +45,70 @@ function decimal(value: unknown, decimals: number): string {
   return `${padded.slice(0, -decimals)}${fraction ? `.${fraction}` : ""}`;
 }
 
-function suggestion(value: unknown): ActionSuggestion | undefined {
+/**
+ * Plain-language Action reasons. OUTPUT_IMPROVEMENT_VERIFIED stays deliberately
+ * narrow: the handoff states it proves only that an attested verification child
+ * passed the unchanged Economic Boundary, never an optimal amount, best price or
+ * route, protocol safety, or guaranteed live execution.
+ */
+const ACTION_REASON: Record<string, Copy> = {
+  OUTPUT_IMPROVEMENT_VERIFIED: {
+    en: "A verification run confirmed this amount can meet your minimum received. It is not an optimal amount, a best price, or a safety or execution guarantee.",
+    zh: "验证运行确认这个数量可以满足你的最低收到量。这不是最优数量或最佳价格，也不构成安全或上链保证。",
+  },
+  ALTERNATIVE_PATH_VERIFIED: {
+    en: "A verification run confirmed an alternative path for this condition.",
+    zh: "验证运行确认了这个条件存在可行的替代路径。",
+  },
+  CANNOT_CREATE_MISSING_ROUTE: {
+    en: "Changing this cannot create a route that does not exist.",
+    zh: "改这个无法创造出不存在的路径。",
+  },
+  CHANGES_ACCEPTANCE_BOUNDARY_ONLY: {
+    en: "This only changes what you accept, not what the transaction would do.",
+    zh: "这只会改变你接受的条件，不会改变交易本身的结果。",
+  },
+  EFFECT_NOT_VERIFIED: {
+    en: "The effect of changing this was not verified in this run.",
+    zh: "本次运行没有验证修改这个条件的效果。",
+  },
+  RESTORES_CHECK_ONLY: {
+    en: "This only retries the check itself; it does not change the transaction.",
+    zh: "这只会重试检查本身，不会改变交易。",
+  },
+};
+
+/** Registry decimals for the P0 pair, so atomic values never reach a screen. */
+const DECIMALS: Record<string, number> = { MON: 18, USDC: 6 };
+const decimalsFor = (symbol: string) => DECIMALS[symbol] ?? 18;
+
+/**
+ * Converts an atomic `proposedChange` into display units. The handoff requires
+ * rendering human copy from the Intent plus token registry rather than showing
+ * atomic strings or reverse-engineering Diff values.
+ */
+function displayChange(value: unknown, field: string, unit: string) {
+  const change = obj(value);
+  const before = str(change?.before);
+  const after = str(change?.after);
+  if (before === undefined || after === undefined) return undefined;
+
+  // Only amount fields are atomic; pair and protocol changes are identities.
+  const isAmount = field === "amountIn" || field === "minimumReceived";
+  if (!isAmount) return { before, after, unit: "" };
+
+  return {
+    before: decimal(before, decimalsFor(unit)),
+    after: decimal(after, decimalsFor(unit)),
+    unit,
+  };
+}
+
+function suggestion(
+  value: unknown,
+  tokenIn: string,
+  tokenOut: string,
+): ActionSuggestion | undefined {
   const evaluation = obj(value);
   const action = obj(evaluation?.action);
   const field = str(action?.field);
@@ -55,6 +119,9 @@ function suggestion(value: unknown): ActionSuggestion | undefined {
     !["amountIn", "tokenPair", "protocol", "minimumReceived"].includes(field)
   )
     return;
+  const reasonCode = str(evaluation?.actionReasonCode);
+  // Amounts are quoted in the asset the field refers to, not always tokenIn.
+  const unit = field === "minimumReceived" ? tokenOut : tokenIn;
   return {
     field: field as ActionSuggestion["field"],
     category:
@@ -62,11 +129,12 @@ function suggestion(value: unknown): ActionSuggestion | undefined {
         ? "ACCEPTANCE_BOUNDARY"
         : "TRANSACTION_CONDITION",
     relevance: relevance as ActionSuggestion["relevance"],
-    reason: cp(
-      (str(evaluation?.actionReasonCode) ?? "unknown")
-        .replaceAll("_", " ")
-        .toLowerCase(),
-    ),
+    recommendable: evaluation?.recommendable === true,
+    reasonCode,
+    reason:
+      ACTION_REASON[reasonCode ?? ""] ??
+      cp("This action carries no recognized reason code."),
+    proposedChange: displayChange(evaluation?.proposedChange, field, unit),
   };
 }
 
@@ -268,10 +336,10 @@ function mapRun(
             (apiFailure ? failureCopy(apiFailure).en : "No summary provided"),
         ),
     recommendedActions: arr(run?.recommendedActions)
-      .map(suggestion)
+      .map((item) => suggestion(item, tokenIn, tokenOut))
       .filter((item): item is ActionSuggestion => !!item),
     irrelevantActions: arr(run?.irrelevantActions)
-      .map(suggestion)
+      .map((item) => suggestion(item, tokenIn, tokenOut))
       .filter((item): item is ActionSuggestion => !!item),
     checked: scope
       .filter((item) => item.status === "checked")

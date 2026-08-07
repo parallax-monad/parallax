@@ -16,9 +16,8 @@ import {
   type FormState,
   INITIAL_FORM,
   planSubmission,
-  toInput,
 } from "@/lib/analyze/form";
-import { checkSwap } from "@/lib/analyze/service";
+import { loadReplay } from "@/lib/analyze/service";
 import { createStageScheduler } from "@/lib/analyze/stageScheduler";
 import type { CheckSwapResult } from "@/lib/analyze/types";
 import type { Language } from "@/lib/i18n";
@@ -89,7 +88,6 @@ export function WalletApp({
       return;
     }
 
-    const parent = result?.systemStatus === "OK" ? result : undefined;
     const submitted = plan.submitted;
     setFormErrors({});
     setResult(undefined);
@@ -102,7 +100,7 @@ export function WalletApp({
       stageMs: STAGE_MS,
       onStage: setStage,
       onSettle: async () => {
-        const nextResult = await checkSwap(toInput(submitted, parent?.runId));
+        const nextResult = await loadReplay("mon-to-usdc");
         setResult(nextResult);
         setSubmittedForm(submitted);
         setScreen("result");

@@ -345,6 +345,24 @@ export function WalletResult({
                 className="border-b border-line py-2.5 text-[14px] leading-[1.6] text-dim last:border-b-0"
                 key={suggestion.field}
               >
+                {suggestion.proposedChange && (
+                  <span className="mb-1 flex flex-wrap items-center gap-2 text-[14px]">
+                    <span className="text-[12px] font-bold uppercase tracking-[0.06em] text-dim">
+                      {say(language, { en: "Amount", zh: "数量" })}
+                    </span>
+                    <span className="text-dim line-through">
+                      {suggestion.proposedChange.before}{" "}
+                      {suggestion.proposedChange.unit}
+                    </span>
+                    <span aria-hidden="true" className="text-faint">
+                      →
+                    </span>
+                    <strong className="text-monad-dim">
+                      {suggestion.proposedChange.after}{" "}
+                      {suggestion.proposedChange.unit}
+                    </strong>
+                  </span>
+                )}
                 {say(language, suggestion.reason)}
               </li>
             ))}

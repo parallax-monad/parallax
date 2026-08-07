@@ -54,6 +54,19 @@ function ActionRow({
           {say(language, CATEGORY_LABEL[suggestion.category])}
         </span>
       </div>
+      {suggestion.proposedChange && (
+        <p className="m-0 mt-1.5 flex flex-wrap items-center gap-2 text-[14px]">
+          <span className="text-dim line-through">
+            {suggestion.proposedChange.before} {suggestion.proposedChange.unit}
+          </span>
+          <span aria-hidden="true" className="text-faint">
+            →
+          </span>
+          <strong className="text-monad-dim">
+            {suggestion.proposedChange.after} {suggestion.proposedChange.unit}
+          </strong>
+        </p>
+      )}
       <p className="m-0 mt-1.5 text-[14px] leading-[1.6] text-dim">
         {say(language, suggestion.reason)}
       </p>
