@@ -496,35 +496,48 @@ export async function checkSwap(
   );
 }
 
+/**
+ * Loads a recorded Run. `displayAmountIn` overrides the displayed input amount
+ * with the caller's value: the fixture Evidence is still the recorded 0.01 MON
+ * run, so the amount shown is the request, not what the Evidence covers.
+ */
 export async function loadReplay(
   fixtureId: "mon-to-usdc" | "usdc-to-mon",
-  options: CheckOptions = {},
+  options: CheckOptions & { displayAmountIn?: string } = {},
 ): Promise<CheckSwapResult> {
   const input: CheckSwapInput = {
     protocol: "kuru",
     tokenIn: fixtureId === "mon-to-usdc" ? "MON" : "USDC",
     tokenOut: fixtureId === "mon-to-usdc" ? "USDC" : "MON",
-    amountIn: "unavailable",
+    amountIn: options.displayAmountIn ?? "unavailable",
   };
+  const withAmount = (result: CheckSwapResult): CheckSwapResult =>
+    options.displayAmountIn === undefined
+      ? result
+      : {
+          ...result,
+          intent: { ...result.intent, amountIn: options.displayAmountIn },
+        };
   try {
     const response = await (options.fetch ?? fetch)(
       `${API_BASE}/api/replay/${fixtureId}`,
       { signal: options.signal },
     );
     const payload: unknown = await response.json();
-    if (response.ok)
-      return (
-        mapRun(payload) ??
-        failed(
-          input,
-          {
-            httpStatus: response.status,
-            code: "INVALID_RESPONSE",
-            retryable: false,
-          },
-          payload,
-        )
-      );
+    if (response.ok) {
+      const mapped = mapRun(payload);
+      return mapped
+        ? withAmount(mapped)
+        : failed(
+            input,
+            {
+              httpStatus: response.status,
+              code: "INVALID_RESPONSE",
+              retryable: false,
+            },
+            payload,
+          );
+    }
     const error = obj(obj(payload)?.error);
     return failed(
       input,

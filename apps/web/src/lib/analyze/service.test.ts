@@ -6,7 +6,7 @@ import {
   planSubmission,
   validateForm,
 } from "./form";
-import { checkSwap } from "./service";
+import { checkSwap, loadReplay } from "./service";
 import type { CheckSwapInput } from "./types";
 
 const input: CheckSwapInput = {
@@ -264,6 +264,89 @@ describe("checkSwap API adapter", () => {
     expect(result.apiFailure).toMatchObject({
       code: "NETWORK_ERROR",
       retryable: true,
+    });
+  });
+});
+
+describe("loadReplay", () => {
+  const recorded = {
+    runId: "recorded-kuru-mon-to-usdc-91383505",
+    replayMode: true,
+    intent: {
+      ...intent,
+      sender: "0xcccccccccccccccccccccccccccccccccccccccc",
+      recipient: "0xcccccccccccccccccccccccccccccccccccccccc",
+      amountInAtomic: "10000000000000000",
+    },
+    status: "completed",
+    systemStatus: "OK",
+    verdict: "UNKNOWN",
+    summary: "Recorded Kuru replay: MON to USDC.",
+    ruleResults: [],
+    recommendedActions: [],
+    irrelevantActions: [],
+    evidence: [
+      {
+        key: "mon-to-usdc:quote",
+        kind: "generic",
+        status: "confirmed",
+        summary: "Recorded Quote Evidence",
+        source: "quote",
+        stage: "QUOTE",
+        isReplay: true,
+        isMock: false,
+        fixtureId: "mon-to-usdc",
+      },
+    ],
+    scope: [],
+  };
+
+  test("maps a recorded Run as RECORDED_REPLAY", async () => {
+    const request = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(jsonResponse(recorded));
+    const result = await loadReplay("mon-to-usdc", { fetch: request });
+
+    expect(request.mock.calls[0]?.[0]).toBe("/api/replay/mon-to-usdc");
+    expect(result.productRunMode).toBe("RECORDED_REPLAY");
+    expect(result.replayMode).toBe(true);
+    // Without an override the recorded atomic amount is what gets shown.
+    expect(result.intent.amountIn).toBe("0.01");
+  });
+
+  test("displayAmountIn overrides the shown amount without touching Evidence", async () => {
+    const request = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(jsonResponse(recorded));
+    const result = await loadReplay("mon-to-usdc", {
+      fetch: request,
+      displayAmountIn: "100",
+    });
+
+    expect(result.intent.amountIn).toBe("100");
+    // The Evidence still describes the recorded run, not the shown amount.
+    expect(result.productRunMode).toBe("RECORDED_REPLAY");
+    expect(result.evidence[0]?.id).toBe("mon-to-usdc:quote");
+  });
+
+  test("keeps a replay transport failure as an error page", async () => {
+    const request = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(
+        jsonResponse(
+          { error: { code: "REPLAY_NOT_FOUND", message: "missing" } },
+          404,
+        ),
+      );
+    const result = await loadReplay("mon-to-usdc", {
+      fetch: request,
+      displayAmountIn: "100",
+    });
+
+    expect(result.systemStatus).toBe("INTEGRATION_ERROR");
+    expect(result.apiFailure).toMatchObject({
+      code: "REPLAY_NOT_FOUND",
+      retryable: false,
     });
   });
 });

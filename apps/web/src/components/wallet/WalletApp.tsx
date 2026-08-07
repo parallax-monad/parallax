@@ -16,8 +16,9 @@ import {
   type FormState,
   INITIAL_FORM,
   planSubmission,
+  toInput,
 } from "@/lib/analyze/form";
-import { loadReplay } from "@/lib/analyze/service";
+import { checkSwap, loadReplay } from "@/lib/analyze/service";
 import { createStageScheduler } from "@/lib/analyze/stageScheduler";
 import type { CheckSwapResult } from "@/lib/analyze/types";
 import type { Language } from "@/lib/i18n";
@@ -88,6 +89,7 @@ export function WalletApp({
       return;
     }
 
+    const parent = result?.systemStatus === "OK" ? result : undefined;
     const submitted = plan.submitted;
     setFormErrors({});
     setResult(undefined);
@@ -100,7 +102,17 @@ export function WalletApp({
       stageMs: STAGE_MS,
       onStage: setStage,
       onSettle: async () => {
-        const nextResult = await loadReplay("mon-to-usdc");
+        const live = await checkSwap(toInput(submitted, parent?.runId));
+        // Demo affordance: this runtime has no Moss engine, so a live check
+        // cannot produce a conclusion. Replay keeps the result screen
+        // reviewable and stays labelled RECORDED_REPLAY by the mapper.
+        const nextResult =
+          live.systemStatus === "INTEGRATION_ERROR" &&
+          live.apiFailure?.code === "UNSUPPORTED"
+            ? await loadReplay("mon-to-usdc", {
+                displayAmountIn: submitted.amountIn,
+              })
+            : live;
         setResult(nextResult);
         setSubmittedForm(submitted);
         setScreen("result");
