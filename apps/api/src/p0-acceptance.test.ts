@@ -842,6 +842,13 @@ describe("Backend P0 acceptance matrix", () => {
         runId: "run-1",
         status: "completed",
         verdict: "ADJUST",
+        intent: {
+          economicBoundary: {
+            availability: "available",
+            minimumReceivedAtomic: "20000",
+            source: "user_declared",
+          },
+        },
         recommendedActions: [
           {
             action: { kind: "TRANSACTION_ADJUSTMENT", field: "amountIn" },
@@ -856,15 +863,47 @@ describe("Backend P0 acceptance matrix", () => {
         ],
       },
     });
-    expect(
-      response.status === 200 &&
-        response.body.status === "completed" &&
-        response.body.evidence.some(
-          (item) =>
-            item.kind === "action_verification" &&
-            item.verificationRunId === "run-2",
-        ),
-    ).toBe(true);
+    if (response.status !== 200 || response.body.status !== "completed") {
+      throw new Error("expected completed ADJUST Run");
+    }
+
+    const action = response.body.recommendedActions[0];
+    expect(action).toBeDefined();
+    const attestation = response.body.evidence.find(
+      (item) => item.kind === "action_verification",
+    );
+    expect(attestation).toMatchObject({
+      kind: "action_verification",
+      field: "amountIn",
+      actionReasonCode: "OUTPUT_IMPROVEMENT_VERIFIED",
+      baselineRunId: "run-1",
+      verificationRunId: "run-2",
+      beforeValue: "1500000000000000000",
+      afterValue: "1000000000000000000",
+      baselineBoundaryAtomic: "20000",
+      verificationBoundaryAtomic: "20000",
+      resultEvidenceKey: "verified-output-improvement",
+    });
+    if (attestation?.kind !== "action_verification" || action === undefined) {
+      throw new Error("expected Action Gate attestation and Action");
+    }
+
+    const verifiedOutput = response.body.evidence.find(
+      (item) => item.key === attestation.resultEvidenceKey,
+    );
+    expect(verifiedOutput).toMatchObject({
+      kind: "simulated_token_out",
+      key: "verified-output-improvement",
+    });
+    expect(action.evidenceRefs.map((reference) => reference.key)).toEqual([
+      attestation.key,
+      attestation.resultEvidenceKey,
+    ]);
+    expect(action.proposedChange).toEqual({
+      field: "amountIn",
+      before: attestation.beforeValue,
+      after: attestation.afterValue,
+    });
     expect(store.get("run-2")).toMatchObject({
       status: "completed",
       parentRunId: "run-1",

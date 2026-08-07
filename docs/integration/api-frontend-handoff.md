@@ -128,8 +128,33 @@ Body is a `RunResult`. Two terminal shapes:
    `PROCEED | ADJUST | STOP | UNKNOWN`.
    Unattested `ADJUST` candidates are **fail-closed to `STOP`** with empty
    `recommendedActions`. A verified fixture Action Gate may publish
-   `verdict = ADJUST` with recommendable `amountIn` Actions when attestation and a
-   completed verification child Run are present (acceptance row A14).
+   `verdict = ADJUST` with one recommendable `amountIn` Action only when the
+   public gate below is met (acceptance row A14). A completed verification
+   child alone is not sufficient.
+
+   **Fixture verified `ADJUST` gate (public boundary):**
+
+   - baseline has an available Economic Boundary;
+   - baseline `P0-EVIDENCE-001 = PASS`, `P0-EXECUTION-001 = PASS`, and
+     `P0-ECONOMIC-001 = FAIL` with `OUTPUT_BELOW_BOUNDARY`;
+   - only `amountIn` changes on the verification child; the original Economic
+     Boundary is preserved;
+   - the child reaches `status = completed` with Evidence, Execution, and
+     Economic rules all `PASS`;
+   - the child's Economic-rule `simulated_token_out` Evidence matches the
+     child's normalized `recipient` and `tokenOut`;
+   - baseline Evidence includes an `action_verification` attestation whose
+     `resultEvidenceKey` and Action `evidenceRefs` link the public Action to
+     that attestation and the verified output Evidence;
+   - missing, failing, mismatched, unattested, or non-terminal verification
+     remains `STOP` with empty `recommendedActions`.
+
+   **`OUTPUT_IMPROVEMENT_VERIFIED` visibility:** this Action Reason Code means
+   only that the attested verification child produced a verified simulated
+   output that passed the unchanged Economic Boundary relative to the failing
+   baseline. It is **not** evidence of a globally optimal amount, best price or
+   route, protocol safety, guaranteed live execution, or support for
+   non-`amountIn` adjustments.
 2. **`status: "integration_error"`** — `systemStatus: "INTEGRATION_ERROR"`,
    `verdict: "UNKNOWN"`, structured `error` on the Run (`code`, `stage`,
    `message`, `retryable`).

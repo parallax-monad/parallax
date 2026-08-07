@@ -121,6 +121,35 @@ describe("Action Gate fixture helpers", () => {
     ).toBe(false);
   });
 
+  it("rejects baselines without Evidence PASS", () => {
+    const baseline = economicFailStopResult(assets, "run-1", availableIntent);
+    const evidence = ruleById(baseline, "P0-EVIDENCE-001");
+    expect(
+      isActionGateCandidate({
+        ...baseline,
+        ruleResults: [
+          {
+            ruleId: "P0-EVIDENCE-001",
+            status: "FAIL",
+            reasonCode: "CRITICAL_EVIDENCE_MISSING",
+            evidenceRefs: evidence.evidenceRefs,
+            actionEvaluations: [],
+          },
+          ruleById(baseline, "P0-EXECUTION-001"),
+          ruleById(baseline, "P0-ECONOMIC-001"),
+        ] as Completed["ruleResults"],
+      }),
+    ).toBe(false);
+    expect(
+      isActionGateCandidate({
+        ...baseline,
+        ruleResults: baseline.ruleResults.filter(
+          (rule) => rule.ruleId !== "P0-EVIDENCE-001",
+        ),
+      }),
+    ).toBe(false);
+  });
+
   it("proposes a deterministic amountInAtomic reduction", () => {
     const adjustment = proposeAmountInAdjustment(availableIntent);
     expect(adjustment).toEqual({
@@ -223,6 +252,109 @@ describe("Action Gate fixture helpers", () => {
     };
 
     expect(childRunPassesActionGate(failingChild, "run-1")).toBe(false);
+  });
+
+  it("attests the Economic-rule simulated output when multiple outputs exist", () => {
+    const adjustment = proposeAmountInAdjustment(availableIntent);
+    const childBase = economicPassChildResult(
+      assets,
+      "run-2",
+      adjustment.nextIntent,
+    );
+    const economic = ruleById(childBase, "P0-ECONOMIC-001");
+    const referenced = childBase.evidence.find(
+      (item) => item.key === economic.evidenceRefs[0]?.key,
+    );
+    if (referenced?.kind !== "simulated_token_out") {
+      throw new Error("expected Economic simulated_token_out Evidence");
+    }
+
+    const decoy = {
+      ...referenced,
+      key: "decoy-simulated-token-out",
+      amountReceivedAtomic: "1",
+      recipient: "0x2222222222222222222222222222222222222222",
+    };
+    const child: Completed = {
+      ...childBase,
+      parentRunId: "run-1",
+      evidence: [decoy, ...childBase.evidence],
+      diff: {
+        previousRunId: "run-1",
+        previousVerdict: "STOP",
+        changedFields: [
+          {
+            field: "amountInAtomic",
+            before: adjustment.before,
+            after: adjustment.after,
+          },
+        ],
+      },
+    };
+
+    expect(childRunPassesActionGate(child, "run-1")).toBe(true);
+    const baseline = economicFailStopResult(assets, "run-1", availableIntent);
+    const verified = buildVerifiedAdjustBaseline(baseline, child, adjustment);
+    const output = verified.evidence.find(
+      (item) =>
+        item.kind === "simulated_token_out" &&
+        item.key === "verified-output-improvement",
+    );
+    expect(output).toMatchObject({
+      kind: "simulated_token_out",
+      amountReceivedAtomic: referenced.amountReceivedAtomic,
+      recipient: referenced.recipient,
+    });
+  });
+
+  it("rejects a child when Economic EvidenceRef does not resolve to matching tokenOut", () => {
+    const adjustment = proposeAmountInAdjustment(availableIntent);
+    const childBase = economicPassChildResult(
+      assets,
+      "run-2",
+      adjustment.nextIntent,
+    );
+    const referenced = ruleById(childBase, "P0-ECONOMIC-001").evidenceRefs[0];
+    if (referenced === undefined) {
+      throw new Error("expected Economic EvidenceRef");
+    }
+    const decoyKey = "decoy-simulated-token-out";
+    const mismatched: Completed = {
+      ...childBase,
+      parentRunId: "run-1",
+      ruleResults: childBase.ruleResults.map((rule) =>
+        rule.ruleId === "P0-ECONOMIC-001"
+          ? {
+              ...rule,
+              evidenceRefs: [{ ...referenced, key: decoyKey }],
+            }
+          : rule,
+      ),
+      evidence: [
+        ...childBase.evidence.map((item) =>
+          item.kind === "simulated_token_out"
+            ? {
+                ...item,
+                key: decoyKey,
+                recipient: "0x2222222222222222222222222222222222222222",
+              }
+            : item,
+        ),
+      ],
+      diff: {
+        previousRunId: "run-1",
+        previousVerdict: "STOP",
+        changedFields: [
+          {
+            field: "amountInAtomic",
+            before: adjustment.before,
+            after: adjustment.after,
+          },
+        ],
+      },
+    };
+
+    expect(childRunPassesActionGate(mismatched, "run-1")).toBe(false);
   });
 
   it("rejects a child whose simulated tokenOut recipient does not match Intent", () => {

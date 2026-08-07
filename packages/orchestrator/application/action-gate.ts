@@ -15,6 +15,8 @@ const REQUIRED_CHILD_RULE_IDS = [
   "P0-ECONOMIC-001",
 ] as const;
 
+type CompletedRun = Extract<RunResult, { status: "completed" }>;
+
 type EvidenceProvenance = {
   key: string;
   source: EvidenceRef["source"];
@@ -30,9 +32,7 @@ type EvidenceProvenance = {
 };
 
 /** P0 fixture path: economic FAIL with execution PASS and a declared boundary. */
-export function isActionGateCandidate(
-  result: Extract<RunResult, { status: "completed" }>,
-): boolean {
+export function isActionGateCandidate(result: CompletedRun): boolean {
   if (
     (result.verdict !== "STOP" && result.verdict !== "ADJUST") ||
     result.parentRunId !== undefined ||
@@ -43,6 +43,9 @@ export function isActionGateCandidate(
     return false;
   }
 
+  const evidence = result.ruleResults.find(
+    (rule) => rule.ruleId === "P0-EVIDENCE-001",
+  );
   const execution = result.ruleResults.find(
     (rule) => rule.ruleId === "P0-EXECUTION-001",
   );
@@ -51,6 +54,7 @@ export function isActionGateCandidate(
   );
 
   return (
+    evidence?.status === "PASS" &&
     execution?.status === "PASS" &&
     economic?.status === "FAIL" &&
     economic.reasonCode === "OUTPUT_BELOW_BOUNDARY"
@@ -83,20 +87,46 @@ export function proposeAmountInAdjustment(intent: NormalizedSwapIntent): {
   };
 }
 
-export function simulatedTokenOutEvidence(
-  result: Extract<RunResult, { status: "completed" }>,
+/**
+ * Resolves the simulated tokenOut Evidence referenced by P0-ECONOMIC-001.
+ * First-match scanning is intentionally avoided so multi-output Runs cannot
+ * attest an unreferenced output.
+ */
+export function economicSimulatedTokenOutEvidence(
+  result: CompletedRun,
 ): SimulatedTokenOutEvidence | undefined {
-  return result.evidence.find(
-    (item): item is SimulatedTokenOutEvidence =>
-      item.kind === "simulated_token_out",
+  const economic = result.ruleResults.find(
+    (rule) => rule.ruleId === "P0-ECONOMIC-001",
   );
+  if (economic === undefined || economic.evidenceRefs.length !== 1) {
+    return undefined;
+  }
+
+  const reference = economic.evidenceRefs[0];
+  if (reference === undefined) {
+    return undefined;
+  }
+
+  const evidence = result.evidence.find((item) => item.key === reference.key);
+  if (evidence?.kind !== "simulated_token_out") {
+    return undefined;
+  }
+
+  return evidence;
+}
+
+/** Resolves simulated tokenOut via the Economic rule EvidenceRef. */
+export function simulatedTokenOutEvidence(
+  result: CompletedRun,
+): SimulatedTokenOutEvidence | undefined {
+  return economicSimulatedTokenOutEvidence(result);
 }
 
 export function childRunPassesActionGate(
-  child: Extract<RunResult, { status: "completed" }>,
+  child: CompletedRun,
   baselineRunId: string,
 ): boolean {
-  const output = simulatedTokenOutEvidence(child);
+  const output = economicSimulatedTokenOutEvidence(child);
   if (
     child.parentRunId !== baselineRunId ||
     child.replayMode ||
@@ -139,14 +169,14 @@ export function evidenceRefFromItem(evidence: EvidenceProvenance): EvidenceRef {
  * (not the child's Evidence record relocated into the baseline).
  */
 export function buildVerifiedAdjustBaseline(
-  baseline: Extract<RunResult, { status: "completed" }>,
-  child: Extract<RunResult, { status: "completed" }>,
+  baseline: CompletedRun,
+  child: CompletedRun,
   adjustment: { before: string; after: string },
-): Extract<RunResult, { status: "completed" }> {
-  const childOutput = simulatedTokenOutEvidence(child);
+): CompletedRun {
+  const childOutput = economicSimulatedTokenOutEvidence(child);
   if (childOutput === undefined) {
     throw new Error(
-      "Action Gate verification requires child simulated tokenOut Evidence",
+      "Action Gate verification requires child Economic simulated tokenOut Evidence",
     );
   }
 

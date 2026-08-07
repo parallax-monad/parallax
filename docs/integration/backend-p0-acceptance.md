@@ -25,6 +25,9 @@ Out of scope for this gate:
 - Frontend Analyze UI and CTA routing
 - Live Kuru MON → USDC SUCCESS evidence (`pnpm smoke:kuru:live`)
 - Database, SSE, Queue, signing, or PancakeSwap
+- Full TV-ECO-006 / §3.3.1 `ACTION_GATE` / CrossRun locator Shared Contract
+  expansion (this gate's verified `ADJUST` path uses interim
+  `action_verification` Evidence only)
 
 ## Matrix
 
@@ -39,7 +42,7 @@ Expected public outcome column. Public outcomes may surface under transport-leve
 | --- | --- | --- | --- | --- |
 | A1 | `PROCEED` | Completed Run, `verdict = PROCEED`, stored | `p0-acceptance` A1 | `agent-flow` live Evidence → PROCEED |
 | A2 | `STOP` | Completed Run, `verdict = STOP` (unattested ADJUST fail-closed only) | `p0-acceptance` A2 | `agent-flow` NO_ROUTE → STOP |
-| A14 | `ADJUST` | Completed Run, `verdict = ADJUST` with verified `recommendedActions` (fixture Action Gate) | `p0-acceptance` A14 | `application` Action Gate + TV-ECO-006 |
+| A14 | `ADJUST` | Completed Run, `verdict = ADJUST` with verified `recommendedActions` (fixture Action Gate) | `p0-acceptance` A14 | `application` fixture Action Gate using interim Shared Contract `action_verification`; full TV-ECO-006 / `ACTION_GATE` contract deferred |
 | A3 | `UNKNOWN` | Completed Run, `verdict = UNKNOWN` | `p0-acceptance` A3 | recorded Replay fixtures |
 | A4 | Integration Error | Response body `status = integration_error`, `verdict = UNKNOWN` (store record may be `completed` when the error Run was stored successfully) | `p0-acceptance` A4 | moss-bridge / agent-flow |
 | A5 | Stage evidence preserved | `QUOTE` / `ACTION` / `SIMULATE` Evidence stages round-trip through Check Application | `p0-acceptance` A5 | `agent-flow`, moss-bridge live adapter for real stage execution |
