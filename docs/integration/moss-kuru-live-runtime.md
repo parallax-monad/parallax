@@ -1,6 +1,6 @@
 # Moss Kuru Live Runtime (Reproducible Environment Contract)
 
-Status: REPRODUCIBLE RUNTIME LOCKED; LIVE ACCEPTANCE NOT CLAIMED — BLOCKED BY REQUIRED ENVIRONMENT AND CURRENT PINNED RUNTIME
+Status: TEMPORARY FORK PIN LOCKED; LIVE SIMULATION SUCCEEDED ON THE PIN — EVIDENCE REGENERATED ON NODE v22.23.2
 
 This document pins the exact Moss runtime that the Kuru MON → USDC live adapter
 (`packages/moss-bridge/src/live-kuru.ts`) targets, and the exact environment
@@ -13,16 +13,16 @@ Moss git commit, not a workspace label.
 | Item | Recorded baseline | Current pinned runtime | Evidence |
 | --- | --- | --- | --- |
 | Moss repository | `https://github.com/nishuzumi/moss.git` (upstream) | same (upstream); local fork `https://github.com/jzhao0/moss.git` | `git remote -v` |
-| Moss commit | `d09b38cbc44ee7f5722c5d09e7224f7750187762` | `d09b38cbc44ee7f5722c5d09e7224f7750187762` (local fork `main`) | `git cat-file -t d09b38c…` → `commit`; `git rev-parse main` |
-| `@themoss/core` | 0.1.0 (workspace) | 0.1.0 | `git show d09b38c…:packages/core/package.json` |
+| Moss commit | `d09b38c…` (recorded baseline) | `ef15448e166f31c891e80dba5073dae04a052a2b` (**temporary Parallax fork pin**, separately confirmed for Parallax use; upstream Moss PR #175 is still OPEN) | `git cat-file -t ef15448e…` → `commit`; checked by `assertCheckoutRevision` |
+| `@themoss/core` | 0.1.0 (workspace) | 0.1.0 | `git show ef15448e…:packages/core/package.json` |
 | `@themoss/erc` | 0.1.0 (workspace) | 0.1.0 | same path `packages/erc/package.json` |
 | `@themoss/protocol-kuru` | 0.1.0 (workspace, `packages/protocols/kuru`) | 0.1.0 | same path `packages/protocols/kuru/package.json` |
 | `@themoss/simulator` | 0.1.0 (workspace) | 0.1.0 | same path `packages/simulator/package.json` |
 | `@themoss/system` | 0.1.0 (workspace) | 0.1.0 | same path `packages/system/package.json` |
 | Published npm identity | 0.1.0, but **Plan-based API**, not matching Capability/Receipt baseline | NOT USED (API mismatch verified again on 2026-08-03) | `npm view @themoss/core@0.1.0`; packed `dist/index.d.ts` exports `plan`/`finalizePlan`/`computePlanHash`/`Event`, no `Receipt`/`verifyReceiptCoverage` |
-| Capability API | `Registry.discover(filter)` → `Coordinate[]`; `Registry.load(coords)` → `Stub[]`; `Registry.action(protocol, method, account, params)` → `CapabilityNode` | identical (d09b38c) | `git show d09b38c…:packages/core/src/registry.ts` |
-| Receipt API | `createTraceSimulator(runtime, { receipt })`; `simulate(capability)` → `{ results, halted? }`; `parseReceipt` | identical (d09b38c) | `git show d09b38c…:packages/simulator/src/index.ts` |
-| FlipOrderUpdated | unsupported (receipt parsing throws, recorded `RECEIPT_FAILED`) | **unsupported on d09b38c**; only unmerged `upstream/pr-138` (`55f7ad9`) handles it | `git merge-base --is-ancestor 55f7ad9 upstream/main` → NO; recorded fixture `fixtures/chain-evidence/kuru/mon-to-usdc/raw.json` |
+| Capability API | `Registry.discover(filter)` → `Coordinate[]`; `Registry.load(coords)` → `Stub[]`; `Registry.action(protocol, method, account, params)` → `CapabilityNode` | identical (ef15448e) | `git show ef15448e…:packages/core/src/registry.ts` |
+| Receipt API | `createTraceSimulator(runtime, { receipt })`; `simulate(capability)` → `{ results, halted? }`; `parseReceipt` | identical (ef15448e) | `git show ef15448e…:packages/simulator/src/index.ts` |
+| FlipOrderUpdated | unsupported (receipt parsing throws, recorded `RECEIPT_FAILED`) | **parsed successfully on ef15448e**: real Monad mainnet Kuru MON → USDC live simulation observed FlipOrderUpdated + Trade, warnings empty, `executionStatus=SUCCESS` | `fixtures/chain-evidence/kuru/live-success-mon-to-usdc/raw.json` (2026-08-07 run) |
 
 ### Re-verification of the old ADR claims
 
@@ -36,33 +36,34 @@ Moss git commit, not a workspace label.
 
 ## FlipOrderUpdated Status
 
-- Current target runtime (d09b38c): **D - receipt/outcome cannot be completed.**
-  `swapReceipt` throws `Unexpected Change: Kuru market emitted FlipOrderUpdated`;
-  the simulator catches it as a `RECEIPT_FAILED` warning, halts the chain, and
-  returns no receipt. This is exactly what the recorded fixture shows.
-- The upstream fix (`55f7ad9`, PR #138) is unmerged and unpublished. It is not a
-  stable runtime. Using it would require a vendored/workspace dependency on an
-  unreleased Moss revision; that decision belongs to the team and is out of
-  scope for this delivery.
-- The Parallax adapter does **not** delete the warning or synthesize a receipt.
-  `executionStatus` stays `UNKNOWN` (fail closed). No `live-success` fixture can
-  be created until a Moss runtime that parses flip-order receipts is released
-  or vendored.
+- **Historical baseline (d09b38c):** `swapReceipt` threw `Unexpected Change:
+  Kuru market emitted FlipOrderUpdated`; the simulator caught it as a
+  `RECEIPT_FAILED` warning, halted the chain, and returned no receipt.
+- **Current temporary pin (ef15448e): parsed successfully.** A real Monad
+  mainnet Kuru MON → USDC live simulation on 2026-08-07 observed both
+  FlipOrderUpdated and Trade; the receipt parser succeeded, warnings were
+  empty, and `executionStatus=SUCCESS`.
+- Therefore the historical **"FlipOrderUpdated unsupported" blocker is closed
+  for this exact pin (ef15448e) only.** Do not generalize the support claim to
+  any other Moss revision without fresh evidence.
+- This pin is a **temporary Parallax fork pin**, separately confirmed for
+  Parallax use. Upstream Moss PR #175 is still **OPEN**; ef15448e must NOT be
+  described as the final upstream immutable merged revision.
 
 ## Reproducible Environment
 
 | Property | Value |
 | --- | --- |
-| Parallax commit (base) | `8ed7bba8da7a24f1ef33fd0639575b1a6c33ce7f` |
-| Parallax branch | `feat/moss-live-kuru-adapter` |
-| Moss repository | `https://github.com/nishuzumi/moss.git` (upstream) |
-| Moss commit (pinned) | `d09b38cbc44ee7f5722c5d09e7224f7750187762` |
+| Live fixture producer commit | `938f62fe5c872626f5cfa2f0a58c975d53e4a8de` (formal Node v22.23.2 live fixture producer; matches `metadata.json`) |
+| Parallax branch | `feat/moss-fork-pinned-runtime` |
+| Moss repository | `https://github.com/nishuzumi/moss.git` (upstream); temporary Parallax fork pin `https://github.com/jzhao0/moss.git` |
+| Moss commit (pinned) | `ef15448e166f31c891e80dba5073dae04a052a2b` (temporary fork pin) |
 | `@themoss/core` | 0.1.0 |
 | `@themoss/erc` | 0.1.0 |
 | `@themoss/protocol-kuru` | 0.1.0 |
 | `@themoss/simulator` | 0.1.0 |
 | `@themoss/system` | 0.1.0 |
-| Node | v22.23.2 (downloaded from nodejs.org `v22.23.2`, darwin-arm64 tarball) |
+| Node | **v22.23.2 (contract pin)** (downloaded from nodejs.org `v22.23.2`, darwin-arm64 tarball). The committed live fixture was regenerated by a real live smoke under Node v22.23.2 (2026-08-08, runId `kuru-live-1786163979273`) |
 | pnpm | 11.10.0 (matches Moss `packageManager`, activated via corepack under Node 22) |
 | OS / architecture | macOS 15.7.5 / darwin-arm64 |
 | Chain ID | 143 (Monad mainnet; observed by the adapter and enforced by Agent Flow and the smoke acceptance gate) |
@@ -79,7 +80,7 @@ Moss git commit, not a workspace label.
 | `MOSS_RPC_URL` | yes (never printed) | read-only Monad RPC endpoint for `createRuntime`, quote reads, and `debug_traceCall` simulation |
 | `MOSS_RUNTIME_PATH` | no | absolute path to the pinned Moss Git checkout with built workspace `dist`; `.git` metadata must be retained and `git` must be available to the runtime environment |
 | `MOSS_RUNTIME_VERSION` | no | exact `@themoss/core` version, e.g. `0.1.0` |
-| `MOSS_RUNTIME_REVISION` | no | immutable Moss git commit, e.g. `d09b38cbc44ee7f5722c5d09e7224f7750187762` |
+| `MOSS_RUNTIME_REVISION` | no | immutable Moss git commit, e.g. `ef15448e166f31c891e80dba5073dae04a052a2b` (temporary fork pin) |
 | `MOSS_SENDER` | no | read-only sender address (defaults to the fixture sender above) |
 
 ## How to reproduce
@@ -98,25 +99,28 @@ directory without authoritative Git metadata is rejected rather than treated
 as a verified checkout.
 
 ```bash
-# 1. Pin the Moss runtime in a dedicated checkout (never touch the upstream repo).
-cd /Users/jie/Documents/web3-week2/moss   # local fork with upstream remote
-git fetch upstream
-git worktree add ~/.local/moss-runtime/d09b38c d09b38cbc44ee7f5722c5d09e7224f7750187762
+# 1. Pin the temporary Moss runtime in a dedicated checkout (never touch the upstream repo).
+git fetch origin
+git worktree add /Users/jie/Documents/moss-parallax-runtime ef15448e166f31c891e80dba5073dae04a052a2b
 
-# 2. Build it under Node 22 + pnpm 11.10.0 (frozen lockfile).
+# 2. Build it under Node v22.23.2 + pnpm 11.10.0 (frozen lockfile).
 export PATH="$HOME/.local/opt/node-v22.23.2-darwin-arm64/bin:$PATH"
-cd ~/.local/moss-runtime/d09b38c
+node --version   # MUST print v22.23.2 before any RPC request
+cd /Users/jie/Documents/moss-parallax-runtime
 pnpm install --frozen-lockfile
 pnpm -r build
 
 # 3. Run the Parallax live smoke (MOSS_RPC_URL must be configured; values never printed).
 cd /Users/jie/Documents/parallax-team
 export MOSS_RPC_URL=...            # read-only, never printed
-export MOSS_RUNTIME_PATH="$HOME/.local/moss-runtime/d09b38c"
+export MOSS_RUNTIME_PATH="/Users/jie/Documents/moss-parallax-runtime"
 export MOSS_RUNTIME_VERSION=0.1.0
-export MOSS_RUNTIME_REVISION=d09b38cbc44ee7f5722c5d09e7224f7750187762
+export MOSS_RUNTIME_REVISION=ef15448e166f31c891e80dba5073dae04a052a2b
 pnpm smoke:kuru:live
 ```
+
+The formal fixture was regenerated by a real live smoke under Node v22.23.2 on
+2026-08-08 (runId `kuru-live-1786163979273`).
 
 The smoke saves raw stage output to the gitignored `.smoke-live/` directory and
 persists the public `/api/check` response alongside it. It only writes the
@@ -145,10 +149,19 @@ promote one layer into another:
    reject results where that value is absent or invalid. A stage block is never
    treated as a substitute for the simulator's internal block.
 
-The pinned d09b runtime currently does not expose the simulator block, so live
-Agent Flow remains fail-closed until an approved runtime revision exposes it.
-Downstream consumers must still independently verify any stronger deployment or
-production-readiness claim.
+The current temporary pin (ef15448e) exposes the pinned block through a getter
+(`getPinnedBlockNumber()`, Hex `0x…` from `eth_blockNumber`). The adapter
+normalizes it to decimal, verifies it end-to-end (`simulatorPinnedBlock`
+= 94112902 in the committed fixture), and fails closed on malformed or missing
+values. A stage/route block is never accepted as a substitute.
+
+**Future upstream API migration (documented only, not implemented here):** Box
+has proposed that the final upstream API should move from the getter to
+run-scoped `SimulateOutcome.simulatorPinnedBlock`. Parallax has replied that
+this outcome API is compatible and preferred, has no getter-specific external
+constraint, and expects a small migration after upstream #175 settles. The
+temporary fork consumer remains valid until upstream finalizes and confirms an
+immutable revision; PR #23 stays compatible with the frozen ef15448e pin.
 
 ## Security and trust boundary
 
@@ -165,21 +178,25 @@ production-readiness claim.
 
 ## Known limitations
 
-1. d09b38c cannot parse `FlipOrderUpdated` receipts → simulation halts →
-   `executionStatus = UNKNOWN`. No live SUCCESS fixture exists for MON → USDC.
-2. Simulator synthetic-prefunds native MON only; ERC-20 affordability is not
-   proven (`walletAffordabilityChecked: false`).
-3. The simulator pins one base block internally (Moss ADR 0002). The adapter
-   records it only when the runtime exposes the explicit pinned-block API;
-   otherwise `simulatorPinnedBlock` is absent and Agent Flow/acceptance reject
-   the result as non-authoritative. Per-stage pre-call block heights remain
-   supplementary provenance.
+1. The historical "FlipOrderUpdated unsupported" limitation is **closed for the
+   exact pin ef15448e** (parsed successfully in a real mainnet live
+   simulation). It does not generalize to other Moss revisions.
+2. Moss trace simulation synthetic-prefunds native MON only; ERC-20
+   affordability is not proven (`walletAffordabilityChecked: false`).
+3. The simulator pins one base block internally (Moss ADR 0002). On the
+   temporary pin the adapter reads it via the `getPinnedBlockNumber()` getter;
+   `simulatorPinnedBlock` is required for authoritative live results, and
+   Agent Flow/acceptance fail closed when it is absent or invalid. Per-stage
+   pre-call block heights remain supplementary provenance.
 4. Quote uses the public Kuru API for market discovery, then verifies on-chain;
    its availability is not guaranteed.
-5. `MOSS_RPC_URL`, `MOSS_RUNTIME_PATH`, `MOSS_RUNTIME_VERSION`, and
-   `MOSS_RUNTIME_REVISION` are not configured in this repository state, so the
-   live smoke writes a configuration artifact and fails. No live acceptance
-   artifact is claimed here.
+5. The committed live fixture was **regenerated under Node v22.23.2** (real
+   live smoke, 2026-08-08, runId `kuru-live-1786163979273`), matching the
+   runtime contract pin. The earlier v24.14.0 fixture was superseded and the
+   metadata was never falsified.
+6. Existing evidence is **simulation-only**: no signing, no broadcasting, no
+   custody, no wallet mutation, and no real swap execution occurred. The action
+   stage only constructed unsigned calldata.
 
 ## Raw → Normalized Evidence mapping
 
@@ -213,9 +230,16 @@ explicit field mapping implemented by `normalizeLiveKuruEvidence`.
 
 ## P0 status
 
-`P0_LIVE_BLOCKED_PORTABLE_RUNTIME` — this repository does not currently contain
-the required Moss checkout/RPC configuration, so no live acceptance result is
-claimed. Once configured, the smoke will classify a real run as simulation
-blocked if the pinned runtime still cannot parse `FlipOrderUpdated`; the
-minimal unblock is a published or team-vendored Moss revision that parses
-flip-order receipts (the unmerged `55f7ad9` is the smallest known candidate).
+- The 24-gate live acceptance passed on the temporary pin: the committed
+  fixture records `liveSuccess=true`, `p0DecisionCandidate=P0_LIVE_READY`,
+  `status=PARTIALLY_VERIFIED`, `apiVerdict=PROCEED`, and
+  `assetChangeAssessment=EXPLAINED`.
+- `PROCEED` here means **no blocking evidence was found within the checked
+  scope**. It does **not** mean: guaranteed minimum received, guaranteed
+  profit, best price, safe to sign, or an execution guarantee. The economic
+  boundary is unavailable, so P0-ECONOMIC-001 is `NOT_APPLICABLE` /
+  `not checked` (`PRECONDITION_ABSENT`).
+- Merge gate: the fixture was **regenerated under Node v22.23.2** (real live
+  smoke, 2026-08-08, runId `kuru-live-1786163979273`), resolving the Node
+  drift. Live status `P0_LIVE_ACCEPTED_CANDIDATE` is supported by the audit
+  and the merge evidence now matches the runtime contract pin.

@@ -1,13 +1,16 @@
 # Backend P0 Acceptance Matrix
 
-Status: DELIVERY GATE FOR DETERMINISTIC CHECK APPLICATION / RUN LIFECYCLE PATHS — LIVE SUCCESS REMAINS MOSS-BLOCKED
+Status: DELIVERY GATE FOR DETERMINISTIC CHECK APPLICATION / RUN LIFECYCLE PATHS — LIVE SIMULATION SUCCEEDED ON THE TEMPORARY MOSS PIN; EVIDENCE REGENERATED ON NODE v22.23.2
 
 Owner: Clare (backend / `apps/api`)
 Command: `pnpm test:acceptance`
 
 This is the delivery-facing backend acceptance entry. It does not replace unit
 tests. It organizes the P0 Check Application / Run lifecycle claims that backend
-can prove without a frontend owner and without a live Moss SUCCESS fixture.
+can prove without a frontend owner. A real live Kuru MON → USDC simulation has
+succeeded on the temporary Moss pin ef15448e (fixture
+`fixtures/chain-evidence/kuru/live-success-mon-to-usdc/`); see
+[moss-kuru-live-runtime.md](./moss-kuru-live-runtime.md).
 
 ## Scope
 
@@ -23,7 +26,8 @@ In scope:
 Out of scope for this gate:
 
 - Frontend Analyze UI and CTA routing
-- Live Kuru MON → USDC SUCCESS evidence (`pnpm smoke:kuru:live`)
+- Live Kuru MON → USDC evidence regeneration under Node v22.23.2
+  (`pnpm smoke:kuru:live`)
 - Database, SSE, Queue, signing, or PancakeSwap
 - Full TV-ECO-006 / §3.3.1 `ACTION_GATE` / CrossRun locator Shared Contract
   expansion (this gate's verified `ADJUST` path uses interim
@@ -91,8 +95,16 @@ pnpm smoke:kuru:live      # live Moss/RPC; success not claimed here
 
 ## Live SUCCESS note
 
-`pnpm smoke:kuru:live` remains the live path. Until Moss Owner provides a
-runtime that parses `FlipOrderUpdated` and exposes simulator pinned-block
-provenance, backend acceptance does not claim live SUCCESS. Failures and
-configuration artifacts under `.smoke-live/` are diagnostic, not delivery
-success evidence.
+`pnpm smoke:kuru:live` remains the live path. A real Monad mainnet Kuru MON →
+USDC live simulation **succeeded** on the temporary Parallax fork pin
+`ef15448e`: FlipOrderUpdated and Trade were observed and parsed, warnings were
+empty, pinned-block provenance was proven end-to-end
+(`simulatorPinnedBlock=94112902`), and the 24-gate acceptance passed
+(`liveSuccess=true`, `P0_LIVE_READY`). The historical "FlipOrderUpdated
+unsupported" blocker is closed **for this exact pin only**.
+
+Merge state: the committed fixture was **regenerated under Node v22.23.2** by
+a real live smoke (2026-08-08, runId `kuru-live-1786163979273`), resolving the
+Node drift against the runtime contract pin. Failures and configuration
+artifacts under `.smoke-live/` remain diagnostic, not delivery success
+evidence.
