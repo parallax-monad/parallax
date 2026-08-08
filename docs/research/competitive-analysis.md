@@ -6,6 +6,11 @@
 >
 > Purpose: Inform product positioning, differentiation and P0 scope—not market sizing or user-demand validation
 
+Related documents:
+
+- [User Research](./user-research.md)
+- [P0 PRD](../product/prd.md)
+
 ## Executive summary
 
 Parallax is exploring a narrow product question:
