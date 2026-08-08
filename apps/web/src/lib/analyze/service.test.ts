@@ -654,6 +654,33 @@ describe("form validation and backend-supported reruns", () => {
     expect(validateForm(INITIAL_FORM).valid).toBe(true);
   });
 
+  test("rejects decimal formats the public API contract does not accept", () => {
+    for (const value of [".0003", "1e-3", "0,0003", " 0.0003 "]) {
+      const validation = validateForm({
+        ...INITIAL_FORM,
+        minimumReceived: value,
+      });
+      expect(validation.valid).toBe(false);
+      if (!validation.valid) {
+        expect(validation.errors.minimumReceived?.en).toContain("0.0003");
+      }
+    }
+  });
+
+  test("accepts a plain-decimal Minimum Received", () => {
+    expect(
+      validateForm({ ...INITIAL_FORM, minimumReceived: "0.0003" }).valid,
+    ).toBe(true);
+  });
+
+  test("rejects non-contract amountIn formats before calling the API", () => {
+    const validation = validateForm({ ...INITIAL_FORM, amountIn: ".01" });
+    expect(validation.valid).toBe(false);
+    if (!validation.valid) {
+      expect(validation.errors.amountIn?.en).toContain("0.01");
+    }
+  });
+
   test("counts amount and boundary as two backend intent changes", () => {
     expect(
       changedLogicalFields(INITIAL_FORM, {

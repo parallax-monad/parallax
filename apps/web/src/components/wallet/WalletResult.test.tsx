@@ -65,6 +65,10 @@ describe("WalletResult", () => {
         },
       }),
     );
+    expect(html).toContain("border-risk-moderate/50");
+    expect(html).toContain("bg-risk-moderate/10");
+    expect(html).toContain("text-risk-moderate");
+    expect(html).not.toContain("risk-elevated");
     expect(html).toContain("Check could not be completed");
     expect(html).toContain("RPC_UNAVAILABLE");
     expect(html).toContain("retryable");

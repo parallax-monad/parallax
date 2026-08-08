@@ -50,10 +50,20 @@ export function validateForm(form: FormState): FormValidation {
   const slippage = parseFinite(form.slippage);
   const minimumReceived = parsePlainDecimal(form.minimumReceived);
 
-  if (amountIn === undefined || amountIn <= 0) {
+  if (form.amountIn === "") {
     errors.amountIn = {
-      en: "Amount must be a positive number.",
-      zh: "输入数量必须是大于 0 的数字。",
+      en: "Amount must be greater than 0.",
+      zh: "输入数量必须大于 0。",
+    };
+  } else if (!PLAIN_DECIMAL.test(form.amountIn)) {
+    errors.amountIn = {
+      en: "Use a plain decimal such as 0.01 (no spaces, commas, or scientific notation).",
+      zh: "请输入 0.01 这类普通小数（不要使用空格、逗号或科学记数法）。",
+    };
+  } else if (amountIn === undefined || amountIn <= 0) {
+    errors.amountIn = {
+      en: "Amount must be greater than 0.",
+      zh: "输入数量必须大于 0。",
     };
   }
 
@@ -68,14 +78,18 @@ export function validateForm(form: FormState): FormValidation {
     };
   }
 
-  if (
-    form.minimumReceived.trim() !== "" &&
-    (minimumReceived === undefined || minimumReceived <= 0)
-  ) {
-    errors.minimumReceived = {
-      en: "Minimum received must be a positive number when provided.",
-      zh: "填写最低收到量时，必须输入大于 0 的数字。",
-    };
+  if (form.minimumReceived !== "") {
+    if (!PLAIN_DECIMAL.test(form.minimumReceived)) {
+      errors.minimumReceived = {
+        en: "Use a plain decimal such as 0.0003 (include the leading 0; no spaces, commas, or scientific notation).",
+        zh: "请输入 0.0003 这类普通小数（必须包含前导 0；不要使用空格、逗号或科学记数法）。",
+      };
+    } else if (minimumReceived === undefined || minimumReceived <= 0) {
+      errors.minimumReceived = {
+        en: "Minimum received must be greater than 0 when provided.",
+        zh: "填写最低收到量时，必须大于 0。",
+      };
+    }
   }
 
   if (

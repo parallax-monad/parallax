@@ -158,7 +158,7 @@ export function WalletResult({
           <span className="eyebrow-monad m-0">
             {say(language, { en: "Before you sign", zh: "签名之前" })}
           </span>
-          <span className="pill border-risk-elevated/50 text-risk-elevated">
+          <span className="pill border-risk-moderate/50 text-risk-moderate">
             {say(language, { en: "Integration error", zh: "集成错误" })}
           </span>
           <span className="pill">
@@ -166,7 +166,7 @@ export function WalletResult({
           </span>
         </div>
 
-        <section className="flex items-start gap-3 border border-risk-elevated/50 bg-risk-elevated/10 p-4 text-risk-elevated">
+        <section className="flex items-start gap-3 border border-risk-moderate/50 bg-risk-moderate/10 p-4 text-risk-moderate">
           <VerdictIcon
             className="mt-0.5 shrink-0"
             size={30}
@@ -191,7 +191,7 @@ export function WalletResult({
               {say(language, result.summary)}
             </p>
             {result.apiFailure && (
-              <dl className="mt-3 border-t border-risk-elevated/30 pt-2 text-[12px]">
+              <dl className="mt-3 border-t border-risk-moderate/30 pt-2 text-[12px]">
                 <div className="flex justify-between gap-3 py-1">
                   <dt className="font-bold uppercase tracking-[0.06em]">
                     error.code
@@ -223,7 +223,7 @@ export function WalletResult({
                     className="flex justify-between gap-3 py-1"
                     key={`${issue.field ?? ""}:${issue.code ?? ""}`}
                   >
-                    <dt className="font-bold uppercase tracking-[0.06em]">
+                    <dt className="min-w-0 break-all font-bold uppercase tracking-[0.06em]">
                       {issue.field ?? "error.issue"}
                     </dt>
                     <dd className="mono m-0 min-w-0 break-words text-right text-white">
