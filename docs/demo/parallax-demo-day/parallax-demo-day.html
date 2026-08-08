@@ -1299,35 +1299,39 @@
   </div>
 </section>
 
+<!-- 第 2 页：先呈现用户痛点，再说明竞品已覆盖的能力与 Parallax 的缺口。 -->
 <section class="slide light" data-layout="S03" data-animate="duo-mirror">
   <div class="canvas-card">
-    <div class="chrome-min">
-      <div class="l">PROBLEM · THE DECISION AFTER FAILURE</div>
+    <div class="chrome-min tight">
+      <div class="l">PROBLEM · FROM EVIDENCE TO DECISION</div>
       <div class="r">02 / 07</div>
     </div>
     <div data-anim="line" style="display:flex;flex-direction:column;gap:1.4vh">
-      <div class="t-meta">A TECHNICAL OUTCOME IS NOT A NEXT STEP</div>
-      <h1 style="font-family:var(--sans),var(--sans-zh);font-weight:200;font-size:min(7.2vw,12vh);line-height:.96;letter-spacing:-.04em">A failed swap tells you<br/><span style="color:var(--accent)">what broke</span> — not what to do.</h1>
+      <div class="t-meta">THE GAP BETWEEN EVIDENCE AND ACTION</div>
+      <h1 style="font-family:var(--sans),var(--sans-zh);font-weight:200;font-size:min(5.75vw,9.7vh);line-height:.96;letter-spacing:-.04em">Existing tools show you<br/><span style="color:var(--accent)">what happened</span> — not always what to do.</h1>
     </div>
-    <div class="duo-compare" style="margin-top:6vh">
+    <div class="duo-compare" style="margin-top:2.2vh">
       <div class="col">
-        <div class="col-tag"><span class="num">01</span> WHAT USERS SEE</div>
+        <div class="col-tag"><span class="num">01</span> USER PAIN</div>
         <div class="col-ttl">Swap failed.</div>
-        <div class="col-desc">一个技术结果，没有对应的下一步决策。</div>
-        <ul class="col-list">
-          <li>不知道原因就重试</li>
-          <li>凭感觉修改 Slippage、Amount 或 Route</li>
+        <div class="col-desc">用户看到错误、警告或模拟结果，却仍要自己猜下一步。</div>
+        <ul class="col-list" style="margin-top:1.4vh">
+          <li>不知道当前原因对应哪一个条件</li>
+          <li>凭感觉反复改 Slippage、Amount 或 Route</li>
         </ul>
       </div>
       <div class="vrule"></div>
-      <div class="col accent">
-        <div class="col-tag"><span class="num">02</span> WHAT THEY STILL GUESS</div>
-        <div class="col-ttl">Slippage?<br/>Amount? Route?</div>
-        <div class="col-desc">真正的问题不是“发生了什么”，而是“下一步该改什么？”</div>
-        <ul class="col-list">
-          <li>调整真正相关的条件</li>
-          <li>停止重复不起作用的修改</li>
-        </ul>
+      <div class="col accent" style="gap:1.7vh">
+        <div>
+          <div class="col-tag"><span class="num">02</span> WHAT EXISTS</div>
+          <div class="col-ttl" style="font-size:min(3.1vw,5.1vh)">Evidence exists.</div>
+          <div class="col-desc" style="margin-top:1.2vh">DEX / aggregator 提供 quote、route、slippage；wallet / simulation 提供 warnings 与执行证据。</div>
+        </div>
+        <div style="border-top:1px solid var(--grey-2);padding-top:2vh">
+          <div class="col-tag"><span class="num">03</span> WHAT IS STILL MISSING</div>
+          <div class="col-ttl" style="font-size:min(3.1vw,5.1vh)">Cause → action.</div>
+          <div class="col-desc" style="margin-top:1.2vh">还需要把原因连到相关调整，并用一次 re-run 证明结果是否改变。</div>
+        </div>
       </div>
     </div>
   </div>
@@ -1452,42 +1456,42 @@
   </div>
 </section>
 
+<!-- 第 6 页：四个产品 verdict 的含义与边界。 -->
 <section class="slide light" data-layout="S19" data-animate="four-cards">
   <div class="canvas-card">
     <div class="chrome-min">
-      <div class="l">PRODUCT HIGHLIGHTS · EVIDENCE → ACTION</div>
+      <div class="l">PRODUCT VERDICTS · BOUNDED DECISION</div>
       <div class="r">06 / 07</div>
     </div>
     <div data-anim="line" style="display:flex;flex-direction:column;gap:1.4vh">
       <div style="height:2px;background:var(--accent);width:100%"></div>
       <div style="display:flex;flex-direction:column;gap:1.2vh;padding-top:1.2vh">
-        <div class="t-meta">WHAT MAKES PARALLAX DIFFERENT</div>
-        <h1 style="font-family:var(--sans),var(--sans-zh);font-weight:200;font-size:min(6.2vw,10.5vh);line-height:.96;letter-spacing:-.04em">The product closes the gap<br/>between evidence and action.</h1>
+        <div class="t-meta">FOUR OUTCOMES · ONE SCOPE-AWARE RULESET</div>
+        <h1 style="font-family:var(--sans),var(--sans-zh);font-weight:200;font-size:min(6.05vw,10.1vh);line-height:.96;letter-spacing:-.04em">Four outcomes.<br/><span style="color:var(--accent)">One bounded decision.</span></h1>
       </div>
     </div>
-    <div data-anim="up" style="flex:1;display:grid;grid-template-columns:repeat(4,1fr);gap:1.2vw;align-items:stretch;margin-top:5vh">
-      <article class="card-fill" style="padding:2.2vh 1.25vw;display:flex;flex-direction:column;justify-content:space-between;min-width:0">
-        <div style="font-family:var(--mono);font-size:max(14px,.78vw);letter-spacing:.16em;color:var(--accent)">01</div>
-        <div><div class="t-meta">REASON → ACTION</div><h2 style="font-family:var(--sans),var(--sans-zh);font-weight:300;font-size:min(2.6vw,4.4vh);line-height:1.02;letter-spacing:-.03em;margin-top:1.2vh">Cause becomes<br/>a relevant move.</h2></div>
-        <p class="body-sm" style="margin-top:2vh">不只知道“交换失败”，还要知道原因，以及什么真正有用。</p>
+    <div data-anim="up" style="flex:1;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1.2vw;align-items:stretch;margin-top:4.2vh;padding-bottom:var(--nav-safe-bottom)">
+      <article class="card-fill" style="padding:2vh 1.15vw;display:flex;flex-direction:column;justify-content:space-between;min-width:0">
+        <div style="font-family:var(--mono);font-size:max(14px,.76vw);letter-spacing:.16em;color:var(--accent)">01</div>
+        <div><h2 style="font-family:var(--sans),var(--sans-zh);font-weight:300;font-size:min(3.05vw,5.15vh);line-height:1;letter-spacing:-.03em">PROCEED</h2><div class="t-meta" style="margin-top:1.4vh">NO BLOCKING EVIDENCE</div><div class="body-sm" style="margin-top:1vh">在已检查范围内，没有发现阻断性证据。</div></div>
+        <p class="body-sm" style="margin-top:2vh">不是安全保证；先查看哪些内容尚未检查。</p>
       </article>
-      <article class="card-fill" style="padding:2.2vh 1.25vw;display:flex;flex-direction:column;justify-content:space-between;min-width:0">
-        <div style="font-family:var(--mono);font-size:max(14px,.78vw);letter-spacing:.16em;color:var(--accent)">02</div>
-        <div><div class="t-meta">RELEVANT ≠ IRRELEVANT</div><h2 style="font-family:var(--sans),var(--sans-zh);font-weight:300;font-size:min(2.6vw,4.4vh);line-height:1.02;letter-spacing:-.03em;margin-top:1.2vh">Stop changing<br/>the wrong thing.</h2></div>
-        <p class="body-sm" style="margin-top:2vh">让用户看到哪些调整可能有帮助，哪些不会解决当前原因。</p>
+      <article class="card-fill" style="padding:2vh 1.15vw;display:flex;flex-direction:column;justify-content:space-between;min-width:0">
+        <div style="font-family:var(--mono);font-size:max(14px,.76vw);letter-spacing:.16em;color:var(--accent)">02</div>
+        <div><h2 style="font-family:var(--sans),var(--sans-zh);font-weight:300;font-size:min(3.05vw,5.15vh);line-height:1;letter-spacing:-.03em">ADJUST</h2><div class="t-meta" style="margin-top:1.4vh">CHANGE ONE CONDITION</div><div class="body-sm" style="margin-top:1vh">存在经过验证的相关调整，可以再次检查。</div></div>
+        <p class="body-sm" style="margin-top:2vh">不猜测；只展示有证据支持的行动。</p>
       </article>
-      <article class="card-fill" style="padding:2.2vh 1.25vw;display:flex;flex-direction:column;justify-content:space-between;min-width:0">
-        <div style="font-family:var(--mono);font-size:max(14px,.78vw);letter-spacing:.16em;color:var(--accent)">03</div>
-        <div><div class="t-meta">PREVIOUS vs NEW</div><h2 style="font-family:var(--sans),var(--sans-zh);font-weight:300;font-size:min(2.6vw,4.4vh);line-height:1.02;letter-spacing:-.03em;margin-top:1.2vh">One change.<br/>A visible diff.</h2></div>
-        <p class="body-sm" style="margin-top:2vh">重新运行一次，比较结果是否真的发生变化。</p>
+      <article class="card-fill" style="padding:2vh 1.15vw;display:flex;flex-direction:column;justify-content:space-between;min-width:0">
+        <div style="font-family:var(--mono);font-size:max(14px,.76vw);letter-spacing:.16em;color:var(--accent)">03</div>
+        <div><h2 style="font-family:var(--sans),var(--sans-zh);font-weight:300;font-size:min(3.05vw,5.15vh);line-height:1;letter-spacing:-.03em">STOP</h2><div class="t-meta" style="margin-top:1.4vh">DO NOT CONTINUE</div><div class="body-sm" style="margin-top:1vh">当前路径不应继续，或无法在当前范围内执行。</div></div>
+        <p class="body-sm" style="margin-top:2vh">结论只针对当前 Intent、路径与检查范围。</p>
       </article>
-      <article class="card-accent" style="padding:2.2vh 1.25vw;display:flex;flex-direction:column;justify-content:space-between;min-width:0">
-        <div style="font-family:var(--mono);font-size:max(14px,.78vw);letter-spacing:.16em;opacity:.72">04</div>
-        <div><div class="t-meta" style="color:rgba(255,255,255,.72)">BOUNDED VERDICTS</div><h2 style="font-family:var(--sans),var(--sans-zh);font-weight:300;font-size:min(2.6vw,4.4vh);line-height:1.02;letter-spacing:-.03em;margin-top:1.2vh">UNKNOWN is<br/>not a pass.</h2></div>
-        <p class="body-sm" style="margin-top:2vh;color:rgba(255,255,255,.84)">PROCEED 不是安全保证，不确定性必须保持可见。</p>
+      <article class="card-accent" style="padding:2vh 1.15vw;display:flex;flex-direction:column;justify-content:space-between;min-width:0">
+        <div style="font-family:var(--mono);font-size:max(14px,.76vw);letter-spacing:.16em;opacity:.72">04</div>
+        <div><h2 style="font-family:var(--sans),var(--sans-zh);font-weight:300;font-size:min(3.05vw,5.15vh);line-height:1;letter-spacing:-.03em">UNKNOWN</h2><div class="t-meta" style="color:rgba(255,255,255,.72);margin-top:1.4vh">EVIDENCE INCOMPLETE</div><div class="body-sm" style="margin-top:1vh;color:rgba(255,255,255,.88)">证据缺失、不完整或无法归类，不能得出可靠结论。</div></div>
+        <p class="body-sm" style="margin-top:2vh;color:rgba(255,255,255,.84)">UNKNOWN 不是通过；不把未知伪装成风险或许可。</p>
       </article>
     </div>
-    <div class="t-meta" style="margin-top:2.4vh;color:var(--text-helper)">DECISION, NOT PERMISSION.</div>
   </div>
 </section>
 
