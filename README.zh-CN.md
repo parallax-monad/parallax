@@ -9,13 +9,15 @@ Parallax 是面向 Monad 兑换交易、由 Moss 驱动的只读签名前决策�
 
 > Moss 告诉我们将会发生什么。Parallax 帮助用户判断下一步该做什么。
 
-## 在线演示
+## 项目演示
 
-访问已公开部署的 Parallax 演示版本：
+- [体验在线应用](https://parallax-web-snowy.vercel.app)
+- [查看 Demo Day 演示文稿](https://parallax-monad.github.io/parallax/parallax-demo-day.html)
+- [观看产品演示视频](https://www.youtube.com/watch?v=j43WqH6TrTE)
 
-**[https://parallax-web-snowy.vercel.app](https://parallax-web-snowy.vercel.app)**
-
-无需演示账号。当前公开部署仅提供前端体验，并未开放仓库前端所调用的同源后端 API 路径。因此，该部署不能证明系统已达到生产就绪状态，也不能证明实时 Moss、RPC 或交易执行路径完整可用。
+无需演示账号。公开前端通过 Vercel API 重写连接到已部署的后端。
+该连接仍处于实验阶段、保持只读，并仅限文档所述的 Moss/Kuru 范围；
+它不代表系统已达到生产就绪状态，也不代表交易执行已完成。
 
 ## 产品主张
 
@@ -64,7 +66,7 @@ MVP 接收受支持的兑换交易意图，请求报价，执行签名前检查�
 | 共享契约与决策规则 | 已实现当前 P0 范围，并有自动化测试覆盖 |
 | 后端 API 与编排 | 已通过 Hono 实现进程内运行记录存储、实时报价/检查边界和记录回放 |
 | 实时 Moss/Kuru 后端 | 已针对固定 Kuru 运行环境和经验证范围实现；需要显式配置运行环境与 RPC |
-| Vercel 公开演示 | 前端可公开访问；该部署目前没有开放同源后端 API 路径 |
+| Vercel 公开演示 | 前端可公开访问，并通过 Vercel 重写将同源 `/api/*` 请求转发到已部署的 Render 后端 |
 | 签名、广播、执行或托管 | 明确不实现 |
 
 经验证的实时证据仅限文档所述的固定 Kuru MON → USDC 路径与运行环境范围。它不能证明所有代币对、协议、资产行为、运行环境修订版或未来市场条件都受支持。
@@ -205,7 +207,10 @@ pnpm smoke:kuru:live              # 外部实时 Moss/RPC 冒烟测试
 
 **[https://parallax-web-snowy.vercel.app](https://parallax-web-snowy.vercel.app)**
 
-无需演示账号。当前公开地址提供前端应用，但没有开放前端预期的同源 `/api/*` 后端路径。实时报价/检查功能需要另行配置后端运行环境；该公开部署不代表系统已经达到生产就绪状态。
+无需演示账号。公开前端会通过 Vercel 将同源 `/api/*` 请求转发到已部署的
+Render 后端。文档所述的 Kuru MON → USDC 报价流程已通过该公开入口验证。
+服务可用性仍取决于外部后端、RPC 与固定的 Moss 运行环境；该部署不代表
+系统已达到生产就绪状态，也不代表支持更广泛的协议范围。
 
 ## 文档导航
 

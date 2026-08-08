@@ -9,13 +9,16 @@ Parallax is a read-only, Moss-powered pre-transaction decision layer for Monad s
 
 > Moss tells us what will happen. Parallax helps the user decide what to do next.
 
-## Live Demo
+## Demo
 
-Try the public Parallax demo:
+- [Try the live application](https://parallax-web-snowy.vercel.app)
+- [View the Demo Day presentation](https://parallax-monad.github.io/parallax/parallax-demo-day.html)
+- [Watch the product demo video](https://www.youtube.com/watch?v=j43WqH6TrTE)
 
-**[https://parallax-web-snowy.vercel.app](https://parallax-web-snowy.vercel.app)**
-
-No demo account is required. The public deployment currently serves the frontend experience; it does not expose the repository's same-origin backend API routes. It should not be treated as proof of production readiness, live Moss availability, or complete transaction execution.
+No demo account is required. The public frontend connects to the deployed
+backend through the Vercel API rewrite. This verified connection remains
+experimental, read-only, and limited to the documented Moss/Kuru scope; it is
+not a production-readiness or transaction-execution claim.
 
 ## Product thesis
 
@@ -64,7 +67,7 @@ The frontend adapter on `main` calls `POST /api/quote`, `POST /api/check`, and `
 | Shared contracts and decision rules | Implemented with automated tests for the current P0 slices |
 | Backend API and orchestration | Implemented with Hono, process-local Run storage, live check/quote boundaries, and recorded replay |
 | Live Moss/Kuru backend | Implemented for the pinned Kuru runtime and verified scope; requires explicit runtime and RPC configuration |
-| Public Vercel demo | Frontend is publicly reachable; same-origin backend API routes are not currently exposed by that deployment |
+| Public Vercel demo | Frontend is publicly reachable and routes same-origin `/api/*` requests to the deployed Render backend through the Vercel rewrite |
 | Signing, broadcasting, execution, or custody | Intentionally not implemented |
 
 The verified live evidence is limited to the documented pinned Kuru MON → USDC path and runtime scope. It does not establish support for every pair, protocol, asset behavior, runtime revision, or future market condition.
@@ -205,7 +208,11 @@ The frontend demo is publicly deployed on Vercel:
 
 **[https://parallax-web-snowy.vercel.app](https://parallax-web-snowy.vercel.app)**
 
-No demo account is required. The current public URL serves the frontend application but does not expose its expected same-origin `/api/*` backend routes. Live quote/check behavior therefore requires a separately configured backend environment; the public deployment is not a production-readiness claim.
+No demo account is required. The public frontend routes same-origin `/api/*`
+requests through Vercel to the deployed Render backend. The documented Kuru
+MON → USDC quote flow has been verified through that public origin. Availability
+still depends on the external backend, RPC, and pinned Moss runtime, and the
+deployment is not a production-readiness or broader protocol-support claim.
 
 ## Documentation map
 
