@@ -17,15 +17,17 @@ python3 -m http.server 8000
 http://localhost:8000/parallax-demo-day.html
 ```
 
-## Online access
+## 在线访问
 
 GitHub Pages 部署后，可直接打开公开链接：
 
-[Open Demo Day PPT](https://parallax-monad.github.io/parallax/parallax-demo-day.html)
+[打开 Demo Day 演示文稿](https://parallax-monad.github.io/parallax/parallax-demo-day.html)
 
-## Controls
+## 操作方式
 
-- `←` / `→`：上一页 / 下一页
+- `←` / `→`、`Page Up` / `Page Down`：上一页 / 下一页
 - `Home` / `End`：跳到开头 / 结尾
-- `O`：打开总览
-- 鼠标滚轮或触摸滑动：翻页
+- `Esc`：打开或关闭总览
+- `B`：切换动态模式与低功耗静态模式
+- 鼠标滚轮：翻页
+- 触摸左右滑动：翻页
