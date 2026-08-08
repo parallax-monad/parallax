@@ -1287,7 +1287,7 @@ Contract and API owners must confirm field names, versioning, serialization, err
 
 | Stakeholder | Primary review responsibility |
 | --- | --- |
-| Rei (`rainypilgrimage-beep`) | Rule-to-product semantic accuracy, canonical Scope categories and reason vocabulary, Action visibility boundaries, unsupported inference |
+| Rei (`rainypilgrimage`) | Rule-to-product semantic accuracy, canonical Scope categories and reason vocabulary, Action visibility boundaries, unsupported inference |
 | Jie (`jzhao0`) | Real Fixture accuracy, Moss Evidence, provenance, Live／Replay／Mock claims, normalized Intent and Action Gate feasibility |
 | Clare (`brightheartma`) | Product View Model unions, Contract/API mapping, Integration Error payload, Recovery Action and ReplayRef adapter mapping |
 | Antony (`antony819`) | CTA routing, frontend implementability, Scope provenance, loading/empty states, i18n, Previous/New and View Model ergonomics |

@@ -40,7 +40,7 @@ scripts/       Development and operational scripts
 | Member | GitHub | Area |
 |---|---|---|
 | Kai | [@chin0312](https://github.com/chin0312) | Product and demo |
-| Rei | [@rainypilgrimage-beep](https://github.com/rainypilgrimage-beep) | Risk methodology and research |
+| Rei | [@rainypilgrimage](https://github.com/rainypilgrimage) | Risk methodology and research |
 | Jie | [@jzhao0](https://github.com/jzhao0) | Moss integration and risk engine |
 | Clare | [@brightheartma](https://github.com/brightheartma) | API, backend, orchestration, and deployment |
 | Antony | [@antony819](https://github.com/antony819) | Web frontend |
