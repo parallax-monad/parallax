@@ -226,6 +226,42 @@ describe("checkSwap API adapter", () => {
     });
   });
 
+  test("surfaces backend field issues from a normalization failure", async () => {
+    const request = vi.fn<typeof fetch>().mockResolvedValue(
+      jsonResponse(
+        {
+          error: {
+            code: "NORMALIZATION_FAILED",
+            message: "The check request could not be normalized",
+            issues: {
+              code: "TOO_MANY_DECIMAL_PLACES",
+              field: "economicBoundary.minimumReceived",
+              message: "Amount supports at most 6 decimal places",
+            },
+          },
+        },
+        400,
+      ),
+    );
+
+    const result = await checkSwap(input, { fetch: request });
+
+    expect(result.apiFailure).toMatchObject({
+      httpStatus: 400,
+      code: "NORMALIZATION_FAILED",
+      retryable: false,
+      issues: [
+        {
+          code: "TOO_MANY_DECIMAL_PLACES",
+          field: "economicBoundary.minimumReceived",
+          message: "Amount supports at most 6 decimal places",
+        },
+      ],
+    });
+    expect(result.summary.en).toContain("economicBoundary.minimumReceived");
+    expect(result.summary.en).toContain("at most 6 decimal places");
+  });
+
   test("preserves INVALID_RERUN reason in the error-page model", async () => {
     const request = vi.fn<typeof fetch>().mockResolvedValue(
       jsonResponse(

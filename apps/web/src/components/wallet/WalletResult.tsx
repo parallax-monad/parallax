@@ -142,6 +142,14 @@ export function WalletResult({
   const { intent, quote, verdict } = result;
   const unresolved = quote.expectedOutput === "unavailable";
   const amountIn = Number(intent.amountIn);
+  // The boundary rule only fails when the simulated output misses the user's
+  // Minimum Received, so name that gap instead of leaving a bare STOP.
+  const boundaryShortfall = result.ruleResults.some(
+    (item) =>
+      item.group === "economicBoundary" &&
+      item.outcome === "FAIL" &&
+      item.detail.en === "OUTPUT_BELOW_BOUNDARY",
+  );
 
   if (result.systemStatus === "INTEGRATION_ERROR") {
     return (
@@ -210,6 +218,19 @@ export function WalletResult({
                     {String(result.apiFailure.retryable)}
                   </dd>
                 </div>
+                {result.apiFailure.issues?.map((issue) => (
+                  <div
+                    className="flex justify-between gap-3 py-1"
+                    key={`${issue.field ?? ""}:${issue.code ?? ""}`}
+                  >
+                    <dt className="font-bold uppercase tracking-[0.06em]">
+                      {issue.field ?? "error.issue"}
+                    </dt>
+                    <dd className="mono m-0 min-w-0 break-words text-right text-white">
+                      {issue.message ?? issue.code}
+                    </dd>
+                  </div>
+                ))}
               </dl>
             )}
           </div>
@@ -306,6 +327,30 @@ export function WalletResult({
           </p>
         </div>
       </section>
+
+      {boundaryShortfall && (
+        <section className="border border-risk-high/50 bg-risk-high/10 p-4">
+          <strong className="block text-[13px] font-bold uppercase tracking-[0.08em] text-risk-high">
+            {say(language, {
+              en: "Below your Minimum Received",
+              zh: "低于你的最低收到量",
+            })}
+          </strong>
+          <p className="mt-1.5 text-[14px] leading-[1.6] text-white">
+            {say(language, {
+              en: `The simulation returned ${quote.expectedOutput} ${intent.tokenOut}, which does not meet the Minimum Received you accepted. Lower that boundary or change the amount, then run the check again.`,
+              zh: `模拟结果为 ${quote.expectedOutput} ${intent.tokenOut}，未达到你接受的最低收到量。请降低该边界或修改数量，然后重新检查。`,
+            })}
+          </p>
+          <p className="mt-2 text-[12px] leading-[1.6] text-dim">
+            {say(language, {
+              en: "Minimum Received is an acceptance boundary. Lowering it accepts a worse output; it does not improve the transaction.",
+              zh: "最低收到量是接受边界。降低它意味着接受更差的输出，并不会改善交易本身。",
+            })}
+          </p>
+        </section>
+      )}
+
       <p className="text-[12px] leading-[1.6] text-dim">
         {say(language, MODE_EXPLANATION[result.productRunMode])}
       </p>

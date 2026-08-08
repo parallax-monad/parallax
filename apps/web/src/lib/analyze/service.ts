@@ -3,6 +3,7 @@ import { validateForm } from "./form";
 import type {
   ActionSuggestion,
   ApiFailure,
+  ApiFailureIssue,
   CheckSwapInput,
   CheckSwapResult,
   EvidenceItem,
@@ -216,12 +217,33 @@ function diff(value: unknown): RunDiff | undefined {
   return rows.length ? rows : undefined;
 }
 
+/** The backend sends a single issue object or a list; normalize to a list. */
+function failureIssues(value: unknown): ApiFailureIssue[] | undefined {
+  const raw = Array.isArray(value) ? value : value === undefined ? [] : [value];
+  const issues = raw.flatMap((entry) => {
+    const item = obj(entry);
+    if (!item) return [];
+    const code = str(item.code);
+    const field = str(item.field);
+    const message = str(item.message);
+    return code || field || message ? [{ code, field, message }] : [];
+  });
+  return issues.length ? issues : undefined;
+}
+
 function failureCopy(failure: ApiFailure) {
   const label = failure.code.replaceAll("_", " ").toLowerCase();
   const reason = failure.reason ? ` (${failure.reason})` : "";
+  const detail = failure.issues
+    ?.map((issue) =>
+      [issue.field, issue.message ?? issue.code].filter(Boolean).join(": "),
+    )
+    .filter(Boolean)
+    .join("; ");
+  const suffix = detail ? ` ${detail}.` : "";
   return {
-    en: `The check failed with ${label}${reason}. This is a system result, not a transaction-risk verdict.`,
-    zh: `检查因 ${label}${reason} 失败。这是系统结果，不是交易风险结论。`,
+    en: `The check failed with ${label}${reason}.${suffix} This is a system result, not a transaction-risk verdict.`,
+    zh: `检查因 ${label}${reason} 失败。${suffix}这是系统结果，不是交易风险结论。`,
   };
 }
 
@@ -300,6 +322,7 @@ function mapRun(
               ? runError.retryable
               : (transportFailure?.retryable ?? false),
           message: str(runError?.message) ?? transportFailure?.message,
+          issues: failureIssues(runError?.issues) ?? transportFailure?.issues,
         }
       : undefined;
   const mappedEvidence = arr(run?.evidence)
@@ -489,6 +512,7 @@ export async function checkSwap(
     reason: str(error?.reason),
     retryable: response.status >= 500,
     message: str(error?.message),
+    issues: failureIssues(error?.issues),
   };
   return (
     mapRun(envelope?.run, apiFailure, payload) ??
@@ -535,6 +559,7 @@ export async function loadReplay(
         code: str(error?.code) ?? `HTTP_${response.status}`,
         retryable: response.status >= 500,
         message: str(error?.message),
+        issues: failureIssues(error?.issues),
       },
       payload,
     );

@@ -90,4 +90,77 @@ describe("WalletResult", () => {
     expect(html).toContain("cannot be retried as-is");
     expect(html).toContain("View details");
   });
+
+  test("shows the backend field issue that caused a rejected request", () => {
+    const html = render(
+      result({
+        systemStatus: "INTEGRATION_ERROR",
+        apiFailure: {
+          httpStatus: 400,
+          code: "NORMALIZATION_FAILED",
+          retryable: false,
+          issues: [
+            {
+              code: "TOO_MANY_DECIMAL_PLACES",
+              field: "economicBoundary.minimumReceived",
+              message: "Amount supports at most 6 decimal places",
+            },
+          ],
+        },
+      }),
+    );
+
+    expect(html).toContain("NORMALIZATION_FAILED");
+    expect(html).toContain("economicBoundary.minimumReceived");
+    expect(html).toContain("Amount supports at most 6 decimal places");
+  });
+
+  test("names the shortfall when output misses Minimum Received", () => {
+    const html = render(
+      result({
+        verdict: "STOP",
+        quote: {
+          expectedOutput: "0.000223",
+          route: { en: "MON → USDC", zh: "MON → USDC" },
+          blockNumber: "94209970",
+        },
+        ruleResults: [
+          {
+            id: "P0-ECONOMIC-001",
+            group: "economicBoundary",
+            label: { en: "P0-ECONOMIC-001", zh: "P0-ECONOMIC-001" },
+            outcome: "FAIL",
+            detail: {
+              en: "OUTPUT_BELOW_BOUNDARY",
+              zh: "OUTPUT_BELOW_BOUNDARY",
+            },
+          },
+        ],
+      }),
+    );
+
+    expect(html).toContain("Below your Minimum Received");
+    expect(html).toContain("0.000223");
+    expect(html).toContain("does not meet the Minimum Received");
+    expect(html).toContain("does not improve the transaction");
+  });
+
+  test("stays quiet about the boundary when the rule passed", () => {
+    const html = render(
+      result({
+        verdict: "PROCEED",
+        ruleResults: [
+          {
+            id: "P0-ECONOMIC-001",
+            group: "economicBoundary",
+            label: { en: "P0-ECONOMIC-001", zh: "P0-ECONOMIC-001" },
+            outcome: "PASS",
+            detail: { en: "No reason provided", zh: "No reason provided" },
+          },
+        ],
+      }),
+    );
+
+    expect(html).not.toContain("Below your Minimum Received");
+  });
 });

@@ -84,6 +84,13 @@ export type RunDiff = {
   direction: "improved" | "worsened" | "changed";
 }[];
 
+/** Field-level rejections the backend reports alongside a failure code. */
+export type ApiFailureIssue = {
+  code?: string;
+  field?: string;
+  message?: string;
+};
+
 export type ApiFailure = {
   httpStatus?: number;
   code: string;
@@ -91,6 +98,7 @@ export type ApiFailure = {
   stage?: string;
   retryable: boolean;
   message?: string;
+  issues?: ApiFailureIssue[];
 };
 
 export type CheckSwapResult = {
