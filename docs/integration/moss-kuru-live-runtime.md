@@ -243,3 +243,17 @@ explicit field mapping implemented by `normalizeLiveKuruEvidence`.
   smoke, 2026-08-08, runId `kuru-live-1786163979273`), resolving the Node
   drift. Live status `P0_LIVE_ACCEPTED_CANDIDATE` is supported by the audit
   and the merge evidence now matches the runtime contract pin.
+
+### Integration coordination status
+
+- **#23 Moss Live** is merged on `main`. The temporary runtime pin
+  `ef15448e166f31c891e80dba5073dae04a052a2b` and Node `v22.23.2` evidence
+  support the exact Live SUCCESS claim above. This does not claim that the
+  temporary pin is the final immutable upstream Moss revision; migration after
+  upstream Moss finalizes remains a follow-up.
+- **#21 frontend → API** remains `CHANGES_REQUESTED`: the frontend must keep
+  live `UNSUPPORTED` distinct from Recorded Replay and must not override the
+  fixture/API `amountInAtomic` with `displayAmountIn`.
+- **#19 Action Gate** is merged on `main` with interim `action_verification`
+  and A14. Full §3.3.1 `ACTION_GATE` / CrossRun Contract work remains
+  deferred.
