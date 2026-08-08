@@ -1,5 +1,6 @@
 import {
   type CSSProperties,
+  type ReactNode,
   type PointerEvent as ReactPointerEvent,
   useEffect,
   useRef,
@@ -81,6 +82,14 @@ function readRoute() {
   return window.location.hash === "#/analyze" ? "analyze" : "home";
 }
 
+export function AppRouteSurface({ children }: { children: ReactNode }) {
+  return (
+    <div className="min-h-[100dvh] bg-[#05050a]" data-app-route-surface="">
+      {children}
+    </div>
+  );
+}
+
 export default function App() {
   const [language, setLanguage] = useState<Language>(getInitialLanguage);
   const [route, setRoute] = useState(readRoute);
@@ -92,7 +101,7 @@ export default function App() {
   }, []);
 
   return (
-    <div className="min-h-[calc(100vh-65px)]">
+    <AppRouteSurface>
       <SiteNav
         active={route === "analyze" ? "analyze" : "home"}
         language={language}
@@ -104,7 +113,7 @@ export default function App() {
       ) : (
         <Home language={language} />
       )}
-    </div>
+    </AppRouteSurface>
   );
 }
 

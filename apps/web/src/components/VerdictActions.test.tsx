@@ -2,6 +2,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, test } from "vitest";
 import {
   createVerdictInteractionHandlers,
+  getSelectedVoteStatus,
   VerdictActions,
   type VerdictZone,
 } from "./VerdictActions";
@@ -147,10 +148,20 @@ describe("VerdictActions", () => {
     expect(html).not.toContain("可以签署");
     expect(html).toContain("PROCEED／演示");
     expect(html).toContain("请勿使用当前交易路径");
-    expect(html).toContain("继续之前请先调整");
+    expect(html).toContain("请勿使用当前");
+    expect(html).toContain("交易路径");
+    expect(html).toContain("verdict-heading-zh-line");
+    expect(html).toContain("调整后再继续");
     expect(html).toContain("一人一票 · 点击改投");
     expect(html).toContain("一人一票");
     expect(html).toContain("由于必要证据缺失或不完整");
     expect(html).toContain("阻断证据适用于当前交易意图或路径");
+  });
+
+  test("keeps the full desktop vote status and provides a mobile visual abbreviation", () => {
+    expect(getSelectedVoteStatus("en")).toBe("YOUR ONLY VOTE");
+    expect(getSelectedVoteStatus("en", true)).toBe("YOUR VOTE");
+    expect(getSelectedVoteStatus("zh-CN")).toBe("你的唯一一票");
+    expect(getSelectedVoteStatus("zh-CN", true)).toBe("你的唯一一票");
   });
 });

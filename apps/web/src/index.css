@@ -11,7 +11,10 @@
     --space-violet: #836ef9;
     color-scheme: dark;
   }
-  html {
+  html,
+  body,
+  #root {
+    min-height: 100%;
     background: var(--space-black);
   }
   body {
@@ -602,6 +605,9 @@
       color 220ms ease,
       transform 220ms ease;
   }
+  .verdict-heading-zh-line {
+    display: block;
+  }
   .verdict-quadrant[data-current-action="true"] h3 {
     color: var(--verdict-color);
     text-decoration: none;
@@ -646,6 +652,15 @@
     align-self: end;
     color: var(--verdict-color);
     font-size: 8px;
+  }
+  .verdict-field-center > .verdict-vote-status {
+    max-width: calc(100% - 12px);
+    line-height: 1.15;
+    overflow-wrap: normal;
+    text-align: center;
+  }
+  .verdict-vote-status-mobile {
+    display: none;
   }
   .verdict-field-center i {
     width: 5px;
@@ -853,6 +868,19 @@ html[lang="zh-CN"] .verdict-quadrant h3 {
 }
 
 @media (max-width: 720px) {
+  .verdict-heading-zh-line {
+    display: inline;
+  }
+  .verdict-vote-status-desktop {
+    display: none;
+  }
+  .verdict-vote-status-mobile {
+    display: block;
+  }
+  .verdict-field-center > .verdict-vote-status {
+    font-size: 6px;
+    letter-spacing: 0.04em;
+  }
   .hero-reveal-grid {
     display: grid;
     grid-template-columns: 1fr;

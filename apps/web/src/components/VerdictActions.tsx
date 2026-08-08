@@ -12,6 +12,7 @@ type VerdictQuadrant = {
   note: readonly [string, string];
   shortLabel: readonly [string, string];
   body: readonly [string, string];
+  chineseLabelLines?: readonly [string, string];
 };
 
 const QUADRANTS: VerdictQuadrant[] = [
@@ -44,6 +45,7 @@ const QUADRANTS: VerdictQuadrant[] = [
     zone: "southwest",
     tone: "blocked",
     label: ["DO NOT USE THIS TRANSACTION PATH", "请勿使用当前交易路径"],
+    chineseLabelLines: ["请勿使用当前", "交易路径"],
     note: ["STOP / DEMO", "STOP／演示"],
     shortLabel: ["STOP", "停止"],
     body: [
@@ -55,7 +57,7 @@ const QUADRANTS: VerdictQuadrant[] = [
     index: "02",
     zone: "southeast",
     tone: "rerun",
-    label: ["ADJUST BEFORE PROCEEDING", "继续之前请先调整"],
+    label: ["ADJUST BEFORE PROCEEDING", "调整后再继续"],
     note: ["ADJUST / DEMO", "ADJUST／演示"],
     shortLabel: ["ADJUST", "调整"],
     body: [
@@ -125,6 +127,11 @@ export function createVerdictInteractionHandlers(
       if (event.pointerType !== "touch") previewZone(zone);
     },
   };
+}
+
+export function getSelectedVoteStatus(language: Language, compact = false) {
+  if (compact) return pick(language, "YOUR VOTE", "你的唯一一票");
+  return pick(language, "YOUR ONLY VOTE", "你的唯一一票");
 }
 
 export function VerdictActions({ language }: { language: Language }) {
@@ -245,7 +252,24 @@ export function VerdictActions({ language }: { language: Language }) {
                 </span>
                 <b>{pick(language, quadrant.note[0], quadrant.note[1])}</b>
               </div>
-              <h3>{pick(language, quadrant.label[0], quadrant.label[1])}</h3>
+              <h3>
+                {language === "zh-CN" && quadrant.chineseLabelLines ? (
+                  <>
+                    <span className="sr-only">{quadrant.label[1]}</span>
+                    {quadrant.chineseLabelLines.map((line) => (
+                      <span
+                        aria-hidden="true"
+                        className="verdict-heading-zh-line"
+                        key={line}
+                      >
+                        {line}
+                      </span>
+                    ))}
+                  </>
+                ) : (
+                  pick(language, quadrant.label[0], quadrant.label[1])
+                )}
+              </h3>
               <p>{pick(language, quadrant.body[0], quadrant.body[1])}</p>
             </button>
           );
@@ -256,12 +280,32 @@ export function VerdictActions({ language }: { language: Language }) {
           data-tone={activeQuadrant?.tone}
           data-verdict-center=""
         >
-          <span>
-            {activeQuadrant
-              ? selectedZone === activeZone
-                ? pick(language, "YOUR ONLY VOTE", "你的唯一一票")
-                : pick(language, "PREVIEW", "预览")
-              : pick(language, "CAST YOUR VOTE", "投下你的选择")}
+          <span className="verdict-vote-status">
+            {activeQuadrant ? (
+              selectedZone === activeZone ? (
+                <>
+                  <span className="sr-only">
+                    {getSelectedVoteStatus(language)}
+                  </span>
+                  <span
+                    aria-hidden="true"
+                    className="verdict-vote-status-desktop"
+                  >
+                    {getSelectedVoteStatus(language)}
+                  </span>
+                  <span
+                    aria-hidden="true"
+                    className="verdict-vote-status-mobile"
+                  >
+                    {getSelectedVoteStatus(language, true)}
+                  </span>
+                </>
+              ) : (
+                pick(language, "PREVIEW", "预览")
+              )
+            ) : (
+              pick(language, "CAST YOUR VOTE", "投下你的选择")
+            )}
           </span>
           <i aria-hidden="true" />
           <strong>
