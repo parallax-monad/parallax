@@ -167,6 +167,19 @@ export function planSubmission(
     }
 
     const changes = changedLogicalFields(previousSubmitted, form);
+
+    if (changes.includes("minimumReceived")) {
+      return {
+        allowed: false,
+        errors: {
+          minimumReceived: {
+            en: "A Re-run must keep the original Minimum Received. Change another supported condition, or discard this result and start a new swap to set a different boundary.",
+            zh: "重新检查必须保留原本的最低收到量。请修改其他受支持的条件；如要更改此边界，请放弃本次结果并开始新的兑换。",
+          },
+        },
+      };
+    }
+
     if (
       (changes.length === 0 && !options.allowUnchanged) ||
       changes.length > 1 ||
@@ -177,7 +190,7 @@ export function planSubmission(
         errors: {
           form: {
             en: "Change exactly one backend-supported condition before rerunning. Slippage is not part of the /api/check contract.",
-            zh: "重新检查前必须只修改一个后端支持的条件。滑点不属于 /api/check 契约。",
+            zh: "请至少修改一个条件。",
           },
         },
       };

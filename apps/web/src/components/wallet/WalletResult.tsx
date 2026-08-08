@@ -55,7 +55,7 @@ const VERDICT_PLAIN: Record<Verdict, Copy> = {
 const PRIMARY_ACTION: Record<Verdict, Copy> = {
   PROCEED: { en: "Review swap inputs", zh: "查看兑换输入" },
   ADJUST: { en: "Review demo adjustment", zh: "查看演示调整" },
-  STOP: { en: "Review route or pair", zh: "查看路径或代币对" },
+  STOP: { en: "Modify parameters and retry", zh: "修改参数重试" },
   UNKNOWN: { en: "Review inputs", zh: "查看输入" },
 };
 
@@ -338,14 +338,14 @@ export function WalletResult({
           </strong>
           <p className="mt-1.5 text-[14px] leading-[1.6] text-white">
             {say(language, {
-              en: `The simulation returned ${simulatedOutput} ${intent.tokenOut}, which does not meet the Minimum Received you accepted. Lower that boundary or change the amount, then run the check again.`,
-              zh: `模拟结果为 ${simulatedOutput} ${intent.tokenOut}，未达到你接受的最低收到量。请降低该边界或修改数量，然后重新检查。`,
+              en: `The simulation returned ${simulatedOutput} ${intent.tokenOut}, which is below the original Minimum Received. A Re-run must preserve that boundary: change another supported parameter, or discard this result and start a new swap to set a different boundary.`,
+              zh: `模拟结果为 ${simulatedOutput} ${intent.tokenOut}，低于原本的最低收到量。重新检查必须保留该边界：请修改其他受支持的参数；如要更改边界，请放弃本次结果并开始新的兑换。`,
             })}
           </p>
           <p className="mt-2 text-[12px] leading-[1.6] text-dim">
             {say(language, {
-              en: "Minimum Received is an acceptance boundary. Lowering it accepts a worse output; it does not improve the transaction.",
-              zh: "最低收到量是接受边界。降低它意味着接受更差的输出，并不会改善交易本身。",
+              en: "Minimum Received is fixed for a Re-run. Lowering it requires a new swap because it accepts a worse output rather than improving this transaction.",
+              zh: "重新检查时最低收到量必须保持不变。如要降低它，必须开始新的兑换，因为这只是接受更差的输出，并不会改善当前交易。",
             })}
           </p>
         </section>
