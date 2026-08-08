@@ -1,3 +1,8 @@
+<p align="center">
+  <a href="./README.md">English</a> |
+  <a href="./README.zh-CN.md">简体中文</a>
+</p>
+
 # Parallax
 
 Parallax is a read-only, Moss-powered pre-transaction decision layer for Monad swaps.

@@ -61,7 +61,6 @@ type ProtocolPlanet = {
   interior: THREE.Points<THREE.BufferGeometry, THREE.ShaderMaterial>;
   core: THREE.Mesh<THREE.SphereGeometry, THREE.ShaderMaterial>;
   coreUniforms: CoreUniforms;
-  backdrop: THREE.Sprite;
   halo: THREE.Sprite;
   satellites: THREE.Points<THREE.BufferGeometry, THREE.PointsMaterial>;
   uniforms: readonly [PlanetUniforms, PlanetUniforms];
@@ -128,7 +127,7 @@ const MARKERS: MarkerConfig[] = [
     introControl: [-39, 27, 20],
     planetSeed: 0x4b555255,
     compact: [-21, 12, 5],
-    dispersed: [-88, 42, 8],
+    dispersed: [-82, 30, 8],
   },
   {
     label: EVIDENCE_TRACE_MARKERS[1].label,
@@ -143,7 +142,7 @@ const MARKERS: MarkerConfig[] = [
     introControl: [39, -27, -17],
     planetSeed: 0x50414e43,
     compact: [22, -11, -7],
-    dispersed: [92, -44, -4],
+    dispersed: [88, -34, -4],
   },
   {
     label: EVIDENCE_TRACE_MARKERS[2].label,
@@ -435,35 +434,6 @@ function setQuadraticBezier3(
   );
 }
 
-function constrainProtocolMarkerToViewport(
-  target: THREE.Vector3,
-  config: ProtocolMarkerConfig,
-  camera: THREE.PerspectiveCamera,
-  width: number,
-  height: number,
-) {
-  const distanceFromCamera = Math.max(camera.position.z - target.z, 1);
-  const halfHeight =
-    Math.tan(THREE.MathUtils.degToRad(camera.fov * 0.5)) * distanceFromCamera;
-  const halfWidth = halfHeight * (width / Math.max(height, 1));
-  const compactViewport = width < 640;
-  const horizontalPadding =
-    config.size * (compactViewport ? 1.35 : width < 1100 ? 1.55 : 1.7);
-  const topPadding = config.size * (compactViewport ? 1.75 : 2.05);
-  const bottomPadding = config.size * (compactViewport ? 1.35 : 1.55);
-
-  target.x = clamp(
-    target.x,
-    -Math.max(halfWidth - horizontalPadding, 0),
-    Math.max(halfWidth - horizontalPadding, 0),
-  );
-  target.y = clamp(
-    target.y,
-    -Math.max(halfHeight - bottomPadding, 0),
-    Math.max(halfHeight - topPadding, 0),
-  );
-}
-
 function createSeededRandom(seed: number) {
   let state = seed >>> 0;
   return () => {
@@ -491,21 +461,6 @@ function createPointTexture() {
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
   return texture;
-}
-
-function createContrastTexture() {
-  const canvas = document.createElement("canvas");
-  canvas.width = 128;
-  canvas.height = 128;
-  const context = canvas.getContext("2d");
-  if (!context) throw new Error("Unable to create protocol contrast texture");
-  const gradient = context.createRadialGradient(64, 64, 0, 64, 64, 64);
-  gradient.addColorStop(0, "rgba(0,0,0,0.82)");
-  gradient.addColorStop(0.48, "rgba(0,0,0,0.48)");
-  gradient.addColorStop(1, "rgba(0,0,0,0)");
-  context.fillStyle = gradient;
-  context.fillRect(0, 0, 128, 128);
-  return new THREE.CanvasTexture(canvas);
 }
 
 function particleCountFor(width: number) {
@@ -850,7 +805,7 @@ function createPlanetGeometry({
     positions[offset + 1] = y;
     positions[offset + 2] = z;
 
-    const brightness = shell ? 0.9 + random() * 0.25 : 0.66 + random() * 0.3;
+    const brightness = shell ? 0.96 + random() * 0.26 : 0.72 + random() * 0.3;
     colors[offset] = baseColor.r * brightness;
     colors[offset + 1] = baseColor.g * brightness;
     colors[offset + 2] = baseColor.b * brightness;
@@ -949,10 +904,10 @@ function createSignalShell(
   const material = new THREE.PointsMaterial({
     map: pointTexture,
     color: config.color,
-    size: 0.5,
+    size: 0.56,
     sizeAttenuation: true,
     transparent: true,
-    opacity: 0.58,
+    opacity: 0.72,
     depthWrite: false,
     blending: THREE.AdditiveBlending,
   });
@@ -968,7 +923,7 @@ function createSignalNode(
     coreColor: config.color,
     highlightColor: "#f7fbff",
     rimColor: config.color,
-    brightness: 0.72,
+    brightness: 0.9,
   });
   const core = new THREE.Mesh(sphereGeometry, coreLayer.material);
   core.scale.setScalar(config.size * 0.27);
@@ -978,12 +933,12 @@ function createSignalNode(
       map: pointTexture,
       color: config.color,
       transparent: true,
-      opacity: 0.075,
+      opacity: 0.14,
       blending: THREE.AdditiveBlending,
       depthWrite: false,
     }),
   );
-  halo.scale.set(config.size * 2.35, config.size * 2.35, 1);
+  halo.scale.set(config.size * 2.5, config.size * 2.5, 1);
   const group = new THREE.Group();
   group.add(halo, core, shell);
   return { group, core, coreUniforms: coreLayer.uniforms, shell, halo };
@@ -1031,7 +986,6 @@ function createProtocolSatellites(
 function createProtocolPlanet(
   config: ProtocolMarkerConfig,
   pointTexture: THREE.Texture,
-  contrastTexture: THREE.Texture,
   sphereGeometry: THREE.SphereGeometry,
 ): ProtocolPlanet {
   const radius = config.size * 0.58;
@@ -1049,50 +1003,38 @@ function createProtocolPlanet(
     color: config.color,
     seed: config.planetSeed ^ 0x494e5445,
   });
-  const shellLayer = createPlanetMaterial(pointTexture, 1.18);
-  const interiorLayer = createPlanetMaterial(pointTexture, 0.84);
+  const shellLayer = createPlanetMaterial(pointTexture, 1.24);
+  const interiorLayer = createPlanetMaterial(pointTexture, 0.9);
   const shell = new THREE.Points(shellGeometry, shellLayer.material);
   const interior = new THREE.Points(interiorGeometry, interiorLayer.material);
   const coreLayer = createCoreMaterial({
     coreColor: config.coreColor,
     highlightColor: config.highlightColor,
     rimColor: config.rimColor,
-    brightness: 1.24,
+    brightness: 1.28,
   });
   const core = new THREE.Mesh(sphereGeometry, coreLayer.material);
   core.scale.setScalar(radius * 0.6);
-  const backdrop = new THREE.Sprite(
-    new THREE.SpriteMaterial({
-      map: contrastTexture,
-      transparent: true,
-      opacity: 0.16,
-      depthWrite: false,
-      depthTest: true,
-    }),
-  );
-  backdrop.position.z = -1.1;
-  backdrop.scale.set(config.size * 4.4, config.size * 4.4, 1);
   const halo = new THREE.Sprite(
     new THREE.SpriteMaterial({
       map: pointTexture,
       color: config.color,
       transparent: true,
-      opacity: 0.32,
+      opacity: 0.37,
       blending: THREE.AdditiveBlending,
       depthWrite: false,
     }),
   );
-  halo.scale.set(config.size * 3.55, config.size * 3.55, 1);
+  halo.scale.set(config.size * 3.65, config.size * 3.65, 1);
   const satellites = createProtocolSatellites(config, pointTexture);
   const group = new THREE.Group();
-  group.add(backdrop, halo, core, interior, shell, satellites);
+  group.add(halo, core, interior, shell, satellites);
   return {
     group,
     shell,
     interior,
     core,
     coreUniforms: coreLayer.uniforms,
-    backdrop,
     halo,
     satellites,
     uniforms: [shellLayer.uniforms, interiorLayer.uniforms],
@@ -1102,7 +1044,6 @@ function createProtocolPlanet(
 function createMarker(
   config: MarkerConfig,
   pointTexture: THREE.Texture,
-  contrastTexture: THREE.Texture,
   sphereGeometry: THREE.SphereGeometry,
 ): Marker {
   const group = new THREE.Group();
@@ -1111,7 +1052,7 @@ function createMarker(
     new THREE.SpriteMaterial({
       map: labelTexture,
       transparent: true,
-      opacity: config.role === "protocol" ? 0.82 : 0.3,
+      opacity: config.role === "protocol" ? 0.88 : 0.46,
       depthWrite: false,
     }),
   );
@@ -1123,12 +1064,7 @@ function createMarker(
   );
   label.position.set(0, config.size * 1.15, 0);
   if (config.role === "protocol") {
-    const planet = createProtocolPlanet(
-      config,
-      pointTexture,
-      contrastTexture,
-      sphereGeometry,
-    );
+    const planet = createProtocolPlanet(config, pointTexture, sphereGeometry);
     group.add(planet.group, label);
     return {
       kind: "protocol",
@@ -1165,7 +1101,6 @@ function disposeMarker(marker: Marker) {
     marker.planet.interior.geometry.dispose();
     marker.planet.interior.material.dispose();
     marker.planet.core.material.dispose();
-    (marker.planet.backdrop.material as THREE.SpriteMaterial).dispose();
     (marker.planet.halo.material as THREE.SpriteMaterial).dispose();
     marker.planet.satellites.geometry.dispose();
     marker.planet.satellites.material.dispose();
@@ -1195,7 +1130,6 @@ export function RouteGraph3D({
     let reduceMotion = motionQuery.matches;
     let renderer: THREE.WebGLRenderer;
     let pointTexture: THREE.CanvasTexture;
-    let contrastTexture: THREE.CanvasTexture;
     try {
       renderer = new THREE.WebGLRenderer({
         alpha: true,
@@ -1203,7 +1137,6 @@ export function RouteGraph3D({
         powerPreference: "high-performance",
       });
       pointTexture = createPointTexture();
-      contrastTexture = createContrastTexture();
     } catch {
       container.dataset.webgl = "failed";
       return;
@@ -1242,7 +1175,7 @@ export function RouteGraph3D({
     constellation.add(particleField.points);
     const sharedSphereGeometry = new THREE.SphereGeometry(1, 32, 24);
     const markers = MARKERS.map((config) =>
-      createMarker(config, pointTexture, contrastTexture, sharedSphereGeometry),
+      createMarker(config, pointTexture, sharedSphereGeometry),
     );
     const protocolMarkers = markers.filter(
       (marker): marker is ProtocolMarker => marker.kind === "protocol",
@@ -1424,6 +1357,7 @@ export function RouteGraph3D({
         : clamp(progressRef.current, 0, 1);
       const rawProgress = clamp(progressRef.current, 0, 1);
       const introEmphasis = 1 - smoothstep(0, INTRO_END_PROGRESS, rawProgress);
+      const labelVisibility = 1 - smoothstep(0.3, 0.48, progress);
       dragYaw = lerp(dragYaw, dragYawTarget, isDragging ? 0.18 : 0.09);
       dragPitch = lerp(dragPitch, dragPitchTarget, isDragging ? 0.18 : 0.09);
       const explorationVisibility = reduceMotion
@@ -1478,7 +1412,7 @@ export function RouteGraph3D({
         const { config, group } = marker;
         const positionExpansion =
           marker.kind === "protocol"
-            ? smoothstep(0.22, 0.52, progress)
+            ? smoothstep(0.02, 0.58, expansion)
             : markerExpansion;
         if (marker.kind === "protocol" && introEmphasis > 0) {
           setQuadraticBezier3(
@@ -1526,13 +1460,6 @@ export function RouteGraph3D({
             group.position.x += passivePointerX * (0.85 + depthResponse * 0.55);
             group.position.y += passivePointerY * (0.45 + depthResponse * 0.35);
           }
-          constrainProtocolMarkerToViewport(
-            group.position,
-            marker.config,
-            camera,
-            container.clientWidth,
-            container.clientHeight,
-          );
         } else {
           marker.node.group.rotation.y = reduceMotion
             ? config.phase * 0.08
@@ -1591,13 +1518,7 @@ export function RouteGraph3D({
         const breathe = reduceMotion
           ? 1
           : 1 + Math.sin(time * 0.00056 + config.phase) * 0.025;
-        const revealScale = smoothstep(0.42, 0.72, progress);
-        const mobileScale =
-          container.clientWidth < 640
-            ? lerp(0.86, 0.74, revealScale)
-            : container.clientWidth < 1100
-              ? lerp(1, 0.92, revealScale)
-              : 1;
+        const mobileScale = container.clientWidth < 640 ? 0.88 : 1;
         planet.group.scale.setScalar(
           mobileScale * breathe * (1 + focus * PROTOCOL_FOCUS_SCALE),
         );
@@ -1626,29 +1547,25 @@ export function RouteGraph3D({
         planet.coreUniforms.uTime.value = time * 0.001;
         planet.coreUniforms.uFocus.value = focus;
         planet.coreUniforms.uMotion.value = reduceMotion ? 0 : 1;
-        planet.coreUniforms.uBrightness.value = 1.24 + focus * 0.18;
+        planet.coreUniforms.uBrightness.value = 1.28 + focus * 0.2;
         planet.halo.scale.set(
-          config.size * (3.55 + introEmphasis * 0.28 + focus * 0.46),
-          config.size * (3.55 + introEmphasis * 0.28 + focus * 0.46),
+          config.size * (3.65 + introEmphasis * 0.28 + focus * 0.48),
+          config.size * (3.65 + introEmphasis * 0.28 + focus * 0.48),
           1,
         );
         (planet.halo.material as THREE.SpriteMaterial).opacity =
-          0.32 + introEmphasis * 0.08 + focus * 0.18;
-        (planet.backdrop.material as THREE.SpriteMaterial).opacity =
-          0.14 + introEmphasis * 0.035 + focus * 0.025;
+          0.37 + introEmphasis * 0.08 + focus * 0.18;
         planet.satellites.rotation.y = reduceMotion
           ? config.phase * 0.08
           : time * (0.000055 + focus * 0.000035) + config.phase * 0.08;
         planet.satellites.rotation.z =
           -0.24 + config.phase * 0.03 + (reduceMotion ? 0 : time * 0.000018);
         planet.satellites.material.opacity =
-          0.26 + introEmphasis * 0.24 + focus * 0.22;
+          0.3 + introEmphasis * 0.24 + focus * 0.23;
         planet.satellites.material.size =
           0.78 + introEmphasis * 0.16 + focus * 0.14;
-        (marker.label.material as THREE.SpriteMaterial).opacity = Math.min(
-          1,
-          0.92 - progress * 0.12 + focus * 0.24,
-        );
+        (marker.label.material as THREE.SpriteMaterial).opacity =
+          Math.min(1, 0.94 + focus * 0.2) * labelVisibility;
       }
 
       for (const marker of markers) {
@@ -1660,15 +1577,15 @@ export function RouteGraph3D({
           : 1 + Math.sin(time * 0.00072 + config.phase) * 0.025;
         node.group.scale.setScalar(breathe * (1 + focus * SIGNAL_FOCUS_SCALE));
         node.coreUniforms.uFocus.value = focus;
-        node.coreUniforms.uBrightness.value = 0.72 + focus * 0.06;
-        node.shell.material.opacity = 0.58 + focus * 0.16;
+        node.coreUniforms.uBrightness.value = 0.9 + focus * 0.12;
+        node.shell.material.opacity = 0.72 + focus * 0.2;
         (node.halo.material as THREE.SpriteMaterial).opacity =
-          0.075 + focus * 0.065;
-        (marker.label.material as THREE.SpriteMaterial).opacity = Math.min(
-          0.88,
-          (0.34 - progress * 0.22 + focus * 0.54) *
-            (container.clientWidth < 640 ? 0 : 1),
-        );
+          0.14 + focus * 0.1;
+        const signalLabelScale = container.clientWidth < 640 ? 0.72 : 1;
+        (marker.label.material as THREE.SpriteMaterial).opacity =
+          Math.min(0.94, 0.52 + focus * 0.4) *
+          labelVisibility *
+          signalLabelScale;
       }
       renderer.render(scene, camera);
       frame = window.requestAnimationFrame(render);
@@ -1737,7 +1654,6 @@ export function RouteGraph3D({
       particleField.geometry.dispose();
       particleField.material.dispose();
       sharedSphereGeometry.dispose();
-      contrastTexture.dispose();
       pointTexture.dispose();
       renderer.dispose();
       renderer.forceContextLoss();

@@ -216,11 +216,11 @@ function Home({ language }: { language: Language }) {
             aria-hidden="true"
             className="pointer-events-none absolute inset-0 z-[2] opacity-0 [background:radial-gradient(ellipse_at_center,rgba(5,5,10,0.94)_0%,rgba(5,5,10,0.76)_38%,rgba(8,7,15,0.26)_70%,rgba(22,16,47,0.08)_100%)]"
           />
-          <div className="pointer-events-none absolute inset-0 z-[3] flex items-center justify-center px-5 pt-[7vh] sm:px-10">
+          <div className="pointer-events-none absolute inset-0 z-[3] flex items-center justify-center px-5 pt-[2vh] sm:px-10">
             <div
               ref={revealRef}
               data-hero-copy=""
-              className="hero-reveal-grid w-full max-w-[1260px] opacity-0 will-change-[opacity,transform]"
+              className="hero-reveal-grid w-full max-w-[1160px] opacity-0 will-change-[opacity,transform]"
             >
               <div className="hero-copy-column">
                 <span className="hero-copy-kicker">
@@ -228,7 +228,7 @@ function Home({ language }: { language: Language }) {
                 </span>
                 <h1
                   data-hero-title=""
-                  className="m-0 text-[clamp(46px,10vw,74px)] font-extrabold uppercase leading-[0.9] tracking-[-0.05em] sm:text-[clamp(54px,6.2vw,92px)]"
+                  className="m-0 text-[clamp(44px,10vw,68px)] font-extrabold uppercase leading-[0.9] tracking-[-0.05em] sm:text-[clamp(52px,5.6vw,82px)]"
                 >
                   {language === "zh-CN" ? (
                     <>
@@ -258,7 +258,7 @@ function Home({ language }: { language: Language }) {
                   <a href="#/analyze" className="btn btn-primary">
                     {pick(language, "Try demo", "体验 Demo")}
                   </a>
-                  <a href="#framework" className="btn">
+                  <a href="#how-it-works" className="btn">
                     {pick(language, "How it works", "运作方式")}
                   </a>
                 </div>
@@ -272,7 +272,10 @@ function Home({ language }: { language: Language }) {
       <div className="landing-space">
         <div aria-hidden="true" className="landing-space-background" />
         <div className="landing-space-content relative z-[1]">
-          <section className="flex flex-col justify-between gap-4 border-y border-line py-3.5 text-[9px] font-bold tracking-[0.08em] text-faint sm:flex-row">
+          <section
+            className="scroll-mt-4 flex flex-col justify-between gap-4 border-y border-line py-3.5 text-[9px] font-bold tracking-[0.08em] text-faint sm:flex-row"
+            id="how-it-works"
+          >
             <span>
               {pick(language, "READ-ONLY WALLET ACCESS", "只读钱包访问")}
             </span>
@@ -292,7 +295,7 @@ function Home({ language }: { language: Language }) {
             </span>
           </section>
 
-          <section className="mt-20 sm:mt-28" id="framework">
+          <section className="mt-16 sm:mt-20" id="framework">
             <span className="eyebrow">
               {pick(language, "Decision framework", "决策框架")}
             </span>
@@ -375,7 +378,7 @@ function Home({ language }: { language: Language }) {
               {pick(language, "before you sign.", "明确该怎么做")}
             </h2>
             <a href="#/analyze" className="btn btn-primary">
-              {pick(language, "Start analysis", "开始分析")}
+              {pick(language, "Try demo", "体验 Demo")}
             </a>
           </section>
 

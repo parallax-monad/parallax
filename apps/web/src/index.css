@@ -67,52 +67,19 @@
         rgba(64, 82, 148, 0.14),
         transparent 31%
       ),
-      linear-gradient(rgba(153, 147, 168, 0.05) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(153, 147, 168, 0.05) 1px, transparent 1px),
       linear-gradient(145deg, #030308, #080713 50%, #04040a);
-    background-size:
-      auto,
-      auto,
-      65px 65px,
-      65px 65px,
-      auto;
-  }
-  .hero-monad-light::before,
-  .hero-monad-light::after {
-    position: absolute;
-    content: "";
-    pointer-events: none;
   }
   .hero-monad-light::before {
+    position: absolute;
     inset: 0;
-    background:
-      linear-gradient(
-        90deg,
-        transparent 0 13%,
-        rgba(167, 157, 201, 0.1) 13% calc(13% + 1px),
-        transparent calc(13% + 1px) 86%,
-        rgba(167, 157, 201, 0.1) 86% calc(86% + 1px),
-        transparent calc(86% + 1px)
-      ),
-      linear-gradient(
-        180deg,
-        rgba(8, 7, 16, 0.16),
-        transparent 28%,
-        rgba(23, 18, 47, 0.26)
-      );
-  }
-  .hero-monad-light::after {
-    right: 7%;
-    bottom: 14%;
-    width: 24vw;
-    height: 24vw;
-    max-width: 410px;
-    max-height: 410px;
-    border: 1px solid rgba(131, 110, 249, 0.2);
-    border-radius: 50%;
-    box-shadow:
-      0 0 120px rgba(131, 110, 249, 0.18),
-      inset 0 0 80px rgba(131, 110, 249, 0.06);
+    content: "";
+    pointer-events: none;
+    background: linear-gradient(
+      180deg,
+      rgba(8, 7, 16, 0.16),
+      transparent 28%,
+      rgba(23, 18, 47, 0.26)
+    );
   }
   .hero-route-trace {
     overflow: hidden;
@@ -128,9 +95,9 @@
   }
   .hero-reveal-grid {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(350px, 430px);
+    grid-template-columns: minmax(0, 1fr) minmax(330px, 400px);
     align-items: center;
-    gap: clamp(44px, 7vw, 108px);
+    gap: clamp(32px, 5vw, 72px);
     color: #f7f5ff;
     text-align: left;
   }
@@ -149,7 +116,7 @@
   .hero-evidence-receipt {
     position: relative;
     width: 100%;
-    max-width: 430px;
+    max-width: 400px;
     overflow: hidden;
     border-top: 1px solid rgba(210, 203, 255, 0.38);
     border-bottom: 1px solid rgba(210, 203, 255, 0.38);
@@ -891,9 +858,6 @@ html[lang="zh-CN"] .verdict-quadrant h3 {
   .hero-route-trace::after {
     display: none;
   }
-  .hero-monad-light::after {
-    display: none;
-  }
   .verdict-field {
     min-height: 660px;
   }
@@ -935,6 +899,60 @@ html[lang="zh-CN"] .verdict-quadrant h3 {
   .verdict-vote-dot {
     width: calc(var(--dot-size) * 0.72);
     height: calc(var(--dot-size) * 0.72);
+  }
+}
+
+@media (min-width: 900px) and (max-height: 850px) {
+  .hero-reveal-grid {
+    grid-template-columns: minmax(0, 1fr) minmax(320px, 390px);
+    gap: clamp(28px, 4vw, 52px);
+  }
+  html[lang="en"] [data-hero-title] {
+    font-size: clamp(48px, 5.4vw, 76px);
+  }
+  html[lang="zh-CN"] [data-hero-title] {
+    font-size: clamp(44px, 5vw, 68px);
+  }
+  .hero-copy-kicker {
+    margin-bottom: 0.7rem;
+  }
+  .hero-copy-column > p {
+    margin-top: 1rem;
+    font-size: 14px;
+    line-height: 1.65;
+  }
+  .hero-copy-column > div {
+    margin-top: 1.25rem;
+  }
+  .hero-evidence-receipt {
+    max-width: 390px;
+  }
+  .hero-receipt-header {
+    padding: 0.75rem 0.9rem 0.6rem 1.05rem;
+  }
+  .hero-receipt-header strong {
+    font-size: 14px;
+  }
+  .hero-receipt-meta {
+    gap: 0.3rem 0.7rem;
+    padding: 0.35rem 0.9rem 0.35rem 1.05rem;
+  }
+  .hero-receipt-row {
+    min-height: 40px;
+    padding: 0.3rem 0.9rem 0.3rem 1.05rem;
+  }
+  .hero-receipt-row strong {
+    font-size: 10px;
+  }
+  .hero-receipt-row > div > span,
+  .hero-receipt-row b {
+    font-size: 7px;
+  }
+  .hero-receipt-verdict {
+    padding: 0.65rem 0.9rem 0.72rem 1.05rem;
+  }
+  .hero-receipt-verdict strong {
+    font-size: 24px;
   }
 }
 

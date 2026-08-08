@@ -32,12 +32,12 @@ describe("RouteGraph3D", () => {
       "#eeeaff",
     ]);
     expect(EVIDENCE_TRACE_MARKERS.map((marker) => marker.color)).toEqual([
-      "#59e1c2",
-      "#9d8cff",
-      "#f4bd63",
-      "#91b8ff",
-      "#d6a7ff",
-      "#ff8ea1",
+      "#42ffd0",
+      "#b784ff",
+      "#ffd36a",
+      "#69d7ff",
+      "#d98cff",
+      "#ff7d9f",
     ]);
   });
 

@@ -3,12 +3,12 @@ import type { Language } from "../lib/i18n";
 export const AMBIENT_STAR_COLORS = ["#ffffff", "#eeeaff"] as const;
 
 export const EVIDENCE_TRACE_MARKERS = [
-  { label: "Kuru", color: "#59e1c2" },
-  { label: "PancakeSwap V2 / V3", color: "#9d8cff" },
-  { label: "WMON", color: "#f4bd63" },
-  { label: "ERC-20 / native MON", color: "#91b8ff" },
-  { label: "ERC-721", color: "#d6a7ff" },
-  { label: "ERC-1155", color: "#ff8ea1" },
+  { label: "Kuru", color: "#42ffd0" },
+  { label: "PancakeSwap V2 / V3", color: "#b784ff" },
+  { label: "WMON", color: "#ffd36a" },
+  { label: "ERC-20 / native MON", color: "#69d7ff" },
+  { label: "ERC-721", color: "#d98cff" },
+  { label: "ERC-1155", color: "#ff7d9f" },
 ] as const;
 
 export function getExpandedMarkerEdgeScale(width: number) {
