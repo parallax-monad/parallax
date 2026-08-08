@@ -139,7 +139,7 @@ export function WalletResult({
   onOpenEvidence: () => void;
 }) {
   const [breakdownOpen, setBreakdownOpen] = useState(false);
-  const { intent, quote, verdict } = result;
+  const { intent, quote, simulatedOutput, verdict } = result;
   const unresolved = quote.expectedOutput === "unavailable";
   const amountIn = Number(intent.amountIn);
   // The boundary rule only fails when the simulated output misses the user's
@@ -338,8 +338,8 @@ export function WalletResult({
           </strong>
           <p className="mt-1.5 text-[14px] leading-[1.6] text-white">
             {say(language, {
-              en: `The simulation returned ${quote.expectedOutput} ${intent.tokenOut}, which does not meet the Minimum Received you accepted. Lower that boundary or change the amount, then run the check again.`,
-              zh: `模拟结果为 ${quote.expectedOutput} ${intent.tokenOut}，未达到你接受的最低收到量。请降低该边界或修改数量，然后重新检查。`,
+              en: `The simulation returned ${simulatedOutput} ${intent.tokenOut}, which does not meet the Minimum Received you accepted. Lower that boundary or change the amount, then run the check again.`,
+              zh: `模拟结果为 ${simulatedOutput} ${intent.tokenOut}，未达到你接受的最低收到量。请降低该边界或修改数量，然后重新检查。`,
             })}
           </p>
           <p className="mt-2 text-[12px] leading-[1.6] text-dim">

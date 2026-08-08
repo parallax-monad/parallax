@@ -22,6 +22,7 @@ function result(overrides: Partial<CheckSwapResult> = {}): CheckSwapResult {
       route: { en: "MON → USDC", zh: "MON → USDC" },
       blockNumber: "92820000",
     },
+    simulatedOutput: "unavailable",
     minimumReceivedSource: "unavailable",
     createdAt: "2026-08-06T00:00:00.000Z",
     ruleVersion: "P0-EVIDENCE-001",
@@ -115,15 +116,16 @@ describe("WalletResult", () => {
     expect(html).toContain("Amount supports at most 6 decimal places");
   });
 
-  test("names the shortfall when output misses Minimum Received", () => {
+  test("names the shortfall using the simulated output, not the quote estimate", () => {
     const html = render(
       result({
         verdict: "STOP",
         quote: {
-          expectedOutput: "0.000223",
+          expectedOutput: "0.000230",
           route: { en: "MON → USDC", zh: "MON → USDC" },
           blockNumber: "94209970",
         },
+        simulatedOutput: "0.000223",
         ruleResults: [
           {
             id: "P0-ECONOMIC-001",
@@ -140,7 +142,7 @@ describe("WalletResult", () => {
     );
 
     expect(html).toContain("Below your Minimum Received");
-    expect(html).toContain("0.000223");
+    expect(html).toContain("The simulation returned 0.000223");
     expect(html).toContain("does not meet the Minimum Received");
     expect(html).toContain("does not improve the transaction");
   });

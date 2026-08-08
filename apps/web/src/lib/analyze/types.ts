@@ -40,6 +40,31 @@ export type CheckSwapInput = {
   slippage?: string;
 };
 
+/** `/api/quote` accepts the exact-input pair only, without boundary or rerun fields. */
+export type QuoteSwapInput = {
+  sender?: string;
+  protocol: Protocol;
+  tokenIn: string;
+  tokenOut: string;
+  amountIn: string;
+};
+
+export type QuotePreview = {
+  estimatedAmountOut: string;
+  minimumAmountOut?: string;
+  blockNumber: string;
+  fetchedAt?: string;
+  runtimeVersion: string;
+  runtimeRevision: string;
+};
+
+export type QuoteState =
+  | { status: "idle" }
+  | { status: "loading" }
+  | { status: "available"; quote: QuotePreview }
+  | { status: "unavailable"; reason: "NO_ROUTE" | "QUOTE_UNAVAILABLE" }
+  | { status: "error"; apiFailure: ApiFailure };
+
 export type EvidenceOrigin = "live" | "replay" | "derived" | "mock";
 export type EvidenceItem = {
   id: string;
@@ -117,6 +142,7 @@ export type CheckSwapResult = {
   intent: IntentSummary;
   diff?: RunDiff;
   quote: { expectedOutput: string; route: Copy; blockNumber: string };
+  simulatedOutput: string;
   minimumReceivedSource: BoundarySource;
   createdAt: string;
   ruleVersion: string;

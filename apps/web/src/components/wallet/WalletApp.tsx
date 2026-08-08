@@ -11,19 +11,27 @@ import { WalletResult } from "@/components/wallet/WalletResult";
 import { WalletSwap } from "@/components/wallet/WalletSwap";
 import { flaggedFields } from "@/lib/analyze/fields";
 import {
+  DEMO_SLIPPAGE,
   type FormFieldErrors,
   type FormState,
   INITIAL_FORM,
   planSubmission,
   toInput,
+  validateForm,
 } from "@/lib/analyze/form";
-import { checkSwap, loadReplay } from "@/lib/analyze/service";
+import { checkSwap, fetchQuote, loadReplay } from "@/lib/analyze/service";
 import { createStageScheduler } from "@/lib/analyze/stageScheduler";
-import type { CheckSwapResult } from "@/lib/analyze/types";
+import type { CheckSwapResult, QuoteState } from "@/lib/analyze/types";
 import { type Language, pick } from "@/lib/i18n";
 
 /** Milliseconds per simulated Moss stage, tuned for a sub-minute demo. */
 const STAGE_MS = 380;
+
+/**
+ * Debounce before asking the backend for a Quote. Typing an amount digit by
+ * digit should not fire a live Moss Discover → Load → Quote per keystroke.
+ */
+const QUOTE_DEBOUNCE_MS = 450;
 
 type Screen = "home" | "swap" | "checking" | "result";
 
@@ -66,6 +74,7 @@ export function WalletApp({ language }: { language: Language }) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   /** Bumped on every return home, so the background replays its entrance. */
   const [homeVisit, setHomeVisit] = useState(0);
+  const [quote, setQuote] = useState<QuoteState>({ status: "idle" });
   const schedulerRef = useRef(createStageScheduler());
 
   // Reads the ref inside the cleanup so the effect stays dependency-free and
@@ -74,6 +83,45 @@ export function WalletApp({ language }: { language: Language }) {
     const scheduler = schedulerRef.current;
     return () => scheduler.cancel();
   }, []);
+
+  // Quote is only meaningful while the user is editing the swap. Invalid input
+  // clears it rather than leaving a stale amount on screen, and each request
+  // aborts the previous one so a slow response cannot overwrite a newer one.
+  const { protocol, tokenIn, tokenOut, amountIn } = form;
+  useEffect(() => {
+    if (screen !== "swap") return;
+    // Only the exact-input fields govern a Quote, so slippage and Minimum
+    // Received are held at neutral values here instead of gating the request.
+    if (
+      !validateForm({
+        protocol,
+        tokenIn,
+        tokenOut,
+        amountIn,
+        slippage: DEMO_SLIPPAGE,
+        minimumReceived: "",
+      }).valid
+    ) {
+      setQuote({ status: "idle" });
+      return;
+    }
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => {
+      setQuote({ status: "loading" });
+      fetchQuote(
+        { protocol, tokenIn, tokenOut, amountIn },
+        { signal: controller.signal },
+      ).then((next) => {
+        if (!controller.signal.aborted) setQuote(next);
+      });
+    }, QUOTE_DEBOUNCE_MS);
+
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [screen, protocol, tokenIn, tokenOut, amountIn]);
 
   const runCheck = (allowUnchanged = false) => {
     const plan = planSubmission(form, result ? submittedForm : undefined, {
@@ -134,6 +182,7 @@ export function WalletApp({ language }: { language: Language }) {
     setFormErrors({});
     setDrawerOpen(false);
     setForm(INITIAL_FORM);
+    setQuote({ status: "idle" });
     setScreen("home");
     setHomeVisit((visit) => visit + 1);
   };
@@ -191,6 +240,7 @@ export function WalletApp({ language }: { language: Language }) {
                   flags={flags}
                   form={form}
                   language={language}
+                  quote={quote}
                   onChange={(nextForm) => {
                     setForm(nextForm);
                     if (Object.keys(formErrors).length > 0) setFormErrors({});

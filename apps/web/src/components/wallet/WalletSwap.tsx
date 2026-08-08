@@ -12,7 +12,8 @@ import {
   SUPPORTED_TOKENS_OUT,
 } from "@/lib/analyze/fixtures";
 import type { FormFieldErrors, FormState } from "@/lib/analyze/form";
-import { type Language, say } from "@/lib/i18n";
+import type { QuoteState } from "@/lib/analyze/types";
+import { type Copy, type Language, say } from "@/lib/i18n";
 
 /** A token side of the swap. Locked when the fixture set offers one option. */
 function TokenSelect({
@@ -70,11 +71,28 @@ function FlagNote({ flag, language }: { flag: FieldFlag; language: Language }) {
   );
 }
 
+/**
+ * Why the backend has no publishable Quote. These are product states from the
+ * closed `reason` set, not errors, so they never block submitting a Check.
+ */
+const QUOTE_UNAVAILABLE_REASON: Record<"NO_ROUTE" | "QUOTE_UNAVAILABLE", Copy> =
+  {
+    NO_ROUTE: {
+      en: "The backend found no route for this pair and amount, so it published no quote.",
+      zh: "后端未找到此代币对与数量的路径，因此没有报价。",
+    },
+    QUOTE_UNAVAILABLE: {
+      en: "The backend could not produce a quote for this amount right now.",
+      zh: "后端目前无法为该数量生成报价。",
+    },
+  };
+
 export function WalletSwap({
   form,
   language,
   errors = {},
   flags = [],
+  quote = { status: "idle" },
   onChange,
   onSubmit,
   onReplay,
@@ -84,6 +102,8 @@ export function WalletSwap({
   errors?: FormFieldErrors;
   /** Inputs the last run said are worth changing. Empty before the first run. */
   flags?: FieldFlag[];
+  /** Pre-submit `/api/quote` state. Never a locally computed estimate. */
+  quote?: QuoteState;
   onChange: (form: FormState) => void;
   onSubmit: () => void;
   onReplay: () => void;
@@ -97,7 +117,6 @@ export function WalletSwap({
     flags.find((flag) => flag.field === key);
 
   const balance = balanceOf(form.tokenIn);
-  const estimate = undefined;
   const amountFlag = flagFor("amountIn");
   const amountError = errors.amountIn;
   const slippageError = errors.slippage;
@@ -181,13 +200,21 @@ export function WalletSwap({
         </span>
         <div className="mt-3 flex items-center gap-3">
           <strong
+            aria-live="polite"
             className={`min-w-0 flex-1 truncate text-[30px] font-extrabold tracking-[-0.04em] ${
-              estimate === undefined ? "text-faint" : "text-white"
+              quote.status === "available" ? "text-white" : "text-faint"
             }`}
           >
-            {estimate === undefined
-              ? say(language, { en: "No quote", zh: "无报价" })
-              : formatAmount(estimate)}
+            {quote.status === "available"
+              ? // Printed verbatim: the backend already returns human units, and
+                // re-parsing to a number would drop precision.
+                quote.quote.estimatedAmountOut
+              : say(
+                  language,
+                  quote.status === "loading"
+                    ? { en: "Loading quote…", zh: "正在获取报价…" }
+                    : { en: "No quote", zh: "无报价" },
+                )}
           </strong>
           <TokenSelect
             language={language}
@@ -196,10 +223,52 @@ export function WalletSwap({
             onSelect={(value) => set("tokenOut", value)}
           />
         </div>
+
+        {quote.status === "available" && (
+          <dl className="m-0 mt-3 border-t border-line pt-2 text-[12px]">
+            {quote.quote.minimumAmountOut !== undefined && (
+              <div className="flex justify-between gap-3 py-1">
+                <dt className="font-bold uppercase tracking-[0.06em] text-dim">
+                  {say(language, {
+                    en: "Minimum at this quote",
+                    zh: "此报价的最低量",
+                  })}
+                </dt>
+                <dd className="mono m-0 text-right text-white">
+                  {quote.quote.minimumAmountOut} {form.tokenOut}
+                </dd>
+              </div>
+            )}
+            <div className="flex justify-between gap-3 py-1">
+              <dt className="font-bold uppercase tracking-[0.06em] text-dim">
+                {say(language, { en: "Quote block", zh: "报价区块" })}
+              </dt>
+              <dd className="mono m-0 text-right text-white">
+                {quote.quote.blockNumber}
+              </dd>
+            </div>
+          </dl>
+        )}
+
+        {quote.status === "unavailable" && (
+          <p className="mt-2 text-[13px] leading-[1.5] text-risk-elevated">
+            {say(language, QUOTE_UNAVAILABLE_REASON[quote.reason])}
+          </p>
+        )}
+
+        {quote.status === "error" && (
+          <p className="mt-2 text-[13px] leading-[1.5] text-risk-elevated">
+            {say(language, {
+              en: `The quote request failed (${quote.apiFailure.code}). You can still submit the check.`,
+              zh: `报价请求失败（${quote.apiFailure.code}）。你仍然可以提交检查。`,
+            })}
+          </p>
+        )}
+
         <p className="mt-2 text-[12px] leading-[1.5] text-dim">
           {say(language, {
-            en: "The live backend response supplies the quote after submission. No local quote is invented.",
-            zh: "提交后由实时后端响应提供报价。前端不会编造本地报价。",
+            en: "This estimate comes from the backend quote stage before signing. It is not a simulated result and not a guaranteed output.",
+            zh: "此预估来自签名前的后端报价阶段。它不是模拟结果，也不构成输出保证。",
           })}
         </p>
       </section>

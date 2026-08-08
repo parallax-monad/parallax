@@ -6,8 +6,8 @@ import {
   planSubmission,
   validateForm,
 } from "./form";
-import { checkSwap, loadReplay } from "./service";
-import type { CheckSwapInput } from "./types";
+import { checkSwap, fetchQuote, loadReplay } from "./service";
+import type { CheckSwapInput, QuoteSwapInput } from "./types";
 
 const input: CheckSwapInput = {
   protocol: "kuru",
@@ -120,6 +120,70 @@ describe("checkSwap API adapter", () => {
     expect(result.productRunMode).toBe("LIVE");
     expect(result.quote.route.en).toBe("MON → USDC");
     expect(result.rawResponse).toEqual(completed);
+  });
+
+  test("prefers the top-level Quote projection over the simulated output", async () => {
+    const request = vi.fn<typeof fetch>().mockResolvedValue(
+      jsonResponse({
+        ...completed,
+        quote: {
+          estimatedAmountOut: "0.000230",
+          minimumAmountOut: "0.000228",
+          source: "quote",
+          blockNumber: "91383505",
+          runtimeVersion: "moss@1",
+          runtimeRevision: "abc123",
+        },
+        evidence: [
+          ...completed.evidence,
+          {
+            key: "sim-out-1",
+            kind: "simulated_token_out",
+            status: "confirmed",
+            summary: "Simulated output",
+            source: "simulation",
+            stage: "SIMULATE",
+            amountReceivedAtomic: "223",
+            isReplay: false,
+            isMock: false,
+          },
+        ],
+      }),
+    );
+
+    const result = await checkSwap(input, { fetch: request });
+
+    // QUOTE-stage observation and simulation output are separate claims.
+    expect(result.quote.expectedOutput).toBe("0.000230");
+    expect(result.quote.blockNumber).toBe("91383505");
+    expect(result.simulatedOutput).toBe("0.000223");
+  });
+
+  test("falls back to the simulated output when no Quote is projected", async () => {
+    const request = vi.fn<typeof fetch>().mockResolvedValue(
+      jsonResponse({
+        ...completed,
+        evidence: [
+          ...completed.evidence,
+          {
+            key: "sim-out-1",
+            kind: "simulated_token_out",
+            status: "confirmed",
+            summary: "Simulated output",
+            source: "simulation",
+            stage: "SIMULATE",
+            amountReceivedAtomic: "223",
+            isReplay: false,
+            isMock: false,
+          },
+        ],
+      }),
+    );
+
+    const result = await checkSwap(input, { fetch: request });
+
+    expect(result.quote.expectedOutput).toBe("0.000223");
+    expect(result.simulatedOutput).toBe("0.000223");
   });
 
   test("fails a live authoritative verdict closed when pinned-block provenance is missing", async () => {
@@ -332,6 +396,133 @@ describe("checkSwap API adapter", () => {
     expect(result.apiFailure).toMatchObject({
       code: "NETWORK_ERROR",
       retryable: true,
+    });
+  });
+});
+
+describe("fetchQuote", () => {
+  const quoteInput: QuoteSwapInput = {
+    protocol: "kuru",
+    tokenIn: "MON",
+    tokenOut: "USDC",
+    amountIn: "0.01",
+  };
+
+  const available = {
+    status: "available",
+    quote: {
+      estimatedAmountOut: "0.000223",
+      minimumAmountOut: "0.000221",
+      source: "quote",
+      blockNumber: "91383505",
+      fetchedAt: "2026-08-08T12:00:00.000Z",
+      runtimeVersion: "0.1.0",
+      runtimeRevision: "a".repeat(40),
+    },
+  };
+
+  test("posts only the exact-input quote contract fields", async () => {
+    const request = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(jsonResponse(available));
+
+    await fetchQuote(quoteInput, { fetch: request });
+
+    expect(request.mock.calls[0]?.[0]).toBe("/api/quote");
+    const sent = JSON.parse(String(request.mock.calls[0]?.[1]?.body));
+    expect(sent).toEqual({
+      chainId: 143,
+      protocol: "kuru",
+      sender: "0x1111111111111111111111111111111111111111",
+      tokenIn: { kind: "native" },
+      tokenOut: {
+        kind: "erc20",
+        address: "0x754704Bc059F8C67012fEd69BC8A327a5aafb603",
+      },
+      amountIn: "0.01",
+    });
+    // Quote has no boundary, rerun, or slippage inputs in the handoff contract.
+    expect(sent.economicBoundary).toBeUndefined();
+    expect(sent.parentRunId).toBeUndefined();
+    expect(sent.slippage).toBeUndefined();
+  });
+
+  test("keeps backend human-unit amounts verbatim", async () => {
+    const request = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(jsonResponse(available));
+
+    const state = await fetchQuote(quoteInput, { fetch: request });
+
+    expect(state).toEqual({
+      status: "available",
+      quote: {
+        estimatedAmountOut: "0.000223",
+        minimumAmountOut: "0.000221",
+        blockNumber: "91383505",
+        fetchedAt: "2026-08-08T12:00:00.000Z",
+        runtimeVersion: "0.1.0",
+        runtimeRevision: "a".repeat(40),
+      },
+    });
+  });
+
+  test("treats a 200 unavailable payload as a product state, not an error", async () => {
+    const request = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(
+        jsonResponse({ status: "unavailable", reason: "NO_ROUTE" }),
+      );
+
+    expect(await fetchQuote(quoteInput, { fetch: request })).toEqual({
+      status: "unavailable",
+      reason: "NO_ROUTE",
+    });
+  });
+
+  test("rejects an available Quote that is missing stage provenance", async () => {
+    const request = vi.fn<typeof fetch>().mockResolvedValue(
+      jsonResponse({
+        status: "available",
+        quote: { ...available.quote, blockNumber: undefined },
+      }),
+    );
+
+    expect(await fetchQuote(quoteInput, { fetch: request })).toMatchObject({
+      status: "error",
+      apiFailure: { code: "INVALID_RESPONSE", retryable: false },
+    });
+  });
+
+  test("maps a QUOTE_ERROR to a retryable transport failure", async () => {
+    const request = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(
+        jsonResponse(
+          { error: { code: "QUOTE_ERROR", message: "flow failed" } },
+          502,
+        ),
+      );
+
+    expect(await fetchQuote(quoteInput, { fetch: request })).toMatchObject({
+      status: "error",
+      apiFailure: { httpStatus: 502, code: "QUOTE_ERROR", retryable: true },
+    });
+  });
+
+  test("does not offer retry when the live Quote flow is unwired", async () => {
+    const request = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(
+        jsonResponse(
+          { error: { code: "UNSUPPORTED", message: "not configured" } },
+          502,
+        ),
+      );
+
+    expect(await fetchQuote(quoteInput, { fetch: request })).toMatchObject({
+      status: "error",
+      apiFailure: { code: "UNSUPPORTED", retryable: false },
     });
   });
 });

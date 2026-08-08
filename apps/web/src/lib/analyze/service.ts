@@ -7,6 +7,9 @@ import type {
   CheckSwapInput,
   CheckSwapResult,
   EvidenceItem,
+  QuotePreview,
+  QuoteState,
+  QuoteSwapInput,
   RuleResult,
   RunDiff,
   Verdict,
@@ -287,6 +290,7 @@ function failed(
       route: unavailable,
       blockNumber: "unavailable",
     },
+    simulatedOutput: "unavailable",
     minimumReceivedSource: input.minimumReceived
       ? "user_declared"
       : "unavailable",
@@ -338,6 +342,7 @@ function mapRun(
     .map(obj)
     .filter((item): item is Record<string, unknown> => !!item);
   const route = obj(run?.route);
+  const runQuote = obj(run?.quote);
   const routePath = arr(route?.path).map(symbol).join(" → ");
   const output = arr(run?.evidence)
     .map(obj)
@@ -394,15 +399,24 @@ function mapRun(
     },
     diff: diff(run?.diff),
     quote: {
-      expectedOutput: output
-        ? decimal(output.amountReceivedAtomic, tokenOut === "USDC" ? 6 : 18)
-        : "unavailable",
+      // The handoff separates the QUOTE-stage observation from the simulated
+      // output, so the top-level Quote wins for the "expected" figure and the
+      // simulation value stays available on its own field.
+      expectedOutput:
+        str(runQuote?.estimatedAmountOut) ??
+        (output
+          ? decimal(output.amountReceivedAtomic, tokenOut === "USDC" ? 6 : 18)
+          : "unavailable"),
       route: routePath ? cp(routePath) : unavailable,
       blockNumber:
+        str(runQuote?.blockNumber) ??
         str(route?.blockNumber) ??
         str(run?.simulatorPinnedBlock) ??
         "unavailable",
     },
+    simulatedOutput: output
+      ? decimal(output.amountReceivedAtomic, tokenOut === "USDC" ? 6 : 18)
+      : "unavailable",
     minimumReceivedSource: (str(boundary?.source) ??
       "unavailable") as CheckSwapResult["minimumReceivedSource"],
     createdAt: new Date().toISOString(),
@@ -443,6 +457,128 @@ function body(input: CheckSwapInput) {
 }
 
 export type CheckOptions = { fetch?: typeof fetch; signal?: AbortSignal };
+
+/** `/api/quote` is a strict exact-input body: no boundary, no parent, no slippage. */
+function quoteBody(input: QuoteSwapInput) {
+  return {
+    chainId: 143,
+    protocol: input.protocol,
+    sender: input.sender ?? DEFAULT_SENDER,
+    tokenIn: asset(input.tokenIn),
+    tokenOut: asset(input.tokenOut),
+    amountIn: input.amountIn,
+  };
+}
+
+function quotePreview(value: unknown): QuotePreview | undefined {
+  const quote = obj(value);
+  const estimatedAmountOut = str(quote?.estimatedAmountOut);
+  const blockNumber = str(quote?.blockNumber);
+  const runtimeVersion = str(quote?.runtimeVersion);
+  const runtimeRevision = str(quote?.runtimeRevision);
+  // An available Quote is only publishable with its stage block and runtime
+  // identity, so a partial payload is treated as an invalid response instead.
+  if (
+    !estimatedAmountOut ||
+    !blockNumber ||
+    !runtimeVersion ||
+    !runtimeRevision
+  )
+    return;
+  return {
+    estimatedAmountOut,
+    minimumAmountOut: str(quote?.minimumAmountOut),
+    blockNumber,
+    fetchedAt: str(quote?.fetchedAt),
+    runtimeVersion,
+    runtimeRevision,
+  };
+}
+
+/**
+ * Reads the pre-submit Quote. A backend `unavailable` state is a real product
+ * state, not an error, and never blocks submitting the full Check.
+ */
+export async function fetchQuote(
+  input: QuoteSwapInput,
+  options: CheckOptions = {},
+): Promise<QuoteState> {
+  let response: Response;
+  try {
+    response = await (options.fetch ?? fetch)(`${API_BASE}/api/quote`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(quoteBody(input)),
+      signal: options.signal,
+    });
+  } catch (error) {
+    const aborted =
+      error instanceof DOMException && error.name === "AbortError";
+    return {
+      status: "error",
+      apiFailure: {
+        code: aborted ? "REQUEST_ABORTED" : "NETWORK_ERROR",
+        retryable: !aborted,
+        message: error instanceof Error ? error.message : undefined,
+      },
+    };
+  }
+
+  let payload: unknown;
+  try {
+    payload = await response.json();
+  } catch {
+    return {
+      status: "error",
+      apiFailure: {
+        httpStatus: response.status,
+        code: "INVALID_JSON_RESPONSE",
+        retryable: response.status >= 500,
+      },
+    };
+  }
+
+  if (!response.ok) {
+    const error = obj(obj(payload)?.error);
+    const code = str(error?.code) ?? `HTTP_${response.status}`;
+    return {
+      status: "error",
+      apiFailure: {
+        httpStatus: response.status,
+        code,
+        reason: str(error?.reason),
+        // UNSUPPORTED means the live Quote flow is not wired, so retrying the
+        // same request cannot change the outcome.
+        retryable: response.status >= 500 && code !== "UNSUPPORTED",
+        message: str(error?.message),
+        issues: failureIssues(error?.issues),
+      },
+    };
+  }
+
+  const result = obj(payload);
+  if (result?.status === "unavailable") {
+    const reason = str(result.reason);
+    return {
+      status: "unavailable",
+      reason: reason === "NO_ROUTE" ? "NO_ROUTE" : "QUOTE_UNAVAILABLE",
+    };
+  }
+
+  const preview =
+    result?.status === "available" ? quotePreview(result.quote) : undefined;
+  if (!preview)
+    return {
+      status: "error",
+      apiFailure: {
+        httpStatus: response.status,
+        code: "INVALID_RESPONSE",
+        retryable: false,
+      },
+    };
+
+  return { status: "available", quote: preview };
+}
 
 export async function checkSwap(
   input: CheckSwapInput,
