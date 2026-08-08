@@ -613,6 +613,32 @@
   .slide[data-layout="S17"] [data-anim="up"] > div:last-child > div:first-child svg{
     height:35vh!important;
   }
+  .slide[data-layout="S17"] .decision-diagram-label{
+    z-index:2;
+    background:var(--grey-1);
+    padding:.24em .48em;
+    line-height:1.15;
+  }
+  .slide[data-layout="S17"] .decision-diagram-core{
+    background:var(--accent);
+    padding:.22em .38em .28em;
+    text-align:center;
+  }
+  .slide[data-layout="S14"] .loop-diagram-side-label{
+    z-index:2;
+    background:var(--grey-1);
+    padding:.24em .48em;
+    line-height:1.15;
+  }
+  @media (min-height:800px){
+    .slide[data-layout="S14"] .loop-diagram > svg{
+      width:min(30vw,46vh)!important;
+      height:min(30vw,46vh)!important;
+    }
+    .slide[data-layout="S14"] .loop-diagram-evidence{
+      right:-3vw!important;
+    }
+  }
 
   /* ESC 索引页: 动画元素强制可见 (覆盖 motion-ready 的 opacity:0) */
   #overview [data-anim]{opacity:1!important;transform:none!important}
@@ -1405,9 +1431,9 @@
         </svg>
         <div style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);font-family:var(--mono);font-size:max(14px,.82vw);letter-spacing:.2em;line-height:1.5;color:var(--accent);white-space:nowrap">RE-CHECK<br/><span style="font-family:var(--sans);font-size:min(3.8vw,6.2vh);font-weight:200;letter-spacing:-.04em;color:var(--ink)">LOOP</span></div>
         <div style="position:absolute;left:50%;top:3%;transform:translateX(-50%);font-family:var(--mono);font-size:max(14px,.72vw);letter-spacing:.12em">INTENT · 意图</div>
-        <div style="position:absolute;right:2%;top:48%;font-family:var(--mono);font-size:max(14px,.72vw);letter-spacing:.12em">EVIDENCE · 证据</div>
+        <div class="loop-diagram-side-label loop-diagram-evidence" style="position:absolute;right:0;top:50%;transform:translateY(-50%);font-family:var(--mono);font-size:max(14px,.72vw);letter-spacing:.12em">EVIDENCE · 证据</div>
         <div style="position:absolute;left:50%;bottom:3%;transform:translateX(-50%);font-family:var(--mono);font-size:max(14px,.72vw);letter-spacing:.12em">DIFF · 差异</div>
-        <div style="position:absolute;left:0;top:48%;font-family:var(--mono);font-size:max(14px,.72vw);letter-spacing:.12em">ACTION · 行动</div>
+        <div class="loop-diagram-side-label" style="position:absolute;left:0;top:50%;transform:translateY(-50%);font-family:var(--mono);font-size:max(14px,.72vw);letter-spacing:.12em">ACTION · 行动</div>
       </div>
     </div>
   </div>
@@ -1440,11 +1466,11 @@
             <path d="M260 28 V75" fill="none" stroke="var(--accent)" stroke-width="2"/>
             <path d="M260 281 V328" fill="none" stroke="var(--accent)" stroke-width="2"/>
           </svg>
-          <div style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);font-family:var(--mono);font-size:max(14px,.82vw);letter-spacing:.12em;color:#fff;white-space:nowrap">PARALLAX<br/><span style="font-family:var(--sans);font-weight:300;font-size:1.25em;letter-spacing:-.02em">Decision layer</span></div>
-          <div style="position:absolute;left:7%;top:47%;font-family:var(--mono);font-size:max(14px,.72vw);letter-spacing:.12em">MONAD</div>
-          <div style="position:absolute;right:5%;top:47%;font-family:var(--mono);font-size:max(14px,.72vw);letter-spacing:.12em">USER ACTION · 用户操作</div>
-          <div style="position:absolute;left:50%;top:7%;transform:translateX(-50%);font-family:var(--mono);font-size:max(14px,.72vw);letter-spacing:.12em;color:var(--accent)">MOSS · EVIDENCE</div>
-          <div style="position:absolute;left:50%;bottom:4%;transform:translateX(-50%);font-family:var(--mono);font-size:max(14px,.72vw);letter-spacing:.12em">RULES · VERDICT</div>
+          <div class="decision-diagram-label decision-diagram-core" style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);font-family:var(--mono);font-size:max(14px,.82vw);letter-spacing:.12em;color:#fff;white-space:nowrap">PARALLAX<br/><span style="font-family:var(--sans);font-weight:300;font-size:1.25em;letter-spacing:-.02em">Decision layer</span></div>
+          <div class="decision-diagram-label" style="position:absolute;left:0;top:47%;font-family:var(--mono);font-size:max(14px,.72vw);letter-spacing:.12em">MONAD · PLAYGROUND</div>
+          <div class="decision-diagram-label" style="position:absolute;right:0;top:47%;font-family:var(--mono);font-size:max(14px,.72vw);letter-spacing:.12em">USER ACTION · 用户操作</div>
+          <div class="decision-diagram-label" style="position:absolute;left:50%;top:7%;transform:translateX(-50%);font-family:var(--mono);font-size:max(14px,.72vw);letter-spacing:.12em;color:var(--accent)">MOSS · EVIDENCE</div>
+          <div class="decision-diagram-label" style="position:absolute;left:50%;bottom:4%;transform:translateX(-50%);font-family:var(--mono);font-size:max(14px,.72vw);letter-spacing:.12em">RULES · VERDICT</div>
         </div>
         <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1.2vw;border-top:1px solid var(--border-subtle);padding-top:1.6vh">
           <div><div class="t-meta">MOSS</div><p class="body-sm" style="margin-top:.6vh">构建 · 模拟</p></div>
@@ -1535,8 +1561,7 @@
         </ul>
         <div data-anim="foot" style="display:flex;flex-direction:column;gap:.75vh;padding-top:1.6vh;color:var(--text-helper);font-family:var(--mono);font-size:max(14px,.72vw);letter-spacing:.05em;line-height:1.5">
           <a href="https://github.com/parallax-monad/parallax" target="_blank" rel="noreferrer" style="color:var(--accent);text-decoration:none">GITHUB · github.com/parallax-monad/parallax</a>
-          <div>DEMO URL · TO BE ADDED</div>
-          <div>VIDEO URL · TO BE ADDED</div>
+          <a href="https://parallax-web-snowy.vercel.app/" target="_blank" rel="noreferrer" style="color:var(--accent);text-decoration:none">DEMO URL · parallax-web-snowy.vercel.app</a>
         </div>
       </div>
     </div>
