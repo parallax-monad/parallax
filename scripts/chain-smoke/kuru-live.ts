@@ -45,6 +45,8 @@ import type { KuruLiveRunner } from "../../packages/orchestrator/agent-flow/inde
 import {
   apiCheckAcceptanceOf,
   apiCheckProvenanceMatchesOf,
+  p0CandidateOf,
+  smokeStatusOf,
 } from "./live-smoke-acceptance.js";
 import { formatRepositoryJson } from "./repository-json.js";
 
@@ -317,25 +319,22 @@ test("kuru live smoke: MON -> USDC", async () => {
     runtimeVersion,
     runtimeRevision,
   });
-  const decision = liveSuccess
-    ? productProceed
-      ? "P0_LIVE_READY"
-      : "VALID_LIVE_UNKNOWN"
-    : adapterDecision === "P0_LIVE_READY"
-      ? "P0_LIVE_BLOCKED_SIMULATION"
-      : adapterDecision;
-
   const failedStage = result.stages.find((stage) => !stage.success);
-  const status =
-    evidence.integrationStatus === "TIMEOUT"
-      ? "FAILED"
-      : failedStage
-        ? "PARTIALLY_VERIFIED"
-        : liveSuccess
-          ? productProceed
-            ? "PARTIALLY_VERIFIED"
-            : "VALID_LIVE_UNKNOWN"
-          : "FAILED";
+  // p0DecisionCandidate stays acceptance-derived and only ever uses the shared
+  // P0DecisionCandidate set (live-acceptance.ts). VALID_LIVE_UNKNOWN is a
+  // smoke/product status and lives only in the separate status axis, next to
+  // the canonical apiVerdict, so the acceptance field cannot drift outside the
+  // gate's closed candidate set.
+  const p0Candidate = p0CandidateOf({
+    liveSuccess,
+    adapterCandidate: adapterDecision,
+  });
+  const status = smokeStatusOf({
+    integrationStatus: evidence.integrationStatus,
+    failedStage,
+    liveSuccess,
+    productProceed,
+  });
   const metadata = {
     ...baseMetadata(runId, startedAt),
     status,
@@ -345,7 +344,7 @@ test("kuru live smoke: MON -> USDC", async () => {
       ? null
       : (failedStage?.error?.code ??
         (evidence.integrationStatus === "TIMEOUT" ? "TIMEOUT" : "UNKNOWN")),
-    p0DecisionCandidate: decision,
+    p0DecisionCandidate: p0Candidate,
     apiCheckStatus: apiResponseStatus ?? null,
     apiCheckSchemaValid: apiCheck.success,
     apiVerdict: apiVerdict ?? null,

@@ -6,7 +6,10 @@
  * RPC).
  */
 
-import { MONAD_CHAIN_ID } from "@parallax/moss-bridge";
+import {
+  MONAD_CHAIN_ID,
+  type P0DecisionCandidate,
+} from "@parallax/moss-bridge";
 import {
   type CompletedRunResult,
   runResultSchema,
@@ -66,4 +69,43 @@ export function apiCheckProvenanceMatchesOf(
       item.runtimeVersion === adapter.evidence.runtimeVersion &&
       item.runtimeRevision === adapter.evidence.runtimeRevision,
   );
+}
+
+/**
+ * Independent smoke/product status axis. Unlike p0DecisionCandidate, this
+ * field may carry smoke-only labels such as VALID_LIVE_UNKNOWN (technical Live
+ * acceptance passed but the canonical product Verdict is not PROCEED).
+ */
+export type SmokeStatus =
+  | "PARTIALLY_VERIFIED"
+  | "VALID_LIVE_UNKNOWN"
+  | "FAILED";
+
+export function smokeStatusOf(input: {
+  integrationStatus: string;
+  failedStage?: { stage: string } | null;
+  liveSuccess: boolean;
+  productProceed: boolean;
+}): SmokeStatus {
+  if (input.integrationStatus === "TIMEOUT") return "FAILED";
+  if (input.failedStage) return "PARTIALLY_VERIFIED";
+  if (!input.liveSuccess) return "FAILED";
+  return input.productProceed ? "PARTIALLY_VERIFIED" : "VALID_LIVE_UNKNOWN";
+}
+
+/**
+ * p0DecisionCandidate must stay acceptance-derived and use only the shared
+ * P0DecisionCandidate set. When the adapter gate alone says P0_LIVE_READY but
+ * the smoke-level boundary checks failed, the run did not clear the smoke gate
+ * and is reported as a simulation blocker rather than inventing a fourth
+ * candidate.
+ */
+export function p0CandidateOf(input: {
+  liveSuccess: boolean;
+  adapterCandidate: P0DecisionCandidate;
+}): P0DecisionCandidate {
+  if (!input.liveSuccess && input.adapterCandidate === "P0_LIVE_READY") {
+    return "P0_LIVE_BLOCKED_SIMULATION";
+  }
+  return input.adapterCandidate;
 }

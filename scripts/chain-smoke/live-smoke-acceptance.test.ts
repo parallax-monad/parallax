@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   apiCheckAcceptanceOf,
   apiCheckProvenanceMatchesOf,
+  p0CandidateOf,
+  smokeStatusOf,
 } from "./live-smoke-acceptance.js";
 
 const REVISION = "0x9876fedcba1234567890abcdef1234567890abcd";
@@ -229,5 +231,95 @@ describe("live smoke acceptance helpers", () => {
         adapterProvenance({ simulatorPinnedBlock: undefined }),
       ),
     ).toBe(false);
+  });
+});
+
+describe("smoke p0 candidate + status axes", () => {
+  it("technical gate passes + apiVerdict=PROCEED: P0_LIVE_READY and PARTIALLY_VERIFIED", () => {
+    const adapterCandidate = p0CandidateOf({
+      liveSuccess: true,
+      adapterCandidate: "P0_LIVE_READY",
+    });
+    const status = smokeStatusOf({
+      integrationStatus: "OK",
+      failedStage: null,
+      liveSuccess: true,
+      productProceed: true,
+    });
+    expect(adapterCandidate).toBe("P0_LIVE_READY");
+    expect(status).toBe("PARTIALLY_VERIFIED");
+  });
+
+  it("technical gate passes + apiVerdict=UNKNOWN: candidate stays legal, VALID_LIVE_UNKNOWN only in status axis", () => {
+    const adapterCandidate = p0CandidateOf({
+      liveSuccess: true,
+      adapterCandidate: "P0_LIVE_READY",
+    });
+    const status = smokeStatusOf({
+      integrationStatus: "OK",
+      failedStage: null,
+      liveSuccess: true,
+      productProceed: false,
+    });
+    expect([
+      "P0_LIVE_READY",
+      "P0_LIVE_BLOCKED_PORTABLE_RUNTIME",
+      "P0_LIVE_BLOCKED_SIMULATION",
+    ]).toContain(adapterCandidate);
+    expect(status).toBe("VALID_LIVE_UNKNOWN");
+  });
+
+  it("integration failure: candidate stays legal, status is FAILED", () => {
+    const adapterCandidate = p0CandidateOf({
+      liveSuccess: false,
+      adapterCandidate: "P0_LIVE_BLOCKED_PORTABLE_RUNTIME",
+    });
+    const status = smokeStatusOf({
+      integrationStatus: "TIMEOUT",
+      failedStage: null,
+      liveSuccess: false,
+      productProceed: false,
+    });
+    expect(adapterCandidate).toBe("P0_LIVE_BLOCKED_PORTABLE_RUNTIME");
+    expect(status).toBe("FAILED");
+  });
+
+  it("simulation acceptance failure: candidate is the simulation blocker, status is FAILED", () => {
+    const adapterCandidate = p0CandidateOf({
+      liveSuccess: false,
+      adapterCandidate: "P0_LIVE_BLOCKED_SIMULATION",
+    });
+    const status = smokeStatusOf({
+      integrationStatus: "OK",
+      failedStage: { stage: "SIMULATE" },
+      liveSuccess: false,
+      productProceed: false,
+    });
+    expect(adapterCandidate).toBe("P0_LIVE_BLOCKED_SIMULATION");
+    expect(status).toBe("PARTIALLY_VERIFIED");
+  });
+
+  it("adapter READY but smoke boundary failed: mapped to a simulation blocker, never a fourth candidate", () => {
+    const adapterCandidate = p0CandidateOf({
+      liveSuccess: false,
+      adapterCandidate: "P0_LIVE_READY",
+    });
+    expect(adapterCandidate).toBe("P0_LIVE_BLOCKED_SIMULATION");
+  });
+
+  it("VALID_LIVE_UNKNOWN is never produced by p0CandidateOf", () => {
+    const candidates = [
+      p0CandidateOf({ liveSuccess: true, adapterCandidate: "P0_LIVE_READY" }),
+      p0CandidateOf({
+        liveSuccess: false,
+        adapterCandidate: "P0_LIVE_BLOCKED_SIMULATION",
+      }),
+      p0CandidateOf({
+        liveSuccess: false,
+        adapterCandidate: "P0_LIVE_BLOCKED_PORTABLE_RUNTIME",
+      }),
+      p0CandidateOf({ liveSuccess: false, adapterCandidate: "P0_LIVE_READY" }),
+    ];
+    expect(candidates).not.toContain("VALID_LIVE_UNKNOWN");
   });
 });

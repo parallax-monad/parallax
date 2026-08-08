@@ -87,8 +87,7 @@ function fakeBundle(
     simulator: {
       version: "0.1.0",
       createTraceSimulator: () => {
-        let stateful: string | undefined =
-          overrides.statefulPinnedBlock === undefined ? undefined : undefined;
+        let stateful: string | undefined;
         return {
           ...(overrides.withoutPinnedBlock
             ? { pinnedBlockNumber: overrides.blockNumber ?? 100n }

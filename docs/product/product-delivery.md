@@ -324,6 +324,14 @@ Product/UI must not infer `minimumReceivedSource = unavailable` from missing dat
 
 ## 8. Current real Fixture presentation
 
+> Separate from the live evidence fixture: the current
+> `fixtures/chain-evidence/kuru/live-success-mon-to-usdc/` live simulation
+> succeeded on the temporary Moss pin (see
+> [moss-kuru-live-runtime.md](../integration/moss-kuru-live-runtime.md)) and is
+> **SUPERSEDED_PENDING_NODE22_REGEN**. The presentations below cover only the
+> older Recorded Replay fixtures under `fixtures/replay-data/`, which were
+> recorded against the pre-live baseline.
+
 The following presentation is limited to the latest reviewed real recorded Fixtures. Both are Recorded Replay candidates, not current Live checks, and neither supports a public transaction adjustment or verified Action Gate attestation.
 
 ### MON → USDC
