@@ -868,9 +868,6 @@ html[lang="zh-CN"] .verdict-quadrant h3 {
 }
 
 @media (max-width: 720px) {
-  .verdict-heading-zh-line {
-    display: inline;
-  }
   .verdict-vote-status-desktop {
     display: none;
   }
@@ -1007,6 +1004,18 @@ html[lang="zh-CN"] .verdict-quadrant h3 {
   .verdict-vote-dot {
     width: calc(var(--dot-size) * 0.72);
     height: calc(var(--dot-size) * 0.72);
+  }
+}
+
+@media (min-width: 340px) and (max-width: 720px) {
+  html[lang="zh-CN"] .verdict-quadrant[data-mobile-zh-single-line="true"] h3 {
+    font-size: clamp(15px, 4.5vw, 19px);
+    letter-spacing: -0.03em;
+    line-height: 1.05;
+    overflow-wrap: normal;
+    text-wrap: nowrap;
+    white-space: nowrap;
+    word-break: keep-all;
   }
 }
 @media (hover: none) and (pointer: coarse) {

@@ -156,6 +156,12 @@ describe("VerdictActions", () => {
     expect(html).toContain("一人一票");
     expect(html).toContain("由于必要证据缺失或不完整");
     expect(html).toContain("阻断证据适用于当前交易意图或路径");
+    expect(html.match(/data-mobile-zh-single-line="true"/g)).toHaveLength(3);
+    const stopButton = html.match(
+      /<button[^>]*data-zone="southwest"[^>]*>/,
+    )?.[0];
+    expect(stopButton).toBeDefined();
+    expect(stopButton).not.toContain('data-mobile-zh-single-line="true"');
   });
 
   test("keeps the full desktop vote status and provides a mobile visual abbreviation", () => {

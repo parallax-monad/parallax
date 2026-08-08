@@ -5,7 +5,7 @@ import {
   getEvidenceTraceAriaLabel,
   getExpandedMarkerEdgeScale,
 } from "./evidenceTrace";
-import { getTouchDragIntent } from "./RouteGraph3D";
+import { detachAndDisposeRenderer, getTouchDragIntent } from "./RouteGraph3D";
 
 describe("RouteGraph3D", () => {
   test("describes the hero visualization as a protocol route", () => {
@@ -67,5 +67,34 @@ describe("RouteGraph3D", () => {
     expect(getTouchDragIntent(-20, 10)).toBe("horizontal");
     expect(getTouchDragIntent(8, 24)).toBe("vertical");
     expect(getTouchDragIntent(12, 12)).toBe("vertical");
+  });
+
+  test("detaches the visible canvas before disposing and losing its context", () => {
+    const events: string[] = [];
+    const container = {
+      removeChild: () => {
+        events.push("detach");
+      },
+    } as unknown as HTMLElement;
+    const canvas = {
+      parentNode: container,
+      remove: () => events.push("remove"),
+    } as unknown as HTMLCanvasElement;
+    const renderer = {
+      domElement: canvas,
+      dispose: () => events.push("dispose"),
+      forceContextLoss: () => events.push("context-loss"),
+    };
+
+    detachAndDisposeRenderer(renderer, container, () =>
+      events.push("scene-resources"),
+    );
+
+    expect(events).toEqual([
+      "detach",
+      "scene-resources",
+      "dispose",
+      "context-loss",
+    ]);
   });
 });

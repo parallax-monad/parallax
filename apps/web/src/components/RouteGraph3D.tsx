@@ -1139,6 +1139,27 @@ function disposeMarker(marker: Marker) {
   marker.labelTexture.dispose();
 }
 
+type DisposableRenderer = Pick<
+  THREE.WebGLRenderer,
+  "dispose" | "domElement" | "forceContextLoss"
+>;
+
+export function detachAndDisposeRenderer(
+  renderer: DisposableRenderer,
+  container: HTMLElement,
+  disposeSceneResources: () => void,
+) {
+  const canvas = renderer.domElement;
+  if (canvas.parentNode === container) {
+    container.removeChild(canvas);
+  } else {
+    canvas.remove();
+  }
+  disposeSceneResources();
+  renderer.dispose();
+  renderer.forceContextLoss();
+}
+
 export function RouteGraph3D({
   language,
   progressRef,
@@ -1733,16 +1754,15 @@ export function RouteGraph3D({
       );
       document.removeEventListener("visibilitychange", onVisibilityChange);
       motionQuery.removeEventListener("change", onMotionChange);
-      for (const marker of markers) disposeMarker(marker);
-      ambientStars.geometry.dispose();
-      ambientStars.material.dispose();
-      particleField.geometry.dispose();
-      particleField.material.dispose();
-      sharedSphereGeometry.dispose();
-      pointTexture.dispose();
-      renderer.dispose();
-      renderer.forceContextLoss();
-      renderer.domElement.remove();
+      detachAndDisposeRenderer(renderer, container, () => {
+        for (const marker of markers) disposeMarker(marker);
+        ambientStars.geometry.dispose();
+        ambientStars.material.dispose();
+        particleField.geometry.dispose();
+        particleField.material.dispose();
+        sharedSphereGeometry.dispose();
+        pointTexture.dispose();
+      });
     };
   }, [progressRef]);
 

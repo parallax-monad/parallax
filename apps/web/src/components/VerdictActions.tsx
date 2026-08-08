@@ -13,6 +13,7 @@ type VerdictQuadrant = {
   shortLabel: readonly [string, string];
   body: readonly [string, string];
   chineseLabelLines?: readonly [string, string];
+  mobileZhSingleLine?: boolean;
 };
 
 const QUADRANTS: VerdictQuadrant[] = [
@@ -21,6 +22,7 @@ const QUADRANTS: VerdictQuadrant[] = [
     zone: "northwest",
     tone: "evidence",
     label: ["MORE EVIDENCE IS REQUIRED", "需要更多证据"],
+    mobileZhSingleLine: true,
     note: ["UNKNOWN / DEMO", "UNKNOWN／演示"],
     shortLabel: ["UNKNOWN", "未知"],
     body: [
@@ -33,6 +35,7 @@ const QUADRANTS: VerdictQuadrant[] = [
     zone: "northeast",
     tone: "ready",
     label: ["NO BLOCKING EVIDENCE FOUND", "未发现阻断证据"],
+    mobileZhSingleLine: true,
     note: ["PROCEED / DEMO", "PROCEED／演示"],
     shortLabel: ["PROCEED", "继续"],
     body: [
@@ -58,6 +61,7 @@ const QUADRANTS: VerdictQuadrant[] = [
     zone: "southeast",
     tone: "rerun",
     label: ["ADJUST BEFORE PROCEEDING", "调整后再继续"],
+    mobileZhSingleLine: true,
     note: ["ADJUST / DEMO", "ADJUST／演示"],
     shortLabel: ["ADJUST", "调整"],
     body: [
@@ -236,6 +240,9 @@ export function VerdictActions({ language }: { language: Language }) {
               aria-pressed={selected}
               className="verdict-quadrant"
               data-current-action={active ? "true" : undefined}
+              data-mobile-zh-single-line={
+                quadrant.mobileZhSingleLine ? "true" : undefined
+              }
               data-verdict-choice=""
               data-verdict-tone={quadrant.tone}
               data-zone={quadrant.zone}
