@@ -9,6 +9,14 @@ Parallax is a read-only, Moss-powered pre-transaction decision layer for Monad s
 
 > Moss tells us what will happen. Parallax helps the user decide what to do next.
 
+## Live Demo
+
+Try the public Parallax demo:
+
+**[https://parallax-web-snowy.vercel.app](https://parallax-web-snowy.vercel.app)**
+
+No demo account is required. The public deployment currently serves the frontend experience; it does not expose the repository's same-origin backend API routes. It should not be treated as proof of production readiness, live Moss availability, or complete transaction execution.
+
 ## Product thesis
 
 Swap interfaces can expose quotes, warnings, and simulation output without connecting the observed cause to a bounded next action. Parallax turns traceable execution evidence into a scope-aware decision that a user can inspect and, when supported, test again after changing one relevant condition.
@@ -23,12 +31,12 @@ Swap intent
 → PROCEED / ADJUST / STOP / UNKNOWN
 → relevant or irrelevant adjustment
 → optional re-run
-→ previous vs new result
+→ Previous Run vs New Run
 ```
 
 `UNKNOWN` is not a pass. `PROCEED` means no blocking evidence was found within the checked scope; it is not a safety guarantee or investment recommendation.
 
-## What Parallax does
+## Main features
 
 - captures a structured, unsigned swap intent;
 - obtains and normalizes quote, prepared-action, simulation, and provenance evidence;
@@ -36,34 +44,34 @@ Swap intent
 - presents `PROCEED`, `ADJUST`, `STOP`, or `UNKNOWN` with checked, unknown, and not-checked scope;
 - separates verified relevant adjustments from irrelevant changes;
 - supports recorded replay and a bounded one-change re-run comparison;
-- remains read-only: no signing, broadcasting, custody, or wallet mutation.
+- remains read-only: no signing, broadcasting, execution, custody, or wallet mutation.
 
 ## Demo flow
 
-The landing page is available at `#/`. Choose **Try demo** (or **体验 Demo**) to open the wallet-style MVP at `#/analyze`.
+The landing page is available at `#/`. Choose **Try demo** to open the wallet-style MVP at `#/analyze`.
 
-The frontend currently on `main` demonstrates the decision experience with deterministic local fixture logic. The backend API and live Moss/Kuru runtime path are implemented separately; frontend-to-backend MVP wiring is still being integrated and is not represented as complete on `main`.
+The MVP collects a supported swap intent, requests a quote, runs the pre-sign check, presents the evidence and scope behind the result, and supports recorded replay or a bounded re-run when applicable.
+
+The frontend adapter on `main` calls `POST /api/quote`, `POST /api/check`, and `GET /api/replay/:id`. Local Vite development proxies those paths to the API process at `127.0.0.1:8787`.
 
 ## Current implementation status
 
-Status as of **2026-08-08**:
-
 | Area | Status on `main` |
 | --- | --- |
-| Landing experience | Implemented with English/Simplified Chinese copy and an interactive Three.js evidence constellation |
-| Wallet-style frontend MVP | Implemented at `#/analyze` using deterministic demo fixtures |
-| Shared contracts and verdict rules | Implemented with automated tests for the current P0 slices |
-| Backend API and orchestration | Implemented with Hono, `POST /api/check`, process-local Run storage, and recorded Replay |
-| Recorded Replay | Implemented at `GET /api/replay/:id`; never used as a silent live-check fallback |
-| Live Moss/Kuru backend | Landed for the pinned Kuru runtime and verified fixture scope; requires explicit runtime configuration |
-| Frontend-to-backend connection | In progress outside `main`; the current frontend still uses its local demo service |
-| Signing/broadcasting/custody | Intentionally not implemented |
+| Landing experience | Implemented with English and Simplified Chinese copy and an interactive Three.js evidence constellation |
+| Wallet-style frontend MVP | Implemented at `#/analyze` with quote, check, replay, evidence, and re-run UI |
+| Frontend/API adapter | Implemented for `/api/quote`, `/api/check`, and `/api/replay/:id`; local Vite development proxies to the API |
+| Shared contracts and decision rules | Implemented with automated tests for the current P0 slices |
+| Backend API and orchestration | Implemented with Hono, process-local Run storage, live check/quote boundaries, and recorded replay |
+| Live Moss/Kuru backend | Implemented for the pinned Kuru runtime and verified scope; requires explicit runtime and RPC configuration |
+| Public Vercel demo | Frontend is publicly reachable; same-origin backend API routes are not currently exposed by that deployment |
+| Signing, broadcasting, execution, or custody | Intentionally not implemented |
 
-The live evidence proves a specific pinned Kuru MON → USDC simulation path. It does not prove every pair, protocol, runtime revision, asset behavior, or future market condition.
+The verified live evidence is limited to the documented pinned Kuru MON → USDC path and runtime scope. It does not establish support for every pair, protocol, asset behavior, runtime revision, or future market condition.
 
 ## P0 scope and exclusions
 
-P0 focuses on a light DeFi user who is about to sign a Monad swap or retry after a failure. It covers evidence-backed cause, scope disclosure, a bounded verdict, verified action visibility, and optional re-run comparison.
+P0 focuses on a light DeFi user who is about to sign a Monad swap or retry after a failure. It covers evidence-backed cause, scope disclosure, a bounded decision, verified action visibility, and optional re-run comparison.
 
 P0 does not provide:
 
@@ -76,16 +84,16 @@ P0 does not provide:
 
 A user-supplied `Minimum Received` is an explicit acceptance boundary. Parallax does not lower it to manufacture `PROCEED`.
 
-## Architecture overview
+## Architecture and technology stack
 
 | Path | Responsibility |
 | --- | --- |
-| `apps/web` | React 18 + Vite frontend, landing experience, wallet-style demo, and Three.js visualization |
-| `apps/api` | Node.js/Hono HTTP runtime for live Check and recorded Replay |
+| `apps/web` | React 18 + Vite frontend, landing experience, wallet-style MVP, API adapter, and Three.js visualization |
+| `apps/api` | Node.js/Hono HTTP runtime for live quote/check and recorded replay |
 | `packages/contracts` | Shared schemas, normalized Intent/Run types, Evidence, Replay, and serialization |
 | `packages/moss-bridge` | Moss/Kuru runtime loading, live execution-evidence adapter, normalization, and provenance checks |
-| `packages/orchestrator` | Agent Flow, rerun lifecycle, Action Gate, and application orchestration |
-| `packages/risk` | Deterministic P0 rule evaluation and centralized Verdict policy |
+| `packages/orchestrator` | Agent Flow, re-run lifecycle, Action Gate, and application orchestration |
+| `packages/risk` | Deterministic P0 rule evaluation and centralized decision policy |
 | `fixtures` | Recorded raw/normalized Evidence and replay fixtures |
 | `docs` | Product, research, risk methodology, integration, ADR, and runtime documentation |
 | `scripts` | Deterministic and live Kuru smoke/acceptance tooling |
@@ -102,13 +110,13 @@ packages/
   contracts/           Shared contracts and serialization
   moss-bridge/         Moss/Kuru adapter and normalization
   orchestrator/        Agent Flow and application lifecycle
-  risk/                Rule and Verdict logic
-fixtures/              Evidence and Replay fixtures
+  risk/                Rule and decision logic
+fixtures/              Evidence and replay fixtures
 docs/                  Product, research, integration, methodology, and ADRs
 scripts/               Smoke and repository-validation scripts
 ```
 
-## Quick start
+## Installation and local development
 
 Requirements:
 
@@ -123,7 +131,7 @@ pnpm install --frozen-lockfile
 cp .env.example .env
 ```
 
-Start the frontend demo:
+Start the frontend:
 
 ```bash
 pnpm --filter @parallax/web dev
@@ -131,13 +139,13 @@ pnpm --filter @parallax/web dev
 
 Open the Vite URL and use `#/` for the landing page or `#/analyze` for the MVP.
 
-To start the backend, first fill the required values in `.env`, then run:
+To use quote and check requests locally, configure `.env` and start the API in a separate terminal:
 
 ```bash
 pnpm --filter @parallax/api start
 ```
 
-The frontend and backend are separate processes. On current `main`, starting both does not by itself replace the frontend's local demo service with API calls.
+The Vite development server proxies `/api/*` to `http://127.0.0.1:8787`.
 
 ## Environment configuration
 
@@ -145,7 +153,7 @@ The frontend and backend are separate processes. On current `main`, starting bot
 
 | Variable | Purpose |
 | --- | --- |
-| `MONAD_RPC_URL` | Read-only Monad RPC used by backend `POST /api/check` |
+| `MONAD_RPC_URL` | Read-only Monad RPC used by backend live quote/check requests |
 | `MOSS_RPC_URL` | Read-only RPC used by the local live-smoke command; not consumed automatically by the backend |
 | `MOSS_RUNTIME_VERSION` | Expected Moss package/runtime version |
 | `MOSS_RUNTIME_REVISION` | Expected immutable Moss Git revision |
@@ -154,7 +162,7 @@ The frontend and backend are separate processes. On current `main`, starting bot
 | `CORS_ORIGIN` | Browser origin allowed to call the API |
 | `HOST` / `PORT` | Node HTTP listener configuration |
 
-The live backend requires the Moss checkout at `MOSS_RUNTIME_PATH` to retain its `.git` metadata, match the configured version/revision, and be readable by a runtime with `git` available. Without that path, `POST /api/check` fails closed as `UNSUPPORTED` with an `UNKNOWN` Run rather than returning fake live evidence.
+The live backend requires the Moss checkout at `MOSS_RUNTIME_PATH` to retain its `.git` metadata, match the configured version/revision, and be readable by a runtime with `git` available. Without that path, live quote/check requests fail closed as `UNSUPPORTED`; recorded replay remains a separate, explicitly labelled path.
 
 Never commit RPC credentials or populated `.env` files.
 
@@ -175,17 +183,29 @@ pnpm smoke:kuru:live              # external live Moss/RPC smoke
 
 ## API overview
 
+### `POST /api/quote`
+
+Runs the exact-input live quote boundary before form submission. It returns an available quote, an explicit no-route/unavailable result, or a scoped error. It does not run the full simulation or produce a transaction decision.
+
 ### `POST /api/check`
 
-Runs the backend-owned live Check boundary. A request carries a normalized swap Intent; successful processing returns a completed or Integration Error Run envelope. A re-run uses the same endpoint with `parentRunId` and exactly one allowed Intent change.
+Runs the backend-owned pre-sign check. A request carries a normalized swap Intent; successful processing returns a completed or Integration Error Run envelope. A re-run uses the same endpoint with `parentRunId` and exactly one allowed Intent change.
 
-If live Moss is not configured, the endpoint returns an explicit `UNSUPPORTED` application error and an `UNKNOWN` Run. It never substitutes Recorded Replay for a live result.
+If live Moss is not configured, the endpoint returns an explicit `UNSUPPORTED` application error and an `UNKNOWN` Run. It never substitutes recorded replay for a live result.
 
 ### `GET /api/replay/:id`
 
-Returns a frozen Recorded Replay fixture. Replay preserves recorded provenance but is not a current live run and cannot be used as a live Check parent.
+Returns a frozen recorded replay fixture. Replay preserves recorded provenance but is not a current live Run and cannot be used as a live check parent.
 
 See the [frontend API handoff](docs/integration/api-frontend-handoff.md) for payloads, error mappings, CORS, and startup details.
+
+## Deployment
+
+The frontend demo is publicly deployed on Vercel:
+
+**[https://parallax-web-snowy.vercel.app](https://parallax-web-snowy.vercel.app)**
+
+No demo account is required. The current public URL serves the frontend application but does not expose its expected same-origin `/api/*` backend routes. Live quote/check behavior therefore requires a separately configured backend environment; the public deployment is not a production-readiness claim.
 
 ## Documentation map
 
@@ -225,8 +245,8 @@ Live RPC/Moss smoke tests are intentionally separate because they require extern
 
 | Member | GitHub | Area |
 | --- | --- | --- |
-| Kai | [@chin0312](https://github.com/chin0312) | Product and demo |
-| Rei | [@rainypilgrimage](https://github.com/rainypilgrimage) | Risk methodology and research |
+| Kai | [@chin0312](https://github.com/chin0312) | Product, research, and demo |
+| Rei | [@rainypilgrimage](https://github.com/rainypilgrimage) | Product, risk methodology, and research |
 | Jie | [@jzhao0](https://github.com/jzhao0) | Moss integration and risk engine |
 | Clare | [@brightheartma](https://github.com/brightheartma) | API, backend, orchestration, and deployment |
 | Antony | [@antony819](https://github.com/antony819) | Web frontend |
@@ -235,7 +255,7 @@ Live RPC/Moss smoke tests are intentionally separate because they require extern
 
 - Start work from the latest `main` on a short-lived branch.
 - Keep runtime, Contract, product-copy, and Evidence claims in their owning layers.
-- Do not use Recorded Replay or Mock data as proof of a live user Verdict.
+- Do not use recorded replay or mock data as proof of a live user decision.
 - Run the relevant checks before opening a pull request.
 - Request review from the owners of the files and semantics changed.
 
