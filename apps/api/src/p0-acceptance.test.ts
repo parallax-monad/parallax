@@ -13,6 +13,7 @@ import type {
   NormalizedSwapIntent,
   RunResult,
 } from "@parallax/contracts";
+import { ReplayApplicationService } from "@parallax/orchestrator/application";
 import {
   economicFailStopResult,
   economicPassChildResult,
@@ -22,6 +23,7 @@ import { CheckApplicationService } from "./application.js";
 import { normalizeCheckSwapRequest } from "./normalization.js";
 import { type AgentFlowPort, UnsupportedAgentFlowError } from "./ports.js";
 import type { BackendRuntime } from "./runtime-config.js";
+import { FileReplayFixtureRepository } from "./storage/replay-fixture-repository.js";
 import { InMemoryRunStore, type RunStore } from "./store.js";
 import { createTrustedTokenRegistry } from "./trusted-token-registry.js";
 
@@ -908,5 +910,47 @@ describe("Backend P0 acceptance matrix", () => {
       status: "completed",
       parentRunId: "run-1",
     });
+  });
+
+  it("A15 Replay fixture runId is not a Check Re-run parent", async () => {
+    const replay = await new ReplayApplicationService({
+      repository: new FileReplayFixtureRepository(),
+    }).replay("mon-to-usdc");
+
+    expect(replay.status).toBe(200);
+    if (replay.status !== 200) {
+      throw new Error("expected the mon-to-usdc Replay fixture");
+    }
+    expect(replay.body.replayMode).toBe(true);
+
+    const store = new InMemoryRunStore();
+    let agentFlowCalls = 0;
+    const response = await createService(
+      {
+        async check() {
+          agentFlowCalls += 1;
+          throw new Error("Replay parent must be rejected before Agent Flow");
+        },
+      },
+      store,
+      () => "run-must-not-start",
+    ).check(
+      publicRequest({
+        parentRunId: replay.body.runId,
+        amountIn: "2",
+      }),
+    );
+
+    expect(response).toMatchObject({
+      status: 400,
+      body: {
+        error: {
+          code: "INVALID_RERUN",
+          reason: "PARENT_NOT_FOUND",
+        },
+      },
+    });
+    expect(agentFlowCalls).toBe(0);
+    expect(store.get("run-must-not-start")).toBeUndefined();
   });
 });
