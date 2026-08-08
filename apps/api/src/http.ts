@@ -4,6 +4,7 @@ import type {
   CheckApiErrorBody,
   CheckApplicationResponse,
 } from "./application.js";
+import type { QuoteApplicationResponse } from "./quote-application.js";
 
 const MAX_BODY_BYTES = 1024 * 1024;
 
@@ -11,30 +12,62 @@ export interface CheckService {
   check(request: unknown): Promise<CheckApplicationResponse>;
 }
 
+type TransportErrorResponse = {
+  status: 400 | 404 | 405 | 413 | 500;
+  body:
+    | CheckApiErrorBody
+    | {
+        error: {
+          code:
+            | "INVALID_JSON"
+            | "NOT_FOUND"
+            | "METHOD_NOT_ALLOWED"
+            | "PAYLOAD_TOO_LARGE"
+            | "INTERNAL_ERROR";
+          message: string;
+        };
+      };
+};
+
 type TransportResponse =
   | CheckApplicationResponse
-  | {
-      status: 400 | 404 | 405 | 413 | 500;
-      body:
-        | CheckApiErrorBody
-        | {
-            error: {
-              code:
-                | "INVALID_JSON"
-                | "NOT_FOUND"
-                | "METHOD_NOT_ALLOWED"
-                | "PAYLOAD_TOO_LARGE"
-                | "INTERNAL_ERROR";
-              message: string;
-            };
-          };
-    };
+  | QuoteApplicationResponse
+  | TransportErrorResponse;
 
 /** Hono transport for the Backend-owned POST /api/check boundary. */
 export function createCheckApp(service: CheckService): Hono {
+  return createJsonPostApp({
+    path: "/api/check",
+    operation: "check",
+    handle: (request) => service.check(request),
+  });
+}
+
+export interface QuoteService {
+  quote(request: unknown): Promise<QuoteApplicationResponse>;
+}
+
+/** Hono transport for the Backend-owned POST /api/quote boundary. */
+export function createQuoteApp(service: QuoteService): Hono {
+  return createJsonPostApp({
+    path: "/api/quote",
+    operation: "quote",
+    handle: (request) => service.quote(request),
+  });
+}
+
+type JsonPostAppOptions = {
+  path: "/api/check" | "/api/quote";
+  operation: "check" | "quote";
+  handle(
+    request: unknown,
+  ): Promise<CheckApplicationResponse | QuoteApplicationResponse>;
+};
+
+function createJsonPostApp(options: JsonPostAppOptions): Hono {
   const app = new Hono();
 
-  app.post("/api/check", async (context) => {
+  app.post(options.path, async (context) => {
     const request = context.req.raw;
     const contentLength = request.headers.get("content-length");
     if (
@@ -61,17 +94,17 @@ export function createCheckApp(service: CheckService): Hono {
       return invalidJsonResponse();
     }
 
-    return jsonResponse(await service.check(body));
+    return jsonResponse(await options.handle(body));
   });
 
-  app.all("/api/check", () =>
+  app.all(options.path, () =>
     jsonResponse(
       {
         status: 405,
         body: {
           error: {
             code: "METHOD_NOT_ALLOWED",
-            message: "Only POST is supported for /api/check",
+            message: `Only POST is supported for ${options.path}`,
           },
         },
       },
@@ -92,7 +125,7 @@ export function createCheckApp(service: CheckService): Hono {
       body: {
         error: {
           code: "INTERNAL_ERROR",
-          message: "The check could not be completed",
+          message: `The ${options.operation} could not be completed`,
         },
       },
     }),

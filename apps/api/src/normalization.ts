@@ -8,6 +8,7 @@ import {
   intentNormalizationErrorSchema,
   type NormalizedSwapIntent,
   normalizedSwapIntentSchema,
+  type QuoteRequest,
   type TrustedTokenRegistry,
 } from "@parallax/contracts";
 
@@ -102,6 +103,23 @@ export function normalizeCheckSwapRequest(
       economicBoundary,
     }),
   };
+}
+
+/** Quotes use the same trusted Intent normalization without an economic boundary. */
+export function normalizeQuoteRequest(
+  request: QuoteRequest,
+  registry: TrustedTokenRegistry,
+): IntentNormalizationResult {
+  return normalizeCheckSwapRequest(
+    {
+      ...request,
+      economicBoundary: {
+        availability: "unavailable",
+        source: "unavailable",
+      },
+    },
+    registry,
+  );
 }
 
 function conversionFailure(

@@ -38,3 +38,8 @@ export function isUnsupportedAgentFlowError(
 export interface AgentFlowPort {
   check(input: AgentFlowCheckInput): Promise<unknown>;
 }
+
+/** Backend-owned caller contract for the pre-check Quote flow. */
+export interface QuoteAgentFlowPort {
+  quote(input: AgentFlowCheckInput): Promise<unknown>;
+}
