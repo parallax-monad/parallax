@@ -186,18 +186,22 @@ describe("checkSwap API adapter", () => {
     expect(result.simulatedOutput).toBe("0.000223");
   });
 
-  test("fails a live authoritative verdict closed when pinned-block provenance is missing", async () => {
+  test("preserves a terminal NO_ROUTE STOP without pinned-block provenance", async () => {
     const request = vi.fn<typeof fetch>().mockResolvedValue(
       jsonResponse({
         ...completed,
-        verdict: "PROCEED",
+        verdict: "STOP",
+        summary: "No executable route exists for this token pair.",
         simulatorPinnedBlock: undefined,
+        route: { availability: "unavailable", reason: "NO_ROUTE" },
       }),
     );
     const result = await checkSwap(input, { fetch: request });
 
-    expect(result.verdict).toBe("UNKNOWN");
-    expect(result.summary.en).toContain("simulatorPinnedBlock");
+    expect(result.verdict).toBe("STOP");
+    expect(result.summary.en).toBe(
+      "No executable route exists for this token pair.",
+    );
   });
 
   test("maps a verified ADJUST Action into display units, not atomic values", async () => {

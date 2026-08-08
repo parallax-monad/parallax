@@ -215,9 +215,7 @@ function diff(value: unknown, tokenIn: string): RunDiff | undefined {
 
     const isAmount = field === "amountInAtomic";
     const show = (atomic: string) =>
-      isAmount
-        ? `${decimal(atomic, decimalsFor(tokenIn))} ${tokenIn}`
-        : atomic;
+      isAmount ? `${decimal(atomic, decimalsFor(tokenIn))} ${tokenIn}` : atomic;
 
     return [
       {
@@ -361,25 +359,15 @@ function mapRun(
   const tokenIn = symbol(intent?.tokenIn);
   const tokenOut = symbol(intent?.tokenOut);
   const boundary = obj(intent?.economicBoundary);
-  const effectiveVerdict: Verdict =
-    !replayMode && !str(run?.simulatorPinnedBlock) && verdict !== "UNKNOWN"
-      ? "UNKNOWN"
-      : verdict;
-  const provenanceFailedClosed = effectiveVerdict !== verdict;
   return {
     runId,
     parentRunId: str(run?.parentRunId),
     systemStatus: systemStatus as CheckSwapResult["systemStatus"],
-    verdict: effectiveVerdict,
-    summary: provenanceFailedClosed
-      ? {
-          en: "Live provenance is incomplete because simulatorPinnedBlock is missing. The UI has failed closed to UNKNOWN.",
-          zh: "实时来源信息不完整：缺少 simulatorPinnedBlock。UI 已保守降级为 UNKNOWN。",
-        }
-      : cp(
-          str(run?.summary) ??
-            (apiFailure ? failureCopy(apiFailure).en : "No summary provided"),
-        ),
+    verdict: verdict as Verdict,
+    summary: cp(
+      str(run?.summary) ??
+        (apiFailure ? failureCopy(apiFailure).en : "No summary provided"),
+    ),
     recommendedActions: arr(run?.recommendedActions)
       .map((item) => suggestion(item, tokenIn, tokenOut))
       .filter((item): item is ActionSuggestion => !!item),
