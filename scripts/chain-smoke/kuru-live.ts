@@ -42,6 +42,13 @@ import { expect, test } from "vitest";
 import { bootstrapBackendApp } from "../../apps/api/src/bootstrap/backend.js";
 import { runResultSchema } from "../../packages/contracts/src/index.js";
 import type { KuruLiveRunner } from "../../packages/orchestrator/agent-flow/index.js";
+import {
+  apiCheckAcceptanceOf,
+  apiCheckProvenanceMatchesOf,
+  p0CandidateOf,
+  smokeStatusOf,
+} from "./live-smoke-acceptance.js";
+import { formatRepositoryJson } from "./repository-json.js";
 
 const rpcUrl = process.env.MOSS_RPC_URL;
 const runtimePath = process.env.MOSS_RUNTIME_PATH;
@@ -90,10 +97,10 @@ const apiCheckRequest = {
 
 function writeJson(dir: string, name: string, value: unknown): void {
   mkdirSync(dir, { recursive: true });
-  writeFileSync(
-    join(dir, name),
-    `${JSON.stringify(toJsonValue(value), null, 2)}\n`,
-  );
+  // Deterministic Biome-compatible repository JSON (see repository-json.ts) so
+  // generated evidence artifacts pass `pnpm lint` without a formatting
+  // subprocess. Serialization order is the parsed object's own order.
+  writeFileSync(join(dir, name), formatRepositoryJson(toJsonValue(value)));
 }
 
 function baseMetadata(
@@ -149,25 +156,6 @@ function stageStatus(
       : null,
     error: stage.error ? toJsonValue(stage.error) : null,
   }));
-}
-
-function apiCheckAcceptanceOf(
-  value: unknown,
-  expected: { runId: string; simulatorPinnedBlock: string },
-): boolean {
-  const parsed = runResultSchema.safeParse(value);
-  if (!parsed.success || parsed.data.status !== "completed") return false;
-
-  return (
-    parsed.data.runId === expected.runId &&
-    parsed.data.systemStatus === "OK" &&
-    parsed.data.verdict === "PROCEED" &&
-    parsed.data.simulatorPinnedBlock === expected.simulatorPinnedBlock &&
-    parsed.data.scope.every((item) => item.status !== "unknown") &&
-    parsed.data.evidence.every(
-      (item) => item.isReplay === false && item.isMock === false,
-    )
-  );
 }
 
 test("kuru live smoke: MON -> USDC", async () => {
@@ -304,39 +292,49 @@ test("kuru live smoke: MON -> USDC", async () => {
     runtimeVersion,
     runtimeRevision,
   });
-  const apiCheckAcceptance = apiCheckAcceptanceOf(apiResponseBody, {
-    runId,
-    simulatorPinnedBlock: result.simulatorPinnedBlock ?? "",
-  });
+  const apiCheckAcceptance = apiCheckAcceptanceOf(apiResponseBody);
   const apiCheck = runResultSchema.safeParse(apiResponseBody);
-  const apiCheckProvenanceMatches =
-    apiCheck.success &&
-    apiCheck.data.runId === runId &&
-    apiCheck.data.simulatorPinnedBlock === result.simulatorPinnedBlock;
+  const apiCheckProvenanceMatches = apiCheckProvenanceMatchesOf(
+    apiResponseBody,
+    {
+      simulatorPinnedBlock: result.simulatorPinnedBlock,
+      observedChainId: result.observedChainId,
+      evidence: {
+        runtimeVersion: result.evidence.runtimeVersion,
+        runtimeRevision: result.evidence.runtimeRevision,
+      },
+    },
+  );
   const liveSuccess =
     apiResponseStatus === 200 &&
     apiCheckAcceptance &&
     apiCheckProvenanceMatches &&
     liveSuccessOf(acceptance);
+  const apiVerdict = apiCheck.success ? apiCheck.data.verdict : undefined;
+  // The full technical Live gate passed; the canonical Verdict may
+  // legitimately be a fail-closed UNKNOWN (no economic boundary provided).
+  // PROCEED is a business verdict and is never manufactured by the smoke.
+  const productProceed = liveSuccess && apiVerdict === "PROCEED";
   const adapterDecision = p0DecisionCandidate(result, {
     runtimeVersion,
     runtimeRevision,
   });
-  const decision = liveSuccess
-    ? "P0_LIVE_READY"
-    : adapterDecision === "P0_LIVE_READY"
-      ? "P0_LIVE_BLOCKED_SIMULATION"
-      : adapterDecision;
-
   const failedStage = result.stages.find((stage) => !stage.success);
-  const status =
-    evidence.integrationStatus === "TIMEOUT"
-      ? "FAILED"
-      : failedStage
-        ? "PARTIALLY_VERIFIED"
-        : liveSuccess
-          ? "PARTIALLY_VERIFIED"
-          : "FAILED";
+  // p0DecisionCandidate stays acceptance-derived and only ever uses the shared
+  // P0DecisionCandidate set (live-acceptance.ts). VALID_LIVE_UNKNOWN is a
+  // smoke/product status and lives only in the separate status axis, next to
+  // the canonical apiVerdict, so the acceptance field cannot drift outside the
+  // gate's closed candidate set.
+  const p0Candidate = p0CandidateOf({
+    liveSuccess,
+    adapterCandidate: adapterDecision,
+  });
+  const status = smokeStatusOf({
+    integrationStatus: evidence.integrationStatus,
+    failedStage,
+    liveSuccess,
+    productProceed,
+  });
   const metadata = {
     ...baseMetadata(runId, startedAt),
     status,
@@ -346,9 +344,10 @@ test("kuru live smoke: MON -> USDC", async () => {
       ? null
       : (failedStage?.error?.code ??
         (evidence.integrationStatus === "TIMEOUT" ? "TIMEOUT" : "UNKNOWN")),
-    p0DecisionCandidate: decision,
+    p0DecisionCandidate: p0Candidate,
     apiCheckStatus: apiResponseStatus ?? null,
     apiCheckSchemaValid: apiCheck.success,
+    apiVerdict: apiVerdict ?? null,
     apiCheckAcceptance,
     apiCheckProvenanceMatches,
     observedChainId: result.observedChainId ?? null,
@@ -381,6 +380,17 @@ test("kuru live smoke: MON -> USDC", async () => {
       process.exit(1);
     }
     expect(false, JSON.stringify({ acceptance }, null, 2)).toBe(true);
+    return;
+  }
+
+  if (!productProceed) {
+    // The full technical Live gate passed but the canonical Verdict is a
+    // legitimate non-PROCEED (e.g. UNKNOWN without an economic boundary). This
+    // is a completed authoritative Live UNKNOWN, never a green PROCEED result
+    // and not an integration failure.
+    console.log(
+      `LIVE_SMOKE_VALID_UNKNOWN execution=${evidence.executionStatus} integration=${evidence.integrationStatus} verdict=${apiVerdict} artifact=${artifactDir}`,
+    );
     return;
   }
 

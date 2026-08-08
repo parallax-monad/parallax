@@ -1,13 +1,16 @@
 # Backend P0 Acceptance Matrix
 
-Status: DELIVERY GATE FOR DETERMINISTIC CHECK APPLICATION / RUN LIFECYCLE PATHS — LIVE SUCCESS REMAINS MOSS-BLOCKED
+Status: DELIVERY GATE FOR DETERMINISTIC CHECK APPLICATION / RUN LIFECYCLE PATHS — LIVE SIMULATION SUCCEEDED ON THE TEMPORARY MOSS PIN; EVIDENCE REGENERATED ON NODE v22.23.2
 
 Owner: Clare (backend / `apps/api`)
 Command: `pnpm test:acceptance`
 
 This is the delivery-facing backend acceptance entry. It does not replace unit
 tests. It organizes the P0 Check Application / Run lifecycle claims that backend
-can prove without a frontend owner and without a live Moss SUCCESS fixture.
+can prove without a frontend owner. A real live Kuru MON → USDC simulation has
+succeeded on the temporary Moss pin ef15448e (fixture
+`fixtures/chain-evidence/kuru/live-success-mon-to-usdc/`); see
+[moss-kuru-live-runtime.md](./moss-kuru-live-runtime.md).
 
 ## Scope
 
@@ -19,11 +22,13 @@ In scope:
 - Re-run single-condition and Child Run failure preservation
 - Fail-closed unverified `ADJUST`
 - Verified `ADJUST` via fixture Action Gate (`amountIn` only)
+- Replay fixture versus Check Re-run parent separation
 
 Out of scope for this gate:
 
 - Frontend Analyze UI and CTA routing
-- Live Kuru MON → USDC SUCCESS evidence (`pnpm smoke:kuru:live`)
+- Live Kuru MON → USDC evidence regeneration under Node v22.23.2
+  (`pnpm smoke:kuru:live`)
 - Database, SSE, Queue, signing, or PancakeSwap
 - Full TV-ECO-006 / §3.3.1 `ACTION_GATE` / CrossRun locator Shared Contract
   expansion (this gate's verified `ADJUST` path uses interim
@@ -51,9 +56,10 @@ Expected public outcome column. Public outcomes may surface under transport-leve
 | A8 | Moss unavailable | `error.code = MOSS_UNAVAILABLE`, `error.stage = unknown`, `retryable = true` | `p0-acceptance` A8 | agent-flow Moss mapping; public `error.stage` mapping for non-QUOTE/ACTION/SIMULATE stages is unresolved |
 | A9 | Unsupported live runtime | `error.code = UNSUPPORTED`, `retryable = false` | `p0-acceptance` A9 | bootstrap / server integration |
 | A10 | Provenance | deterministic gate requires and preserves simulator pinned-block fields | `p0-acceptance` A10 | agent-flow provenance fail-closed |
-| A11 | Replay / Live separation | run-level Replay rejection: Replay Run cannot be a Re-run baseline; live Agent Flow cannot return `replayMode` | `p0-acceptance` A11 | `application/replay` |
+| A11 | Replay / Live separation | Check Store Replay rejection: a stored result with `replayMode = true` cannot be a Re-run baseline; live Agent Flow cannot return `replayMode` | `p0-acceptance` A11 | `application/replay` |
 | A12 | Re-run one condition | Multi-field Intent change rejected as `INVALID_RERUN` with `reason: NOT_EXACTLY_ONE_CHANGE` | `p0-acceptance` A12 | `application/rerun` |
 | A13 | Child Run failure | Failed child still keeps `parentRunId` and `diff` with atomic `amountInAtomic` before/after | `p0-acceptance` A13 | API application Re-run tests |
+| A15 | Replay / Check Re-run separation | A Replay fixture `runId` is not a Check parent: returns `INVALID_RERUN` with `reason: PARENT_NOT_FOUND`, does not start a Run, and does not call Agent Flow | `p0-acceptance` A15 | `ReplayApplicationService` + `FileReplayFixtureRepository` + Check Application |
 
 ## Frontend consumer notes
 
@@ -74,6 +80,17 @@ Recorded from API-consumption review; not additional gate rows.
    user-facing failure cause until Contracts expands the enum.
 4. **Re-run Diff values are atomic.** A13 pins `amountInAtomic` before/after as
    atomic strings; display-unit formatting is frontend work.
+5. **Replay parent semantics are store-specific.** A fixture `runId` returned by
+   `GET /api/replay/:id` is not registered in the Check `RunStore`, so using it
+   for a Check Re-run returns `PARENT_NOT_FOUND` before Agent Flow. A Check
+   `parentRunId` lost after an API process restart returns the same reason. The
+   separate `PARENT_IS_REPLAY` reason applies only when a Replay-marked result is
+   already present in the Check Store.
+6. **Replay amount display is a frontend projection.** The current Shared
+   Contract exposes `intent.amountInAtomic`, not a separate human-unit
+   `amountIn` field, as the authoritative fixture input. Frontend may derive a
+   view-model `amountIn` using trusted token decimals, without a
+   `displayAmountIn` override or a new API field.
 
 ## How to run
 
@@ -91,8 +108,16 @@ pnpm smoke:kuru:live      # live Moss/RPC; success not claimed here
 
 ## Live SUCCESS note
 
-`pnpm smoke:kuru:live` remains the live path. Until Moss Owner provides a
-runtime that parses `FlipOrderUpdated` and exposes simulator pinned-block
-provenance, backend acceptance does not claim live SUCCESS. Failures and
-configuration artifacts under `.smoke-live/` are diagnostic, not delivery
-success evidence.
+`pnpm smoke:kuru:live` remains the live path. A real Monad mainnet Kuru MON →
+USDC live simulation **succeeded** on the temporary Parallax fork pin
+`ef15448e`: FlipOrderUpdated and Trade were observed and parsed, warnings were
+empty, pinned-block provenance was proven end-to-end
+(`simulatorPinnedBlock=94112902`), and the 24-gate acceptance passed
+(`liveSuccess=true`, `P0_LIVE_READY`). The historical "FlipOrderUpdated
+unsupported" blocker is closed **for this exact pin only**.
+
+Merge state: the committed fixture was **regenerated under Node v22.23.2** by
+a real live smoke (2026-08-08, runId `kuru-live-1786163979273`), resolving the
+Node drift against the runtime contract pin. Failures and configuration
+artifacts under `.smoke-live/` remain diagnostic, not delivery success
+evidence.

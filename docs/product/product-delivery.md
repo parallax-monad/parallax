@@ -324,6 +324,14 @@ Product/UI must not infer `minimumReceivedSource = unavailable` from missing dat
 
 ## 8. Current real Fixture presentation
 
+> Separate from the live evidence fixture: the current
+> `fixtures/chain-evidence/kuru/live-success-mon-to-usdc/` live simulation
+> succeeded on the temporary Moss pin (see
+> [moss-kuru-live-runtime.md](../integration/moss-kuru-live-runtime.md)) and
+> was regenerated under Node v22.23.2. The presentations below cover only the
+> older Recorded Replay fixtures under `fixtures/replay-data/`, which were
+> recorded against the pre-live baseline.
+
 The following presentation is limited to the latest reviewed real recorded Fixtures. Both are Recorded Replay candidates, not current Live checks, and neither supports a public transaction adjustment or verified Action Gate attestation.
 
 ### MON → USDC
@@ -1287,7 +1295,7 @@ Contract and API owners must confirm field names, versioning, serialization, err
 
 | Stakeholder | Primary review responsibility |
 | --- | --- |
-| Rei (`rainypilgrimage-beep`) | Rule-to-product semantic accuracy, canonical Scope categories and reason vocabulary, Action visibility boundaries, unsupported inference |
+| Rei (`rainypilgrimage`) | Rule-to-product semantic accuracy, canonical Scope categories and reason vocabulary, Action visibility boundaries, unsupported inference |
 | Jie (`jzhao0`) | Real Fixture accuracy, Moss Evidence, provenance, Live／Replay／Mock claims, normalized Intent and Action Gate feasibility |
 | Clare (`brightheartma`) | Product View Model unions, Contract/API mapping, Integration Error payload, Recovery Action and ReplayRef adapter mapping |
 | Antony (`antony819`) | CTA routing, frontend implementability, Scope provenance, loading/empty states, i18n, Previous/New and View Model ergonomics |

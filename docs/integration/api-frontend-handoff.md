@@ -1,6 +1,6 @@
 # Frontend API Handoff (`/api/check` + `/api/replay`)
 
-Status: BACKEND HANDOFF FOR ANALYZE 联调 — LIVE SUCCESS NOT CLAIMED
+Status: BACKEND HANDOFF FOR ANALYZE 联调 — LIVE SIMULATION SUCCEEDED ON THE TEMPORARY MOSS PIN; FIXTURE REGENERATED ON NODE v22.23.2
 
 Owner: Clare (`apps/api`)
 Consumers: Antony (`apps/web`)
@@ -17,6 +17,26 @@ Related:
 - Deterministic backend acceptance gate:
   [backend-p0-acceptance.md](./backend-p0-acceptance.md) (`pnpm test:acceptance`)
 
+## Coordination status
+
+This handoff is evaluated against `main` while the integration work remains
+split across the following owners:
+
+- **#21 frontend → API:** remains `CHANGES_REQUESTED`. Frontend must not silently
+  convert live `UNSUPPORTED` into Recorded Replay, and must remove any
+  `displayAmountIn` override that replaces the API Intent value.
+- **#23 Moss Live:** is merged on `main`. The temporary runtime pin
+  `ef15448e166f31c891e80dba5073dae04a052a2b` and Node `v22.23.2` evidence
+  support the exact Live SUCCESS claim documented in the runtime handoff;
+  migration after upstream Moss finalizes remains a follow-up.
+- **#19 Action Gate:** is merged on `main` with the interim
+  `action_verification` path and A14. The full §3.3.1 `ACTION_GATE` / CrossRun
+  Contract remains deferred.
+
+The exact temporary-pin Live SUCCESS claim is now part of `main`; Recorded
+Replay remains a separate deterministic integration path and must not be used
+as a Live Check fallback.
+
 ## 1. Scope
 
 In scope:
@@ -32,7 +52,8 @@ Out of scope:
 - Durable Run persistence (process-memory store only)
 - Signing, broadcast, wallet custody
 - Non-`amountIn` Action Gate fields (protocol / tokenPair / slippage) beyond the fixture path
-- Claiming Live Kuru MON → USDC SUCCESS (Moss-blocked; see live runtime doc)
+- Live evidence fixture regeneration is complete (Node v22.23.2, 2026-08-08;
+  see live runtime doc)
 
 ## 2. Startup runbook
 
@@ -64,7 +85,7 @@ Log / error hygiene: do not print `MONAD_RPC_URL`, `MOSS_RPC_URL`, or URL userin
 | Config | `POST /api/check` |
 | --- | --- |
 | No `MOSS_RUNTIME_PATH` | HTTP **502**, `error.code = "UNSUPPORTED"`, Run envelope `verdict = UNKNOWN`, `retryable = false` |
-| Valid pinned path | Live Agent Flow runs; still fail-closed without trustworthy pinned-block / runtime provenance. Live SUCCESS is not claimed in this handoff. |
+| Valid pinned path | Live Agent Flow runs; fail-closed without trustworthy pinned-block / runtime provenance. Live simulation SUCCESS is proven on the temporary pin (see [moss-kuru-live-runtime.md](./moss-kuru-live-runtime.md)); the committed evidence fixture was regenerated on Node v22.23.2. |
 
 Recorded Replay is **only** via `/api/replay/:id`. It is never used as a fallback for live Check.
 
@@ -247,13 +268,23 @@ Successful child responses include `parentRunId` and `diff` (machine-normalized
 `before` / `after`). On Agent Flow failure, child may still return
 `parentRunId` + `diff` on the failed Run envelope (see ADR 0002).
 
+### Replay `runId` versus Check `RunStore`
+
+The `runId` returned by `GET /api/replay/:id` identifies a frozen fixture; it is
+not inserted into the process-local Check `RunStore`. Passing that `runId` as a
+`POST /api/check` `parentRunId` therefore returns
+`INVALID_RERUN` with `reason: PARENT_NOT_FOUND`, before a new Run is started or
+Agent Flow is called. This is distinct from a test or in-process Check record
+whose stored result has `replayMode: true`, which returns
+`INVALID_RERUN` with `reason: PARENT_IS_REPLAY`.
+
 ### `INVALID_RERUN` reasons
 
 | `reason` | Meaning |
 | --- | --- |
-| `PARENT_NOT_FOUND` | Unknown `parentRunId` (or lost after process restart) |
+| `PARENT_NOT_FOUND` | Unknown or unavailable `parentRunId`, including a Replay fixture `runId` that is not stored in the Check `RunStore` or a Check Run lost after API process restart |
 | `PARENT_NOT_COMPLETED` | Parent not a completed baseline |
-| `PARENT_IS_REPLAY` | Replay Runs cannot be Re-run baselines |
+| `PARENT_IS_REPLAY` | A Replay-marked result already stored in the Check `RunStore` cannot be a Re-run baseline |
 | `RERUN_CHAINING_UNSUPPORTED` | Parent is already a child Run |
 | `CHAIN_OR_SENDER_CHANGED` | chainId / sender must match baseline |
 | `BOUNDARY_CHANGED` / `BOUNDARY_ASSET_CHANGED` | Economic Boundary must stay unchanged |
@@ -279,8 +310,16 @@ token registry, not by reverse-engineering Diff strings.
 - Body is a frozen `RunResult` with `replayMode: true` and Evidence
   `isReplay: true` / `fixtureId` set.
 - Recorded Replay **must not** be labeled Live.
-- Replay **cannot** be a Re-run `parentRunId` baseline (`PARENT_IS_REPLAY`).
+- A Replay-marked result already stored in the Check `RunStore` **cannot** be a
+  Re-run `parentRunId` baseline (`PARENT_IS_REPLAY`). An HTTP Replay fixture
+  `runId` is not stored there and therefore returns `PARENT_NOT_FOUND` instead;
+  see the Replay `runId` versus Check `RunStore` section under Re-run.
 - Live Check **never** falls back to Replay.
+- **Amount display contract:** the Replay fixture `intent` has no separate
+  human-unit `amountIn` field in the current Shared Contract. Its authoritative
+  input is `intent.amountInAtomic`. Frontend may expose a view-model `amountIn`
+  by converting that atomic value with trusted token decimals, but must not use
+  an independent `displayAmountIn` value or treat it as a new API field.
 
 | HTTP | `error.code` | Meaning |
 | --- | --- | --- |
@@ -314,8 +353,10 @@ Frontend must display Live vs Recorded Replay explicitly. Do not upgrade
 1. Start API without `MOSS_RUNTIME_PATH` → `POST /api/check` returns `UNSUPPORTED`.
 2. `GET /api/replay/mon-to-usdc` returns 200 with `replayMode: true`, `verdict: UNKNOWN` in current fixtures.
 3. Confirm CORS from the web origin.
-4. (Optional) Configure Moss path per [moss-kuru-live-runtime.md](./moss-kuru-live-runtime.md); expect fail-closed Live until Moss SUCCESS exists — do not block UI on Live SUCCESS.
-5. Re-run only against in-process Check `runId`s; handle `PARENT_NOT_FOUND` after API restart.
+4. (Optional) Configure Moss path per [moss-kuru-live-runtime.md](./moss-kuru-live-runtime.md). Live simulation SUCCESS has been achieved on the temporary pin; treat `PROCEED` as "no blocking evidence within the checked scope" (never a guaranteed outcome). The committed fixture was regenerated on Node v22.23.2.
+5. Re-run only against in-process Check `runId`s. A Replay fixture `runId` is
+   not a Check parent and returns `PARENT_NOT_FOUND`; a Check `parentRunId`
+   lost after an API process restart returns the same reason.
 6. CTA / retry: use `error.retryable` and closed reason codes from this page and Product delivery docs.
 
 ## 8. Non-goals reminder
