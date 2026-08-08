@@ -4,7 +4,6 @@ import { ChevronDownIcon, SwapIcon } from "@/components/wallet/WalletIcons";
 import {
   balanceOf,
   DEMO_RECIPIENT,
-  estimateOutput,
   formatAmount,
 } from "@/components/wallet/walletData";
 import type { FieldFlag } from "@/lib/analyze/fields";
@@ -13,7 +12,8 @@ import {
   SUPPORTED_TOKENS_OUT,
 } from "@/lib/analyze/fixtures";
 import type { FormFieldErrors, FormState } from "@/lib/analyze/form";
-import { type Language, say } from "@/lib/i18n";
+import type { QuoteState } from "@/lib/analyze/types";
+import { type Copy, type Language, say } from "@/lib/i18n";
 
 /** A token side of the swap. Locked when the fixture set offers one option. */
 function TokenSelect({
@@ -71,21 +71,42 @@ function FlagNote({ flag, language }: { flag: FieldFlag; language: Language }) {
   );
 }
 
+/**
+ * Why the backend has no publishable Quote. These are product states from the
+ * closed `reason` set, not errors, so they never block submitting a Check.
+ */
+const QUOTE_UNAVAILABLE_REASON: Record<"NO_ROUTE" | "QUOTE_UNAVAILABLE", Copy> =
+  {
+    NO_ROUTE: {
+      en: "The backend found no route for this pair and amount, so it published no quote.",
+      zh: "后端未找到此代币对与数量的路径，因此没有报价。",
+    },
+    QUOTE_UNAVAILABLE: {
+      en: "The backend could not produce a quote for this amount right now.",
+      zh: "后端目前无法为该数量生成报价。",
+    },
+  };
+
 export function WalletSwap({
   form,
   language,
   errors = {},
   flags = [],
+  quote = { status: "idle" },
   onChange,
   onSubmit,
+  onReplay,
 }: {
   form: FormState;
   language: Language;
   errors?: FormFieldErrors;
   /** Inputs the last run said are worth changing. Empty before the first run. */
   flags?: FieldFlag[];
+  /** Pre-submit `/api/quote` state. Never a locally computed estimate. */
+  quote?: QuoteState;
   onChange: (form: FormState) => void;
   onSubmit: () => void;
+  onReplay: () => void;
 }) {
   const [advancedOpen, setAdvancedOpen] = useState(false);
 
@@ -96,13 +117,6 @@ export function WalletSwap({
     flags.find((flag) => flag.field === key);
 
   const balance = balanceOf(form.tokenIn);
-  const estimate = estimateOutput({
-    protocol: form.protocol,
-    tokenIn: form.tokenIn,
-    tokenOut: form.tokenOut,
-    amountIn: form.amountIn,
-    slippage: form.slippage,
-  });
   const amountFlag = flagFor("amountIn");
   const amountError = errors.amountIn;
   const slippageError = errors.slippage;
@@ -182,23 +196,25 @@ export function WalletSwap({
 
       <section className="border border-line bg-ink-rail p-4">
         <span className="text-[12px] font-bold uppercase tracking-[0.08em] text-dim">
-          {say(language, {
-            en: "You receive (demo est.)",
-            zh: "你收到（演示估算）",
-          })}
+          {say(language, { en: "You receive (est.)", zh: "你收到（预估）" })}
         </span>
         <div className="mt-3 flex items-center gap-3">
           <strong
+            aria-live="polite"
             className={`min-w-0 flex-1 truncate text-[30px] font-extrabold tracking-[-0.04em] ${
-              estimate === undefined ? "text-faint" : "text-white"
+              quote.status === "available" ? "text-white" : "text-faint"
             }`}
           >
-            {estimate === undefined
-              ? say(language, {
-                  en: "Estimate unavailable",
-                  zh: "暂无估算",
-                })
-              : formatAmount(estimate)}
+            {quote.status === "available"
+              ? // Printed verbatim: the backend already returns human units, and
+                // re-parsing to a number would drop precision.
+                quote.quote.estimatedAmountOut
+              : say(
+                  language,
+                  quote.status === "loading"
+                    ? { en: "Loading quote…", zh: "正在获取报价…" }
+                    : { en: "No quote", zh: "无报价" },
+                )}
           </strong>
           <TokenSelect
             language={language}
@@ -207,10 +223,52 @@ export function WalletSwap({
             onSelect={(value) => set("tokenOut", value)}
           />
         </div>
+
+        {quote.status === "available" && (
+          <dl className="m-0 mt-3 border-t border-line pt-2 text-[12px]">
+            {quote.quote.minimumAmountOut !== undefined && (
+              <div className="flex justify-between gap-3 py-1">
+                <dt className="font-bold uppercase tracking-[0.06em] text-dim">
+                  {say(language, {
+                    en: "Minimum at this quote",
+                    zh: "此报价的最低量",
+                  })}
+                </dt>
+                <dd className="mono m-0 text-right text-white">
+                  {quote.quote.minimumAmountOut} {form.tokenOut}
+                </dd>
+              </div>
+            )}
+            <div className="flex justify-between gap-3 py-1">
+              <dt className="font-bold uppercase tracking-[0.06em] text-dim">
+                {say(language, { en: "Quote block", zh: "报价区块" })}
+              </dt>
+              <dd className="mono m-0 text-right text-white">
+                {quote.quote.blockNumber}
+              </dd>
+            </div>
+          </dl>
+        )}
+
+        {quote.status === "unavailable" && (
+          <p className="mt-2 text-[13px] leading-[1.5] text-risk-elevated">
+            {say(language, QUOTE_UNAVAILABLE_REASON[quote.reason])}
+          </p>
+        )}
+
+        {quote.status === "error" && (
+          <p className="mt-2 text-[13px] leading-[1.5] text-risk-elevated">
+            {say(language, {
+              en: `The quote request failed (${quote.apiFailure.code}). You can still submit the check.`,
+              zh: `报价请求失败（${quote.apiFailure.code}）。你仍然可以提交检查。`,
+            })}
+          </p>
+        )}
+
         <p className="mt-2 text-[12px] leading-[1.5] text-dim">
           {say(language, {
-            en: "Estimated by deterministic demo logic, not a live or recorded quote.",
-            zh: "由确定性的演示逻辑估算，并非实时或录制报价。",
+            en: "This estimate comes from the backend quote stage before signing. It is not a simulated result and not a guaranteed output.",
+            zh: "此预估来自签名前的后端报价阶段。它不是模拟结果，也不构成输出保证。",
           })}
         </p>
       </section>
@@ -343,8 +401,8 @@ export function WalletSwap({
               </span>
               <span className="field-control text-white">
                 {say(language, {
-                  en: "Kuru (demo default)",
-                  zh: "Kuru（演示默认）",
+                  en: "Kuru (live API)",
+                  zh: "Kuru（实时 API）",
                 })}
               </span>
               {flagFor("protocol") && (
@@ -369,14 +427,24 @@ export function WalletSwap({
 
       <button type="submit" className="btn btn-monad mt-1 w-full">
         {say(language, {
-          en: "Run demo check",
-          zh: "运行演示检查",
+          en: "Submit live check",
+          zh: "提交实时检查",
+        })}
+      </button>
+      <button
+        type="button"
+        className="btn btn-monad-outline mt-2 w-full"
+        onClick={onReplay}
+      >
+        {say(language, {
+          en: "Load recorded replay",
+          zh: "载入录制回放",
         })}
       </button>
       <p className="text-center text-[12px] leading-[1.5] text-dim">
         {say(language, {
-          en: "This demo uses deterministic local data. It does not sign or broadcast a transaction.",
-          zh: "本演示使用确定性的本地数据，不会签名或广播交易。",
+          en: "Parallax runs a pre-sign check. No signing, no broadcasting.",
+          zh: "Parallax 只做签名前检查。不签名，不广播。",
         })}
       </p>
     </form>

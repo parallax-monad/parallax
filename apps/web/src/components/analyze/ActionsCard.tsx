@@ -121,11 +121,11 @@ export function ActionsCard({
           zh: "本次结果的下一步",
         })}
       </span>
-      {result.productRunMode === "DEMO" && (
+      {result.productRunMode === "RECORDED_REPLAY" && (
         <p className="mt-2 text-[13px] leading-[1.6] text-dim">
           {say(language, {
-            en: "Demo-only presentation; not a live verified transaction recommendation.",
-            zh: "仅用于演示，并非经过实时验证的交易建议。",
+            en: "Recorded replay presentation; not a live verified transaction recommendation.",
+            zh: "录制回放展示，并非经过实时验证的交易建议。",
           })}
         </p>
       )}

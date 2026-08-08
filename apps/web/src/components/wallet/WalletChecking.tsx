@@ -14,29 +14,46 @@ const STAGES = [
 
 export const WALLET_STAGE_COUNT = STAGES.length;
 
+/** Provenance must stay honest while loading, not only on the result screen. */
+const HEADER = {
+  live: {
+    en: "Parallax · Live backend check",
+    zh: "Parallax · 实时后端检查",
+  },
+  replay: {
+    en: "Parallax · Recorded replay",
+    zh: "Parallax · 录制回放",
+  },
+};
+
+const TITLE = {
+  live: {
+    en: "Checking this swap before you sign.",
+    zh: "正在签名前检查这笔兑换。",
+  },
+  replay: {
+    en: "Loading a recorded check.",
+    zh: "正在载入一次录制的检查。",
+  },
+};
+
 export function WalletChecking({
   language,
   stage,
+  mode = "live",
 }: {
   language: Language;
   stage: number;
+  mode?: "live" | "replay";
 }) {
   return (
     <div
       aria-live="polite"
       className="flex flex-1 flex-col justify-center px-5 pb-10"
     >
-      <span className="eyebrow-monad">
-        {say(language, {
-          en: "Parallax · Demo preset",
-          zh: "Parallax · 演示预设",
-        })}
-      </span>
+      <span className="eyebrow-monad">{say(language, HEADER[mode])}</span>
       <h2 className="m-0 text-[24px] font-extrabold leading-[1.15] tracking-[-0.04em]">
-        {say(language, {
-          en: "Checking this demo swap before signing.",
-          zh: "正在签名前检查这笔演示兑换。",
-        })}
+        {say(language, TITLE[mode])}
       </h2>
 
       <ol className="m-0 mt-6 list-none p-0">

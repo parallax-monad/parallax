@@ -23,13 +23,15 @@ const OUTCOME_TONE: Record<RuleResult["outcome"], string> = {
 const STAGE_LABEL: Record<EvidenceItem["stage"], Copy> = {
   discover: { en: "Discover", zh: "发现" },
   load: { en: "Load", zh: "加载" },
+  quote: { en: "Quote", zh: "报价" },
   action: { en: "Action", zh: "构建" },
   simulate: { en: "Simulate", zh: "模拟" },
   rpc: { en: "RPC query", zh: "RPC 查询" },
+  unknown: { en: "Unknown", zh: "未知" },
 };
 
 const MODE_LABEL: Record<CheckSwapResult["productRunMode"], Copy> = {
-  DEMO: { en: "Demo preset", zh: "演示预设" },
+  LIVE: { en: "Live check", zh: "实时检查" },
   RECORDED_REPLAY: { en: "Recorded replay", zh: "录制回放" },
 };
 

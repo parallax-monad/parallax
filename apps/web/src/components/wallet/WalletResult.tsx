@@ -19,14 +19,14 @@ const VERDICT_TONE: Record<Verdict, string> = {
 };
 
 const MODE_LABEL: Record<ProductRunMode, Copy> = {
-  DEMO: { en: "Demo preset", zh: "演示预设" },
+  LIVE: { en: "Live check", zh: "实时检查" },
   RECORDED_REPLAY: { en: "Recorded replay", zh: "录制回放" },
 };
 
 const MODE_EXPLANATION: Record<ProductRunMode, Copy> = {
-  DEMO: {
-    en: "This result uses a demo preset. It is not current Live Evidence.",
-    zh: "此结果使用演示预设，并非当前实时证据。",
+  LIVE: {
+    en: "This is the backend response for a live Check. Nothing here is signed or broadcast.",
+    zh: "这是实时检查的后端响应。这里不会签名，也不会广播。",
   },
   RECORDED_REPLAY: {
     en: "This result reproduces previously recorded real Evidence. It is not a current Live Run.",
@@ -55,7 +55,7 @@ const VERDICT_PLAIN: Record<Verdict, Copy> = {
 const PRIMARY_ACTION: Record<Verdict, Copy> = {
   PROCEED: { en: "Review swap inputs", zh: "查看兑换输入" },
   ADJUST: { en: "Review demo adjustment", zh: "查看演示调整" },
-  STOP: { en: "Review route or pair", zh: "查看路径或代币对" },
+  STOP: { en: "Modify parameters and retry", zh: "修改参数重试" },
   UNKNOWN: { en: "Review inputs", zh: "查看输入" },
 };
 
@@ -68,7 +68,7 @@ const INTEGRATION_ERROR_COPY = {
     en: "No transaction conclusion was produced. Retry the check or view technical details.",
     zh: "本次没有生成交易结论。请重试检查或查看技术详情。",
   },
-  retry: { en: "Retry check", zh: "重新检查" },
+  retry: { en: "Retry", zh: "重试" },
   details: { en: "View details", zh: "查看详情" },
 } satisfies Record<string, Copy>;
 
@@ -139,9 +139,17 @@ export function WalletResult({
   onOpenEvidence: () => void;
 }) {
   const [breakdownOpen, setBreakdownOpen] = useState(false);
-  const { intent, quote, verdict } = result;
+  const { intent, quote, simulatedOutput, verdict } = result;
   const unresolved = quote.expectedOutput === "unavailable";
   const amountIn = Number(intent.amountIn);
+  // The boundary rule only fails when the simulated output misses the user's
+  // Minimum Received, so name that gap instead of leaving a bare STOP.
+  const boundaryShortfall = result.ruleResults.some(
+    (item) =>
+      item.group === "economicBoundary" &&
+      item.outcome === "FAIL" &&
+      item.detail.en === "OUTPUT_BELOW_BOUNDARY",
+  );
 
   if (result.systemStatus === "INTEGRATION_ERROR") {
     return (
@@ -150,7 +158,7 @@ export function WalletResult({
           <span className="eyebrow-monad m-0">
             {say(language, { en: "Before you sign", zh: "签名之前" })}
           </span>
-          <span className="pill border-risk-elevated/50 text-risk-elevated">
+          <span className="pill border-risk-moderate/50 text-risk-moderate">
             {say(language, { en: "Integration error", zh: "集成错误" })}
           </span>
           <span className="pill">
@@ -158,7 +166,7 @@ export function WalletResult({
           </span>
         </div>
 
-        <section className="flex items-start gap-3 border border-risk-elevated/50 bg-risk-elevated/10 p-4 text-risk-elevated">
+        <section className="flex items-start gap-3 border border-risk-moderate/50 bg-risk-moderate/10 p-4 text-risk-moderate">
           <VerdictIcon
             className="mt-0.5 shrink-0"
             size={30}
@@ -169,25 +177,84 @@ export function WalletResult({
               {say(language, INTEGRATION_ERROR_COPY.title)}
             </strong>
             <p className="mt-1.5 text-[14px] leading-[1.6] text-white">
-              {say(language, INTEGRATION_ERROR_COPY.explanation)}
+              {say(
+                language,
+                result.apiFailure?.retryable
+                  ? INTEGRATION_ERROR_COPY.explanation
+                  : {
+                      en: "No transaction conclusion was produced. This error cannot be retried as-is; view technical details or discard this check.",
+                      zh: "本次未生成交易结论。此错误无法原样重试，请查看技术详情或放弃本次检查。",
+                    },
+              )}
             </p>
             <p className="mt-2 text-[13px] leading-[1.6] text-dim">
               {say(language, result.summary)}
             </p>
+            {result.apiFailure && (
+              <dl className="mt-3 border-t border-risk-moderate/30 pt-2 text-[12px]">
+                <div className="flex justify-between gap-3 py-1">
+                  <dt className="font-bold uppercase tracking-[0.06em]">
+                    error.code
+                  </dt>
+                  <dd className="mono m-0 text-right text-white">
+                    {result.apiFailure.code}
+                  </dd>
+                </div>
+                {result.apiFailure.reason && (
+                  <div className="flex justify-between gap-3 py-1">
+                    <dt className="font-bold uppercase tracking-[0.06em]">
+                      error.reason
+                    </dt>
+                    <dd className="mono m-0 text-right text-white">
+                      {result.apiFailure.reason}
+                    </dd>
+                  </div>
+                )}
+                <div className="flex justify-between gap-3 py-1">
+                  <dt className="font-bold uppercase tracking-[0.06em]">
+                    retryable
+                  </dt>
+                  <dd className="mono m-0 text-right text-white">
+                    {String(result.apiFailure.retryable)}
+                  </dd>
+                </div>
+                {result.apiFailure.issues?.map((issue) => (
+                  <div
+                    className="flex justify-between gap-3 py-1"
+                    key={`${issue.field ?? ""}:${issue.code ?? ""}`}
+                  >
+                    <dt className="min-w-0 break-all font-bold uppercase tracking-[0.06em]">
+                      {issue.field ?? "error.issue"}
+                    </dt>
+                    <dd className="mono m-0 min-w-0 break-words text-right text-white">
+                      {issue.message ?? issue.code}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+            )}
           </div>
         </section>
         <p className="text-[12px] leading-[1.6] text-dim">
           {say(language, MODE_EXPLANATION[result.productRunMode])}
         </p>
 
-        <div className="grid grid-cols-2 gap-2">
-          <button
-            type="button"
-            className="btn btn-monad"
-            onClick={onRetry ?? onKeep}
-          >
-            {say(language, INTEGRATION_ERROR_COPY.retry)}
-          </button>
+        <div
+          className={
+            result.apiFailure?.retryable
+              ? "grid grid-cols-2 gap-2"
+              : "grid grid-cols-1 gap-2"
+          }
+        >
+          {result.apiFailure?.retryable && (
+            <button
+              type="button"
+              className="btn btn-monad"
+              onClick={onRetry ?? onKeep}
+            >
+              {say(language, INTEGRATION_ERROR_COPY.retry)}
+            </button>
+          )}
           <button
             type="button"
             className="btn btn-monad-outline"
@@ -260,6 +327,30 @@ export function WalletResult({
           </p>
         </div>
       </section>
+
+      {boundaryShortfall && (
+        <section className="border border-risk-high/50 bg-risk-high/10 p-4">
+          <strong className="block text-[13px] font-bold uppercase tracking-[0.08em] text-risk-high">
+            {say(language, {
+              en: "Below your Minimum Received",
+              zh: "低于你的最低收到量",
+            })}
+          </strong>
+          <p className="mt-1.5 text-[14px] leading-[1.6] text-white">
+            {say(language, {
+              en: `The simulation returned ${simulatedOutput} ${intent.tokenOut}, which is below the original Minimum Received. A Re-run must preserve that boundary: change another supported parameter, or discard this result and start a new swap to set a different boundary.`,
+              zh: `模拟结果为 ${simulatedOutput} ${intent.tokenOut}，低于原本的最低收到量。重新检查必须保留该边界：请修改其他受支持的参数；如要更改边界，请放弃本次结果并开始新的兑换。`,
+            })}
+          </p>
+          <p className="mt-2 text-[12px] leading-[1.6] text-dim">
+            {say(language, {
+              en: "Minimum Received is fixed for a Re-run. Lowering it requires a new swap because it accepts a worse output rather than improving this transaction.",
+              zh: "重新检查时最低收到量必须保持不变。如要降低它，必须开始新的兑换，因为这只是接受更差的输出，并不会改善当前交易。",
+            })}
+          </p>
+        </section>
+      )}
+
       <p className="text-[12px] leading-[1.6] text-dim">
         {say(language, MODE_EXPLANATION[result.productRunMode])}
       </p>
@@ -338,11 +429,11 @@ export function WalletResult({
             zh: "本次结果的下一步",
           })}
         </strong>
-        {result.productRunMode === "DEMO" && (
+        {result.productRunMode === "RECORDED_REPLAY" && (
           <p className="mt-1.5 text-[13px] leading-[1.6] text-dim">
             {say(language, {
-              en: "Demo-only presentation; not a live verified transaction recommendation.",
-              zh: "仅用于演示，并非经过实时验证的交易建议。",
+              en: "Recorded replay presentation; not a live verified transaction recommendation.",
+              zh: "录制回放展示，并非经过实时验证的交易建议。",
             })}
           </p>
         )}
