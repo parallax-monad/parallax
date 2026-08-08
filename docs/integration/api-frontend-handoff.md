@@ -25,15 +25,17 @@ split across the following owners:
 - **#21 frontend → API:** remains `CHANGES_REQUESTED`. Frontend must not silently
   convert live `UNSUPPORTED` into Recorded Replay, and must remove any
   `displayAmountIn` override that replaces the API Intent value.
-- **#23 Moss Live:** remains open. This handoff does not claim Live SUCCESS on
-  `main`; the approved runtime pin for the follow-up is
-  `ef15448e166f31c891e80dba5073dae04a052a2b`, pending the owner's changes.
+- **#23 Moss Live:** is merged on `main`. The temporary runtime pin
+  `ef15448e166f31c891e80dba5073dae04a052a2b` and Node `v22.23.2` evidence
+  support the exact Live SUCCESS claim documented in the runtime handoff;
+  migration after upstream Moss finalizes remains a follow-up.
 - **#19 Action Gate:** is merged on `main` with the interim
   `action_verification` path and A14. The full §3.3.1 `ACTION_GATE` / CrossRun
   Contract remains deferred.
 
-Until #23 is merged and verified, the Live status in this document remains
-**not claimed**; Recorded Replay is a separate deterministic integration path.
+The exact temporary-pin Live SUCCESS claim is now part of `main`; Recorded
+Replay remains a separate deterministic integration path and must not be used
+as a Live Check fallback.
 
 ## 1. Scope
 
@@ -280,7 +282,7 @@ whose stored result has `replayMode: true`, which returns
 
 | `reason` | Meaning |
 | --- | --- |
-| `PARENT_NOT_FOUND` | Unknown `parentRunId` (or lost after process restart) |
+| `PARENT_NOT_FOUND` | Unknown or unavailable `parentRunId`, including a Replay fixture `runId` that is not stored in the Check `RunStore` or a Check Run lost after API process restart |
 | `PARENT_NOT_COMPLETED` | Parent not a completed baseline |
 | `PARENT_IS_REPLAY` | A Replay-marked result already stored in the Check `RunStore` cannot be a Re-run baseline |
 | `RERUN_CHAINING_UNSUPPORTED` | Parent is already a child Run |

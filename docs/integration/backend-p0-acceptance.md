@@ -82,9 +82,10 @@ Recorded from API-consumption review; not additional gate rows.
    atomic strings; display-unit formatting is frontend work.
 5. **Replay parent semantics are store-specific.** A fixture `runId` returned by
    `GET /api/replay/:id` is not registered in the Check `RunStore`, so using it
-   for a Check Re-run returns `PARENT_NOT_FOUND` before Agent Flow. The separate
-   `PARENT_IS_REPLAY` reason applies only when a Replay-marked result is already
-   present in the Check Store.
+   for a Check Re-run returns `PARENT_NOT_FOUND` before Agent Flow. A Check
+   `parentRunId` lost after an API process restart returns the same reason. The
+   separate `PARENT_IS_REPLAY` reason applies only when a Replay-marked result is
+   already present in the Check Store.
 6. **Replay amount display is a frontend projection.** The current Shared
    Contract exposes `intent.amountInAtomic`, not a separate human-unit
    `amountIn` field, as the authoritative fixture input. Frontend may derive a
