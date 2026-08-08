@@ -402,6 +402,10 @@ function collectLiveEvidence(
     "SIMULATE",
     `${prefix} simulation asset-change Evidence`,
     { simulationInputRole: "ASSET_CHANGE_SET" },
+    evidence.assetChangeAssessment === "EXPLAINED" &&
+      evidence.assetChanges.value !== null
+      ? "confirmed"
+      : undefined,
   );
   const coverage = collector.addGenericEvidence(
     "simulation-coverage",
@@ -1228,13 +1232,18 @@ function extractSimulatedTokenOut(
   evidence: NormalizedKuruEvidence,
 ): SimulatedTokenOut | undefined {
   const outcome = isRecord(evidence.outcome.value)
-    ? exactOutputFromRecord(evidence.outcome.value, intent)
+    ? exactOutputFromRecord(evidence.outcome.value, intent, evidence)
     : undefined;
   if (outcome !== undefined) {
-    return { ...outcome, derivation: "recipient_balance_delta" };
+    return outcome;
   }
 
-  if (evidence.assetChanges.value === null) return undefined;
+  if (
+    evidence.assetChanges.value === null ||
+    evidence.assetChangeAssessment !== "EXPLAINED"
+  ) {
+    return undefined;
+  }
   for (const change of evidence.assetChanges.value) {
     if (!isRecord(change) || !isExplicitTokenTransfer(change)) continue;
     if (
@@ -1261,13 +1270,25 @@ function extractSimulatedTokenOut(
 function exactOutputFromRecord(
   value: Record<string, unknown>,
   intent: NormalizedSwapIntent,
-): Omit<SimulatedTokenOut, "derivation"> | undefined {
-  const amount = firstString(value, [
-    "amountReceivedAtomic",
-    "amountOutAtomic",
-    "tokenOutAmountAtomic",
-  ]);
-  const recipient = firstString(value, ["recipient"]);
+  evidence: NormalizedKuruEvidence,
+): SimulatedTokenOut | undefined {
+  const amountReceivedAtomic = firstString(value, ["amountReceivedAtomic"]);
+  const amount =
+    amountReceivedAtomic ??
+    firstString(value, [
+      "amountOutAtomic",
+      "tokenOutAmountAtomic",
+      // Moss Kuru's normalized swap outcome uses atomic `amountOut`.
+      "amountOut",
+    ]);
+  const recordedRecipient = firstString(value, ["recipient"]);
+  const inferredRecipient =
+    recordedRecipient === undefined &&
+    evidence.assetChangeAssessment === "EXPLAINED" &&
+    intent.recipient.toLowerCase() === intent.sender.toLowerCase()
+      ? intent.recipient
+      : undefined;
+  const recipient = recordedRecipient ?? inferredRecipient;
   const token = tokenFromRecord(value);
   if (
     amount === undefined ||
@@ -1279,7 +1300,13 @@ function exactOutputFromRecord(
   ) {
     return undefined;
   }
-  return { amountReceivedAtomic: amount };
+  return {
+    amountReceivedAtomic: amount,
+    derivation:
+      amountReceivedAtomic === undefined
+        ? "asset_change"
+        : "recipient_balance_delta",
+  };
 }
 
 function isExplicitTokenTransfer(value: Record<string, unknown>): boolean {
