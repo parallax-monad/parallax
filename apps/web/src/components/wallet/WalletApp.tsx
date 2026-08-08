@@ -67,6 +67,8 @@ export function WalletApp({
   const [submittedForm, setSubmittedForm] = useState<FormState | undefined>();
   const [formErrors, setFormErrors] = useState<FormFieldErrors>({});
   const [stage, setStage] = useState(0);
+  /** Which path the in-flight run came from, so the loading screen can say so. */
+  const [checkingMode, setCheckingMode] = useState<"live" | "replay">("live");
   const [result, setResult] = useState<CheckSwapResult | undefined>(undefined);
   const [drawerOpen, setDrawerOpen] = useState(false);
   /** Bumped on every return home, so the background replays its entrance. */
@@ -95,6 +97,7 @@ export function WalletApp({
     setResult(undefined);
     setDrawerOpen(false);
     setStage(0);
+    setCheckingMode("live");
     setScreen("checking");
 
     schedulerRef.current.run({
@@ -115,6 +118,7 @@ export function WalletApp({
     setResult(undefined);
     setDrawerOpen(false);
     setStage(0);
+    setCheckingMode("replay");
     setScreen("checking");
 
     schedulerRef.current.run({
@@ -209,7 +213,11 @@ export function WalletApp({
                 />
               )}
               {screen === "checking" && (
-                <WalletChecking language={language} stage={stage} />
+                <WalletChecking
+                  language={language}
+                  mode={checkingMode}
+                  stage={stage}
+                />
               )}
               {screen === "result" && result && (
                 <WalletResult
