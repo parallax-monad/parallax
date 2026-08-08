@@ -147,8 +147,9 @@ describe("WalletResult", () => {
 
     expect(html).toContain("Below your Minimum Received");
     expect(html).toContain("The simulation returned 0.000223");
-    expect(html).toContain("does not meet the Minimum Received");
-    expect(html).toContain("does not improve the transaction");
+    expect(html).toContain("is below the original Minimum Received");
+    expect(html).toContain("A Re-run must preserve that boundary");
+    expect(html).toContain("rather than improving this transaction");
   });
 
   test("stays quiet about the boundary when the rule passed", () => {
