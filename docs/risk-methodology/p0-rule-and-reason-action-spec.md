@@ -1,7 +1,7 @@
 # Parallax P0 Rule and Reason-to-Action Specification v0.1
 
 > Status: Normative P0 rule-and-contract semantic standard; implementation and runtime activation pending
-> Product source of truth: `docs/product/prd_cn.md` (PRD v0.4; introduced and merged via PR #2)
+> Product source of truth: `docs/product/prd.md` (PRD v0.4; introduced and merged via PR #2)
 > Runtime impact: None. Merging this document does not activate any rule or Verdict behavior defined by this specification. Each user-visible mapping may be activated only after its corresponding Shared Contract implementation, automated policy tests, and required Evidence, Classification, and Action Gates are complete.
 
 ## 1. Purpose
