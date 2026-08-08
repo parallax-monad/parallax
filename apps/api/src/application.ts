@@ -24,6 +24,7 @@ import { normalizeCheckSwapRequest } from "./normalization.js";
 import { type AgentFlowPort, isUnsupportedAgentFlowError } from "./ports.js";
 import type { BackendRuntime } from "./runtime-config.js";
 import type { CheckRunFailureCode, RunStore } from "./store.js";
+import { tokenDecimals } from "./token-decimals.js";
 
 export type CheckApiErrorCode =
   | "INVALID_REQUEST"
@@ -469,18 +470,6 @@ function childRunFields(context: RerunContext): ChildRunFields | undefined {
     : undefined;
 }
 
-function tokenDecimals(
-  runtime: BackendRuntime,
-  asset: Parameters<BackendRuntime["tokenRegistry"]["resolve"]>[1],
-  chainId: number,
-): number {
-  const metadata = runtime.tokenRegistry.resolve(chainId, asset);
-  if (metadata === undefined) {
-    throw new Error("Normalized Intent token metadata is no longer available");
-  }
-  return metadata.decimals;
-}
-
 function partialRunResultFrom(error: unknown): FailedRunResult | undefined {
   const candidate = asRecord(error)?.partialRunResult;
   const parsed = failedRunResultSchema.safeParse(candidate);
@@ -754,7 +743,8 @@ function hasMismatchedAuthoritativeRuntime(
 
   if (
     result.status === "completed" &&
-    !isBlockNumber(result.simulatorPinnedBlock)
+    !isBlockNumber(result.simulatorPinnedBlock) &&
+    !isCompletedNoRoute(result)
   ) {
     return true;
   }
@@ -792,6 +782,20 @@ function hasMismatchedAuthoritativeRuntime(
   };
 
   return [...authoritativeKeys].some((key) => visit(key));
+}
+
+function isCompletedNoRoute(
+  result: Extract<RunResult, { status: "completed" }>,
+): boolean {
+  return (
+    result.route.availability === "unavailable" &&
+    result.ruleResults.some(
+      (rule) =>
+        rule.ruleId === "P0-EXECUTION-001" &&
+        rule.status === "FAIL" &&
+        rule.reasonCode === "NO_ROUTE_FOUND",
+    )
+  );
 }
 
 function isBlockNumber(value: string | undefined): boolean {

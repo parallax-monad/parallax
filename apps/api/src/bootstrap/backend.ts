@@ -1,16 +1,27 @@
 import { type ServerType, serve as serveNode } from "@hono/node-server";
 import { serializeJson } from "@parallax/contracts";
 import { validateMossRuntimePathSync } from "@parallax/moss-bridge";
-import type { KuruLiveRunner } from "@parallax/orchestrator/agent-flow";
-import { KuruLiveAgentFlow } from "@parallax/orchestrator/agent-flow";
+import type {
+  KuruLiveQuoteRunner,
+  KuruLiveRunner,
+} from "@parallax/orchestrator/agent-flow";
+import {
+  KuruLiveAgentFlow,
+  KuruLiveQuoteAgentFlow,
+} from "@parallax/orchestrator/agent-flow";
 import type { ReplayFixtureRepository } from "@parallax/orchestrator/application";
 import { ReplayApplicationService } from "@parallax/orchestrator/application";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { z } from "zod";
 import { CheckApplicationService } from "../application.js";
-import { createCheckApp } from "../http.js";
-import { type AgentFlowPort, UnsupportedAgentFlowError } from "../ports.js";
+import { createCheckApp, createQuoteApp } from "../http.js";
+import {
+  type AgentFlowPort,
+  type QuoteAgentFlowPort,
+  UnsupportedAgentFlowError,
+} from "../ports.js";
+import { QuoteApplicationService } from "../quote-application.js";
 import { createReplayApp } from "../routes/replay.js";
 import {
   type BackendRuntime,
@@ -64,11 +75,19 @@ export class UnavailableAgentFlow implements AgentFlowPort {
   }
 }
 
+export class UnavailableQuoteAgentFlow implements QuoteAgentFlowPort {
+  public async quote(): Promise<never> {
+    throw new UnsupportedAgentFlowError();
+  }
+}
+
 export type BackendAppDependencies = {
   runtime: BackendRuntime;
   corsOrigin?: string;
   agentFlow?: AgentFlowPort;
   liveRunner?: KuruLiveRunner;
+  quoteFlow?: QuoteAgentFlowPort;
+  quoteRunner?: KuruLiveQuoteRunner;
   store?: RunStore;
   replayRepository?: ReplayFixtureRepository;
 };
@@ -86,6 +105,15 @@ export function createBackendApp(dependencies: BackendAppDependencies): Hono {
     repository:
       dependencies.replayRepository ?? new FileReplayFixtureRepository(),
   });
+  const quoteService = new QuoteApplicationService({
+    runtime: dependencies.runtime,
+    quoteFlow:
+      dependencies.quoteFlow ??
+      createConfiguredQuoteAgentFlow(
+        dependencies.runtime,
+        dependencies.quoteRunner,
+      ),
+  });
 
   const app = new Hono();
   app.use(
@@ -97,6 +125,7 @@ export function createBackendApp(dependencies: BackendAppDependencies): Hono {
     }),
   );
   app.route("/", createCheckApp(checkService));
+  app.route("/", createQuoteApp(quoteService));
   app.route("/", createReplayApp(replayService));
   app.notFound(() => jsonError(404, "NOT_FOUND", "Route not found"));
   app.onError(() =>
@@ -121,12 +150,25 @@ function createConfiguredAgentFlow(
   return new KuruLiveAgentFlow(liveRunner);
 }
 
+function createConfiguredQuoteAgentFlow(
+  runtime: BackendRuntime,
+  quoteRunner?: KuruLiveQuoteRunner,
+): QuoteAgentFlowPort {
+  if (runtime.config.moss.runtimePath === undefined) {
+    return new UnavailableQuoteAgentFlow();
+  }
+
+  return new KuruLiveQuoteAgentFlow(quoteRunner);
+}
+
 export type BootstrapBackendAppOptions = {
   environment?: unknown;
   tokenRegistry: unknown;
   corsOrigin?: string;
   agentFlow?: AgentFlowPort;
   liveRunner?: KuruLiveRunner;
+  quoteFlow?: QuoteAgentFlowPort;
+  quoteRunner?: KuruLiveQuoteRunner;
   store?: RunStore;
   replayRepository?: ReplayFixtureRepository;
 };
@@ -151,6 +193,8 @@ export function bootstrapBackendApp(options: BootstrapBackendAppOptions): Hono {
     corsOrigin: options.corsOrigin ?? serverEnvironment.CORS_ORIGIN,
     agentFlow: options.agentFlow,
     liveRunner: options.liveRunner,
+    quoteFlow: options.quoteFlow,
+    quoteRunner: options.quoteRunner,
     store: options.store,
     replayRepository: options.replayRepository,
   });

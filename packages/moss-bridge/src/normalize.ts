@@ -172,6 +172,12 @@ export function normalizeLiveKuruEvidence(input: {
     fetchedAt: input.fetchedAt,
     mossCommit: input.runtime.runtimeRevision,
   };
+  const quoteLive = {
+    ...live,
+    blockNumber:
+      [...input.stages].reverse().find((stage) => stage.stage === "QUOTE")
+        ?.blockNumber ?? null,
+  };
   const limitations = [
     "Moss trace simulation synthetic-prefunds native MON only and does not prove ERC-20 affordability.",
     "No signing, broadcast, custody, or wallet mutation occurred; the action stage only constructed unsigned calldata.",
@@ -194,7 +200,7 @@ export function normalizeLiveKuruEvidence(input: {
     quote: sourced(
       quote,
       quote ? "quote" : "unknown",
-      live,
+      quoteLive,
       "Quote returned by the live Moss query.",
       "REPRODUCIBLE",
     ),

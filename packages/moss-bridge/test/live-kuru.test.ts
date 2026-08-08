@@ -9,6 +9,7 @@ import {
   type MossRuntimeBundle,
   normalizeLiveKuruEvidence,
   redact,
+  runKuruLiveQuoteWithBundle,
   runKuruLiveSwapWithBundle,
   validateMossRuntimePathSync,
 } from "../src/index.js";
@@ -69,6 +70,8 @@ function fakeBundle(
     simulate?: unknown;
     coreVersion?: string;
     blockNumber?: bigint;
+    blockNumbers?: bigint[];
+    blockReadErrorAt?: number;
     pinnedBlock?: bigint | string;
     statefulPinnedBlock?: string;
     quoteHang?: boolean;
@@ -153,14 +156,27 @@ function fakeCore(overrides: {
   quoteError?: Error;
   actionError?: Error;
   blockNumber?: bigint;
+  blockNumbers?: bigint[];
+  blockReadErrorAt?: number;
   quoteHang?: boolean;
 }) {
+  let blockIndex = 0;
   return {
     createRuntime: async () => ({
       rpcUrl: "https://rpc.example.invalid",
       client: {
         getChainId: async () => 143,
-        getBlockNumber: async () => overrides.blockNumber ?? 100n,
+        getBlockNumber: async () => {
+          const currentIndex = blockIndex++;
+          if (overrides.blockReadErrorAt === currentIndex) {
+            throw new Error("RPC block read failed");
+          }
+          return (
+            overrides.blockNumbers?.[currentIndex] ??
+            overrides.blockNumber ??
+            100n
+          );
+        },
       },
     }),
     Registry: class FakeRegistry {
@@ -245,6 +261,32 @@ const NO_SIGNING_KEYWORDS = [
 ];
 
 describe("kuru live adapter", () => {
+  it("runs discover -> load -> quote without action or simulation", async () => {
+    const result = await runKuruLiveQuoteWithBundle(input(), fakeBundle());
+
+    expect(result.stages.map((stage) => stage.stage)).toEqual([
+      "DISCOVER",
+      "LOAD",
+      "QUOTE",
+    ]);
+    expect(result.evidence.quote.value).toMatchObject({
+      estimatedAmountOut: "0.000223",
+      minimumAmountOut: "0.000221",
+    });
+  });
+
+  it("keeps the Quote stage block when later stages observe newer blocks", async () => {
+    const result = await runKuruLiveSwapWithBundle(
+      input(),
+      fakeBundle({ blockNumbers: [90n, 91n, 92n, 93n, 94n, 95n] }),
+    );
+
+    expect(
+      result.stages.find((stage) => stage.stage === "QUOTE")?.blockNumber,
+    ).toBe("93");
+    expect(result.evidence.quote.blockNumber).toBe("93");
+  });
+
   it("runs discover -> load -> quote -> action -> simulate in order", async () => {
     const result = await runKuruLiveSwapWithBundle(input(), fakeBundle());
     expect(result.stages.map((stage) => stage.stage)).toEqual([
@@ -439,6 +481,21 @@ describe("kuru live adapter", () => {
     expect(result.evidence.executionStatus).toBe("NO_ROUTE");
     const error = result.stages.find((stage) => stage.stage === "QUOTE")?.error;
     expect(error?.code).toBe("NO_ROUTE");
+  });
+
+  it("treats a QUOTE block read failure as an RPC integration error", async () => {
+    const result = await runKuruLiveQuoteWithBundle(
+      input(),
+      fakeBundle({ blockReadErrorAt: 3 }),
+    );
+
+    expect(result.evidence.integrationStatus).toBe("INTEGRATION_ERROR");
+    expect(result.evidence.quote.value).toBeNull();
+    expect(result.stages.at(-1)).toMatchObject({
+      stage: "QUOTE",
+      success: false,
+      error: { source: "rpc", code: "INTEGRATION_ERROR" },
+    });
   });
 
   it("maps an integration error and stops before later stages", async () => {

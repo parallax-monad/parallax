@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: parallax-api-temp
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    envVars:
+      - key: MONAD_RPC_URL
+        sync: false
+      - key: PARALLAX_TOKEN_REGISTRY_JSON
+        sync: false
+      - key: MOSS_RUNTIME_VERSION
+        value: "0.1.0"
+      - key: MOSS_RUNTIME_REVISION
+        value: "ef15448e166f31c891e80dba5073dae04a052a2b"

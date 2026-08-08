@@ -9,6 +9,10 @@ import {
   failedRunResultSchema,
   type NormalizedSwapIntent,
   type P0ReasonCode,
+  type Quote,
+  type QuoteResult,
+  quoteResultSchema,
+  quoteSchema,
   type RuleResult,
   type RunResult,
   runResultSchema,
@@ -16,9 +20,11 @@ import {
 } from "@parallax/contracts";
 import {
   classifyLiveError,
+  type LiveKuruResult,
   type NormalizedKuruEvidence,
   type NormalizedKuruSwapIntent,
   type NormalizedMossError,
+  runKuruLiveQuote,
   runKuruLiveSwap,
   type Sourced,
 } from "@parallax/moss-bridge";
@@ -40,6 +46,7 @@ export type LiveAgentFlowInput = {
 };
 
 export type KuruLiveRunner = typeof runKuruLiveSwap;
+export type KuruLiveQuoteRunner = typeof runKuruLiveQuote;
 
 /** Error shape consumed by the API's Integration Error mapper. */
 export class LiveAgentFlowError extends Error {
@@ -125,12 +132,14 @@ export class KuruLiveAgentFlow {
       throw toLiveAgentFlowError(error);
     }
 
+    const noRoute = live.evidence.executionStatus === "NO_ROUTE";
     assertLiveProvenance(
       live.evidence,
       live.runtime,
       live.observedChainId,
       live.simulatorPinnedBlock,
       input.moss,
+      !noRoute && live.evidence.integrationStatus === "OK",
     );
 
     const evidence = withSimulatorPinnedBlock(
@@ -201,6 +210,97 @@ export class KuruLiveAgentFlow {
   }
 }
 
+/** Backend flow for the pre-check quote; it intentionally stops before Action. */
+export class KuruLiveQuoteAgentFlow {
+  public constructor(
+    private readonly runner: typeof runKuruLiveQuote = runKuruLiveQuote,
+  ) {}
+
+  public async quote(input: LiveAgentFlowInput): Promise<QuoteResult> {
+    if (input.moss.runtimePath === undefined) {
+      throw new LiveAgentFlowError({
+        code: "MOSS_UNAVAILABLE",
+        message: "The configured Moss runtime path is missing",
+        integrationStatus: "UNAVAILABLE",
+        source: "moss",
+      });
+    }
+
+    if (input.intent.protocol !== "kuru" || input.intent.chainId !== 143) {
+      throw unsupportedIntentError();
+    }
+
+    let live: LiveKuruResult;
+    try {
+      live = await this.runner({
+        runId: input.runId,
+        intent: toMossIntent(
+          input.intent,
+          input.tokenInDecimals,
+          input.tokenOutDecimals,
+        ),
+        rpcUrl: input.moss.rpcUrl,
+        runtimePath: input.moss.runtimePath,
+        runtimeVersion: input.moss.runtimeVersion,
+        runtimeRevision: input.moss.runtimeRevision,
+      });
+    } catch (error) {
+      throw toLiveAgentFlowError(error);
+    }
+
+    assertQuoteProvenance(
+      live.evidence,
+      live.runtime,
+      live.observedChainId,
+      input.moss,
+    );
+
+    if (live.observedChainId === undefined) {
+      throw new LiveAgentFlowError({
+        code: "RPC_UNAVAILABLE",
+        message: "The configured RPC did not return a chain ID",
+        integrationStatus: "UNAVAILABLE",
+        source: "rpc",
+        stage: "DISCOVER",
+      });
+    }
+
+    const noRoute = live.evidence.errors.value?.find(
+      (error) => error.code === "NO_ROUTE",
+    );
+    if (noRoute !== undefined) {
+      return quoteResultSchema.parse({
+        status: "unavailable",
+        reason: "NO_ROUTE",
+      });
+    }
+
+    const integrationError = firstIntegrationError(live.evidence);
+    if (integrationError !== undefined) {
+      throw toLiveAgentFlowError(integrationError, {
+        stage: integrationError.stage,
+        source: integrationError.source,
+      });
+    }
+    if (live.evidence.integrationStatus !== "OK") {
+      throw toLiveAgentFlowError(
+        {
+          code: live.evidence.integrationStatus,
+          message: "Live Quote reported an integration failure without details",
+          integrationStatus: live.evidence.integrationStatus,
+          source: "moss",
+        },
+        { stage: lastFailedStage(live) },
+      );
+    }
+
+    const quote = projectQuote(live.evidence);
+    return quote === undefined
+      ? { status: "unavailable", reason: "QUOTE_UNAVAILABLE" }
+      : quoteResultSchema.parse({ status: "available", quote });
+  }
+}
+
 function toMossIntent(
   intent: NormalizedSwapIntent,
   tokenInDecimals: number,
@@ -232,33 +332,34 @@ function toMossAsset(asset: AssetReference): string {
   return asset.kind === "native" ? "native" : asset.address;
 }
 
-function assertLiveProvenance(
+type RuntimeProvenanceIdentity = {
+  runtimeVersion: string;
+  runtimeRevision: string;
+  checkoutRevision?: string;
+  packageVersions: Record<string, string>;
+};
+
+const REQUIRED_RUNTIME_PACKAGES = [
+  "@themoss/core",
+  "@themoss/erc",
+  "@themoss/protocol-kuru",
+  "@themoss/simulator",
+  "@themoss/system",
+];
+
+function hasMismatchedRuntimeProvenance(
   evidence: NormalizedKuruEvidence,
-  runtimeIdentity: {
-    runtimeVersion: string;
-    runtimeRevision: string;
-    checkoutRevision?: string;
-    packageVersions: Record<string, string>;
-  },
+  runtimeIdentity: RuntimeProvenanceIdentity,
   observedChainId: number | undefined,
-  simulatorPinnedBlock: string | undefined,
   runtime: LiveAgentFlowRuntime,
-): void {
-  const requiredPackages = [
-    "@themoss/core",
-    "@themoss/erc",
-    "@themoss/protocol-kuru",
-    "@themoss/simulator",
-    "@themoss/system",
-  ];
-  if (
+): boolean {
+  return (
     !/^[0-9a-f]{40}$/i.test(runtime.runtimeRevision) ||
     (observedChainId !== undefined && observedChainId !== 143) ||
-    !/^\d+$/.test(simulatorPinnedBlock ?? "") ||
     runtimeIdentity.runtimeVersion !== runtime.runtimeVersion ||
     runtimeIdentity.runtimeRevision !== runtime.runtimeRevision ||
     runtimeIdentity.checkoutRevision !== runtime.runtimeRevision ||
-    requiredPackages.some(
+    REQUIRED_RUNTIME_PACKAGES.some(
       (name) =>
         runtimeIdentity.packageVersions[name] !== runtime.runtimeVersion,
     ) ||
@@ -266,13 +367,56 @@ function assertLiveProvenance(
     evidence.isReplay !== false ||
     evidence.isMock !== false ||
     evidence.runtimeVersion !== runtime.runtimeVersion ||
-    evidence.runtimeRevision !== runtime.runtimeRevision ||
+    evidence.runtimeRevision !== runtime.runtimeRevision
+  );
+}
+
+function assertLiveProvenance(
+  evidence: NormalizedKuruEvidence,
+  runtimeIdentity: RuntimeProvenanceIdentity,
+  observedChainId: number | undefined,
+  simulatorPinnedBlock: string | undefined,
+  runtime: LiveAgentFlowRuntime,
+  requireSimulatorPinnedBlock = true,
+): void {
+  if (
+    hasMismatchedRuntimeProvenance(
+      evidence,
+      runtimeIdentity,
+      observedChainId,
+      runtime,
+    ) ||
+    (requireSimulatorPinnedBlock &&
+      !/^\d+$/.test(simulatorPinnedBlock ?? "")) ||
     (evidence.simulatorPinnedBlock !== undefined &&
       evidence.simulatorPinnedBlock !== simulatorPinnedBlock)
   ) {
     throw new LiveAgentFlowError({
       code: "INTERNAL_ERROR",
       message: "Live Agent Flow returned mismatched runtime provenance",
+      integrationStatus: "INTEGRATION_ERROR",
+      source: "moss",
+    });
+  }
+}
+
+function assertQuoteProvenance(
+  evidence: NormalizedKuruEvidence,
+  runtimeIdentity: RuntimeProvenanceIdentity,
+  observedChainId: number | undefined,
+  runtime: LiveAgentFlowRuntime,
+): void {
+  if (
+    hasMismatchedRuntimeProvenance(
+      evidence,
+      runtimeIdentity,
+      observedChainId,
+      runtime,
+    )
+  ) {
+    throw new LiveAgentFlowError({
+      code: "INTERNAL_ERROR",
+      message: "Live Quote returned mismatched runtime provenance",
       integrationStatus: "INTEGRATION_ERROR",
       source: "moss",
     });
@@ -481,6 +625,7 @@ function buildRunResult(
   const ruleResults = [completenessRule, executionRule, economicRule];
   const scope = buildScope(ruleResults, evidence, noRoute);
   const verdict = effectiveVerdict(risk.verdict, ruleResults, scope);
+  const quoteResult = projectQuote(evidence);
 
   return runResultSchema.parse({
     runId,
@@ -499,6 +644,7 @@ function buildRunResult(
     evidence: collector.items,
     scope,
     route,
+    ...(quoteResult ? { quote: quoteResult } : {}),
   });
 }
 
@@ -514,6 +660,7 @@ function buildIntegrationErrorResult(
   const route = buildRoute(intent, quote, evidence);
   const executionPreserved =
     route.availability === "available" && quote !== undefined;
+  const quoteResult = projectQuote(evidence);
   const ruleResults: RuleResult[] = executionPreserved
     ? [
         {
@@ -542,8 +689,41 @@ function buildIntegrationErrorResult(
     irrelevantActions: [],
     evidence: collector.items,
     scope: integrationScope(evidence, flowError.stage, executionPreserved),
+    ...(quoteResult ? { quote: quoteResult } : {}),
     ...(route.availability === "available" ? { route } : {}),
   });
+}
+
+function projectQuote(evidence: NormalizedKuruEvidence): Quote | undefined {
+  if (
+    evidence.quote.source !== "quote" ||
+    evidence.runtimeVersion === undefined ||
+    evidence.runtimeRevision === undefined ||
+    !isRecord(evidence.quote.value)
+  ) {
+    return undefined;
+  }
+
+  const estimatedAmountOut = evidence.quote.value.estimatedAmountOut;
+  if (typeof estimatedAmountOut !== "string") return undefined;
+
+  const minimumAmountOut = evidence.quote.value.minimumAmountOut;
+  const candidate = {
+    estimatedAmountOut,
+    ...(typeof minimumAmountOut === "string" ? { minimumAmountOut } : {}),
+    source: "quote" as const,
+    ...(evidence.quote.blockNumber
+      ? { blockNumber: evidence.quote.blockNumber }
+      : {}),
+    ...(evidence.quote.fetchedAt
+      ? { fetchedAt: evidence.quote.fetchedAt }
+      : {}),
+    runtimeVersion: evidence.runtimeVersion,
+    runtimeRevision: evidence.runtimeRevision,
+  };
+
+  const parsed = quoteSchema.safeParse(candidate);
+  return parsed.success ? parsed.data : undefined;
 }
 
 function integrationErrorForFlowError(

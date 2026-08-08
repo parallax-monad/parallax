@@ -4,6 +4,7 @@ export * from "./decision.js";
 export * from "./evidence.js";
 export * from "./intent.js";
 export * from "./normalization.js";
+export * from "./quote.js";
 export * from "./registry.js";
 export * from "./replay.js";
 export * from "./rerun.js";

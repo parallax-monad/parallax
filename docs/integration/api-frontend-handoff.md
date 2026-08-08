@@ -1,4 +1,4 @@
-# Frontend API Handoff (`/api/check` + `/api/replay`)
+# Frontend API Handoff (`/api/quote` + `/api/check` + `/api/replay`)
 
 Status: BACKEND HANDOFF FOR ANALYZE 联调 — LIVE SIMULATION SUCCEEDED ON THE TEMPORARY MOSS PIN; FIXTURE REGENERATED ON NODE v22.23.2
 
@@ -41,6 +41,7 @@ as a Live Check fallback.
 
 In scope:
 
+- `POST /api/quote` — live pre-submit quote (or explicit `UNSUPPORTED` when Moss path is absent)
 - `POST /api/check` — live Check (or explicit `UNSUPPORTED` when Moss path is absent)
 - `GET /api/replay/:id` — recorded Replay fixtures only
 - Re-run as a second `POST /api/check` with `parentRunId` and exactly one Intent change
@@ -51,7 +52,8 @@ Out of scope:
 - SSE / Job polling / run-by-id history API
 - Durable Run persistence (process-memory store only)
 - Signing, broadcast, wallet custody
-- Non-`amountIn` Action Gate fields (protocol / tokenPair / slippage) beyond the fixture path
+- Quote-only Action / Simulation stages; `/api/quote` stops after Discover → Load → Quote
+- Non-`amountIn` Action Gate adjustments (protocol / tokenPair) beyond the fixture path
 - Live evidence fixture regeneration is complete (Node v22.23.2, 2026-08-08;
   see live runtime doc)
 
@@ -240,7 +242,72 @@ protocol risk from `unknown`.
 returned as HTTP 502 with a `run` envelope. Treat both as Integration Error for
 CTA purposes; prefer `run.error.retryable` when present.
 
-## 4. Re-run (`POST /api/check` + `parentRunId`)
+## 4. `POST /api/quote`
+
+Use this endpoint before submitting a full Check when the UI needs an estimated
+output amount. It accepts the same exact-input token pair and amount, resolves
+tokens through the trusted backend registry, and runs only Moss Discover → Load
+→ Quote. It does not construct an Action, simulate, sign, or broadcast a
+transaction. A successful Quote therefore does not prove execution safety or
+transaction success.
+
+### Request
+
+```json
+{
+  "chainId": 143,
+  "protocol": "kuru",
+  "sender": "0x1111111111111111111111111111111111111111",
+  "tokenIn": { "kind": "native" },
+  "tokenOut": {
+    "kind": "erc20",
+    "address": "0x754704Bc059F8C67012fEd69BC8A327a5aafb603"
+  },
+  "amountIn": "0.01"
+}
+```
+
+`amountIn` and returned quote amounts are human-unit decimal strings. Quote
+uses the existing backend Kuru default of 50 bps; this ticket does not add a
+public slippage input.
+
+### Available / unavailable responses
+
+```json
+{
+  "status": "available",
+  "quote": {
+    "estimatedAmountOut": "0.000223",
+    "minimumAmountOut": "0.000221",
+    "source": "quote",
+    "blockNumber": "91383505",
+    "fetchedAt": "2026-08-08T12:00:00.000Z",
+    "runtimeVersion": "0.1.0",
+    "runtimeRevision": "<40-hex-commit>"
+  }
+}
+```
+
+If no route or no valid quote is available, the HTTP response remains 200:
+
+```json
+{ "status": "unavailable", "reason": "NO_ROUTE" }
+```
+
+An `available` Quote always includes the RPC block observed immediately before
+the QUOTE stage. A missing stage block cannot be published as available.
+
+`reason` is `NO_ROUTE` or `QUOTE_UNAVAILABLE`. Transport and normalization
+errors use the same `INVALID_JSON`, `INVALID_REQUEST`, `NORMALIZATION_FAILED`,
+`UNSUPPORTED`, and `PAYLOAD_TOO_LARGE` conventions described above; Quote
+flow failures return HTTP 502 with `error.code = "QUOTE_ERROR"`.
+
+When `/api/check` returns a completed or integration-error Run, it may also
+include the same optional top-level `quote` object. This is the Quote-stage
+observation and must not be substituted with `simulated_token_out`, which is a
+separate simulation output.
+
+## 5. Re-run (`POST /api/check` + `parentRunId`)
 
 Same endpoint. Add `parentRunId` and change **exactly one** supported Intent
 condition (for example `amountIn` only).
@@ -299,7 +366,7 @@ Diff display: `amountInAtomic` is atomic units; `tokenPair` uses
 `native` / `erc20:<lowercase-address>`. Render human copy from full Intent +
 token registry, not by reverse-engineering Diff strings.
 
-## 5. `GET /api/replay/:id`
+## 6. `GET /api/replay/:id`
 
 | ID | Fixture |
 | --- | --- |
@@ -335,7 +402,7 @@ Example:
 curl -s "http://127.0.0.1:8787/api/replay/mon-to-usdc"
 ```
 
-## 6. Provenance fields (required for UI)
+## 7. Provenance fields (required for UI)
 
 | Field | Rule |
 | --- | --- |
@@ -348,19 +415,22 @@ curl -s "http://127.0.0.1:8787/api/replay/mon-to-usdc"
 Frontend must display Live vs Recorded Replay explicitly. Do not upgrade
 `UNKNOWN` or Integration Error into protocol `STOP` / `PROCEED` locally.
 
-## 7. Frontend联调 checklist
+## 8. Frontend联调 checklist
 
-1. Start API without `MOSS_RUNTIME_PATH` → `POST /api/check` returns `UNSUPPORTED`.
-2. `GET /api/replay/mon-to-usdc` returns 200 with `replayMode: true`, `verdict: UNKNOWN` in current fixtures.
-3. Confirm CORS from the web origin.
-4. (Optional) Configure Moss path per [moss-kuru-live-runtime.md](./moss-kuru-live-runtime.md). Live simulation SUCCESS has been achieved on the temporary pin; treat `PROCEED` as "no blocking evidence within the checked scope" (never a guaranteed outcome). The committed fixture was regenerated on Node v22.23.2.
-5. Re-run only against in-process Check `runId`s. A Replay fixture `runId` is
+1. Start API without `MOSS_RUNTIME_PATH` → both live endpoints return `UNSUPPORTED`.
+2. With the runtime configured, call `POST /api/quote` first and branch on
+   `status`; do not require a quote for a full Check if the backend reports
+   `QUOTE_UNAVAILABLE`.
+3. `GET /api/replay/mon-to-usdc` returns 200 with `replayMode: true`, `verdict: UNKNOWN` in current fixtures.
+4. Confirm CORS from the web origin.
+5. (Optional) Configure Moss path per [moss-kuru-live-runtime.md](./moss-kuru-live-runtime.md). Live simulation SUCCESS has been achieved on the temporary pin; treat `PROCEED` as "no blocking evidence within the checked scope" (never a guaranteed outcome). The committed fixture was regenerated on Node v22.23.2.
+6. Re-run only against in-process Check `runId`s. A Replay fixture `runId` is
    not a Check parent and returns `PARENT_NOT_FOUND`; a Check `parentRunId`
    lost after an API process restart returns the same reason.
-6. CTA / retry: use `error.retryable` and closed reason codes from this page and Product delivery docs.
+7. CTA / retry: use `error.retryable` and closed reason codes from this page and Product delivery docs.
 
-## 8. Non-goals reminder
+## 9. Non-goals reminder
 
 Do not implement against the early draft REST shapes (`/api/analyze`, async jobs,
 SSE) from older planning notes. The live public surfaces for P0 Analyze联调 are
-**`POST /api/check`** and **`GET /api/replay/:id`** only.
+**`POST /api/quote`**, **`POST /api/check`**, and **`GET /api/replay/:id`**.
