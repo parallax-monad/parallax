@@ -68,7 +68,7 @@ const INTEGRATION_ERROR_COPY = {
     en: "No transaction conclusion was produced. Retry the check or view technical details.",
     zh: "本次没有生成交易结论。请重试检查或查看技术详情。",
   },
-  retry: { en: "Retry check", zh: "重新检查" },
+  retry: { en: "Retry", zh: "重试" },
   details: { en: "View details", zh: "查看详情" },
 } satisfies Record<string, Copy>;
 
@@ -169,25 +169,71 @@ export function WalletResult({
               {say(language, INTEGRATION_ERROR_COPY.title)}
             </strong>
             <p className="mt-1.5 text-[14px] leading-[1.6] text-white">
-              {say(language, INTEGRATION_ERROR_COPY.explanation)}
+              {say(
+                language,
+                result.apiFailure?.retryable
+                  ? INTEGRATION_ERROR_COPY.explanation
+                  : {
+                      en: "No transaction conclusion was produced. This error cannot be retried as-is; view technical details or discard this check.",
+                      zh: "本次未生成交易结论。此错误无法原样重试，请查看技术详情或放弃本次检查。",
+                    },
+              )}
             </p>
             <p className="mt-2 text-[13px] leading-[1.6] text-dim">
               {say(language, result.summary)}
             </p>
+            {result.apiFailure && (
+              <dl className="mt-3 border-t border-risk-elevated/30 pt-2 text-[12px]">
+                <div className="flex justify-between gap-3 py-1">
+                  <dt className="font-bold uppercase tracking-[0.06em]">
+                    error.code
+                  </dt>
+                  <dd className="mono m-0 text-right text-white">
+                    {result.apiFailure.code}
+                  </dd>
+                </div>
+                {result.apiFailure.reason && (
+                  <div className="flex justify-between gap-3 py-1">
+                    <dt className="font-bold uppercase tracking-[0.06em]">
+                      error.reason
+                    </dt>
+                    <dd className="mono m-0 text-right text-white">
+                      {result.apiFailure.reason}
+                    </dd>
+                  </div>
+                )}
+                <div className="flex justify-between gap-3 py-1">
+                  <dt className="font-bold uppercase tracking-[0.06em]">
+                    retryable
+                  </dt>
+                  <dd className="mono m-0 text-right text-white">
+                    {String(result.apiFailure.retryable)}
+                  </dd>
+                </div>
+              </dl>
+            )}
           </div>
         </section>
         <p className="text-[12px] leading-[1.6] text-dim">
           {say(language, MODE_EXPLANATION[result.productRunMode])}
         </p>
 
-        <div className="grid grid-cols-2 gap-2">
-          <button
-            type="button"
-            className="btn btn-monad"
-            onClick={onRetry ?? onKeep}
-          >
-            {say(language, INTEGRATION_ERROR_COPY.retry)}
-          </button>
+        <div
+          className={
+            result.apiFailure?.retryable
+              ? "grid grid-cols-2 gap-2"
+              : "grid grid-cols-1 gap-2"
+          }
+        >
+          {result.apiFailure?.retryable && (
+            <button
+              type="button"
+              className="btn btn-monad"
+              onClick={onRetry ?? onKeep}
+            >
+              {say(language, INTEGRATION_ERROR_COPY.retry)}
+            </button>
+          )}
           <button
             type="button"
             className="btn btn-monad-outline"
