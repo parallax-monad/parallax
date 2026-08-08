@@ -1,11 +1,10 @@
 import { type Language, pick } from "@/lib/i18n";
 
 /**
- * The language pair, shared by the site nav and the wallet header.
+ * The language pair used by the landing nav and the wallet utility row.
  *
- * The wallet renders its own copy at narrow widths, where the nav's copy would
- * collide with the wallet's close button. Keeping one component means the two
- * placements cannot drift apart in labelling or behaviour.
+ * A single instance remains visible at each width, keeping labelling and
+ * behaviour consistent without competing with wallet-local controls.
  */
 export function LanguageSwitch({
   language,

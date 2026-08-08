@@ -1,5 +1,7 @@
 import {
   type CSSProperties,
+  type MouseEvent as ReactMouseEvent,
+  type ReactNode,
   type PointerEvent as ReactPointerEvent,
   useEffect,
   useRef,
@@ -33,38 +35,38 @@ const DIMENSIONS: Dimension[] = [
     accent: "#ff8ea1",
     title: { en: "What happened", zh: "发生了什么" },
     body: {
-      en: "Moss runs quote, action, and simulation to show the real execution result of this intent.",
-      zh: "Moss 会执行报价、操作生成与模拟，呈现这笔交易意图的实际执行结果。",
+      en: "Parallax presents what the checked quote, prepared action, and simulation evidence actually showed.",
+      zh: "Parallax 呈现本次检查中的报价、已生成操作与模拟证据实际显示了什么。",
     },
   },
   {
     key: "Evidence",
     displayKey: { en: "Evidence", zh: "证据" },
     accent: "#9d8cff",
-    title: { en: "What proves it", zh: "证据是什么" },
+    title: { en: "What supports it", zh: "哪些证据支持结论" },
     body: {
-      en: "Every conclusion traces back to normalized execution evidence, labelled with source, block, and replay.",
-      zh: "每个结论都可追溯至标准化后的执行证据，并标注来源、区块与回放信息。",
+      en: "Each displayed conclusion is tied to the available evidence and its disclosed source, mode, and provenance.",
+      zh: "每个展示的结论都关联到现有证据，并明确披露其来源、模式与溯源信息。",
     },
   },
   {
     key: "Adjust",
     displayKey: { en: "Adjust", zh: "调整" },
     accent: "#75e6b1",
-    title: { en: "What you can change", zh: "可以改什么" },
+    title: { en: "What can change", zh: "哪些条件可以调整" },
     body: {
-      en: "Adjustments tied to the actual cause: route, token pair, amount, or slippage.",
-      zh: "仅建议与实际原因相关的调整：路由、代币对、数量或滑点。",
+      en: "When a verified adjustment is available, Parallax identifies the supported condition and asks you to rerun the check.",
+      zh: "当存在经过验证的调整时，Parallax 会指出有证据支持的条件，并要求重新运行检查。",
     },
   },
   {
     key: "Irrelevant",
     displayKey: { en: "Irrelevant", zh: "无关项" },
     accent: "#91b8ff",
-    title: { en: "What will not help", zh: "改了也无效" },
+    title: { en: "What will not help", zh: "哪些修改不会有帮助" },
     body: {
-      en: "Changes unrelated to the cause are marked irrelevant, so retries stop being guesswork.",
-      zh: "与当前原因无关的修改会被标为无效，避免反复进行无效重试。",
+      en: "When verified, changes that do not address the observed cause are separated from relevant actions.",
+      zh: "经过验证后，未针对已观察原因的修改会与相关操作分开显示。",
     },
   },
 ];
@@ -81,6 +83,39 @@ function readRoute() {
   return window.location.hash === "#/analyze" ? "analyze" : "home";
 }
 
+export function AppRouteSurface({ children }: { children: ReactNode }) {
+  return (
+    <div className="min-h-[100dvh] bg-[#05050a]" data-app-route-surface="">
+      <div aria-hidden="true" className="route-transition-shield" />
+      {children}
+    </div>
+  );
+}
+
+export function prepareAnalyzeNavigation(
+  event: Pick<
+    ReactMouseEvent<HTMLAnchorElement>,
+    | "altKey"
+    | "button"
+    | "ctrlKey"
+    | "defaultPrevented"
+    | "metaKey"
+    | "shiftKey"
+  >,
+) {
+  if (
+    event.defaultPrevented ||
+    event.button !== 0 ||
+    event.altKey ||
+    event.ctrlKey ||
+    event.metaKey ||
+    event.shiftKey
+  ) {
+    return;
+  }
+  document.documentElement.dataset.routeTransition = "analyze";
+}
+
 export default function App() {
   const [language, setLanguage] = useState<Language>(getInitialLanguage);
   const [route, setRoute] = useState(readRoute);
@@ -91,20 +126,35 @@ export default function App() {
     return () => window.removeEventListener("hashchange", sync);
   }, []);
 
+  useEffect(() => {
+    if (route !== "analyze") {
+      delete document.documentElement.dataset.routeTransition;
+      return;
+    }
+    const frame = window.requestAnimationFrame(() => {
+      delete document.documentElement.dataset.routeTransition;
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [route]);
+
   return (
-    <div className="min-h-[calc(100vh-65px)]">
+    <AppRouteSurface>
       <SiteNav
         active={route === "analyze" ? "analyze" : "home"}
         language={language}
         minimal={route === "analyze"}
+        onAnalyzeNavigate={prepareAnalyzeNavigation}
         onLanguageChange={setLanguage}
       />
       {route === "analyze" ? (
-        <WalletApp language={language} onLanguageChange={setLanguage} />
+        <WalletApp language={language} />
       ) : (
-        <Home language={language} />
+        <Home
+          language={language}
+          onAnalyzeNavigate={prepareAnalyzeNavigation}
+        />
       )}
-    </div>
+    </AppRouteSurface>
   );
 }
 
@@ -144,7 +194,7 @@ function useScrollReveal(
         1,
       );
       shade.style.opacity = String(
-        Math.min(Math.max((visualProgress - 0.38) / 0.62, 0), 1) * 0.78,
+        Math.min(Math.max((visualProgress - 0.38) / 0.62, 0), 1) * 0.68,
       );
       reveal.style.opacity = String(revealProgress);
       reveal.style.pointerEvents = revealProgress > 0.35 ? "auto" : "none";
@@ -189,7 +239,13 @@ function useScrollReveal(
   }, [heroRef, progressRef, revealRef, shadeRef]);
 }
 
-function Home({ language }: { language: Language }) {
+function Home({
+  language,
+  onAnalyzeNavigate,
+}: {
+  language: Language;
+  onAnalyzeNavigate: (event: ReactMouseEvent<HTMLAnchorElement>) => void;
+}) {
   const heroRef = useRef<HTMLDivElement>(null);
   const shadeRef = useRef<HTMLDivElement>(null);
   const revealRef = useRef<HTMLDivElement>(null);
@@ -214,13 +270,13 @@ function Home({ language }: { language: Language }) {
           <div
             ref={shadeRef}
             aria-hidden="true"
-            className="pointer-events-none absolute inset-0 z-[2] opacity-0 [background:radial-gradient(ellipse_at_center,rgba(5,5,10,0.97)_0%,rgba(5,5,10,0.88)_40%,rgba(8,7,15,0.42)_72%,rgba(22,16,47,0.24)_100%)]"
+            className="pointer-events-none absolute inset-0 z-[2] opacity-0 [background:radial-gradient(ellipse_at_center,rgba(5,5,10,0.94)_0%,rgba(5,5,10,0.76)_38%,rgba(8,7,15,0.26)_70%,rgba(22,16,47,0.08)_100%)]"
           />
-          <div className="pointer-events-none absolute inset-0 z-[3] flex items-center justify-center px-5 pt-[7vh] sm:px-10">
+          <div className="pointer-events-none absolute inset-0 z-[3] flex items-center justify-center px-5 pt-[2vh] sm:px-10">
             <div
               ref={revealRef}
               data-hero-copy=""
-              className="hero-reveal-grid w-full max-w-[1260px] opacity-0 will-change-[opacity,transform]"
+              className="hero-reveal-grid w-full max-w-[1160px] opacity-0 will-change-[opacity,transform]"
             >
               <div className="hero-copy-column">
                 <span className="hero-copy-kicker">
@@ -228,7 +284,7 @@ function Home({ language }: { language: Language }) {
                 </span>
                 <h1
                   data-hero-title=""
-                  className="m-0 text-[clamp(46px,10vw,74px)] font-extrabold uppercase leading-[0.9] tracking-[-0.05em] sm:text-[clamp(54px,6.2vw,92px)]"
+                  className="m-0 text-[clamp(44px,10vw,68px)] font-extrabold uppercase leading-[0.9] tracking-[-0.05em] sm:text-[clamp(52px,5.6vw,82px)]"
                 >
                   {language === "zh-CN" ? (
                     <>
@@ -250,15 +306,20 @@ function Home({ language }: { language: Language }) {
                 <p className="m-0 mt-7 max-w-[620px] text-[14px] leading-[1.75] text-dim sm:mt-9 sm:text-[16px]">
                   {pick(
                     language,
-                    "Parallax turns one Moss replay into a traceable receipt—showing the intent, route, prepared action, simulation, boundary, and provenance before anything is signed.",
-                    "Parallax 将一次 Moss 回放整理为可追溯的证据回执，在签署前呈现交易意图、路径、已生成操作、模拟结果、经济边界与证据来源。",
+                    "This demo previews how Parallax organizes a checked swap intent, available execution evidence, the acceptance boundary, and provenance into a traceable decision receipt—without signing or broadcasting.",
+                    "本演示展示 Parallax 如何将已检查的兑换意图、现有执行证据、接受边界与溯源信息整理为可追溯的决策回执，全程不签名，也不广播。",
                   )}
                 </p>
                 <div className="pointer-events-auto mt-8 flex flex-wrap gap-3 sm:mt-10">
-                  <a href="#/analyze" className="btn btn-primary">
-                    {pick(language, "Analyze transaction", "分析交易")}
+                  {/* biome-ignore lint/a11y/useValidAnchor: this is a real client-side hash route with native link semantics */}
+                  <a
+                    href="#/analyze"
+                    className="btn btn-primary"
+                    onClick={onAnalyzeNavigate}
+                  >
+                    {pick(language, "Try demo", "体验 Demo")}
                   </a>
-                  <a href="#framework" className="btn">
+                  <a href="#how-it-works" className="btn">
                     {pick(language, "How it works", "运作方式")}
                   </a>
                 </div>
@@ -272,15 +333,18 @@ function Home({ language }: { language: Language }) {
       <div className="landing-space">
         <div aria-hidden="true" className="landing-space-background" />
         <div className="landing-space-content relative z-[1]">
-          <section className="flex flex-col justify-between gap-4 border-y border-line py-3.5 text-[9px] font-bold tracking-[0.08em] text-faint sm:flex-row">
+          <section
+            className="scroll-mt-4 flex flex-col justify-between gap-4 border-y border-line py-3.5 text-[9px] font-bold tracking-[0.08em] text-faint sm:flex-row"
+            id="how-it-works"
+          >
             <span>
-              {pick(language, "READ-ONLY WALLET ACCESS", "只读钱包访问")}
+              {pick(language, "READ-ONLY PRE-SIGN CHECK", "只读签名前检查")}
             </span>
             <span>
               {pick(
                 language,
-                "REPLAY FIXTURES CLEARLY LABELLED",
-                "回放样本均有明确标注",
+                "DEMO / REPLAY MODE CLEARLY LABELLED",
+                "明确标注演示／回放模式",
               )}
             </span>
             <span>
@@ -292,7 +356,7 @@ function Home({ language }: { language: Language }) {
             </span>
           </section>
 
-          <section className="mt-20 sm:mt-28" id="framework">
+          <section className="mt-16 sm:mt-20" id="framework">
             <span className="eyebrow">
               {pick(language, "Decision framework", "决策框架")}
             </span>
@@ -309,14 +373,14 @@ function Home({ language }: { language: Language }) {
             <p className="mb-9 max-w-[700px] text-[14px] leading-[1.7] text-faint sm:mb-11 sm:text-[16px]">
               {pick(
                 language,
-                "Every result answers the same four questions, so a failed swap turns into one concrete next step instead of another blind retry.",
-                "每个结果都回答同样的四个问题，让一次失败的兑换交易转化为一个明确的下一步，而不是再次盲目重试。",
+                "A completed check separates what happened, what supports the conclusion, what can be changed, and what will not help—while keeping missing evidence explicit.",
+                "一次完成的检查会分别说明发生了什么、哪些证据支持结论、哪些条件可以调整，以及哪些修改不会有帮助，同时明确保留缺失证据。",
               )}
             </p>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
               {DIMENSIONS.map((dimension) => (
                 <article
-                  className="question-card card flex min-h-[230px] flex-col p-6 sm:min-h-[250px] sm:p-7"
+                  className="question-card card min-h-[215px] p-6 sm:min-h-[230px] sm:p-7"
                   key={dimension.key}
                   onPointerMove={moveSurfaceGlow}
                   style={
@@ -332,9 +396,6 @@ function Home({ language }: { language: Language }) {
                   <p className="relative z-[1] m-0 text-[13px] leading-[1.7] text-dim sm:text-[14px]">
                     {say(language, dimension.body)}
                   </p>
-                  <b className="relative z-[1] mt-auto pt-8 text-[9px] tracking-[0.1em]">
-                    {pick(language, "OPEN EVIDENCE →", "查看证据 →")}
-                  </b>
                 </article>
               ))}
             </div>
@@ -374,16 +435,21 @@ function Home({ language }: { language: Language }) {
               <br />
               {pick(language, "before you sign.", "明确该怎么做")}
             </h2>
-            <a href="#/analyze" className="btn btn-primary">
-              {pick(language, "Start analysis", "开始分析")}
+            {/* biome-ignore lint/a11y/useValidAnchor: this is a real client-side hash route with native link semantics */}
+            <a
+              href="#/analyze"
+              className="btn btn-primary"
+              onClick={onAnalyzeNavigate}
+            >
+              {pick(language, "Try demo", "体验 Demo")}
             </a>
           </section>
 
           <footer className="pt-6 text-[9px] font-semibold tracking-[0.04em] text-faint">
             {pick(
               language,
-              "Parallax · Pre-sign decision layer · Explanation and adjustment only; not investment advice.",
-              "Parallax · 签名前决策层 · 仅提供解释与调整建议；不构成投资建议。",
+              "Parallax · Pre-sign decision layer · Evidence, scope, and decision support only; not investment advice.",
+              "Parallax · 签名前决策层 · 仅提供证据、检查范围与决策支持；不构成投资建议。",
             )}
           </footer>
         </div>

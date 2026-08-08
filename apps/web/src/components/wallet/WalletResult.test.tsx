@@ -30,17 +30,19 @@ describe("WalletResult", () => {
 
     expect(html).toContain("Check could not be completed");
     expect(html).toContain("No transaction conclusion was produced");
-    expect(html).toContain("Retry");
+    expect(html).toContain("Retry check");
     expect(html).toContain("View details");
     expect(html).not.toContain("Not enough evidence");
     expect(html).not.toContain("PROCEED");
-    expect(html).not.toContain("Demo suggestions");
+    expect(html).not.toContain("Next step in this result");
+    expect(html).toContain("Demo preset");
   });
 
   test("renders demo mode and compact scope counts for a normal result", () => {
     const html = render(checkSwap(input));
 
-    expect(html).toContain(">Demo<");
+    expect(html).toContain(">Demo preset<");
+    expect(html).toContain("It is not current Live Evidence");
     expect(html).toContain("Checked: 2");
     expect(html).toContain("Unknown: 0");
     expect(html).toContain("Not checked: 4");

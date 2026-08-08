@@ -21,12 +21,15 @@ export function DiffCard({
   return (
     <div className="card">
       <span className="eyebrow-monad">
-        {say(language, { en: "Previous vs new", zh: "前后对比" })}
+        {say(language, {
+          en: "Previous Run vs New Run",
+          zh: "上一次运行与新运行",
+        })}
       </span>
       <h2 className="m-0 mb-1.5 text-[20px] font-extrabold tracking-[-0.03em]">
         {say(language, {
-          en: "What your change did.",
-          zh: "你的修改带来了什么。",
+          en: "What changed between these runs.",
+          zh: "两次运行之间发生了哪些变化。",
         })}
       </h2>
       <p className="mono mb-3 text-dim">
