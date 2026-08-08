@@ -1,6 +1,11 @@
 import type { FailedRunResult } from "@parallax/contracts";
 import { describe, expect, it } from "vitest";
-import { type CheckService, createCheckApp } from "./http.js";
+import {
+  type CheckService,
+  createCheckApp,
+  createQuoteApp,
+  type QuoteService,
+} from "./http.js";
 
 function dispatch(request: Request, service: CheckService) {
   return createCheckApp(service).fetch(request);
@@ -238,5 +243,59 @@ describe("POST /api/check transport", () => {
         message: "The check could not be completed",
       },
     });
+  });
+});
+
+describe("POST /api/quote transport", () => {
+  it("passes parsed JSON to the quote service and preserves the response", async () => {
+    let received: unknown;
+    const service: QuoteService = {
+      async quote(input: unknown) {
+        received = input;
+        return {
+          status: 200,
+          body: {
+            status: "available",
+            quote: {
+              estimatedAmountOut: "0.000223",
+              source: "quote",
+              blockNumber: "91383505",
+              runtimeVersion: "0.1.0",
+              runtimeRevision: "d09b38cbc44ee7f5722c5d09e7224f7750187762",
+            },
+          },
+        };
+      },
+    };
+
+    const response = await createQuoteApp(service).fetch(
+      request('{"amountIn":"0.01"}', { pathname: "/api/quote" }),
+    );
+
+    expect(received).toEqual({ amountIn: "0.01" });
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      status: "available",
+      quote: { estimatedAmountOut: "0.000223" },
+    });
+  });
+
+  it("only accepts POST on the exact quote path", async () => {
+    const service: QuoteService = {
+      async quote() {
+        throw new Error("must not run");
+      },
+    };
+
+    const wrongMethod = await createQuoteApp(service).fetch(
+      request("", { method: "GET", pathname: "/api/quote" }),
+    );
+    const wrongPath = await createQuoteApp(service).fetch(
+      request("{}", { pathname: "/api/quotes" }),
+    );
+
+    expect(wrongMethod.status).toBe(405);
+    expect(wrongMethod.headers.get("allow")).toBe("POST");
+    expect(wrongPath.status).toBe(404);
   });
 });

@@ -337,9 +337,8 @@ type MossSimulator = {
   getPinnedBlockNumber?: () => unknown | Promise<unknown>;
 };
 
-type LiveContext = {
+type StageContext = {
   registry: MossRegistry;
-  simulator: MossSimulator;
   readBlockNumber: () => Promise<string>;
   log: (line: string) => void;
 };
@@ -374,7 +373,7 @@ function stageLogStatus(error: NormalizedMossError): string {
 }
 
 async function recordStage(
-  context: LiveContext,
+  context: StageContext,
   stage: StageName,
   run: () => unknown | Promise<unknown>,
   raw: RawKuruEvidence,
@@ -386,7 +385,46 @@ async function recordStage(
   context.log(`[${stage}] START`);
   const startedAt = new Date().toISOString();
   const startedMs = Date.now();
-  const blockNumber = await context.readBlockNumber().catch(() => undefined);
+  let blockNumber: string | undefined;
+  let blockReadError: unknown;
+  try {
+    blockNumber = await context.readBlockNumber();
+  } catch (error) {
+    blockReadError = error;
+  }
+
+  // An available Quote must carry the RPC block observed immediately before
+  // QUOTE. A failed read is therefore a Quote/RPC integration failure, not an
+  // unavailable quote that can be returned as HTTP 200.
+  if (stage === "QUOTE" && blockReadError !== undefined) {
+    const finishedAt = new Date().toISOString();
+    const normalized = classifyLiveError(blockReadError, {
+      stage,
+      source: "rpc",
+    });
+    errors[stageKey(stage)] = toJsonValue(normalized);
+    stages.push({
+      stage,
+      startedAt,
+      finishedAt,
+      success: false,
+      error: normalized,
+      raw: toJsonValue(
+        blockReadError instanceof Error
+          ? blockReadError.message
+          : blockReadError,
+      ),
+      runtime,
+      ...(blockNumber ? { blockNumber } : {}),
+    });
+    context.log(
+      `[${stage}] ${stageLogStatus(normalized)} duration=${
+        Date.now() - startedMs
+      }ms block=n/a code=${normalized.code}`,
+    );
+    return false;
+  }
+
   try {
     const value = await withTimeout(
       Promise.resolve().then(run),
@@ -488,6 +526,212 @@ function stageKey(stage: StageName): keyof RawKuruEvidence {
   return "simulation";
 }
 
+type PreparedKuruRuntime = {
+  fetchedAt: string;
+  identity: RuntimeIdentity;
+  raw: RawKuruEvidence;
+  errors: Record<string, JsonValue>;
+  stages: StageRecord[];
+  mossRuntime: unknown;
+  chainId?: number;
+  initialBlock?: string;
+  registry: MossRegistry;
+  context: StageContext;
+};
+
+async function prepareKuruRuntime(
+  input: LiveKuruAdapterInput,
+  bundle: MossRuntimeBundle,
+  log: (line: string) => void,
+): Promise<PreparedKuruRuntime> {
+  const fetchedAt = input.fetchedAt ?? new Date().toISOString();
+  const runtimeVersion = String(
+    bundle.core.version ?? bundle.packageVersions["@themoss/core"],
+  );
+  if (runtimeVersion !== input.runtimeVersion) {
+    throw new Error(
+      `MOSS runtime mismatch: expected ${input.runtimeVersion}, loaded ${runtimeVersion} (${input.runtimeRevision})`,
+    );
+  }
+
+  assertPackageVersions(bundle.packageVersions, input.runtimeVersion);
+  assertCheckoutRevision(bundle.checkoutRevision, input.runtimeRevision);
+
+  const identity: RuntimeIdentity = {
+    runtimeVersion: input.runtimeVersion,
+    runtimeRevision: input.runtimeRevision,
+    checkoutRevision: bundle.checkoutRevision,
+    packageVersions: bundle.packageVersions,
+  };
+  const raw: RawKuruEvidence = {
+    discover: null,
+    load: null,
+    quote: null,
+    action: null,
+    simulation: null,
+  };
+  const errors: Record<string, JsonValue> = {};
+  const stages: StageRecord[] = [];
+  const { createRuntime, Registry } = bundle.core as {
+    createRuntime: (opts: { rpcUrl: string }) => Promise<{
+      rpcUrl: string;
+      client: {
+        getChainId(): Promise<number>;
+        getBlockNumber(): Promise<bigint>;
+      };
+    }>;
+    Registry: new (runtime: unknown) => MossRegistry;
+  };
+  const mossRuntime = await createRuntime({ rpcUrl: input.rpcUrl });
+  const client = mossRuntime.client;
+  const chainId = await client.getChainId().catch(() => undefined);
+  const readBlock = async (): Promise<string> =>
+    (await client.getBlockNumber()).toString();
+  const initialBlock = await readBlock().catch(() => undefined);
+  log(
+    `[INIT] chainId=${chainId ?? "n/a"} block=${
+      initialBlock ?? "n/a"
+    } runtimeVersion=${input.runtimeVersion} runtimeRevision=${input.runtimeRevision}`,
+  );
+  const registry = new Registry(mossRuntime).use(
+    bundle.system,
+    bundle.erc,
+    bundle.kuru,
+  );
+
+  return {
+    fetchedAt,
+    identity,
+    raw,
+    errors,
+    stages,
+    mossRuntime,
+    ...(chainId === undefined ? {} : { chainId }),
+    ...(initialBlock === undefined ? {} : { initialBlock }),
+    registry,
+    context: { registry, readBlockNumber: readBlock, log },
+  };
+}
+
+async function runKuruQuoteStages(
+  input: LiveKuruAdapterInput,
+  prepared: Pick<
+    PreparedKuruRuntime,
+    "context" | "registry" | "raw" | "errors" | "stages" | "identity"
+  >,
+  stageTimeoutMs: number,
+): Promise<{ quoted: boolean; params: Record<string, unknown> }> {
+  const { context, registry, raw, errors, stages, identity } = prepared;
+  const params = swapParamsOf(input.intent);
+  const discovered = await recordStage(
+    context,
+    "DISCOVER",
+    () => registry.discover({ protocol: "kuru" }),
+    raw,
+    errors,
+    stages,
+    identity,
+    stageTimeoutMs,
+  );
+
+  let loaded = discovered;
+  if (loaded) {
+    loaded = await recordStage(
+      context,
+      "LOAD",
+      () => registry.load([{ protocol: "kuru", method: "swap" }]),
+      raw,
+      errors,
+      stages,
+      identity,
+      stageTimeoutMs,
+    );
+  }
+
+  let quoted = loaded;
+  if (quoted) {
+    quoted = await recordStage(
+      context,
+      "QUOTE",
+      () => registry.action("kuru", "quote", input.intent.sender, params),
+      raw,
+      errors,
+      stages,
+      identity,
+      stageTimeoutMs,
+    );
+  }
+
+  return { quoted, params };
+}
+
+/**
+ * Runs only the discover -> load -> quote portion of the Kuru flow. The quote
+ * endpoint must not execute action construction or simulation: those stages
+ * belong to POST /api/check and can fail for reasons unrelated to quote data.
+ */
+export async function runKuruLiveQuote(
+  input: LiveKuruAdapterInput,
+): Promise<LiveKuruResult> {
+  const bundle = await loadMossRuntime(input.runtimePath, {
+    runtimeVersion: input.runtimeVersion,
+    runtimeRevision: input.runtimeRevision,
+  });
+  return runKuruLiveQuoteWithBundle(input, bundle);
+}
+
+/** Testable quote-only adapter with an injected Moss runtime bundle. */
+export async function runKuruLiveQuoteWithBundle(
+  input: LiveKuruAdapterInput,
+  bundle: MossRuntimeBundle,
+): Promise<LiveKuruResult> {
+  const log = input.logger ?? (() => {});
+  const stageTimeoutMs = input.stageTimeoutMs ?? DEFAULT_STAGE_TIMEOUT_MS;
+  const overallTimeoutMs = input.overallTimeoutMs ?? DEFAULT_OVERALL_TIMEOUT_MS;
+
+  const execute = async (): Promise<LiveKuruResult> => {
+    const {
+      fetchedAt,
+      identity,
+      raw,
+      errors,
+      stages,
+      chainId,
+      initialBlock,
+      registry,
+      context,
+    } = await prepareKuruRuntime(input, bundle, log);
+    await runKuruQuoteStages(
+      input,
+      { context, registry, raw, errors, stages, identity },
+      stageTimeoutMs,
+    );
+
+    const evidence = normalizeLiveKuruEvidence({
+      intent: input.intent,
+      raw: {
+        ...raw,
+        errors: Object.keys(errors).length > 0 ? errors : undefined,
+      },
+      runtime: identity,
+      fetchedAt,
+      stages,
+      initialBlock,
+    });
+
+    return {
+      runId: input.runId,
+      evidence,
+      raw,
+      stages,
+      runtime: identity,
+      ...(chainId === undefined ? {} : { observedChainId: chainId }),
+    };
+  };
+
+  return withTimeout(execute(), overallTimeoutMs, "OVERALL");
+}
+
 /**
  * Run the full Kuru MON -> USDC live chain:
  * discover -> load -> quote -> action -> simulate.
@@ -520,63 +764,18 @@ export async function runKuruLiveSwapWithBundle(
   const overallTimeoutMs = input.overallTimeoutMs ?? DEFAULT_OVERALL_TIMEOUT_MS;
 
   const execute = async (): Promise<LiveKuruResult> => {
-    const fetchedAt = input.fetchedAt ?? new Date().toISOString();
-
-    const runtimeVersion = String(
-      bundle.core.version ?? bundle.packageVersions["@themoss/core"],
-    );
-    if (runtimeVersion !== input.runtimeVersion) {
-      throw new Error(
-        `MOSS runtime mismatch: expected ${input.runtimeVersion}, loaded ${runtimeVersion} (${input.runtimeRevision})`,
-      );
-    }
-
-    assertPackageVersions(bundle.packageVersions, input.runtimeVersion);
-
-    assertCheckoutRevision(bundle.checkoutRevision, input.runtimeRevision);
-
-    const identity: RuntimeIdentity = {
-      runtimeVersion: input.runtimeVersion,
-      runtimeRevision: input.runtimeRevision,
-      checkoutRevision: bundle.checkoutRevision,
-      packageVersions: bundle.packageVersions,
-    };
-
-    const raw: RawKuruEvidence = {
-      discover: null,
-      load: null,
-      quote: null,
-      action: null,
-      simulation: null,
-    };
-    const errors: Record<string, JsonValue> = {};
-    const stages: StageRecord[] = [];
-    const { createRuntime, Registry } = bundle.core as {
-      createRuntime: (opts: { rpcUrl: string }) => Promise<{
-        rpcUrl: string;
-        client: {
-          getChainId(): Promise<number>;
-          getBlockNumber(): Promise<bigint>;
-        };
-      }>;
-      Registry: new (runtime: unknown) => MossRegistry;
-    };
-    const mossRuntime = await createRuntime({ rpcUrl: input.rpcUrl });
-    const client = mossRuntime.client;
-    const chainId = await client.getChainId().catch(() => undefined);
-    const readBlock = async (): Promise<string> =>
-      (await client.getBlockNumber()).toString();
-    const initialBlock = await readBlock().catch(() => undefined);
-    log(
-      `[INIT] chainId=${chainId ?? "n/a"} block=${
-        initialBlock ?? "n/a"
-      } runtimeVersion=${input.runtimeVersion} runtimeRevision=${input.runtimeRevision}`,
-    );
-    const registry = new Registry(mossRuntime).use(
-      bundle.system,
-      bundle.erc,
-      bundle.kuru,
-    );
+    const {
+      fetchedAt,
+      identity,
+      raw,
+      errors,
+      stages,
+      mossRuntime,
+      chainId,
+      initialBlock,
+      registry,
+      context,
+    } = await prepareKuruRuntime(input, bundle, log);
     const { createTraceSimulator } = bundle.simulator as {
       createTraceSimulator: (
         runtime: unknown,
@@ -591,53 +790,12 @@ export async function runKuruLiveSwapWithBundle(
     });
     const simulatorPinnedBlockBefore =
       await readSimulatorPinnedBlock(simulator);
-    const context: LiveContext = {
-      registry,
-      simulator,
-      readBlockNumber: readBlock,
-      log,
-    };
 
-    const params = swapParamsOf(input.intent);
-
-    const discovered = await recordStage(
-      context,
-      "DISCOVER",
-      () => registry.discover({ protocol: "kuru" }),
-      raw,
-      errors,
-      stages,
-      identity,
+    const { quoted, params } = await runKuruQuoteStages(
+      input,
+      { context, registry, raw, errors, stages, identity },
       stageTimeoutMs,
     );
-
-    let loaded = discovered;
-    if (loaded) {
-      loaded = await recordStage(
-        context,
-        "LOAD",
-        () => registry.load([{ protocol: "kuru", method: "swap" }]),
-        raw,
-        errors,
-        stages,
-        identity,
-        stageTimeoutMs,
-      );
-    }
-
-    let quoted = loaded;
-    if (quoted) {
-      quoted = await recordStage(
-        context,
-        "QUOTE",
-        () => registry.action("kuru", "quote", input.intent.sender, params),
-        raw,
-        errors,
-        stages,
-        identity,
-        stageTimeoutMs,
-      );
-    }
 
     let actioned = quoted;
     let capability: unknown;

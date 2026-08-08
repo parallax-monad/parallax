@@ -3,6 +3,7 @@ import type {
   EvidenceItem,
   EvidenceRef,
   NormalizedSwapIntent,
+  Quote,
   RunResult,
 } from "@parallax/contracts";
 import { ReplayApplicationService } from "@parallax/orchestrator/application";
@@ -136,7 +137,7 @@ function completedRunResult(
   intent: NormalizedSwapIntent,
   overrides: Pick<
     CompletedRunResult,
-    "ruleResults" | "evidence" | "scope" | "route"
+    "ruleResults" | "evidence" | "scope" | "route" | "quote"
   >,
 ): CompletedRunResult {
   return {
@@ -397,6 +398,61 @@ describe("CheckApplicationService", () => {
       status: "completed",
       intent: receivedIntent,
       result: response.body,
+    });
+  });
+
+  it("preserves an optional Quote on the public Check result", async () => {
+    const quote: Quote = {
+      estimatedAmountOut: "0.000223",
+      minimumAmountOut: "0.000221",
+      source: "quote",
+      blockNumber: "12345",
+      runtimeVersion: runtime.config.moss.runtimeVersion,
+      runtimeRevision: runtime.config.moss.runtimeRevision,
+    };
+    const service = createService({
+      async check(input) {
+        return {
+          ...completedRouteResult(input.runId, input.intent),
+          quote,
+        };
+      },
+    });
+
+    const response = await service.check(publicRequest());
+
+    expect(response).toMatchObject({
+      status: 200,
+      body: {
+        status: "completed",
+        quote: {
+          estimatedAmountOut: "0.000223",
+          minimumAmountOut: "0.000221",
+          source: "quote",
+        },
+      },
+    });
+  });
+
+  it("rejects a Quote whose provenance disagrees with QUOTE Evidence", async () => {
+    const service = createService({
+      async check(input) {
+        return {
+          ...completedRouteResult(input.runId, input.intent),
+          quote: {
+            estimatedAmountOut: "0.000223",
+            source: "quote",
+            blockNumber: "99999",
+            runtimeVersion: runtime.config.moss.runtimeVersion,
+            runtimeRevision: runtime.config.moss.runtimeRevision,
+          },
+        };
+      },
+    });
+
+    await expect(service.check(publicRequest())).resolves.toMatchObject({
+      status: 502,
+      body: { error: { code: "INVALID_AGENT_FLOW_RESPONSE" } },
     });
   });
 

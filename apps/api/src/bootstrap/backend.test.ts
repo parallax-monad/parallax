@@ -78,6 +78,47 @@ describe("backend Node runtime", () => {
     });
   });
 
+  it("composes the Quote route independently from the full Check flow", async () => {
+    const app = createBackendApp({
+      runtime: bootstrapBackendRuntime({ environment, tokenRegistry }),
+      quoteFlow: {
+        async quote() {
+          return {
+            status: "available",
+            quote: {
+              estimatedAmountOut: "0.000223",
+              source: "quote",
+              blockNumber: "91383505",
+              runtimeVersion: "0.1.0",
+              runtimeRevision: "d09b38cbc44ee7f5722c5d09e7224f7750187762",
+            },
+          };
+        },
+      },
+    });
+
+    const response = await app.fetch(
+      new Request("https://api.example.test/api/quote", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          chainId: 143,
+          protocol: "kuru",
+          sender,
+          tokenIn: { kind: "native" },
+          tokenOut: { kind: "erc20", address: usdcAddress },
+          amountIn: "0.01",
+        }),
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      status: "available",
+      quote: { estimatedAmountOut: "0.000223" },
+    });
+  });
+
   it("selects the configured live flow and invokes its injected runner", async () => {
     const calls: Parameters<KuruLiveRunner>[0][] = [];
     const runtime = bootstrapBackendRuntime({

@@ -6,7 +6,11 @@ import type {
   Sourced,
 } from "@parallax/moss-bridge";
 import { describe, expect, it } from "vitest";
-import { KuruLiveAgentFlow, type LiveAgentFlowInput } from "./index.js";
+import {
+  KuruLiveAgentFlow,
+  KuruLiveQuoteAgentFlow,
+  type LiveAgentFlowInput,
+} from "./index.js";
 
 const sender = "0x1111111111111111111111111111111111111111";
 const usdc = "0x2222222222222222222222222222222222222222";
@@ -168,6 +172,66 @@ function liveAmountOutFlow() {
 }
 
 describe("KuruLiveAgentFlow", () => {
+  it("returns a quote without requiring simulation provenance", async () => {
+    const flow = new KuruLiveQuoteAgentFlow(async (value) => ({
+      runId: value.runId,
+      evidence: evidence({
+        quote: sourced(
+          {
+            estimatedAmountOut: "0.000223",
+            minimumAmountOut: "0.000221",
+          },
+          "quote",
+        ),
+      }),
+      raw: {
+        discover: null,
+        load: null,
+        quote: null,
+        action: null,
+        simulation: null,
+      },
+      stages: [],
+      runtime: runtimeIdentity(),
+      observedChainId: 143,
+    }));
+
+    await expect(flow.quote(input("quote-1"))).resolves.toMatchObject({
+      status: "available",
+      quote: {
+        estimatedAmountOut: "0.000223",
+        minimumAmountOut: "0.000221",
+      },
+    });
+  });
+
+  it("fails closed when the Quote RPC chain ID is unavailable", async () => {
+    const flow = new KuruLiveQuoteAgentFlow(async (value) => ({
+      runId: value.runId,
+      evidence: evidence({
+        quote: sourced({ estimatedAmountOut: "0.000223" }, "quote"),
+      }),
+      raw: {
+        discover: null,
+        load: null,
+        quote: null,
+        action: null,
+        simulation: null,
+      },
+      stages: [],
+      runtime: runtimeIdentity(),
+    }));
+
+    await expect(
+      flow.quote(input("quote-chain-unavailable")),
+    ).rejects.toMatchObject({
+      code: "RPC_UNAVAILABLE",
+      integrationStatus: "UNAVAILABLE",
+      source: "rpc",
+      stage: "DISCOVER",
+    });
+  });
+
   it("maps live Evidence and Risk output into a completed Run", async () => {
     let received:
       | Parameters<
@@ -215,6 +279,13 @@ describe("KuruLiveAgentFlow", () => {
       systemStatus: "OK",
       verdict: "PROCEED",
       simulatorPinnedBlock: "1",
+      quote: {
+        estimatedAmountOut: "10",
+        source: "quote",
+        blockNumber: "1",
+        runtimeVersion: runtime.runtimeVersion,
+        runtimeRevision: runtime.runtimeRevision,
+      },
       route: { availability: "available", protocol: "kuru" },
       ruleResults: [
         { ruleId: "P0-EVIDENCE-001", status: "PASS" },
@@ -264,7 +335,6 @@ describe("KuruLiveAgentFlow", () => {
       stages: [],
       runtime: runtimeIdentity(),
       observedChainId: 143,
-      simulatorPinnedBlock: "1",
     }));
 
     const result = await flow.check(input());

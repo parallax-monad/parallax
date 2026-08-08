@@ -23,6 +23,8 @@ export {
   loadMossRuntime,
   type MossRuntimeBundle,
   type MossRuntimeExpectation,
+  runKuruLiveQuote,
+  runKuruLiveQuoteWithBundle,
   runKuruLiveSwap,
   runKuruLiveSwapWithBundle,
   validateMossRuntimePathSync,

@@ -17,6 +17,7 @@ import {
   scopeDisclosureSchema,
 } from "./evidence.js";
 import { normalizedSwapIntentSchema } from "./intent.js";
+import { quoteSchema } from "./quote.js";
 import { routeSchema } from "./route.js";
 
 export const runDiffFieldSchema = z.enum([
@@ -954,6 +955,84 @@ function validateAvailableRoute(
   }
 }
 
+function validateRunQuote(
+  result: {
+    intent: z.infer<typeof normalizedSwapIntentSchema>;
+    evidence: EvidenceItem[];
+    quote?: z.infer<typeof quoteSchema>;
+    route?: z.infer<typeof routeSchema>;
+  },
+  context: z.RefinementCtx,
+) {
+  if (result.quote === undefined) return;
+
+  const quoteEvidence = result.evidence.filter(
+    (evidence) =>
+      evidence.kind === "generic" &&
+      evidence.source === "quote" &&
+      evidence.stage === "QUOTE" &&
+      evidence.routeInputRole === "ROUTE_QUOTE",
+  );
+  const resolvingEvidence = quoteEvidence[0];
+
+  if (quoteEvidence.length !== 1 || resolvingEvidence === undefined) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message:
+        "A top-level Quote requires exactly one canonical QUOTE Evidence item",
+      path: ["quote"],
+    });
+    return;
+  }
+
+  if (
+    !isTrustedEvidence(resolvingEvidence) ||
+    resolvingEvidence.status !== "confirmed" ||
+    resolvingEvidence.blockNumber !== result.quote.blockNumber ||
+    resolvingEvidence.runtimeVersion !== result.quote.runtimeVersion ||
+    resolvingEvidence.runtimeRevision !== result.quote.runtimeRevision
+  ) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message:
+        "Top-level Quote provenance must match its canonical QUOTE Evidence",
+      path: ["quote"],
+    });
+  }
+
+  if (result.route?.availability !== "available") {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "A top-level Quote requires an available resolving Route",
+      path: ["quote"],
+    });
+    return;
+  }
+
+  if (
+    result.route.source === "quote" &&
+    result.route.evidenceRef.key !== resolvingEvidence.key
+  ) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message:
+        "Quote-sourced Routes must resolve from the top-level Quote Evidence",
+      path: ["route", "evidenceRef"],
+    });
+  }
+
+  if (
+    result.route.source === "quote" &&
+    result.route.blockNumber !== result.quote.blockNumber
+  ) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Quote-sourced Route blockNumber must match the top-level Quote",
+      path: ["route", "blockNumber"],
+    });
+  }
+}
+
 function validateNoRouteClassification(
   result: {
     intent: z.infer<typeof normalizedSwapIntentSchema>;
@@ -1248,6 +1327,7 @@ export const completedRunResultSchema = runIdentitySchema
     evidence: z.array(evidenceItemSchema).min(1),
     scope: scopeDisclosureSchema,
     route: routeSchema,
+    quote: quoteSchema.optional(),
     diff: runDiffSchema.optional(),
   })
   .strict()
@@ -1281,6 +1361,7 @@ export const completedRunResultSchema = runIdentitySchema
       context,
     );
     validateAvailableRoute(result, evidenceByKey, context);
+    validateRunQuote(result, context);
     const hasTrustedNoRoute = validateNoRouteClassification(
       result,
       evidenceByKey,
@@ -1345,6 +1426,7 @@ export const failedRunResultSchema = runIdentitySchema
     irrelevantActions: z.array(actionEvaluationSchema).max(0),
     evidence: z.array(evidenceItemSchema),
     scope: scopeDisclosureSchema,
+    quote: quoteSchema.optional(),
     route: routeSchema.optional(),
   })
   .strict()
@@ -1387,6 +1469,7 @@ export const failedRunResultSchema = runIdentitySchema
         context,
       );
     }
+    validateRunQuote(result, context);
     validateEconomicBoundary(result, evidenceByKey, false, context, true);
 
     result.ruleResults.forEach((ruleResult, index) => {

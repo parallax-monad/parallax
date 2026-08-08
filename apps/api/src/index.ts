@@ -4,6 +4,7 @@ export * from "./bootstrap/replay.js";
 export * from "./http.js";
 export * from "./normalization.js";
 export * from "./ports.js";
+export * from "./quote-application.js";
 export * from "./routes/replay.js";
 export * from "./runtime-config.js";
 export * from "./server.js";
