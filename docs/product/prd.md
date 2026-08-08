@@ -24,7 +24,7 @@ The core of Parallax is not generating a longer Risk Report, nor is it determini
 The current P0 decisions are informed by two complementary research tracks:
 
 - [User Research](../research/user-research.md) supports the working Primary User, Trigger Moment, reason-to-action gap, interaction principles, and current validation limits.
-- [Competitive Analysis](https://github.com/parallax-monad/parallax/pull/20) evaluates which parts of the pre-transaction journey are already supported by existing products and informs the P0 positioning, exclusions, claim boundaries, and decision-loop hypothesis. Its expected final repository location is `docs/research/competitive-analysis.md`.
+- [Competitive Analysis](../research/competitive-analysis.md) evaluates which parts of the pre-transaction journey are already supported by existing products and informs the P0 positioning, exclusions, claim boundaries, and decision-loop hypothesis.
 
 These documents provide research input. This PRD remains the authoritative product-scope document.
 
