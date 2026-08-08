@@ -20,8 +20,8 @@
     },
     "source": "quote",
     "reproducibility": "REPRODUCIBLE",
-    "blockNumber": "93985839",
-    "fetchedAt": "2026-08-07T18:00:21.608Z",
+    "blockNumber": "94112901",
+    "fetchedAt": "2026-08-08T04:39:40.097Z",
     "formula": "Quote returned by the live Moss query."
   },
   "action": {
@@ -37,8 +37,8 @@
     ],
     "source": "moss",
     "reproducibility": "REPRODUCIBLE",
-    "blockNumber": "93985839",
-    "fetchedAt": "2026-08-07T18:00:21.608Z"
+    "blockNumber": "94112901",
+    "fetchedAt": "2026-08-08T04:39:40.097Z"
   },
   "receipt": {
     "value": {
@@ -292,8 +292,8 @@
     },
     "source": "moss",
     "reproducibility": "REPRODUCIBLE",
-    "blockNumber": "93985839",
-    "fetchedAt": "2026-08-07T18:00:21.608Z"
+    "blockNumber": "94112901",
+    "fetchedAt": "2026-08-08T04:39:40.097Z"
   },
   "outcome": {
     "value": {
@@ -307,8 +307,8 @@
     },
     "source": "moss",
     "reproducibility": "REPRODUCIBLE",
-    "blockNumber": "93985839",
-    "fetchedAt": "2026-08-07T18:00:21.608Z"
+    "blockNumber": "94112901",
+    "fetchedAt": "2026-08-08T04:39:40.097Z"
   },
   "assetChanges": {
     "value": [
@@ -377,31 +377,31 @@
     ],
     "source": "moss",
     "reproducibility": "REPRODUCIBLE",
-    "blockNumber": "93985839",
-    "fetchedAt": "2026-08-07T18:00:21.608Z"
+    "blockNumber": "94112901",
+    "fetchedAt": "2026-08-08T04:39:40.097Z"
   },
   "assetChangeAssessment": "EXPLAINED",
   "warnings": {
     "value": [],
     "source": "moss",
     "reproducibility": "REPRODUCIBLE",
-    "blockNumber": "93985839",
-    "fetchedAt": "2026-08-07T18:00:21.608Z"
+    "blockNumber": "94112901",
+    "fetchedAt": "2026-08-08T04:39:40.097Z"
   },
   "revertReason": {
     "value": null,
     "source": "unknown",
     "reproducibility": "REPRODUCIBLE",
-    "blockNumber": "93985839",
-    "fetchedAt": "2026-08-07T18:00:21.608Z",
+    "blockNumber": "94112901",
+    "fetchedAt": "2026-08-08T04:39:40.097Z",
     "limitation": "No corresponding recorded evidence is available."
   },
   "gas": {
     "value": ["528696"],
     "source": "moss",
     "reproducibility": "REPRODUCIBLE",
-    "blockNumber": "93985839",
-    "fetchedAt": "2026-08-07T18:00:21.608Z"
+    "blockNumber": "94112901",
+    "fetchedAt": "2026-08-08T04:39:40.097Z"
   },
   "simulationCoverage": {
     "value": {
@@ -414,32 +414,32 @@
     },
     "source": "derived",
     "reproducibility": "REPRODUCIBLE",
-    "blockNumber": "93985839",
-    "fetchedAt": "2026-08-07T18:00:21.608Z",
+    "blockNumber": "94112901",
+    "fetchedAt": "2026-08-08T04:39:40.097Z",
     "formula": "Expected transactions are derived from the action capability tree; observed results are derived from the simulator result list."
   },
   "errors": {
     "value": [],
     "source": "unknown",
     "reproducibility": "REPRODUCIBLE",
-    "blockNumber": "93985839",
-    "fetchedAt": "2026-08-07T18:00:21.608Z",
+    "blockNumber": "94112901",
+    "fetchedAt": "2026-08-08T04:39:40.097Z",
     "formula": "Structured errors are normalized from live stage errors."
   },
   "blockNumber": {
-    "value": "93985839",
+    "value": "94112901",
     "source": "rpc",
     "reproducibility": "REPRODUCIBLE",
-    "blockNumber": "93985839",
-    "fetchedAt": "2026-08-07T18:00:21.608Z",
+    "blockNumber": "94112901",
+    "fetchedAt": "2026-08-08T04:39:40.097Z",
     "formula": "Latest block read across live stages; simulatorPinnedBlock records the simulator's exact pinned block when the runtime exposes it."
   },
   "mossVersion": "@themoss/protocol-kuru@0.1.0",
   "mossCommit": "ef15448e166f31c891e80dba5073dae04a052a2b",
   "runtimeVersion": "0.1.0",
   "runtimeRevision": "ef15448e166f31c891e80dba5073dae04a052a2b",
-  "simulatorPinnedBlock": "93985841",
-  "fetchedAt": "2026-08-07T18:00:21.608Z",
+  "simulatorPinnedBlock": "94112902",
+  "fetchedAt": "2026-08-08T04:39:40.097Z",
   "isReplay": false,
   "isMock": false,
   "source": "moss",
@@ -448,8 +448,8 @@
     "value": "NOT_APPLICABLE",
     "source": "derived",
     "reproducibility": "REPRODUCIBLE",
-    "blockNumber": "93985839",
-    "fetchedAt": "2026-08-07T18:00:21.608Z",
+    "blockNumber": "94112901",
+    "fetchedAt": "2026-08-08T04:39:40.097Z",
     "formula": "Native MON input has no ERC-20 approval action."
   },
   "walletAffordabilityChecked": false,

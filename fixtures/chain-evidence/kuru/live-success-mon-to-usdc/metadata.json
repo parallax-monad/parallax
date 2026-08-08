@@ -1,10 +1,10 @@
 {
-  "runId": "kuru-live-1786125621032",
-  "startedAt": "2026-08-07T18:00:21.032Z",
-  "finishedAt": "2026-08-07T18:00:29.759Z",
-  "nodeVersion": "v24.14.0",
-  "pnpmVersion": "pnpm/11.10.0 npm/? node/v24.14.0 darwin arm64",
-  "parallaxCommit": "dd4912be9edac002985dd0a9f3fdd72368a6e22f",
+  "runId": "kuru-live-1786163979273",
+  "startedAt": "2026-08-08T04:39:39.273Z",
+  "finishedAt": "2026-08-08T04:39:49.599Z",
+  "nodeVersion": "v22.23.2",
+  "pnpmVersion": "pnpm/11.10.0 npm/? node/v22.23.2 darwin arm64",
+  "parallaxCommit": "938f62fe5c872626f5cfa2f0a58c975d53e4a8de",
   "mossRuntimeVersion": "0.1.0",
   "mossRuntimeRevision": "ef15448e166f31c891e80dba5073dae04a052a2b",
   "chainId": "143",
@@ -29,52 +29,52 @@
   "apiCheckAcceptance": true,
   "apiCheckProvenanceMatches": true,
   "observedChainId": 143,
-  "simulatorPinnedBlock": "93985841",
+  "simulatorPinnedBlock": "94112902",
   "stageStatuses": [
     {
       "stage": "DISCOVER",
       "status": "OK",
-      "blockNumber": "93985823",
+      "blockNumber": "94112883",
       "durationMs": 0,
       "error": null
     },
     {
       "stage": "LOAD",
       "status": "OK",
-      "blockNumber": "93985823",
-      "durationMs": 1,
+      "blockNumber": "94112883",
+      "durationMs": 0,
       "error": null
     },
     {
       "stage": "QUOTE",
       "status": "OK",
-      "blockNumber": "93985823",
-      "durationMs": 3062,
+      "blockNumber": "94112883",
+      "durationMs": 3063,
       "error": null
     },
     {
       "stage": "ACTION",
       "status": "OK",
-      "blockNumber": "93985823",
-      "durationMs": 1589,
+      "blockNumber": "94112883",
+      "durationMs": 1962,
       "error": null
     },
     {
       "stage": "SIMULATE",
       "status": "OK",
-      "blockNumber": "93985839",
-      "durationMs": 1908,
+      "blockNumber": "94112901",
+      "durationMs": 2065,
       "error": null
     }
   ],
   "blockProvenance": {
-    "initial": "93985839",
+    "initial": "94112901",
     "perStage": [
-      { "stage": "DISCOVER", "blockNumber": "93985823" },
-      { "stage": "LOAD", "blockNumber": "93985823" },
-      { "stage": "QUOTE", "blockNumber": "93985823" },
-      { "stage": "ACTION", "blockNumber": "93985823" },
-      { "stage": "SIMULATE", "blockNumber": "93985839" }
+      { "stage": "DISCOVER", "blockNumber": "94112883" },
+      { "stage": "LOAD", "blockNumber": "94112883" },
+      { "stage": "QUOTE", "blockNumber": "94112883" },
+      { "stage": "ACTION", "blockNumber": "94112883" },
+      { "stage": "SIMULATE", "blockNumber": "94112901" }
     ]
   },
   "simulationCoverage": {
