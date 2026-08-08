@@ -34,6 +34,18 @@
 }
 
 @layer components {
+  .route-transition-shield {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    pointer-events: none;
+    background: #05050a;
+    opacity: 0;
+    will-change: opacity;
+  }
+  html[data-route-transition="analyze"] .route-transition-shield {
+    opacity: 1;
+  }
   .shell {
     @apply mx-auto w-[min(90vw,1500px)] px-4 pb-28 pt-16;
   }

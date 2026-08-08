@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { type MouseEventHandler, useEffect } from "react";
 import { LanguageSwitch } from "@/components/LanguageSwitch";
 import { LANGUAGE_STORAGE_KEY, type Language, pick } from "@/lib/i18n";
 
@@ -6,12 +6,14 @@ export function SiteNav({
   language,
   active = "home",
   minimal = false,
+  onAnalyzeNavigate,
   onLanguageChange,
 }: {
   language: Language;
   active?: "home" | "analyze";
   /** Wallet route only: show a compact return path and keep the languages. */
   minimal?: boolean;
+  onAnalyzeNavigate?: MouseEventHandler<HTMLAnchorElement>;
   onLanguageChange: (language: Language) => void;
 }) {
   useEffect(() => {
@@ -50,12 +52,14 @@ export function SiteNav({
       )}
       <div className="ml-auto flex items-center gap-4 sm:gap-[30px]">
         {!minimal && (
+          // biome-ignore lint/a11y/useValidAnchor: this is a real client-side hash route with native link semantics
           <a
             href="#/analyze"
             aria-current={active === "analyze" ? "page" : undefined}
             className={`text-[13px] font-bold uppercase tracking-[0.08em] no-underline transition-colors hover:text-accent sm:text-[15px] ${
               active === "analyze" ? "text-accent" : "text-dim"
             }`}
+            onClick={onAnalyzeNavigate}
           >
             {pick(language, "Try demo", "体验 Demo")}
           </a>

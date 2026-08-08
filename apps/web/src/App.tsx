@@ -1,5 +1,6 @@
 import {
   type CSSProperties,
+  type MouseEvent as ReactMouseEvent,
   type ReactNode,
   type PointerEvent as ReactPointerEvent,
   useEffect,
@@ -85,9 +86,34 @@ function readRoute() {
 export function AppRouteSurface({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-[100dvh] bg-[#05050a]" data-app-route-surface="">
+      <div aria-hidden="true" className="route-transition-shield" />
       {children}
     </div>
   );
+}
+
+export function prepareAnalyzeNavigation(
+  event: Pick<
+    ReactMouseEvent<HTMLAnchorElement>,
+    | "altKey"
+    | "button"
+    | "ctrlKey"
+    | "defaultPrevented"
+    | "metaKey"
+    | "shiftKey"
+  >,
+) {
+  if (
+    event.defaultPrevented ||
+    event.button !== 0 ||
+    event.altKey ||
+    event.ctrlKey ||
+    event.metaKey ||
+    event.shiftKey
+  ) {
+    return;
+  }
+  document.documentElement.dataset.routeTransition = "analyze";
 }
 
 export default function App() {
@@ -100,18 +126,33 @@ export default function App() {
     return () => window.removeEventListener("hashchange", sync);
   }, []);
 
+  useEffect(() => {
+    if (route !== "analyze") {
+      delete document.documentElement.dataset.routeTransition;
+      return;
+    }
+    const frame = window.requestAnimationFrame(() => {
+      delete document.documentElement.dataset.routeTransition;
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [route]);
+
   return (
     <AppRouteSurface>
       <SiteNav
         active={route === "analyze" ? "analyze" : "home"}
         language={language}
         minimal={route === "analyze"}
+        onAnalyzeNavigate={prepareAnalyzeNavigation}
         onLanguageChange={setLanguage}
       />
       {route === "analyze" ? (
         <WalletApp language={language} />
       ) : (
-        <Home language={language} />
+        <Home
+          language={language}
+          onAnalyzeNavigate={prepareAnalyzeNavigation}
+        />
       )}
     </AppRouteSurface>
   );
@@ -198,7 +239,13 @@ function useScrollReveal(
   }, [heroRef, progressRef, revealRef, shadeRef]);
 }
 
-function Home({ language }: { language: Language }) {
+function Home({
+  language,
+  onAnalyzeNavigate,
+}: {
+  language: Language;
+  onAnalyzeNavigate: (event: ReactMouseEvent<HTMLAnchorElement>) => void;
+}) {
   const heroRef = useRef<HTMLDivElement>(null);
   const shadeRef = useRef<HTMLDivElement>(null);
   const revealRef = useRef<HTMLDivElement>(null);
@@ -264,7 +311,12 @@ function Home({ language }: { language: Language }) {
                   )}
                 </p>
                 <div className="pointer-events-auto mt-8 flex flex-wrap gap-3 sm:mt-10">
-                  <a href="#/analyze" className="btn btn-primary">
+                  {/* biome-ignore lint/a11y/useValidAnchor: this is a real client-side hash route with native link semantics */}
+                  <a
+                    href="#/analyze"
+                    className="btn btn-primary"
+                    onClick={onAnalyzeNavigate}
+                  >
                     {pick(language, "Try demo", "体验 Demo")}
                   </a>
                   <a href="#how-it-works" className="btn">
@@ -383,7 +435,12 @@ function Home({ language }: { language: Language }) {
               <br />
               {pick(language, "before you sign.", "明确该怎么做")}
             </h2>
-            <a href="#/analyze" className="btn btn-primary">
+            {/* biome-ignore lint/a11y/useValidAnchor: this is a real client-side hash route with native link semantics */}
+            <a
+              href="#/analyze"
+              className="btn btn-primary"
+              onClick={onAnalyzeNavigate}
+            >
               {pick(language, "Try demo", "体验 Demo")}
             </a>
           </section>
