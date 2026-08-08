@@ -251,6 +251,61 @@ describe("checkSwap API adapter", () => {
     expect(action?.reason.en).not.toContain("OUTPUT_IMPROVEMENT_VERIFIED");
   });
 
+  test("renders a child Run Diff as amountIn in display units", async () => {
+    const child = {
+      ...completed,
+      runId: "run-live-2",
+      parentRunId: "run-live-1",
+      diff: {
+        previousRunId: "run-live-1",
+        previousVerdict: "UNKNOWN",
+        changedFields: [
+          {
+            field: "amountInAtomic",
+            before: "10000000000000000",
+            after: "20000000000000000",
+          },
+        ],
+      },
+    };
+    const request = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(jsonResponse(child));
+    const result = await checkSwap(input, { fetch: request });
+
+    expect(result.diff).toEqual([
+      {
+        field: { en: "amountIn", zh: "amountIn" },
+        previous: { en: "0.01 MON", zh: "0.01 MON" },
+        next: { en: "0.02 MON", zh: "0.02 MON" },
+        direction: "changed",
+      },
+    ]);
+  });
+
+  test("leaves non-amount Diff fields untouched", async () => {
+    const child = {
+      ...completed,
+      runId: "run-live-3",
+      parentRunId: "run-live-1",
+      diff: {
+        previousRunId: "run-live-1",
+        previousVerdict: "UNKNOWN",
+        changedFields: [
+          { field: "protocol", before: "kuru", after: "pancake" },
+        ],
+      },
+    };
+    const request = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(jsonResponse(child));
+    const result = await checkSwap(input, { fetch: request });
+
+    expect(result.diff?.[0]?.field.en).toBe("protocol");
+    expect(result.diff?.[0]?.previous.en).toBe("kuru");
+    expect(result.diff?.[0]?.next.en).toBe("pancake");
+  });
+
   test("prefers a nested Run retryable=false over the HTTP 502 fallback", async () => {
     const run = {
       ...completed,

@@ -200,22 +200,33 @@ function evidence(value: unknown, replay: boolean): EvidenceItem | undefined {
   };
 }
 
-function diff(value: unknown): RunDiff | undefined {
+/**
+ * The wire Diff names the amount field `amountInAtomic` and carries atomic
+ * strings. The handoff requires human copy from the Intent plus token registry,
+ * so the row is relabeled `amountIn` and converted with trusted decimals.
+ */
+function diff(value: unknown, tokenIn: string): RunDiff | undefined {
   const rows = arr(obj(value)?.changedFields).flatMap((raw) => {
     const item = obj(raw);
     const field = str(item?.field);
     const before = str(item?.before);
     const after = str(item?.after);
-    return field && before !== undefined && after !== undefined
-      ? [
-          {
-            field: cp(field),
-            previous: cp(before),
-            next: cp(after),
-            direction: "changed" as const,
-          },
-        ]
-      : [];
+    if (!field || before === undefined || after === undefined) return [];
+
+    const isAmount = field === "amountInAtomic";
+    const show = (atomic: string) =>
+      isAmount
+        ? `${decimal(atomic, decimalsFor(tokenIn))} ${tokenIn}`
+        : atomic;
+
+    return [
+      {
+        field: cp(isAmount ? "amountIn" : field),
+        previous: cp(show(before)),
+        next: cp(show(after)),
+        direction: "changed" as const,
+      },
+    ];
   });
   return rows.length ? rows : undefined;
 }
@@ -397,7 +408,7 @@ function mapRun(
       tokenOut,
       amountIn: decimal(intent?.amountInAtomic, tokenIn === "USDC" ? 6 : 18),
     },
-    diff: diff(run?.diff),
+    diff: diff(run?.diff, tokenIn),
     quote: {
       // The handoff separates the QUOTE-stage observation from the simulated
       // output, so the top-level Quote wins for the "expected" figure and the

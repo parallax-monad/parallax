@@ -31,18 +31,24 @@ export type FormValidation =
     }
   | { valid: false; errors: FormFieldErrors };
 
+const PLAIN_DECIMAL = /^(?:0|[1-9]\d*)(?:\.\d+)?$/;
+
 function parseFinite(value: string): number | undefined {
   if (value.trim() === "") return undefined;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : undefined;
 }
 
+function parsePlainDecimal(value: string): number | undefined {
+  return PLAIN_DECIMAL.test(value) ? parseFinite(value) : undefined;
+}
+
 /** Shared UI/service validation. No caller is allowed to invent fallback values. */
 export function validateForm(form: FormState): FormValidation {
   const errors: FormFieldErrors = {};
-  const amountIn = parseFinite(form.amountIn);
+  const amountIn = parsePlainDecimal(form.amountIn);
   const slippage = parseFinite(form.slippage);
-  const minimumReceived = parseFinite(form.minimumReceived);
+  const minimumReceived = parsePlainDecimal(form.minimumReceived);
 
   if (amountIn === undefined || amountIn <= 0) {
     errors.amountIn = {
