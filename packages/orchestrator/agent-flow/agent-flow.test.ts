@@ -10,6 +10,18 @@ import { KuruLiveAgentFlow, type LiveAgentFlowInput } from "./index.js";
 
 const sender = "0x1111111111111111111111111111111111111111";
 const usdc = "0x2222222222222222222222222222222222222222";
+const transferTopic =
+  "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
+const liveUsdcTransferEvent: JsonValue = {
+  kind: "event",
+  address: usdc,
+  topics: [
+    transferTopic,
+    `0x${"3".repeat(64)}`,
+    `0x${sender.slice(2).padStart(64, "0")}`,
+  ],
+  data: `0x${"df".padStart(64, "0")}`,
+};
 
 const intent: LiveAgentFlowInput["intent"] = {
   chainId: 143,
@@ -120,6 +132,39 @@ function input(runId = "run-1"): LiveAgentFlowInput {
     tokenOutDecimals: 6,
     moss: runtime,
   };
+}
+
+function liveAmountOutFlow() {
+  return new KuruLiveAgentFlow(async (value) => ({
+    runId: value.runId,
+    evidence: evidence({
+      assetChanges: sourced([liveUsdcTransferEvent], "moss"),
+      assetChangeAssessment: "EXPLAINED",
+      outcome: sourced(
+        {
+          operation: "swap",
+          protocol: "kuru",
+          sender,
+          tokenIn: "native",
+          tokenOut: usdc,
+          amountIn: intent.amountInAtomic,
+          amountOut: "223",
+        },
+        "moss",
+      ),
+    }),
+    raw: {
+      discover: null,
+      load: null,
+      quote: null,
+      action: null,
+      simulation: null,
+    },
+    stages: [],
+    runtime: runtimeIdentity(),
+    observedChainId: 143,
+    simulatorPinnedBlock: "1",
+  }));
 }
 
 describe("KuruLiveAgentFlow", () => {
@@ -390,6 +435,91 @@ describe("KuruLiveAgentFlow", () => {
     expect(
       result.evidence.find((item) => item.kind === "simulated_token_out"),
     ).toMatchObject({ amountReceivedAtomic: "20000" });
+  });
+
+  it("derives simulated tokenOut from the live Kuru amountOut shape", async () => {
+    const flow = liveAmountOutFlow();
+
+    const result = await flow.check({
+      ...input(),
+      intent: {
+        ...intent,
+        economicBoundary: {
+          availability: "available",
+          minimumReceivedAtomic: "1",
+          source: "user_declared",
+        },
+      },
+    });
+
+    expect(result.verdict).toBe("PROCEED");
+    expect(
+      result.ruleResults.find((rule) => rule.ruleId === "P0-ECONOMIC-001"),
+    ).toMatchObject({ status: "PASS" });
+    expect(
+      result.evidence.find((item) => item.kind === "simulated_token_out"),
+    ).toMatchObject({
+      amountReceivedAtomic: "223",
+      recipient: sender,
+      derivation: "asset_change",
+      inputEvidenceRefs: expect.arrayContaining([
+        expect.objectContaining({
+          key: `${runtime.runtimeRevision}:asset-changes`,
+        }),
+      ]),
+    });
+
+    const belowBoundary = await flow.check({
+      ...input("run-live-below-boundary"),
+      intent: {
+        ...intent,
+        economicBoundary: {
+          availability: "available",
+          minimumReceivedAtomic: "1000",
+          source: "user_declared",
+        },
+      },
+    });
+
+    expect(belowBoundary.verdict).toBe("STOP");
+    expect(
+      belowBoundary.ruleResults.find(
+        (rule) => rule.ruleId === "P0-ECONOMIC-001",
+      ),
+    ).toMatchObject({
+      status: "FAIL",
+      reasonCode: "OUTPUT_BELOW_BOUNDARY",
+    });
+  });
+
+  it("does not infer an explicit recipient from the sender", async () => {
+    const flow = liveAmountOutFlow();
+    const recipient = "0x4444444444444444444444444444444444444444";
+
+    const result = await flow.check({
+      ...input("run-explicit-recipient"),
+      intent: {
+        ...intent,
+        recipient,
+        recipientSource: "explicit",
+        economicBoundary: {
+          availability: "available",
+          minimumReceivedAtomic: "1",
+          source: "user_declared",
+        },
+      },
+    });
+
+    expect(result.verdict).toBe("UNKNOWN");
+    expect(
+      result.ruleResults.find((rule) => rule.ruleId === "P0-ECONOMIC-001"),
+    ).toMatchObject({
+      status: "UNKNOWN",
+      reasonCode: "SIMULATED_OUTPUT_UNAVAILABLE",
+    });
+    expect(
+      result.evidence.some((item) => item.kind === "simulated_token_out"),
+    ).toBe(false);
   });
 
   it("returns STOP for a below-boundary result until an Action Gate exists", async () => {

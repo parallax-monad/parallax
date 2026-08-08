@@ -20,12 +20,17 @@ export function WalletHome({
     <div className="flex flex-col gap-5 px-5 pb-6 pt-2">
       <section>
         <span className="text-[12px] font-bold uppercase tracking-[0.1em] text-dim">
-          {say(language, { en: "Total balance", zh: "总余额" })}
+          {say(language, { en: "Demo balance", zh: "演示余额" })}
         </span>
         <strong className="mt-1 block text-[38px] font-extrabold leading-none tracking-[-0.05em]">
           {formatUsd(TOTAL_BALANCE_USD)}
         </strong>
-        <p className="mono mt-2 text-dim">{DEMO_ADDRESS}</p>
+        <div className="mt-2">
+          <span className="block text-[10px] font-bold uppercase tracking-[0.08em] text-faint">
+            {say(language, { en: "Demo wallet", zh: "演示钱包" })}
+          </span>
+          <p className="mono mt-1 text-dim">{DEMO_ADDRESS}</p>
+        </div>
       </section>
 
       <button
@@ -46,8 +51,8 @@ export function WalletHome({
       >
         <strong className="block text-[14px] font-bold text-monad-dim">
           {say(language, {
-            en: "Parallax checks every swap before signing",
-            zh: "Parallax 会在签名前检查每一笔兑换",
+            en: "This demo checks a supported swap intent before signing",
+            zh: "本演示会在签名前检查一个受支持的兑换意图",
           })}
         </strong>
         <p className="mt-1.5 text-[13px] leading-[1.6] text-dim">

@@ -4,7 +4,11 @@ import { DiffCard } from "@/components/analyze/DiffCard";
 import { VerdictIcon } from "@/components/analyze/StatusIcon";
 import { TokenIcon } from "@/components/analyze/TokenIcon";
 import { formatAmount } from "@/components/wallet/walletData";
-import type { CheckSwapResult, Verdict } from "@/lib/analyze/types";
+import type {
+  CheckSwapResult,
+  ProductRunMode,
+  Verdict,
+} from "@/lib/analyze/types";
 import { type Copy, type Language, say } from "@/lib/i18n";
 
 const VERDICT_TONE: Record<Verdict, string> = {
@@ -14,12 +18,34 @@ const VERDICT_TONE: Record<Verdict, string> = {
   STOP: "border-risk-high/50 bg-risk-high/10 text-risk-high",
 };
 
+const MODE_LABEL: Record<ProductRunMode, Copy> = {
+  LIVE: { en: "Live check", zh: "实时检查" },
+  RECORDED_REPLAY: { en: "Recorded replay", zh: "录制回放" },
+};
+
+const MODE_EXPLANATION: Record<ProductRunMode, Copy> = {
+  LIVE: {
+    en: "This is the backend response for a live Check. Nothing here is signed or broadcast.",
+    zh: "这是实时检查的后端响应。这里不会签名，也不会广播。",
+  },
+  RECORDED_REPLAY: {
+    en: "This result reproduces previously recorded real Evidence. It is not a current Live Run.",
+    zh: "此结果复现此前录制的真实证据，并非当前实时运行。",
+  },
+};
+
 /** Plain-language names, since the raw verdict words assume swap literacy. */
 const VERDICT_PLAIN: Record<Verdict, Copy> = {
-  PROCEED: { en: "No blocking evidence found", zh: "未发现阻断证据" },
-  ADJUST: { en: "Change something first", zh: "先改一个条件" },
-  STOP: { en: "Do not sign this", zh: "不要签名" },
-  UNKNOWN: { en: "Not enough evidence", zh: "证据不足" },
+  PROCEED: {
+    en: "No blocking evidence found in the checked scope",
+    zh: "已检查范围内未发现阻断证据",
+  },
+  ADJUST: {
+    en: "Adjust the transaction before proceeding",
+    zh: "继续之前请先调整交易",
+  },
+  STOP: { en: "Do not use this transaction path", zh: "请勿使用当前交易路径" },
+  UNKNOWN: { en: "More evidence is required", zh: "需要更多证据" },
 };
 
 /**
@@ -27,10 +53,10 @@ const VERDICT_PLAIN: Record<Verdict, Copy> = {
  * rather than signing, because this MVP never signs or broadcasts.
  */
 const PRIMARY_ACTION: Record<Verdict, Copy> = {
-  PROCEED: { en: "Keep this swap", zh: "保留这笔兑换" },
-  ADJUST: { en: "Adjust this swap", zh: "调整这笔兑换" },
-  STOP: { en: "Change route or pair", zh: "更换路径或代币对" },
-  UNKNOWN: { en: "Review and run again", zh: "查看后重新检查" },
+  PROCEED: { en: "Review swap inputs", zh: "查看兑换输入" },
+  ADJUST: { en: "Review demo adjustment", zh: "查看演示调整" },
+  STOP: { en: "Review route or pair", zh: "查看路径或代币对" },
+  UNKNOWN: { en: "Review inputs", zh: "查看输入" },
 };
 
 /** Abandoning the intent is the same choice under every verdict. */
@@ -42,26 +68,26 @@ const INTEGRATION_ERROR_COPY = {
     en: "No transaction conclusion was produced. Retry the check or view technical details.",
     zh: "本次没有生成交易结论。请重试检查或查看技术详情。",
   },
-  retry: { en: "Retry", zh: "重试" },
+  retry: { en: "Retry check", zh: "重新检查" },
   details: { en: "View details", zh: "查看详情" },
 } satisfies Record<string, Copy>;
 
 const NEXT_STEP: Record<Verdict, Copy> = {
   PROCEED: {
-    en: "The backend found no blocking condition in its checked scope. This is not a safety guarantee.",
-    zh: "后端在已检查范围内未发现阻断条件。这不构成安全保证。",
+    en: "No blocking evidence was found within the completed demo checks. Review what was not checked before deciding what to do next. This is not a safety guarantee.",
+    zh: "已完成的演示检查中未发现阻断证据。决定下一步之前，请查看哪些项目尚未检查。这不构成安全保证。",
   },
   ADJUST: {
-    en: "The backend suggests changing one verified transaction condition, then running it again.",
-    zh: "后端建议修改一个已验证的交易条件，然后重新运行。",
+    en: "This demo illustrates an adjustment state. Review the displayed evidence and change only the supported condition before rerunning.",
+    zh: "本演示展示调整状态。请查看所展示的证据，仅修改有支持的条件后重新运行。",
   },
   STOP: {
-    en: "The backend found a blocking condition. Review the details before deciding what to do.",
-    zh: "后端发现了阻断条件。决定下一步之前请查看详情。",
+    en: "Blocking evidence applies to this demo Intent or path. Review the checked reason before continuing.",
+    zh: "阻断证据适用于此演示交易意图或路径。继续之前请查看已检查的原因。",
   },
   UNKNOWN: {
-    en: "The backend did not have enough information for a transaction conclusion. Unknown is never a pass.",
-    zh: "后端没有足够信息得出交易结论。Unknown 不等于通过。",
+    en: "The demo could not reach a transaction conclusion because required evidence is missing or incomplete. UNKNOWN is never a pass.",
+    zh: "由于必要证据缺失或不完整，本演示无法形成交易结论。UNKNOWN 绝不代表通过。",
   },
 };
 
@@ -127,6 +153,9 @@ export function WalletResult({
           <span className="pill border-risk-elevated/50 text-risk-elevated">
             {say(language, { en: "Integration error", zh: "集成错误" })}
           </span>
+          <span className="pill">
+            {say(language, MODE_LABEL[result.productRunMode])}
+          </span>
         </div>
 
         <section className="flex items-start gap-3 border border-risk-elevated/50 bg-risk-elevated/10 p-4 text-risk-elevated">
@@ -140,68 +169,25 @@ export function WalletResult({
               {say(language, INTEGRATION_ERROR_COPY.title)}
             </strong>
             <p className="mt-1.5 text-[14px] leading-[1.6] text-white">
-              {say(
-                language,
-                result.apiFailure?.retryable
-                  ? INTEGRATION_ERROR_COPY.explanation
-                  : {
-                      en: "No transaction conclusion was produced. This error cannot be retried as-is; view technical details or discard this check.",
-                      zh: "本次没有生成交易结论。此错误无法原样重试；请查看技术详情或放弃本次检查。",
-                    },
-              )}
+              {say(language, INTEGRATION_ERROR_COPY.explanation)}
             </p>
             <p className="mt-2 text-[13px] leading-[1.6] text-dim">
               {say(language, result.summary)}
             </p>
-            {result.apiFailure && (
-              <dl className="mt-3 border-t border-risk-elevated/30 pt-2 text-[12px]">
-                <div className="flex justify-between gap-3 py-1">
-                  <dt className="font-bold uppercase tracking-[0.06em]">
-                    error.code
-                  </dt>
-                  <dd className="mono m-0 text-right text-white">
-                    {result.apiFailure.code}
-                  </dd>
-                </div>
-                {result.apiFailure.reason && (
-                  <div className="flex justify-between gap-3 py-1">
-                    <dt className="font-bold uppercase tracking-[0.06em]">
-                      error.reason
-                    </dt>
-                    <dd className="mono m-0 text-right text-white">
-                      {result.apiFailure.reason}
-                    </dd>
-                  </div>
-                )}
-                <div className="flex justify-between gap-3 py-1">
-                  <dt className="font-bold uppercase tracking-[0.06em]">
-                    retryable
-                  </dt>
-                  <dd className="mono m-0 text-right text-white">
-                    {String(result.apiFailure.retryable)}
-                  </dd>
-                </div>
-              </dl>
-            )}
           </div>
         </section>
+        <p className="text-[12px] leading-[1.6] text-dim">
+          {say(language, MODE_EXPLANATION[result.productRunMode])}
+        </p>
 
-        <div
-          className={
-            result.apiFailure?.retryable
-              ? "grid grid-cols-2 gap-2"
-              : "grid grid-cols-1 gap-2"
-          }
-        >
-          {result.apiFailure?.retryable && (
-            <button
-              type="button"
-              className="btn btn-monad"
-              onClick={onRetry ?? onKeep}
-            >
-              {say(language, INTEGRATION_ERROR_COPY.retry)}
-            </button>
-          )}
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            className="btn btn-monad"
+            onClick={onRetry ?? onKeep}
+          >
+            {say(language, INTEGRATION_ERROR_COPY.retry)}
+          </button>
           <button
             type="button"
             className="btn btn-monad-outline"
@@ -235,22 +221,30 @@ export function WalletResult({
     notChecked: result.notChecked.length,
   };
 
+  const evidenceAction =
+    verdict === "UNKNOWN"
+      ? scope.unknown > 0
+        ? { en: "View evidence gaps", zh: "查看证据缺口" }
+        : { en: "Review checked scope", zh: "查看已检查范围" }
+      : verdict === "STOP"
+        ? {
+            en: "Review blocking evidence",
+            zh: "查看阻断证据",
+          }
+        : {
+            en: "Review checked scope",
+            zh: "查看已检查范围",
+          };
+
   return (
     <div className="flex flex-col gap-4 px-5 pb-6 pt-2">
       <div className="flex flex-wrap items-center gap-2">
         <span className="eyebrow-monad m-0">
           {say(language, { en: "Before you sign", zh: "签名之前" })}
         </span>
-        {result.productRunMode === "LIVE" && (
-          <span className="pill border-risk-low/50 text-risk-low">
-            {say(language, { en: "Live check", zh: "实时检查" })}
-          </span>
-        )}
-        {result.productRunMode === "RECORDED_REPLAY" && (
-          <span className="pill">
-            {say(language, { en: "Recorded replay", zh: "录制回放" })}
-          </span>
-        )}
+        <span className="pill">
+          {say(language, MODE_LABEL[result.productRunMode])}
+        </span>
       </div>
 
       <section
@@ -262,10 +256,13 @@ export function WalletResult({
             {say(language, VERDICT_PLAIN[verdict])}
           </strong>
           <p className="mt-1.5 text-[14px] leading-[1.6] text-white">
-            {say(language, result.summary)}
+            {say(language, NEXT_STEP[verdict])}
           </p>
         </div>
       </section>
+      <p className="text-[12px] leading-[1.6] text-dim">
+        {say(language, MODE_EXPLANATION[result.productRunMode])}
+      </p>
 
       <fieldset className="flex flex-wrap items-center gap-x-3 gap-y-1 border border-line bg-ink-rail px-4 py-2.5 text-[12px] font-bold uppercase tracking-[0.04em] text-dim">
         <legend className="sr-only">
@@ -302,12 +299,15 @@ export function WalletResult({
         <Side
           amount={
             unresolved
-              ? say(language, { en: "No quote", zh: "无报价" })
+              ? say(language, {
+                  en: "Estimate unavailable",
+                  zh: "暂无估算",
+                })
               : quote.expectedOutput
           }
           caption={say(language, {
-            en: "You receive (est.)",
-            zh: "你收到（预估）",
+            en: "You receive (demo est.)",
+            zh: "你收到（演示估算）",
           })}
           muted={unresolved}
           symbol={intent.tokenOut}
@@ -333,11 +333,19 @@ export function WalletResult({
 
       <section className="border border-line bg-ink-rail p-4">
         <strong className="block text-[13px] font-bold uppercase tracking-[0.08em] text-monad-dim">
-          {say(language, { en: "Backend actions", zh: "后端操作建议" })}
+          {say(language, {
+            en: "Next step in this result",
+            zh: "本次结果的下一步",
+          })}
         </strong>
-        <p className="mt-1.5 text-[14px] leading-[1.6] text-white">
-          {say(language, NEXT_STEP[verdict])}
-        </p>
+        {result.productRunMode === "RECORDED_REPLAY" && (
+          <p className="mt-1.5 text-[13px] leading-[1.6] text-dim">
+            {say(language, {
+              en: "Recorded replay presentation; not a live verified transaction recommendation.",
+              zh: "录制回放展示，并非经过实时验证的交易建议。",
+            })}
+          </p>
+        )}
         {result.recommendedActions.length > 0 && (
           <ul className="m-0 mt-3 list-none border-t border-line p-0">
             {result.recommendedActions.map((suggestion) => (
@@ -345,28 +353,18 @@ export function WalletResult({
                 className="border-b border-line py-2.5 text-[14px] leading-[1.6] text-dim last:border-b-0"
                 key={suggestion.field}
               >
-                {suggestion.proposedChange && (
-                  <span className="mb-1 flex flex-wrap items-center gap-2 text-[14px]">
-                    <span className="text-[12px] font-bold uppercase tracking-[0.06em] text-dim">
-                      {say(language, { en: "Amount", zh: "数量" })}
-                    </span>
-                    <span className="text-dim line-through">
-                      {suggestion.proposedChange.before}{" "}
-                      {suggestion.proposedChange.unit}
-                    </span>
-                    <span aria-hidden="true" className="text-faint">
-                      →
-                    </span>
-                    <strong className="text-monad-dim">
-                      {suggestion.proposedChange.after}{" "}
-                      {suggestion.proposedChange.unit}
-                    </strong>
-                  </span>
-                )}
                 {say(language, suggestion.reason)}
               </li>
             ))}
           </ul>
+        )}
+        {result.recommendedActions.length === 0 && (
+          <p className="mt-2 text-[14px] leading-[1.6] text-white">
+            {say(language, {
+              en: "No public transaction adjustment is available for this result.",
+              zh: "本次结果没有可公开展示的交易调整建议。",
+            })}
+          </p>
         )}
       </section>
 
@@ -388,7 +386,7 @@ export function WalletResult({
         className="text-[13px] font-bold uppercase tracking-[0.08em] text-dim underline transition-colors hover:text-monad-dim"
         onClick={onOpenEvidence}
       >
-        {say(language, { en: "View evidence", zh: "查看证据" })}
+        {say(language, evidenceAction)}
       </button>
 
       <button

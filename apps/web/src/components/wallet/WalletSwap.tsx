@@ -265,11 +265,14 @@ export function WalletSwap({
                 })}
               </span>
               <input
-                aria-describedby={
+                aria-describedby={[
+                  "swap-minimum-received-help",
                   minimumReceivedError
                     ? "swap-minimum-received-error"
-                    : undefined
-                }
+                    : undefined,
+                ]
+                  .filter(Boolean)
+                  .join(" ")}
                 aria-invalid={
                   minimumReceivedError || flagFor("minimumReceived")
                     ? true
@@ -288,6 +291,15 @@ export function WalletSwap({
                 value={form.minimumReceived}
                 onChange={(event) => set("minimumReceived", event.target.value)}
               />
+              <p
+                id="swap-minimum-received-help"
+                className="mt-2 text-[12px] leading-[1.6] text-dim"
+              >
+                {say(language, {
+                  en: "Minimum Received is the lowest output amount accepted for this Intent. It is an acceptance boundary, not an estimate and not a way to improve the transaction.",
+                  zh: "最低收到量是此交易意图可接受的最低输出数量。它是接受边界，不是预估值，也不是改善交易结果的方法。",
+                })}
+              </p>
               {minimumReceivedError ? (
                 <p
                   id="swap-minimum-received-error"

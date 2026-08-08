@@ -2,6 +2,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, test } from "vitest";
 import {
   createVerdictInteractionHandlers,
+  getSelectedVoteStatus,
   VerdictActions,
   type VerdictZone,
 } from "./VerdictActions";
@@ -22,10 +23,10 @@ describe("VerdictActions", () => {
     expect(html).toContain("37 DEMO VOTES / INTERACTIVE POLL");
     expect(html).toContain("ONE PERSON / ONE VOTE");
     expect(html).not.toContain("READY TO SIGN");
-    expect(html).toContain("IN THIS DEMO SCOPE");
-    expect(html).toContain("REVISE &amp; RERUN");
-    expect(html).toContain("DO NOT SIGN");
-    expect(html).toContain("MORE EVIDENCE NEEDED");
+    expect(html).toContain("PROCEED / DEMO");
+    expect(html).toContain("ADJUST BEFORE PROCEEDING");
+    expect(html).toContain("DO NOT USE THIS TRANSACTION PATH");
+    expect(html).toContain("MORE EVIDENCE IS REQUIRED");
   });
 
   test("starts as an uncast interactive vote", () => {
@@ -52,16 +53,16 @@ describe("VerdictActions", () => {
     const html = renderToStaticMarkup(<VerdictActions language="en" />);
 
     expect(html).toContain(
-      "Collect the missing evidence before drawing a conclusion.",
+      "Parallax could not reach a transaction conclusion because required evidence is missing or incomplete.",
     );
     expect(html).toContain(
-      "No blocking evidence was found in this demo scope. This evidence assessment is not a safety guarantee.",
+      "No blocking evidence was found within the checked demo scope. This is not a safety guarantee.",
     );
     expect(html).toContain(
-      "Do not sign: the route cannot execute or meet the stated limits.",
+      "Blocking evidence applies to this transaction Intent or path. Review the checked reason before continuing.",
     );
     expect(html).toContain(
-      "Revise the evidence-identified condition, then rerun the assessment.",
+      "When a verified transaction adjustment is available, review the evidence and rerun after making that one change.",
     );
   });
 
@@ -110,16 +111,24 @@ describe("VerdictActions", () => {
     expect(voted).toBe("northeast");
   });
 
-  test("uses touch press as a fallback but ignores touch enter", () => {
+  test("uses one click path for touch voting and ignores touch enter", () => {
     let selected: VerdictZone = "southeast";
-    const handlers = createVerdictInteractionHandlers("northwest", (zone) => {
-      selected = zone;
-    });
+    let voteUpdates = 0;
+    const handlers = createVerdictInteractionHandlers(
+      "northwest",
+      () => undefined,
+      (zone) => {
+        selected = zone;
+        voteUpdates += 1;
+      },
+    );
 
     handlers.onPointerEnter({ pointerType: "touch" });
     expect(selected).toBe("southeast");
-    handlers.onPointerDown({ pointerType: "touch" });
+    expect("onPointerDown" in handlers).toBe(false);
+    handlers.onClick();
     expect(selected).toBe("northwest");
+    expect(voteUpdates).toBe(1);
   });
 
   test("supports keyboard focus selection", () => {
@@ -135,15 +144,30 @@ describe("VerdictActions", () => {
   test("uses concise, idiomatic Chinese verdict language", () => {
     const html = renderToStaticMarkup(<VerdictActions language="zh-CN" />);
 
-    expect(html).toContain("证据尚不足");
+    expect(html).toContain("需要更多证据");
     expect(html).not.toContain("可以签署");
-    expect(html).toContain("演示范围内");
-    expect(html).toContain("请勿签署");
-    expect(html).toContain("调整后重跑");
+    expect(html).toContain("PROCEED／演示");
+    expect(html).toContain("请勿使用当前交易路径");
+    expect(html).toContain("请勿使用当前");
+    expect(html).toContain("交易路径");
+    expect(html).toContain("verdict-heading-zh-line");
+    expect(html).toContain("调整后再继续");
     expect(html).toContain("一人一票 · 点击改投");
     expect(html).toContain("一人一票");
-    expect(html).toContain("先补齐缺失证据，再形成结论");
-    expect(html).toContain("请勿签署：当前路径无法执行");
-    expect(html).not.toContain("需要更多证据");
+    expect(html).toContain("由于必要证据缺失或不完整");
+    expect(html).toContain("阻断证据适用于当前交易意图或路径");
+    expect(html.match(/data-mobile-zh-single-line="true"/g)).toHaveLength(3);
+    const stopButton = html.match(
+      /<button[^>]*data-zone="southwest"[^>]*>/,
+    )?.[0];
+    expect(stopButton).toBeDefined();
+    expect(stopButton).not.toContain('data-mobile-zh-single-line="true"');
+  });
+
+  test("keeps the full desktop vote status and provides a mobile visual abbreviation", () => {
+    expect(getSelectedVoteStatus("en")).toBe("YOUR ONLY VOTE");
+    expect(getSelectedVoteStatus("en", true)).toBe("YOUR VOTE");
+    expect(getSelectedVoteStatus("zh-CN")).toBe("你的唯一一票");
+    expect(getSelectedVoteStatus("zh-CN", true)).toBe("你的唯一一票");
   });
 });

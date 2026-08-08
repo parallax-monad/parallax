@@ -54,19 +54,6 @@ function ActionRow({
           {say(language, CATEGORY_LABEL[suggestion.category])}
         </span>
       </div>
-      {suggestion.proposedChange && (
-        <p className="m-0 mt-1.5 flex flex-wrap items-center gap-2 text-[14px]">
-          <span className="text-dim line-through">
-            {suggestion.proposedChange.before} {suggestion.proposedChange.unit}
-          </span>
-          <span aria-hidden="true" className="text-faint">
-            →
-          </span>
-          <strong className="text-monad-dim">
-            {suggestion.proposedChange.after} {suggestion.proposedChange.unit}
-          </strong>
-        </p>
-      )}
       <p className="m-0 mt-1.5 text-[14px] leading-[1.6] text-dim">
         {say(language, suggestion.reason)}
       </p>
@@ -129,19 +116,33 @@ export function ActionsCard({
   return (
     <div className="card">
       <span className="eyebrow-monad">
-        {say(language, { en: "Backend actions", zh: "后端操作建议" })}
+        {say(language, {
+          en: "Next step in this result",
+          zh: "本次结果的下一步",
+        })}
       </span>
+      {result.productRunMode === "DEMO" && (
+        <p className="mt-2 text-[13px] leading-[1.6] text-dim">
+          {say(language, {
+            en: "Demo-only presentation; not a live verified transaction recommendation.",
+            zh: "仅用于演示，并非经过实时验证的交易建议。",
+          })}
+        </p>
+      )}
 
       {hasActions ? (
         <div className="mt-3 grid grid-cols-1 gap-7 lg:grid-cols-2">
           <div>
             <h3 className="m-0 mb-1 text-[13px] font-extrabold uppercase tracking-[0.04em] text-monad-dim">
-              {say(language, { en: "Worth changing", zh: "值得修改" })}
+              {say(language, {
+                en: "Supported change",
+                zh: "有证据支持的修改",
+              })}
             </h3>
             <p className="m-0 mb-2 text-[14px] leading-[1.6] text-dim">
               {say(language, {
-                en: "Tied to the cause found in this run.",
-                zh: "与本次发现的原因相关。",
+                en: "Linked to the demonstrated cause in this result.",
+                zh: "与本次结果所展示的原因相关。",
               })}
             </p>
             <ul className="m-0 list-none border-t border-line p-0">
@@ -154,16 +155,27 @@ export function ActionsCard({
                 />
               ))}
             </ul>
+            {result.recommendedActions.length === 0 && (
+              <p className="mt-2 text-[14px] leading-[1.6] text-dim">
+                {say(language, {
+                  en: "No public transaction adjustment is available for this result.",
+                  zh: "本次结果没有可公开展示的交易调整建议。",
+                })}
+              </p>
+            )}
           </div>
 
           <div>
             <h3 className="m-0 mb-1 text-[13px] font-extrabold uppercase tracking-[0.04em] text-faint">
-              {say(language, { en: "Will not help", zh: "改了也无效" })}
+              {say(language, {
+                en: "Not supported by this result",
+                zh: "本次结果不支持的修改",
+              })}
             </h3>
             <p className="m-0 mb-2 text-[14px] leading-[1.6] text-dim">
               {say(language, {
-                en: "Unrelated to the cause, so retrying with these changes nothing.",
-                zh: "与原因无关，改这些重试不会有变化。",
+                en: "This result does not support this change as a relevant next action.",
+                zh: "本次结果不支持将此修改作为相关的下一步。",
               })}
             </p>
             <ul className="m-0 list-none border-t border-line p-0">
@@ -181,8 +193,8 @@ export function ActionsCard({
       ) : (
         <p className="mt-2 text-[14px] text-dim">
           {say(language, {
-            en: "No condition needs to change based on this run.",
-            zh: "根据本次检查，没有条件需要修改。",
+            en: "No public transaction adjustment is available for this result.",
+            zh: "本次结果没有可公开展示的交易调整建议。",
           })}
         </p>
       )}

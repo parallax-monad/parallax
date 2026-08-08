@@ -10,7 +10,10 @@ type VerdictQuadrant = {
   tone: "evidence" | "ready" | "blocked" | "rerun";
   label: readonly [string, string];
   note: readonly [string, string];
+  shortLabel: readonly [string, string];
   body: readonly [string, string];
+  chineseLabelLines?: readonly [string, string];
+  mobileZhSingleLine?: boolean;
 };
 
 const QUADRANTS: VerdictQuadrant[] = [
@@ -18,44 +21,52 @@ const QUADRANTS: VerdictQuadrant[] = [
     index: "04",
     zone: "northwest",
     tone: "evidence",
-    label: ["MORE EVIDENCE NEEDED", "证据尚不足"],
-    note: ["EVIDENCE UNRESOLVED", "尚无法定论"],
+    label: ["MORE EVIDENCE IS REQUIRED", "需要更多证据"],
+    mobileZhSingleLine: true,
+    note: ["UNKNOWN / DEMO", "UNKNOWN／演示"],
+    shortLabel: ["UNKNOWN", "未知"],
     body: [
-      "Collect the missing evidence before drawing a conclusion.",
-      "先补齐缺失证据，再形成结论。",
+      "Parallax could not reach a transaction conclusion because required evidence is missing or incomplete.",
+      "由于必要证据缺失或不完整，Parallax 无法形成交易结论。",
     ],
   },
   {
     index: "01",
     zone: "northeast",
     tone: "ready",
-    label: ["NO BLOCKING EVIDENCE", "未发现阻断证据"],
-    note: ["IN THIS DEMO SCOPE", "演示范围内"],
+    label: ["NO BLOCKING EVIDENCE FOUND", "未发现阻断证据"],
+    mobileZhSingleLine: true,
+    note: ["PROCEED / DEMO", "PROCEED／演示"],
+    shortLabel: ["PROCEED", "继续"],
     body: [
-      "No blocking evidence was found in this demo scope. This evidence assessment is not a safety guarantee.",
-      "演示范围内未发现阻断证据；本次证据判断并不代表安全保证。",
+      "No blocking evidence was found within the checked demo scope. This is not a safety guarantee.",
+      "在已检查的演示范围内未发现阻断证据。这不构成安全保证。",
     ],
   },
   {
     index: "03",
     zone: "southwest",
     tone: "blocked",
-    label: ["DO NOT SIGN", "请勿签署"],
-    note: ["EXECUTION BLOCKED", "执行不可行"],
+    label: ["DO NOT USE THIS TRANSACTION PATH", "请勿使用当前交易路径"],
+    chineseLabelLines: ["请勿使用当前", "交易路径"],
+    note: ["STOP / DEMO", "STOP／演示"],
+    shortLabel: ["STOP", "停止"],
     body: [
-      "Do not sign: the route cannot execute or meet the stated limits.",
-      "请勿签署：当前路径无法执行，或无法满足既定限制。",
+      "Blocking evidence applies to this transaction Intent or path. Review the checked reason before continuing.",
+      "阻断证据适用于当前交易意图或路径。继续之前请查看已检查的原因。",
     ],
   },
   {
     index: "02",
     zone: "southeast",
     tone: "rerun",
-    label: ["REVISE & RERUN", "调整后重跑"],
-    note: ["CURRENT VERDICT", "当前判定"],
+    label: ["ADJUST BEFORE PROCEEDING", "调整后再继续"],
+    mobileZhSingleLine: true,
+    note: ["ADJUST / DEMO", "ADJUST／演示"],
+    shortLabel: ["ADJUST", "调整"],
     body: [
-      "Revise the evidence-identified condition, then rerun the assessment.",
-      "按证据指向调整交易条件，再重新进行判断。",
+      "When a verified transaction adjustment is available, review the evidence and rerun after making that one change.",
+      "当存在经过验证的交易调整时，请查看证据，只修改该项条件后重新运行。",
     ],
   },
 ];
@@ -116,13 +127,15 @@ export function createVerdictInteractionHandlers(
   return {
     onClick: () => voteZone(zone),
     onFocus: () => previewZone(zone),
-    onPointerDown: (event: VerdictPointerEvent) => {
-      if (event.pointerType === "touch") voteZone(zone);
-    },
     onPointerEnter: (event: VerdictPointerEvent) => {
       if (event.pointerType !== "touch") previewZone(zone);
     },
   };
+}
+
+export function getSelectedVoteStatus(language: Language, compact = false) {
+  if (compact) return pick(language, "YOUR VOTE", "你的唯一一票");
+  return pick(language, "YOUR ONLY VOTE", "你的唯一一票");
 }
 
 export function VerdictActions({ language }: { language: Language }) {
@@ -227,6 +240,9 @@ export function VerdictActions({ language }: { language: Language }) {
               aria-pressed={selected}
               className="verdict-quadrant"
               data-current-action={active ? "true" : undefined}
+              data-mobile-zh-single-line={
+                quadrant.mobileZhSingleLine ? "true" : undefined
+              }
               data-verdict-choice=""
               data-verdict-tone={quadrant.tone}
               data-zone={quadrant.zone}
@@ -234,7 +250,6 @@ export function VerdictActions({ language }: { language: Language }) {
               onBlur={() => setPreviewZone(null)}
               onClick={interactionHandlers.onClick}
               onFocus={interactionHandlers.onFocus}
-              onPointerDown={interactionHandlers.onPointerDown}
               onPointerEnter={interactionHandlers.onPointerEnter}
               type="button"
             >
@@ -244,7 +259,24 @@ export function VerdictActions({ language }: { language: Language }) {
                 </span>
                 <b>{pick(language, quadrant.note[0], quadrant.note[1])}</b>
               </div>
-              <h3>{pick(language, quadrant.label[0], quadrant.label[1])}</h3>
+              <h3>
+                {language === "zh-CN" && quadrant.chineseLabelLines ? (
+                  <>
+                    <span className="sr-only">{quadrant.label[1]}</span>
+                    {quadrant.chineseLabelLines.map((line) => (
+                      <span
+                        aria-hidden="true"
+                        className="verdict-heading-zh-line"
+                        key={line}
+                      >
+                        {line}
+                      </span>
+                    ))}
+                  </>
+                ) : (
+                  pick(language, quadrant.label[0], quadrant.label[1])
+                )}
+              </h3>
               <p>{pick(language, quadrant.body[0], quadrant.body[1])}</p>
             </button>
           );
@@ -255,19 +287,39 @@ export function VerdictActions({ language }: { language: Language }) {
           data-tone={activeQuadrant?.tone}
           data-verdict-center=""
         >
-          <span>
-            {activeQuadrant
-              ? selectedZone === activeZone
-                ? pick(language, "YOUR ONLY VOTE", "你的唯一一票")
-                : pick(language, "PREVIEW", "预览")
-              : pick(language, "CAST YOUR VOTE", "投下你的选择")}
+          <span className="verdict-vote-status">
+            {activeQuadrant ? (
+              selectedZone === activeZone ? (
+                <>
+                  <span className="sr-only">
+                    {getSelectedVoteStatus(language)}
+                  </span>
+                  <span
+                    aria-hidden="true"
+                    className="verdict-vote-status-desktop"
+                  >
+                    {getSelectedVoteStatus(language)}
+                  </span>
+                  <span
+                    aria-hidden="true"
+                    className="verdict-vote-status-mobile"
+                  >
+                    {getSelectedVoteStatus(language, true)}
+                  </span>
+                </>
+              ) : (
+                pick(language, "PREVIEW", "预览")
+              )
+            ) : (
+              pick(language, "CAST YOUR VOTE", "投下你的选择")
+            )}
           </span>
           <i aria-hidden="true" />
           <strong>
             {activeZone
               ? `${voteCount(activeZone)} / ${totalVotes}`
               : totalVotes}
-            <small>
+            <small className="verdict-center-label-full">
               {activeQuadrant
                 ? pick(
                     language,
@@ -275,6 +327,15 @@ export function VerdictActions({ language }: { language: Language }) {
                     activeQuadrant.label[1],
                   )
                 : pick(language, "CHOOSE A VERDICT", "选择一个结论")}
+            </small>
+            <small aria-hidden="true" className="verdict-center-label-mobile">
+              {activeQuadrant
+                ? pick(
+                    language,
+                    activeQuadrant.shortLabel[0],
+                    activeQuadrant.shortLabel[1],
+                  )
+                : pick(language, "CHOOSE", "选择")}
             </small>
           </strong>
         </div>

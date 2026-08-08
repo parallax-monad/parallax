@@ -6,10 +6,10 @@ import { type Language, say } from "@/lib/i18n";
  */
 const STAGES = [
   { en: "Preparing quote", zh: "准备报价" },
-  { en: "Building transaction action", zh: "构建交易动作" },
+  { en: "Preparing transaction action", zh: "准备交易操作" },
   { en: "Simulating execution", zh: "模拟执行" },
   { en: "Reviewing evidence", zh: "审阅证据" },
-  { en: "Generating verdict", zh: "生成结论" },
+  { en: "Finalizing result", zh: "生成最终结果" },
 ];
 
 export const WALLET_STAGE_COUNT = STAGES.length;

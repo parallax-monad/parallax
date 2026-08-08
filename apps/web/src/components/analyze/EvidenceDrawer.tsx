@@ -23,11 +23,14 @@ const OUTCOME_TONE: Record<RuleResult["outcome"], string> = {
 const STAGE_LABEL: Record<EvidenceItem["stage"], Copy> = {
   discover: { en: "Discover", zh: "发现" },
   load: { en: "Load", zh: "加载" },
-  quote: { en: "Quote", zh: "报价" },
   action: { en: "Action", zh: "构建" },
   simulate: { en: "Simulate", zh: "模拟" },
   rpc: { en: "RPC query", zh: "RPC 查询" },
-  unknown: { en: "Unknown stage", zh: "未知阶段" },
+};
+
+const MODE_LABEL: Record<CheckSwapResult["productRunMode"], Copy> = {
+  DEMO: { en: "Demo preset", zh: "演示预设" },
+  RECORDED_REPLAY: { en: "Recorded replay", zh: "录制回放" },
 };
 
 export function EvidenceDrawer({
@@ -62,19 +65,27 @@ export function EvidenceDrawer({
         role="dialog"
         aria-modal="true"
         aria-label={say(language, {
-          en: "Technical evidence",
-          zh: "技术证据",
+          en: "Evidence and scope",
+          zh: "证据与检查范围",
         })}
         className="no-scrollbar relative flex h-full w-full max-w-[560px] flex-col overflow-y-auto border-l border-line bg-ink-elev px-6 py-6"
       >
         <div className="flex items-start justify-between gap-4">
           <div>
             <span className="eyebrow-monad">
-              {say(language, { en: "Technical evidence", zh: "技术证据" })}
+              {say(language, {
+                en: "Evidence and scope",
+                zh: "证据与检查范围",
+              })}
             </span>
-            <h2 className="mono m-0 text-[15px] font-extrabold">
-              {result.runId}
-            </h2>
+            <div className="mt-1 flex flex-wrap items-center gap-2">
+              <h2 className="mono m-0 text-[15px] font-extrabold">
+                {result.runId}
+              </h2>
+              <span className="pill">
+                {say(language, MODE_LABEL[result.productRunMode])}
+              </span>
+            </div>
           </div>
           <button
             ref={closeRef}
@@ -159,20 +170,6 @@ export function EvidenceDrawer({
               ["minimumReceivedSource", result.minimumReceivedSource],
               ["productRunMode", result.productRunMode],
               ["evidenceReplayMode", String(result.replayMode)],
-              ["simulatorPinnedBlock", result.simulatorPinnedBlock ?? "—"],
-              ["error.code", result.apiFailure?.code ?? "—"],
-              ["error.reason", result.apiFailure?.reason ?? "—"],
-              ["error.stage", result.apiFailure?.stage ?? "—"],
-              [
-                "error.retryable",
-                result.apiFailure ? String(result.apiFailure.retryable) : "—",
-              ],
-              [
-                "httpStatus",
-                result.apiFailure?.httpStatus
-                  ? String(result.apiFailure.httpStatus)
-                  : "—",
-              ],
               ["ruleVersion", result.ruleVersion],
               ["mossVersion", result.mossVersion],
               ["createdAt", result.createdAt],
@@ -188,24 +185,15 @@ export function EvidenceDrawer({
               language,
               result.productRunMode === "RECORDED_REPLAY"
                 ? {
-                    en: "This run loaded recorded replay evidence. Nothing here is signed or broadcast.",
-                    zh: "本次运行加载了录制回放证据。这里不会签名，也不会广播。",
+                    en: "This result reproduces previously recorded real Evidence. It is not a current Live Run. Nothing here is signed or broadcast.",
+                    zh: "此结果复现此前录制的真实证据，并非当前实时运行。这里不会签名，也不会广播。",
                   }
                 : {
-                    en: "This is the backend response for a live Check. Nothing here is signed or broadcast.",
-                    zh: "这是实时检查的后端响应。这里不会签名，也不会广播。",
+                    en: "This result uses an explicitly labelled demo preset. It is not current Live Evidence. Nothing here is signed or broadcast.",
+                    zh: "此结果使用明确标注的演示预设，并非当前实时证据。这里不会签名，也不会广播。",
                   },
             )}
           </p>
-        </section>
-
-        <section className="mt-6 pb-4">
-          <h3 className="m-0 mb-2 text-[12px] font-bold uppercase tracking-[0.08em] text-dim">
-            {say(language, { en: "Raw response JSON", zh: "原始响应 JSON" })}
-          </h3>
-          <pre className="m-0 max-h-[420px] overflow-auto whitespace-pre-wrap break-words border border-line bg-ink-rail p-3 text-[11px] leading-[1.6] text-dim">
-            {JSON.stringify(result.rawResponse, null, 2)}
-          </pre>
         </section>
       </div>
     </div>
