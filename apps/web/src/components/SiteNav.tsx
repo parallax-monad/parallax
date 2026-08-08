@@ -10,7 +10,7 @@ export function SiteNav({
 }: {
   language: Language;
   active?: "home" | "analyze";
-  /** Wallet route only: drop the brand and Analyze link, keep the languages. */
+  /** Wallet route only: show a compact return path and keep the languages. */
   minimal?: boolean;
   onLanguageChange: (language: Language) => void;
 }) {
@@ -24,11 +24,18 @@ export function SiteNav({
       aria-label={pick(language, "Primary navigation", "主导航")}
       className={`relative z-20 flex min-h-[var(--header-h)] items-center gap-6 bg-transparent px-[max(5vw,18px)] sm:gap-11 ${
         // The wallet is pulled up under this bar, so a minimal nav must not
-        // swallow clicks; only the language switch stays interactive.
+        // swallow clicks; only the return link and language switch are active.
         minimal ? "pointer-events-none" : ""
       }`}
     >
-      {!minimal && (
+      {minimal ? (
+        <a
+          href="#/"
+          className="pointer-events-auto absolute right-[max(4vw,12px)] top-0 inline-flex min-h-7 items-center text-[10px] font-bold tracking-[0.04em] text-dim no-underline transition-colors hover:text-monad-dim md:left-[max(5vw,18px)] md:right-auto md:top-1/2 md:min-h-8 md:-translate-y-1/2 md:text-[12px]"
+        >
+          {pick(language, "← Back to Parallax", "← 返回 Parallax")}
+        </a>
+      ) : (
         <a
           href="#/"
           className="text-[25px] font-extrabold tracking-[-0.07em] text-accent no-underline sm:text-[29px]"
@@ -45,7 +52,7 @@ export function SiteNav({
               active === "analyze" ? "text-accent" : "text-dim"
             }`}
           >
-            {pick(language, "Analyze", "分析")}
+            {pick(language, "Try demo", "体验 Demo")}
           </a>
         )}
         {/* On the wallet route this switch only exists at widths where the frame

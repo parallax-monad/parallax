@@ -118,9 +118,9 @@ const MARKERS: MarkerConfig[] = [
   {
     label: EVIDENCE_TRACE_MARKERS[0].label,
     color: EVIDENCE_TRACE_MARKERS[0].color,
-    coreColor: "#75e6b1",
-    highlightColor: "#ffffff",
-    rimColor: "#c2fff1",
+    coreColor: "#42ffd0",
+    highlightColor: "#f4ffff",
+    rimColor: "#3ddcff",
     role: "protocol",
     size: 8.4,
     phase: 0.2,
@@ -128,14 +128,14 @@ const MARKERS: MarkerConfig[] = [
     introControl: [-39, 27, 20],
     planetSeed: 0x4b555255,
     compact: [-21, 12, 5],
-    dispersed: [-82, 30, 8],
+    dispersed: [-88, 42, 8],
   },
   {
     label: EVIDENCE_TRACE_MARKERS[1].label,
     color: EVIDENCE_TRACE_MARKERS[1].color,
-    coreColor: "#836ef9",
-    highlightColor: "#ffffff",
-    rimColor: "#c4baff",
+    coreColor: "#a66bff",
+    highlightColor: "#fff7ff",
+    rimColor: "#7d8cff",
     role: "protocol",
     size: 7.8,
     phase: 2.4,
@@ -143,7 +143,7 @@ const MARKERS: MarkerConfig[] = [
     introControl: [39, -27, -17],
     planetSeed: 0x50414e43,
     compact: [22, -11, -7],
-    dispersed: [88, -34, -4],
+    dispersed: [92, -44, -4],
   },
   {
     label: EVIDENCE_TRACE_MARKERS[2].label,
@@ -432,6 +432,35 @@ function setQuadraticBezier3(
     start[0] * startWeight + control[0] * controlWeight + end[0] * endWeight,
     start[1] * startWeight + control[1] * controlWeight + end[1] * endWeight,
     start[2] * startWeight + control[2] * controlWeight + end[2] * endWeight,
+  );
+}
+
+function constrainProtocolMarkerToViewport(
+  target: THREE.Vector3,
+  config: ProtocolMarkerConfig,
+  camera: THREE.PerspectiveCamera,
+  width: number,
+  height: number,
+) {
+  const distanceFromCamera = Math.max(camera.position.z - target.z, 1);
+  const halfHeight =
+    Math.tan(THREE.MathUtils.degToRad(camera.fov * 0.5)) * distanceFromCamera;
+  const halfWidth = halfHeight * (width / Math.max(height, 1));
+  const compactViewport = width < 640;
+  const horizontalPadding =
+    config.size * (compactViewport ? 1.35 : width < 1100 ? 1.55 : 1.7);
+  const topPadding = config.size * (compactViewport ? 1.75 : 2.05);
+  const bottomPadding = config.size * (compactViewport ? 1.35 : 1.55);
+
+  target.x = clamp(
+    target.x,
+    -Math.max(halfWidth - horizontalPadding, 0),
+    Math.max(halfWidth - horizontalPadding, 0),
+  );
+  target.y = clamp(
+    target.y,
+    -Math.max(halfHeight - bottomPadding, 0),
+    Math.max(halfHeight - topPadding, 0),
   );
 }
 
@@ -821,7 +850,7 @@ function createPlanetGeometry({
     positions[offset + 1] = y;
     positions[offset + 2] = z;
 
-    const brightness = shell ? 0.78 + random() * 0.28 : 0.52 + random() * 0.3;
+    const brightness = shell ? 0.9 + random() * 0.25 : 0.66 + random() * 0.3;
     colors[offset] = baseColor.r * brightness;
     colors[offset + 1] = baseColor.g * brightness;
     colors[offset + 2] = baseColor.b * brightness;
@@ -1020,15 +1049,15 @@ function createProtocolPlanet(
     color: config.color,
     seed: config.planetSeed ^ 0x494e5445,
   });
-  const shellLayer = createPlanetMaterial(pointTexture, 1.08);
-  const interiorLayer = createPlanetMaterial(pointTexture, 0.74);
+  const shellLayer = createPlanetMaterial(pointTexture, 1.18);
+  const interiorLayer = createPlanetMaterial(pointTexture, 0.84);
   const shell = new THREE.Points(shellGeometry, shellLayer.material);
   const interior = new THREE.Points(interiorGeometry, interiorLayer.material);
   const coreLayer = createCoreMaterial({
     coreColor: config.coreColor,
     highlightColor: config.highlightColor,
     rimColor: config.rimColor,
-    brightness: 1.12,
+    brightness: 1.24,
   });
   const core = new THREE.Mesh(sphereGeometry, coreLayer.material);
   core.scale.setScalar(radius * 0.6);
@@ -1048,12 +1077,12 @@ function createProtocolPlanet(
       map: pointTexture,
       color: config.color,
       transparent: true,
-      opacity: 0.25,
+      opacity: 0.32,
       blending: THREE.AdditiveBlending,
       depthWrite: false,
     }),
   );
-  halo.scale.set(config.size * 3.4, config.size * 3.4, 1);
+  halo.scale.set(config.size * 3.55, config.size * 3.55, 1);
   const satellites = createProtocolSatellites(config, pointTexture);
   const group = new THREE.Group();
   group.add(backdrop, halo, core, interior, shell, satellites);
@@ -1082,11 +1111,11 @@ function createMarker(
     new THREE.SpriteMaterial({
       map: labelTexture,
       transparent: true,
-      opacity: config.role === "protocol" ? 0.68 : 0.3,
+      opacity: config.role === "protocol" ? 0.82 : 0.3,
       depthWrite: false,
     }),
   );
-  const labelScale = config.role === "protocol" ? 9.4 : 8.2;
+  const labelScale = config.role === "protocol" ? 8.9 : 8.2;
   label.scale.set(
     labelTexture.image.width / labelScale,
     labelTexture.image.height / 8.2,
@@ -1418,7 +1447,7 @@ export function RouteGraph3D({
       particleField.uniforms.uMotion.value = reduceMotion ? 0 : 1;
       ambientStars.uniforms.uScrollProgress.value = progress;
       ambientStars.uniforms.uOpacity.value =
-        0.72 * (1 - smoothstep(0.4, 0.82, progress) * 0.7);
+        0.74 * (1 - smoothstep(0.4, 0.82, progress) * 0.58);
 
       const ambientYaw = reduceMotion ? 0 : Math.sin(time * 0.000055) * 0.032;
       const passiveStrength = isDragging ? 0.14 : 1;
@@ -1449,7 +1478,7 @@ export function RouteGraph3D({
         const { config, group } = marker;
         const positionExpansion =
           marker.kind === "protocol"
-            ? smoothstep(0.02, 0.58, expansion)
+            ? smoothstep(0.22, 0.52, progress)
             : markerExpansion;
         if (marker.kind === "protocol" && introEmphasis > 0) {
           setQuadraticBezier3(
@@ -1497,6 +1526,13 @@ export function RouteGraph3D({
             group.position.x += passivePointerX * (0.85 + depthResponse * 0.55);
             group.position.y += passivePointerY * (0.45 + depthResponse * 0.35);
           }
+          constrainProtocolMarkerToViewport(
+            group.position,
+            marker.config,
+            camera,
+            container.clientWidth,
+            container.clientHeight,
+          );
         } else {
           marker.node.group.rotation.y = reduceMotion
             ? config.phase * 0.08
@@ -1555,7 +1591,13 @@ export function RouteGraph3D({
         const breathe = reduceMotion
           ? 1
           : 1 + Math.sin(time * 0.00056 + config.phase) * 0.025;
-        const mobileScale = container.clientWidth < 640 ? 0.88 : 1;
+        const revealScale = smoothstep(0.42, 0.72, progress);
+        const mobileScale =
+          container.clientWidth < 640
+            ? lerp(0.86, 0.74, revealScale)
+            : container.clientWidth < 1100
+              ? lerp(1, 0.92, revealScale)
+              : 1;
         planet.group.scale.setScalar(
           mobileScale * breathe * (1 + focus * PROTOCOL_FOCUS_SCALE),
         );
@@ -1584,14 +1626,14 @@ export function RouteGraph3D({
         planet.coreUniforms.uTime.value = time * 0.001;
         planet.coreUniforms.uFocus.value = focus;
         planet.coreUniforms.uMotion.value = reduceMotion ? 0 : 1;
-        planet.coreUniforms.uBrightness.value = 1.12 + focus * 0.03;
+        planet.coreUniforms.uBrightness.value = 1.24 + focus * 0.18;
         planet.halo.scale.set(
-          config.size * (3.35 + introEmphasis * 0.35 + focus * 0.42),
-          config.size * (3.35 + introEmphasis * 0.35 + focus * 0.42),
+          config.size * (3.55 + introEmphasis * 0.28 + focus * 0.46),
+          config.size * (3.55 + introEmphasis * 0.28 + focus * 0.46),
           1,
         );
         (planet.halo.material as THREE.SpriteMaterial).opacity =
-          0.24 + introEmphasis * 0.1 + focus * 0.15;
+          0.32 + introEmphasis * 0.08 + focus * 0.18;
         (planet.backdrop.material as THREE.SpriteMaterial).opacity =
           0.14 + introEmphasis * 0.035 + focus * 0.025;
         planet.satellites.rotation.y = reduceMotion
@@ -1600,12 +1642,12 @@ export function RouteGraph3D({
         planet.satellites.rotation.z =
           -0.24 + config.phase * 0.03 + (reduceMotion ? 0 : time * 0.000018);
         planet.satellites.material.opacity =
-          0.15 + introEmphasis * 0.34 + focus * 0.2;
+          0.26 + introEmphasis * 0.24 + focus * 0.22;
         planet.satellites.material.size =
-          0.72 + introEmphasis * 0.18 + focus * 0.12;
+          0.78 + introEmphasis * 0.16 + focus * 0.14;
         (marker.label.material as THREE.SpriteMaterial).opacity = Math.min(
           1,
-          0.84 - progress * 0.22 + focus * 0.28,
+          0.92 - progress * 0.12 + focus * 0.24,
         );
       }
 

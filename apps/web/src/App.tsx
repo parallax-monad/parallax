@@ -144,7 +144,7 @@ function useScrollReveal(
         1,
       );
       shade.style.opacity = String(
-        Math.min(Math.max((visualProgress - 0.38) / 0.62, 0), 1) * 0.78,
+        Math.min(Math.max((visualProgress - 0.38) / 0.62, 0), 1) * 0.68,
       );
       reveal.style.opacity = String(revealProgress);
       reveal.style.pointerEvents = revealProgress > 0.35 ? "auto" : "none";
@@ -214,7 +214,7 @@ function Home({ language }: { language: Language }) {
           <div
             ref={shadeRef}
             aria-hidden="true"
-            className="pointer-events-none absolute inset-0 z-[2] opacity-0 [background:radial-gradient(ellipse_at_center,rgba(5,5,10,0.97)_0%,rgba(5,5,10,0.88)_40%,rgba(8,7,15,0.42)_72%,rgba(22,16,47,0.24)_100%)]"
+            className="pointer-events-none absolute inset-0 z-[2] opacity-0 [background:radial-gradient(ellipse_at_center,rgba(5,5,10,0.94)_0%,rgba(5,5,10,0.76)_38%,rgba(8,7,15,0.26)_70%,rgba(22,16,47,0.08)_100%)]"
           />
           <div className="pointer-events-none absolute inset-0 z-[3] flex items-center justify-center px-5 pt-[7vh] sm:px-10">
             <div
@@ -256,7 +256,7 @@ function Home({ language }: { language: Language }) {
                 </p>
                 <div className="pointer-events-auto mt-8 flex flex-wrap gap-3 sm:mt-10">
                   <a href="#/analyze" className="btn btn-primary">
-                    {pick(language, "Analyze transaction", "分析交易")}
+                    {pick(language, "Try demo", "体验 Demo")}
                   </a>
                   <a href="#framework" className="btn">
                     {pick(language, "How it works", "运作方式")}
