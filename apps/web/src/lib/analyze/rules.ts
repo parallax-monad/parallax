@@ -59,6 +59,8 @@ function action(
         ? "ACCEPTANCE_BOUNDARY"
         : "TRANSACTION_CONDITION",
     relevance,
+    // Local reasoning carries no backend Action Gate attestation.
+    recommendable: false,
     reason,
   };
 }
