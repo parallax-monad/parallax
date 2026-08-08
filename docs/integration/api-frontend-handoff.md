@@ -1,6 +1,7 @@
 # Frontend API Handoff (`/api/check` + `/api/replay`)
 
-Status: BACKEND HANDOFF FOR ANALYZE 联调 — LIVE SUCCESS NOT CLAIMED
+Status: BACKEND HANDOFF FOR ANALYZE 联调 — LIVE SUCCESS NOT CLAIMED ON `main`
+(pending Moss PR #23 merge + handoff refresh)
 
 Owner: Clare (`apps/api`)
 Consumers: Antony (`apps/web`)
@@ -17,6 +18,18 @@ Related:
 - Deterministic backend acceptance gate:
   [backend-p0-acceptance.md](./backend-p0-acceptance.md) (`pnpm test:acceptance`)
 
+## 0. Coordination status (2026-08-08)
+
+| Track | PR | What backend expects |
+| --- | --- | --- |
+| Frontend API connection | [#21](https://github.com/parallax-monad/parallax/pull/21) | Explicit Replay entry (or dual CTAs). Do **not** silently map live `UNSUPPORTED` → Replay. Do **not** override Replay Intent `amountIn` with the form value (`displayAmountIn`). |
+| Moss Live integration | [#23](https://github.com/parallax-monad/parallax/pull/23) | Approved Moss pin `ef15448e166f31c891e80dba5073dae04a052a2b` is in flight on that branch. Until #23 merges into `main`, this handoff still does **not** claim Live Kuru MON → USDC SUCCESS. |
+| Fixture Action Gate | [#19](https://github.com/parallax-monad/parallax/pull/19) (merged) | Verified `ADJUST` via interim `action_verification` is on `main` (acceptance A14). Full §3.3.1 `ACTION_GATE` / CrossRun Shared Contract remains deferred. |
+
+Demo wallet UI may be fake; frontend↔backend is “connected” only when the web
+app calls these HTTP surfaces. Local swap estimate fixtures are not backend
+Check results.
+
 ## 1. Scope
 
 In scope:
@@ -32,7 +45,9 @@ Out of scope:
 - Durable Run persistence (process-memory store only)
 - Signing, broadcast, wallet custody
 - Non-`amountIn` Action Gate fields (protocol / tokenPair / slippage) beyond the fixture path
-- Claiming Live Kuru MON → USDC SUCCESS (Moss-blocked; see live runtime doc)
+- Claiming Live Kuru MON → USDC SUCCESS on `main` until Moss PR #23 merges and
+  [moss-kuru-live-runtime.md](./moss-kuru-live-runtime.md) is refreshed for the
+  approved pin (see §0)
 
 ## 2. Startup runbook
 
@@ -64,9 +79,11 @@ Log / error hygiene: do not print `MONAD_RPC_URL`, `MOSS_RPC_URL`, or URL userin
 | Config | `POST /api/check` |
 | --- | --- |
 | No `MOSS_RUNTIME_PATH` | HTTP **502**, `error.code = "UNSUPPORTED"`, Run envelope `verdict = UNKNOWN`, `retryable = false` |
-| Valid pinned path | Live Agent Flow runs; still fail-closed without trustworthy pinned-block / runtime provenance. Live SUCCESS is not claimed in this handoff. |
+| Valid pinned path | Live Agent Flow runs; still fail-closed without trustworthy pinned-block / runtime provenance. Live SUCCESS is not claimed on `main` until PR #23 merges (see §0). |
 
-Recorded Replay is **only** via `/api/replay/:id`. It is never used as a fallback for live Check.
+Recorded Replay is **only** via `/api/replay/:id`. It is never used as a
+fallback for live Check. Frontend must not auto-redirect `UNSUPPORTED` into
+Replay; offer an explicit Replay path or a separate CTA.
 
 ### CORS
 
@@ -251,9 +268,9 @@ Successful child responses include `parentRunId` and `diff` (machine-normalized
 
 | `reason` | Meaning |
 | --- | --- |
-| `PARENT_NOT_FOUND` | Unknown `parentRunId` (or lost after process restart) |
+| `PARENT_NOT_FOUND` | Unknown `parentRunId` (or lost after process restart). **Also** the usual response when a frontend reuses a `runId` from `GET /api/replay/:id`: Replay results are not written into the Check `RunStore`. |
 | `PARENT_NOT_COMPLETED` | Parent not a completed baseline |
-| `PARENT_IS_REPLAY` | Replay Runs cannot be Re-run baselines |
+| `PARENT_IS_REPLAY` | Parent exists in the Check store but is a Replay Run (`replayMode: true`); Replay cannot be a Re-run baseline |
 | `RERUN_CHAINING_UNSUPPORTED` | Parent is already a child Run |
 | `CHAIN_OR_SENDER_CHANGED` | chainId / sender must match baseline |
 | `BOUNDARY_CHANGED` / `BOUNDARY_ASSET_CHANGED` | Economic Boundary must stay unchanged |
@@ -263,6 +280,12 @@ Reason precedence: parent existence/completion, Replay baseline, chaining,
 chain/sender, and Economic Boundary checks run before the exactly-one-change
 diff. A request that changes both sender and amount returns
 `CHAIN_OR_SENDER_CHANGED`, not `NOT_EXACTLY_ONE_CHANGE`.
+
+Product note for Analyze UI: after a successful Replay fetch, a follow-up
+`POST /api/check` with that Replay `runId` as `parentRunId` yields
+`PARENT_NOT_FOUND`, not `PARENT_IS_REPLAY`, because Replay never entered the
+Check store. Branch CTAs on that fact; do not expect Replay → Adjust & Re-run
+against the fixture `runId`.
 
 Diff display: `amountInAtomic` is atomic units; `tokenPair` uses
 `native` / `erc20:<lowercase-address>`. Render human copy from full Intent +
@@ -279,7 +302,9 @@ token registry, not by reverse-engineering Diff strings.
 - Body is a frozen `RunResult` with `replayMode: true` and Evidence
   `isReplay: true` / `fixtureId` set.
 - Recorded Replay **must not** be labeled Live.
-- Replay **cannot** be a Re-run `parentRunId` baseline (`PARENT_IS_REPLAY`).
+- Replay **cannot** be a Re-run `parentRunId` baseline. Using a Replay HTTP
+  `runId` against Check usually surfaces `PARENT_NOT_FOUND`; a Replay record
+  that somehow sits in the Check store surfaces `PARENT_IS_REPLAY` (see §4).
 - Live Check **never** falls back to Replay.
 
 | HTTP | `error.code` | Meaning |
@@ -312,11 +337,20 @@ Frontend must display Live vs Recorded Replay explicitly. Do not upgrade
 ## 7. Frontend联调 checklist
 
 1. Start API without `MOSS_RUNTIME_PATH` → `POST /api/check` returns `UNSUPPORTED`.
-2. `GET /api/replay/mon-to-usdc` returns 200 with `replayMode: true`, `verdict: UNKNOWN` in current fixtures.
-3. Confirm CORS from the web origin.
-4. (Optional) Configure Moss path per [moss-kuru-live-runtime.md](./moss-kuru-live-runtime.md); expect fail-closed Live until Moss SUCCESS exists — do not block UI on Live SUCCESS.
-5. Re-run only against in-process Check `runId`s; handle `PARENT_NOT_FOUND` after API restart.
-6. CTA / retry: use `error.retryable` and closed reason codes from this page and Product delivery docs.
+2. Keep an **explicit** Replay entry (or dual CTA). Do not silently convert
+   `UNSUPPORTED` into Replay.
+3. `GET /api/replay/mon-to-usdc` returns 200 with `replayMode: true`,
+   `verdict: UNKNOWN` in current fixtures. Render the fixture Intent
+   `amountIn`; do not overwrite it with the form amount for display.
+4. Confirm CORS from the web origin.
+5. (Optional) Configure Moss path per
+   [moss-kuru-live-runtime.md](./moss-kuru-live-runtime.md). On `main`, expect
+   fail-closed Live until PR #23 merges — do not block UI on Live SUCCESS.
+6. Re-run only against in-process **Check** `runId`s. Handle
+   `PARENT_NOT_FOUND` after API restart **and** after attempting Re-run from a
+   Replay `runId` (see §4).
+7. CTA / retry: use `error.retryable` and closed reason codes from this page
+   and Product delivery docs.
 
 ## 8. Non-goals reminder
 

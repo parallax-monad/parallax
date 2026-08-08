@@ -1,13 +1,15 @@
 # Backend P0 Acceptance Matrix
 
-Status: DELIVERY GATE FOR DETERMINISTIC CHECK APPLICATION / RUN LIFECYCLE PATHS — LIVE SUCCESS REMAINS MOSS-BLOCKED
+Status: DELIVERY GATE FOR DETERMINISTIC CHECK APPLICATION / RUN LIFECYCLE PATHS —
+LIVE SUCCESS NOT CLAIMED ON `main` (Moss PR #23 in flight)
 
 Owner: Clare (backend / `apps/api`)
 Command: `pnpm test:acceptance`
 
 This is the delivery-facing backend acceptance entry. It does not replace unit
 tests. It organizes the P0 Check Application / Run lifecycle claims that backend
-can prove without a frontend owner and without a live Moss SUCCESS fixture.
+can prove without a frontend owner and without a merged live Moss SUCCESS
+fixture on `main`.
 
 ## Scope
 
@@ -91,8 +93,22 @@ pnpm smoke:kuru:live      # live Moss/RPC; success not claimed here
 
 ## Live SUCCESS note
 
-`pnpm smoke:kuru:live` remains the live path. Until Moss Owner provides a
-runtime that parses `FlipOrderUpdated` and exposes simulator pinned-block
-provenance, backend acceptance does not claim live SUCCESS. Failures and
-configuration artifacts under `.smoke-live/` are diagnostic, not delivery
-success evidence.
+`pnpm smoke:kuru:live` remains the live path. On `main`, this acceptance gate
+still does **not** claim live SUCCESS.
+
+Coordination (2026-08-08):
+
+- Parallax-approved Moss pin for the upcoming Live path:
+  `ef15448e166f31c891e80dba5073dae04a052a2b`
+- Landing work is tracked in
+  [PR #23](https://github.com/parallax-monad/parallax/pull/23)
+  (`feat/moss-fork-pinned-runtime`). Until that PR merges and
+  [moss-kuru-live-runtime.md](./moss-kuru-live-runtime.md) is refreshed,
+  published `main` docs and this gate keep the fail-closed / not-claimed
+  posture.
+- Frontend Analyze connection is tracked separately in
+  [PR #21](https://github.com/parallax-monad/parallax/pull/21); this gate does
+  not cover UI CTA routing.
+
+Failures and configuration artifacts under `.smoke-live/` are diagnostic, not
+delivery success evidence for this gate.

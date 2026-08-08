@@ -1,12 +1,31 @@
 # Moss Kuru Live Runtime (Reproducible Environment Contract)
 
-Status: REPRODUCIBLE RUNTIME LOCKED; LIVE ACCEPTANCE NOT CLAIMED — BLOCKED BY REQUIRED ENVIRONMENT AND CURRENT PINNED RUNTIME
+Status: REPRODUCIBLE RUNTIME LOCKED ON `main` (`d09b38c…`); LIVE ACCEPTANCE NOT
+CLAIMED — PENDING MOSS PR #23 FOR APPROVED PIN `ef15448…`
 
 This document pins the exact Moss runtime that the Kuru MON → USDC live adapter
 (`packages/moss-bridge/src/live-kuru.ts`) targets, and the exact environment
 needed to reproduce it. It supersedes the earlier "recorded workspace baseline"
 identity: every `@themoss/*` package below is an exact version inside an exact
 Moss git commit, not a workspace label.
+
+## Integration status (2026-08-08)
+
+The matrix below still describes the **published `main` baseline**
+(`d09b38cbc44ee7f5722c5d09e7224f7750187762`), including FlipOrderUpdated and
+pinned-block gaps that keep Live SUCCESS unclaimed on `main`.
+
+Separately, Parallax has approved Moss pin
+`ef15448e166f31c891e80dba5073dae04a052a2b` for the Live path. That pin and the
+verified Mainnet Live Simulation landing are tracked in
+[PR #23](https://github.com/parallax-monad/parallax/pull/23). Until #23 merges:
+
+- do not treat `ef15448…` as the published runtime in this document's matrix;
+- do not claim Live Kuru MON → USDC SUCCESS from API handoff or acceptance;
+- keep fail-closed Live / `UNSUPPORTED` without a verified checkout.
+
+After #23 merges, Moss Owner updates this matrix and reproduce steps; API
+handoff then refreshes the Live SUCCESS claim boundary.
 
 ## Runtime Matrix
 
