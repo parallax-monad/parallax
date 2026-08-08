@@ -23,17 +23,22 @@ export function SiteNav({
     <nav
       aria-label={pick(language, "Primary navigation", "主导航")}
       className={`relative z-20 flex min-h-[var(--header-h)] items-center gap-6 bg-transparent px-[max(5vw,18px)] sm:gap-11 ${
-        // The wallet is pulled up under this bar, so a minimal nav must not
+        // The desktop wallet is pulled up under this bar, so a minimal nav must not
         // swallow clicks; only the return link and language switch are active.
-        minimal ? "pointer-events-none" : ""
+        minimal ? "site-nav-minimal pointer-events-none" : ""
       }`}
     >
       {minimal ? (
         <a
           href="#/"
-          className="pointer-events-auto absolute right-[max(4vw,12px)] top-0 inline-flex min-h-7 items-center text-[10px] font-bold tracking-[0.04em] text-dim no-underline transition-colors hover:text-monad-dim md:left-[max(5vw,18px)] md:right-auto md:top-1/2 md:min-h-8 md:-translate-y-1/2 md:text-[12px]"
+          className="site-nav-return pointer-events-auto inline-flex min-h-10 items-center rounded-full border border-line-strong bg-ink-elev/90 px-3 text-[13px] font-bold tracking-[0.02em] text-dim no-underline transition-colors hover:border-monad/60 hover:text-monad-dim md:absolute md:left-[max(5vw,18px)] md:top-1/2 md:min-h-8 md:-translate-y-1/2 md:rounded-none md:border-0 md:bg-transparent md:px-0 md:text-[12px] md:tracking-[0.04em]"
         >
-          {pick(language, "← Back to Parallax", "← 返回 Parallax")}
+          <span className="md:hidden">
+            {pick(language, "← Landing", "← 首页")}
+          </span>
+          <span className="hidden md:inline">
+            {pick(language, "← Back to Parallax", "← 返回 Parallax")}
+          </span>
         </a>
       ) : (
         <a
@@ -55,13 +60,10 @@ export function SiteNav({
             {pick(language, "Try demo", "体验 Demo")}
           </a>
         )}
-        {/* On the wallet route this switch only exists at widths where the frame
-            tucks under the nav. Narrower than that, the wallet header renders
-            its own copy, so the two never overlap and never both show. */}
         <LanguageSwitch
           className={`pointer-events-auto ${
             minimal
-              ? "hidden md:flex"
+              ? "site-nav-language-switch"
               : "border-l border-line-strong pl-4 sm:pl-[30px]"
           }`}
           language={language}

@@ -110,16 +110,24 @@ describe("VerdictActions", () => {
     expect(voted).toBe("northeast");
   });
 
-  test("uses touch press as a fallback but ignores touch enter", () => {
+  test("uses one click path for touch voting and ignores touch enter", () => {
     let selected: VerdictZone = "southeast";
-    const handlers = createVerdictInteractionHandlers("northwest", (zone) => {
-      selected = zone;
-    });
+    let voteUpdates = 0;
+    const handlers = createVerdictInteractionHandlers(
+      "northwest",
+      () => undefined,
+      (zone) => {
+        selected = zone;
+        voteUpdates += 1;
+      },
+    );
 
     handlers.onPointerEnter({ pointerType: "touch" });
     expect(selected).toBe("southeast");
-    handlers.onPointerDown({ pointerType: "touch" });
+    expect("onPointerDown" in handlers).toBe(false);
+    handlers.onClick();
     expect(selected).toBe("northwest");
+    expect(voteUpdates).toBe(1);
   });
 
   test("supports keyboard focus selection", () => {

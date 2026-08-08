@@ -5,6 +5,7 @@ import {
   getEvidenceTraceAriaLabel,
   getExpandedMarkerEdgeScale,
 } from "./evidenceTrace";
+import { getTouchDragIntent } from "./RouteGraph3D";
 
 describe("RouteGraph3D", () => {
   test("describes the hero visualization as a protocol route", () => {
@@ -58,5 +59,13 @@ describe("RouteGraph3D", () => {
       -19.07,
       5,
     );
+  });
+
+  test("separates horizontal touch exploration from vertical scrolling", () => {
+    expect(getTouchDragIntent(5, 2)).toBe("pending");
+    expect(getTouchDragIntent(18, 4)).toBe("horizontal");
+    expect(getTouchDragIntent(-20, 10)).toBe("horizontal");
+    expect(getTouchDragIntent(8, 24)).toBe("vertical");
+    expect(getTouchDragIntent(12, 12)).toBe("vertical");
   });
 });

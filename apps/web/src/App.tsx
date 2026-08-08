@@ -100,7 +100,7 @@ export default function App() {
         onLanguageChange={setLanguage}
       />
       {route === "analyze" ? (
-        <WalletApp language={language} onLanguageChange={setLanguage} />
+        <WalletApp language={language} />
       ) : (
         <Home language={language} />
       )}

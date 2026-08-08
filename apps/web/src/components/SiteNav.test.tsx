@@ -34,8 +34,12 @@ describe("SiteNav", () => {
     );
 
     expect(english).toContain('href="#/"');
+    expect(english).toContain("← Landing");
+    expect(chinese).toContain("← 首页");
     expect(english).toContain("← Back to Parallax");
     expect(chinese).toContain("← 返回 Parallax");
+    expect(english.match(/Switch to Simplified Chinese/g)).toHaveLength(1);
+    expect(english.match(/Switch to English/g)).toHaveLength(1);
     expect(english).not.toContain('href="#/analyze"');
   });
 });

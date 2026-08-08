@@ -113,6 +113,31 @@ const SIGNAL_FOCUS_Z_OFFSET = 3;
 const DRAG_YAW_SENSITIVITY = 0.0052;
 const DRAG_PITCH_SENSITIVITY = 0.0042;
 const DRAG_PITCH_LIMIT = 0.65;
+const TOUCH_DRAG_THRESHOLD = 8;
+const TOUCH_DRAG_DIRECTION_BIAS = 1.15;
+const TOUCH_DRAG_YAW_SENSITIVITY = DRAG_YAW_SENSITIVITY * 0.72;
+const TOUCH_DRAG_PITCH_SENSITIVITY = DRAG_PITCH_SENSITIVITY * 0.3;
+const TOUCH_DRAG_END_PROGRESS = 0.48;
+
+export type TouchDragIntent = "pending" | "horizontal" | "vertical";
+
+export function getTouchDragIntent(
+  deltaX: number,
+  deltaY: number,
+  threshold = TOUCH_DRAG_THRESHOLD,
+  directionBias = TOUCH_DRAG_DIRECTION_BIAS,
+): TouchDragIntent {
+  const horizontalDistance = Math.abs(deltaX);
+  const verticalDistance = Math.abs(deltaY);
+  if (Math.max(horizontalDistance, verticalDistance) <= threshold) {
+    return "pending";
+  }
+  return horizontalDistance > threshold &&
+    horizontalDistance > verticalDistance * directionBias
+    ? "horizontal"
+    : "vertical";
+}
+
 const MARKERS: MarkerConfig[] = [
   {
     label: EVIDENCE_TRACE_MARKERS[0].label,
@@ -1205,6 +1230,10 @@ export function RouteGraph3D({
     let dragLastX = 0;
     let dragLastY = 0;
     let isDragging = false;
+    let touchStartX = 0;
+    let touchStartY = 0;
+    let touchDragPending = false;
+    let dragPointerType = "";
     const projectedPosition = new THREE.Vector3();
     const finePointerQuery = window.matchMedia(
       "(hover: hover) and (pointer: fine)",
@@ -1281,7 +1310,9 @@ export function RouteGraph3D({
     const endDrag = () => {
       const capturedPointerId = dragPointerId;
       isDragging = false;
+      touchDragPending = false;
       dragPointerId = -1;
+      dragPointerType = "";
       renderer.domElement.style.cursor = "grab";
       if (
         capturedPointerId >= 0 &&
@@ -1290,33 +1321,13 @@ export function RouteGraph3D({
         renderer.domElement.releasePointerCapture(capturedPointerId);
       }
     };
-    const onDragPointerDown = (event: PointerEvent) => {
-      if (
-        event.button !== 0 ||
-        event.pointerType === "touch" ||
-        reduceMotion ||
-        !finePointerQuery.matches
-      ) {
-        return;
-      }
-      event.preventDefault();
-      dragPointerId = event.pointerId;
-      dragLastX = event.clientX;
-      dragLastY = event.clientY;
-      isDragging = true;
-      renderer.domElement.setPointerCapture(event.pointerId);
-      renderer.domElement.style.cursor = "grabbing";
-    };
-    const onDragPointerMove = (event: PointerEvent) => {
-      if (!isDragging || event.pointerId !== dragPointerId) return;
-      event.preventDefault();
-      const deltaX = event.clientX - dragLastX;
-      const deltaY = event.clientY - dragLastY;
-      dragLastX = event.clientX;
-      dragLastY = event.clientY;
-      dragYawTarget += deltaX * DRAG_YAW_SENSITIVITY;
+    const applyDragDelta = (deltaX: number, deltaY: number, touch: boolean) => {
+      dragYawTarget +=
+        deltaX * (touch ? TOUCH_DRAG_YAW_SENSITIVITY : DRAG_YAW_SENSITIVITY);
       dragPitchTarget = clamp(
-        dragPitchTarget + deltaY * DRAG_PITCH_SENSITIVITY,
+        dragPitchTarget +
+          deltaY *
+            (touch ? TOUCH_DRAG_PITCH_SENSITIVITY : DRAG_PITCH_SENSITIVITY),
         -DRAG_PITCH_LIMIT,
         DRAG_PITCH_LIMIT,
       );
@@ -1327,6 +1338,71 @@ export function RouteGraph3D({
         dragYaw -= wrappedTurns;
       }
     };
+    const onDragPointerDown = (event: PointerEvent) => {
+      if (reduceMotion || progressRef.current >= TOUCH_DRAG_END_PROGRESS)
+        return;
+      if (event.pointerType === "touch") {
+        if (!event.isPrimary) return;
+        dragPointerId = event.pointerId;
+        dragPointerType = "touch";
+        touchStartX = event.clientX;
+        touchStartY = event.clientY;
+        dragLastX = event.clientX;
+        dragLastY = event.clientY;
+        touchDragPending = true;
+        return;
+      }
+      if (event.button !== 0 || !finePointerQuery.matches) return;
+      event.preventDefault();
+      dragPointerId = event.pointerId;
+      dragPointerType = "mouse";
+      dragLastX = event.clientX;
+      dragLastY = event.clientY;
+      isDragging = true;
+      renderer.domElement.setPointerCapture(event.pointerId);
+      renderer.domElement.style.cursor = "grabbing";
+    };
+    const onDragPointerMove = (event: PointerEvent) => {
+      if (event.pointerId !== dragPointerId) return;
+      if (dragPointerType === "touch") {
+        if (progressRef.current >= TOUCH_DRAG_END_PROGRESS) {
+          endDrag();
+          return;
+        }
+        if (touchDragPending) {
+          const totalX = event.clientX - touchStartX;
+          const totalY = event.clientY - touchStartY;
+          const intent = getTouchDragIntent(totalX, totalY);
+          if (intent === "pending") return;
+          if (intent === "vertical") {
+            endDrag();
+            return;
+          }
+          touchDragPending = false;
+          isDragging = true;
+          renderer.domElement.setPointerCapture(event.pointerId);
+          applyDragDelta(totalX, totalY, true);
+          dragLastX = event.clientX;
+          dragLastY = event.clientY;
+          return;
+        }
+        if (!isDragging) return;
+        const deltaX = event.clientX - dragLastX;
+        const deltaY = event.clientY - dragLastY;
+        dragLastX = event.clientX;
+        dragLastY = event.clientY;
+        applyDragDelta(deltaX, deltaY, true);
+        return;
+      }
+      if (!isDragging) return;
+      event.preventDefault();
+      const deltaX = event.clientX - dragLastX;
+      const deltaY = event.clientY - dragLastY;
+      dragLastX = event.clientX;
+      dragLastY = event.clientY;
+      applyDragDelta(deltaX, deltaY, false);
+    };
+
     const onDragPointerEnd = (event: PointerEvent) => {
       if (event.pointerId === dragPointerId) endDrag();
     };
@@ -1357,6 +1433,12 @@ export function RouteGraph3D({
         : clamp(progressRef.current, 0, 1);
       const rawProgress = clamp(progressRef.current, 0, 1);
       const introEmphasis = 1 - smoothstep(0, INTRO_END_PROGRESS, rawProgress);
+      if (
+        dragPointerType === "touch" &&
+        rawProgress >= TOUCH_DRAG_END_PROGRESS
+      ) {
+        endDrag();
+      }
       const labelVisibility = 1 - smoothstep(0.3, 0.48, progress);
       dragYaw = lerp(dragYaw, dragYawTarget, isDragging ? 0.18 : 0.09);
       dragPitch = lerp(dragPitch, dragPitchTarget, isDragging ? 0.18 : 0.09);
@@ -1606,7 +1688,10 @@ export function RouteGraph3D({
       },
       { threshold: 0.01 },
     );
-    const onVisibilityChange = () => requestRender();
+    const onVisibilityChange = () => {
+      if (document.hidden) endDrag();
+      requestRender();
+    };
     const onMotionChange = (event: MediaQueryListEvent) => {
       reduceMotion = event.matches;
       if (reduceMotion) endDrag();

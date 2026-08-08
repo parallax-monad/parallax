@@ -10,6 +10,7 @@ type VerdictQuadrant = {
   tone: "evidence" | "ready" | "blocked" | "rerun";
   label: readonly [string, string];
   note: readonly [string, string];
+  shortLabel: readonly [string, string];
   body: readonly [string, string];
 };
 
@@ -20,6 +21,7 @@ const QUADRANTS: VerdictQuadrant[] = [
     tone: "evidence",
     label: ["MORE EVIDENCE IS REQUIRED", "需要更多证据"],
     note: ["UNKNOWN / DEMO", "UNKNOWN／演示"],
+    shortLabel: ["UNKNOWN", "未知"],
     body: [
       "Parallax could not reach a transaction conclusion because required evidence is missing or incomplete.",
       "由于必要证据缺失或不完整，Parallax 无法形成交易结论。",
@@ -31,6 +33,7 @@ const QUADRANTS: VerdictQuadrant[] = [
     tone: "ready",
     label: ["NO BLOCKING EVIDENCE FOUND", "未发现阻断证据"],
     note: ["PROCEED / DEMO", "PROCEED／演示"],
+    shortLabel: ["PROCEED", "继续"],
     body: [
       "No blocking evidence was found within the checked demo scope. This is not a safety guarantee.",
       "在已检查的演示范围内未发现阻断证据。这不构成安全保证。",
@@ -42,6 +45,7 @@ const QUADRANTS: VerdictQuadrant[] = [
     tone: "blocked",
     label: ["DO NOT USE THIS TRANSACTION PATH", "请勿使用当前交易路径"],
     note: ["STOP / DEMO", "STOP／演示"],
+    shortLabel: ["STOP", "停止"],
     body: [
       "Blocking evidence applies to this transaction Intent or path. Review the checked reason before continuing.",
       "阻断证据适用于当前交易意图或路径。继续之前请查看已检查的原因。",
@@ -53,6 +57,7 @@ const QUADRANTS: VerdictQuadrant[] = [
     tone: "rerun",
     label: ["ADJUST BEFORE PROCEEDING", "继续之前请先调整"],
     note: ["ADJUST / DEMO", "ADJUST／演示"],
+    shortLabel: ["ADJUST", "调整"],
     body: [
       "When a verified transaction adjustment is available, review the evidence and rerun after making that one change.",
       "当存在经过验证的交易调整时，请查看证据，只修改该项条件后重新运行。",
@@ -116,9 +121,6 @@ export function createVerdictInteractionHandlers(
   return {
     onClick: () => voteZone(zone),
     onFocus: () => previewZone(zone),
-    onPointerDown: (event: VerdictPointerEvent) => {
-      if (event.pointerType === "touch") voteZone(zone);
-    },
     onPointerEnter: (event: VerdictPointerEvent) => {
       if (event.pointerType !== "touch") previewZone(zone);
     },
@@ -234,7 +236,6 @@ export function VerdictActions({ language }: { language: Language }) {
               onBlur={() => setPreviewZone(null)}
               onClick={interactionHandlers.onClick}
               onFocus={interactionHandlers.onFocus}
-              onPointerDown={interactionHandlers.onPointerDown}
               onPointerEnter={interactionHandlers.onPointerEnter}
               type="button"
             >
@@ -267,7 +268,7 @@ export function VerdictActions({ language }: { language: Language }) {
             {activeZone
               ? `${voteCount(activeZone)} / ${totalVotes}`
               : totalVotes}
-            <small>
+            <small className="verdict-center-label-full">
               {activeQuadrant
                 ? pick(
                     language,
@@ -275,6 +276,15 @@ export function VerdictActions({ language }: { language: Language }) {
                     activeQuadrant.label[1],
                   )
                 : pick(language, "CHOOSE A VERDICT", "选择一个结论")}
+            </small>
+            <small aria-hidden="true" className="verdict-center-label-mobile">
+              {activeQuadrant
+                ? pick(
+                    language,
+                    activeQuadrant.shortLabel[0],
+                    activeQuadrant.shortLabel[1],
+                  )
+                : pick(language, "CHOOSE", "选择")}
             </small>
           </strong>
         </div>
