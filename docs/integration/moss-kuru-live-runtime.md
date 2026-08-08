@@ -185,9 +185,12 @@ immutable revision; PR #23 stays compatible with the frozen ef15448e pin.
    affordability is not proven (`walletAffordabilityChecked: false`).
 3. The simulator pins one base block internally (Moss ADR 0002). On the
    temporary pin the adapter reads it via the `getPinnedBlockNumber()` getter;
-   `simulatorPinnedBlock` is required for authoritative live results, and
-   Agent Flow/acceptance fail closed when it is absent or invalid. Per-stage
-   pre-call block heights remain supplementary provenance.
+   `simulatorPinnedBlock` is required for authoritative completed live
+   `/api/check` results that enter Simulation, and Agent Flow/acceptance fail
+   closed when it is absent or invalid. The narrow exception is a verified
+   terminal `NO_ROUTE_FOUND` STOP that ends before Simulation. Quote-only
+   `/api/quote` responses do not enter this requirement. Per-stage pre-call
+   block heights remain supplementary provenance.
 4. Quote uses the public Kuru API for market discovery, then verifies on-chain;
    its availability is not guaranteed.
 5. The committed live fixture was **regenerated under Node v22.23.2** (real

@@ -9,6 +9,8 @@ services:
         sync: false
       - key: PARALLAX_TOKEN_REGISTRY_JSON
         sync: false
+      - key: CORS_ORIGIN
+        sync: false
       - key: MOSS_RUNTIME_VERSION
         value: "0.1.0"
       - key: MOSS_RUNTIME_REVISION

@@ -110,9 +110,11 @@ not be conflated:
 3. **RPC-observed chain and stage blocks** — `chainId` is read from the RPC
    client and passed to Agent Flow, which enforces Chain ID 143. Each stage
    block is observed through RPC before the stage call. Agent Flow and the live
-   acceptance gate additionally require an explicit, valid
-   `simulatorPinnedBlock`; an observed stage block is not a substitute for the
-   Moss simulator's internally pinned block (Moss ADR 0002).
+   acceptance gate for completed Checks that enter Simulation additionally
+   require an explicit, valid `simulatorPinnedBlock`; a verified terminal
+   no-route STOP that ends before Simulation is the narrow exception. An
+   observed stage block is not a substitute for the Moss simulator's
+   internally pinned block (Moss ADR 0002).
 
 The current pinned d09b runtime does not expose `simulatorPinnedBlock`, so it
 cannot produce an authoritative production Agent Flow result until that runtime

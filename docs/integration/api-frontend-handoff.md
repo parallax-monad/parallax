@@ -37,6 +37,12 @@ The exact temporary-pin Live SUCCESS claim is now part of `main`; Recorded
 Replay remains a separate deterministic integration path and must not be used
 as a Live Check fallback.
 
+Verification scope for this handoff: the documented temporary-pin Live SUCCESS
+applies to the full `POST /api/check` path (`Discover → Load → Quote → Action →
+Simulation`). This PR adds deterministic Quote contract and flow coverage, but
+does not include a new Live Quote smoke, Docker build verification, Render
+deployment, or deployed-endpoint verification.
+
 ## 1. Scope
 
 In scope:
@@ -408,7 +414,7 @@ curl -s "http://127.0.0.1:8787/api/replay/mon-to-usdc"
 | --- | --- |
 | `replayMode` | Run-level Replay flag; live Check results must be `false` |
 | Evidence `isReplay` / `isMock` | Do not treat mock as authoritative for PROCEED/ADJUST/STOP |
-| `simulatorPinnedBlock` | Required for authoritative completed live Runs; missing → fail-closed |
+| `simulatorPinnedBlock` | Required for authoritative completed live `/api/check` Runs that entered Simulation; missing → fail-closed. The narrow exception is a verified terminal `NO_ROUTE_FOUND` STOP that ends before Simulation. Quote-only `/api/quote` responses do not enter this requirement. |
 | `runtimeVersion` / `runtimeRevision` | Must match configured Moss identity on core Evidence |
 | `fixtureId` | Present on Replay Evidence; identifies recorded fixture |
 
