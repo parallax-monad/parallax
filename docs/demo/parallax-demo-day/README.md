@@ -17,6 +17,10 @@ python3 -m http.server 8000
 http://localhost:8000/parallax-demo-day.html
 ```
 
+## Online access
+
+部署到 Vercel 后，直接访问同一部署域名下的 `/parallax-demo-day.html`，即可打开在线 PPT。
+
 ## Controls
 
 - `←` / `→`：上一页 / 下一页
