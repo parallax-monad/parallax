@@ -224,7 +224,13 @@ function failureIssues(value: unknown): ApiFailureIssue[] | undefined {
     const item = obj(entry);
     if (!item) return [];
     const code = str(item.code);
-    const field = str(item.field);
+    // Zod-style rejections carry `path` segments; normalized ones carry `field`.
+    const field =
+      str(item.field) ??
+      (Array.isArray(item.path)
+        ? item.path.filter((part) => typeof part === "string").join(".") ||
+          undefined
+        : undefined);
     const message = str(item.message);
     return code || field || message ? [{ code, field, message }] : [];
   });

@@ -262,6 +262,38 @@ describe("checkSwap API adapter", () => {
     expect(result.summary.en).toContain("at most 6 decimal places");
   });
 
+  test("names the rejected field when the backend reports Zod path segments", async () => {
+    const request = vi.fn<typeof fetch>().mockResolvedValue(
+      jsonResponse(
+        {
+          error: {
+            code: "INVALID_REQUEST",
+            issues: [
+              {
+                code: "custom",
+                message: "Expected an amount greater than zero",
+                path: ["economicBoundary", "minimumReceived"],
+              },
+            ],
+          },
+        },
+        400,
+      ),
+    );
+
+    const result = await checkSwap(input, { fetch: request });
+
+    expect(result.apiFailure).toMatchObject({
+      code: "INVALID_REQUEST",
+      issues: [
+        {
+          field: "economicBoundary.minimumReceived",
+          message: "Expected an amount greater than zero",
+        },
+      ],
+    });
+  });
+
   test("preserves INVALID_RERUN reason in the error-page model", async () => {
     const request = vi.fn<typeof fetch>().mockResolvedValue(
       jsonResponse(
