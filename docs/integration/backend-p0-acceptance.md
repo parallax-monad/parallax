@@ -52,6 +52,7 @@ Expected public outcome column. Public outcomes may surface under transport-leve
 | A9 | Unsupported live runtime | `error.code = UNSUPPORTED`, `retryable = false` | `p0-acceptance` A9 | bootstrap / server integration |
 | A10 | Provenance | deterministic gate requires and preserves simulator pinned-block fields | `p0-acceptance` A10 | agent-flow provenance fail-closed |
 | A11 | Replay / Live separation | run-level Replay rejection: Replay Run cannot be a Re-run baseline; live Agent Flow cannot return `replayMode` | `p0-acceptance` A11 | `application/replay` |
+| A15 | Replay HTTP ≠ Check store | `GET /api/replay/:id` `runId` used as Check `parentRunId` → `INVALID_RERUN` / `PARENT_NOT_FOUND` (Replay never enters Check `RunStore`) | `p0-acceptance` A15 | handoff §4; complements A11's in-store `PARENT_IS_REPLAY` |
 | A12 | Re-run one condition | Multi-field Intent change rejected as `INVALID_RERUN` with `reason: NOT_EXACTLY_ONE_CHANGE` | `p0-acceptance` A12 | `application/rerun` |
 | A13 | Child Run failure | Failed child still keeps `parentRunId` and `diff` with atomic `amountInAtomic` before/after | `p0-acceptance` A13 | API application Re-run tests |
 
@@ -74,6 +75,10 @@ Recorded from API-consumption review; not additional gate rows.
    user-facing failure cause until Contracts expands the enum.
 4. **Re-run Diff values are atomic.** A13 pins `amountInAtomic` before/after as
    atomic strings; display-unit formatting is frontend work.
+5. **Replay `runId` is not a Check parent.** A15 pins the Analyze path after
+   `GET /api/replay/:id`: using that fixture `runId` as Check `parentRunId`
+   yields `PARENT_NOT_FOUND`, not `PARENT_IS_REPLAY`. A11 still covers the
+   rarer in-store Replay baseline case.
 
 ## How to run
 

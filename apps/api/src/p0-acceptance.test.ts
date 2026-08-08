@@ -13,6 +13,7 @@ import type {
   NormalizedSwapIntent,
   RunResult,
 } from "@parallax/contracts";
+import { ReplayApplicationService } from "@parallax/orchestrator/application";
 import {
   economicFailStopResult,
   economicPassChildResult,
@@ -22,6 +23,7 @@ import { CheckApplicationService } from "./application.js";
 import { normalizeCheckSwapRequest } from "./normalization.js";
 import { type AgentFlowPort, UnsupportedAgentFlowError } from "./ports.js";
 import type { BackendRuntime } from "./runtime-config.js";
+import { FileReplayFixtureRepository } from "./storage/replay-fixture-repository.js";
 import { InMemoryRunStore, type RunStore } from "./store.js";
 import { createTrustedTokenRegistry } from "./trusted-token-registry.js";
 
@@ -700,6 +702,46 @@ describe("Backend P0 acceptance matrix", () => {
         error: {
           code: "INVALID_RERUN",
           reason: "PARENT_IS_REPLAY",
+        },
+      },
+    });
+  });
+
+  it("A15 Replay HTTP runId is not a Check Re-run parent (PARENT_NOT_FOUND)", async () => {
+    const replay = await new ReplayApplicationService({
+      repository: new FileReplayFixtureRepository(),
+    }).replay("mon-to-usdc");
+    expect(replay).toMatchObject({
+      status: 200,
+      body: {
+        replayMode: true,
+        runId: expect.any(String),
+      },
+    });
+    if (replay.status !== 200) {
+      throw new Error("expected Replay fixture mon-to-usdc");
+    }
+
+    let agentFlowCalls = 0;
+    const response = await createService({
+      async check() {
+        agentFlowCalls += 1;
+        throw new Error("must not run Agent Flow for missing Replay parent");
+      },
+    }).check(
+      publicRequest({
+        parentRunId: replay.body.runId,
+        amountIn: "2",
+      }),
+    );
+
+    expect(agentFlowCalls).toBe(0);
+    expect(response).toMatchObject({
+      status: 400,
+      body: {
+        error: {
+          code: "INVALID_RERUN",
+          reason: "PARENT_NOT_FOUND",
         },
       },
     });
