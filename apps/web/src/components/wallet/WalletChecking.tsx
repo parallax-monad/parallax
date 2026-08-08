@@ -6,10 +6,10 @@ import { type Language, say } from "@/lib/i18n";
  */
 const STAGES = [
   { en: "Preparing quote", zh: "准备报价" },
-  { en: "Building transaction action", zh: "构建交易动作" },
+  { en: "Preparing transaction action", zh: "准备交易操作" },
   { en: "Simulating execution", zh: "模拟执行" },
   { en: "Reviewing evidence", zh: "审阅证据" },
-  { en: "Generating verdict", zh: "生成结论" },
+  { en: "Finalizing result", zh: "生成最终结果" },
 ];
 
 export const WALLET_STAGE_COUNT = STAGES.length;
@@ -28,14 +28,14 @@ export function WalletChecking({
     >
       <span className="eyebrow-monad">
         {say(language, {
-          en: "Parallax · Simulated demo",
-          zh: "Parallax · 模拟演示",
+          en: "Parallax · Demo preset",
+          zh: "Parallax · 演示预设",
         })}
       </span>
       <h2 className="m-0 text-[24px] font-extrabold leading-[1.15] tracking-[-0.04em]">
         {say(language, {
-          en: "Checking this swap before you sign.",
-          zh: "正在签名前检查这笔兑换。",
+          en: "Checking this demo swap before signing.",
+          zh: "正在签名前检查这笔演示兑换。",
         })}
       </h2>
 

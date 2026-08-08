@@ -28,6 +28,11 @@ const STAGE_LABEL: Record<EvidenceItem["stage"], Copy> = {
   rpc: { en: "RPC query", zh: "RPC 查询" },
 };
 
+const MODE_LABEL: Record<CheckSwapResult["productRunMode"], Copy> = {
+  DEMO: { en: "Demo preset", zh: "演示预设" },
+  RECORDED_REPLAY: { en: "Recorded replay", zh: "录制回放" },
+};
+
 export function EvidenceDrawer({
   result,
   language,
@@ -60,19 +65,27 @@ export function EvidenceDrawer({
         role="dialog"
         aria-modal="true"
         aria-label={say(language, {
-          en: "Technical evidence",
-          zh: "技术证据",
+          en: "Evidence and scope",
+          zh: "证据与检查范围",
         })}
         className="no-scrollbar relative flex h-full w-full max-w-[560px] flex-col overflow-y-auto border-l border-line bg-ink-elev px-6 py-6"
       >
         <div className="flex items-start justify-between gap-4">
           <div>
             <span className="eyebrow-monad">
-              {say(language, { en: "Technical evidence", zh: "技术证据" })}
+              {say(language, {
+                en: "Evidence and scope",
+                zh: "证据与检查范围",
+              })}
             </span>
-            <h2 className="mono m-0 text-[15px] font-extrabold">
-              {result.runId}
-            </h2>
+            <div className="mt-1 flex flex-wrap items-center gap-2">
+              <h2 className="mono m-0 text-[15px] font-extrabold">
+                {result.runId}
+              </h2>
+              <span className="pill">
+                {say(language, MODE_LABEL[result.productRunMode])}
+              </span>
+            </div>
           </div>
           <button
             ref={closeRef}
@@ -172,12 +185,12 @@ export function EvidenceDrawer({
               language,
               result.productRunMode === "RECORDED_REPLAY"
                 ? {
-                    en: "This run loaded recorded replay evidence. Nothing here is signed or broadcast.",
-                    zh: "本次运行加载了录制回放证据。这里不会签名，也不会广播。",
+                    en: "This result reproduces previously recorded real Evidence. It is not a current Live Run. Nothing here is signed or broadcast.",
+                    zh: "此结果复现此前录制的真实证据，并非当前实时运行。这里不会签名，也不会广播。",
                   }
                 : {
-                    en: "This demo uses deterministic local data, not recorded or live evidence. Nothing here is signed or broadcast.",
-                    zh: "本演示使用确定性的本地数据，并非录制或实时证据。这里不会签名，也不会广播。",
+                    en: "This result uses an explicitly labelled demo preset. It is not current Live Evidence. Nothing here is signed or broadcast.",
+                    zh: "此结果使用明确标注的演示预设，并非当前实时证据。这里不会签名，也不会广播。",
                   },
             )}
           </p>

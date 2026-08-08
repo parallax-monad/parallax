@@ -182,7 +182,10 @@ export function WalletSwap({
 
       <section className="border border-line bg-ink-rail p-4">
         <span className="text-[12px] font-bold uppercase tracking-[0.08em] text-dim">
-          {say(language, { en: "You receive (est.)", zh: "你收到（预估）" })}
+          {say(language, {
+            en: "You receive (demo est.)",
+            zh: "你收到（演示估算）",
+          })}
         </span>
         <div className="mt-3 flex items-center gap-3">
           <strong
@@ -191,7 +194,10 @@ export function WalletSwap({
             }`}
           >
             {estimate === undefined
-              ? say(language, { en: "No quote", zh: "无报价" })
+              ? say(language, {
+                  en: "Estimate unavailable",
+                  zh: "暂无估算",
+                })
               : formatAmount(estimate)}
           </strong>
           <TokenSelect
@@ -270,11 +276,14 @@ export function WalletSwap({
                 })}
               </span>
               <input
-                aria-describedby={
+                aria-describedby={[
+                  "swap-minimum-received-help",
                   minimumReceivedError
                     ? "swap-minimum-received-error"
-                    : undefined
-                }
+                    : undefined,
+                ]
+                  .filter(Boolean)
+                  .join(" ")}
                 aria-invalid={
                   minimumReceivedError || flagFor("minimumReceived")
                     ? true
@@ -293,6 +302,15 @@ export function WalletSwap({
                 value={form.minimumReceived}
                 onChange={(event) => set("minimumReceived", event.target.value)}
               />
+              <p
+                id="swap-minimum-received-help"
+                className="mt-2 text-[12px] leading-[1.6] text-dim"
+              >
+                {say(language, {
+                  en: "Minimum Received is the lowest output amount accepted for this Intent. It is an acceptance boundary, not an estimate and not a way to improve the transaction.",
+                  zh: "最低收到量是此交易意图可接受的最低输出数量。它是接受边界，不是预估值，也不是改善交易结果的方法。",
+                })}
+              </p>
               {minimumReceivedError ? (
                 <p
                   id="swap-minimum-received-error"
@@ -351,14 +369,14 @@ export function WalletSwap({
 
       <button type="submit" className="btn btn-monad mt-1 w-full">
         {say(language, {
-          en: "Simulate before signing",
-          zh: "签名前先模拟",
+          en: "Run demo check",
+          zh: "运行演示检查",
         })}
       </button>
       <p className="text-center text-[12px] leading-[1.5] text-dim">
         {say(language, {
-          en: "Parallax runs a pre-sign check. No signing, no broadcasting.",
-          zh: "Parallax 只做签名前检查。不签名，不广播。",
+          en: "This demo uses deterministic local data. It does not sign or broadcast a transaction.",
+          zh: "本演示使用确定性的本地数据，不会签名或广播交易。",
         })}
       </p>
     </form>
