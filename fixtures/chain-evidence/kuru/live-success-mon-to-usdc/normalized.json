@@ -1,0 +1,460 @@
+{
+  "protocol": "kuru",
+  "intent": {
+    "chainId": "143",
+    "sender": "0xcccccccccccccccccccccccccccccccccccccccc",
+    "tokenIn": "native",
+    "tokenOut": "0x754704Bc059F8C67012fEd69BC8A327a5aafb603",
+    "amountIn": "0.01",
+    "minimumReceivedSource": "unavailable"
+  },
+  "integrationStatus": "OK",
+  "executionStatus": "SUCCESS",
+  "quote": {
+    "value": {
+      "amountSide": "amountIn",
+      "amountIn": "0.01",
+      "estimatedAmountOut": "0.000223",
+      "minimumAmountOut": "0.000221",
+      "path": ["native", "0x754704Bc059F8C67012fEd69BC8A327a5aafb603"]
+    },
+    "source": "quote",
+    "reproducibility": "REPRODUCIBLE",
+    "blockNumber": "94112901",
+    "fetchedAt": "2026-08-08T04:39:40.097Z",
+    "formula": "Quote returned by the live Moss query."
+  },
+  "action": {
+    "value": [
+      {
+        "protocol": "kuru",
+        "method": "swap",
+        "sender": "0xcccccccccccccccccccccccccccccccccccccccc",
+        "target": "0xd651346d7c789536ebf06dc72aE3C8502cd695CC",
+        "nativeValue": "0x2386f26fc10000",
+        "calldataBytes": 420
+      }
+    ],
+    "source": "moss",
+    "reproducibility": "REPRODUCIBLE",
+    "blockNumber": "94112901",
+    "fetchedAt": "2026-08-08T04:39:40.097Z"
+  },
+  "receipt": {
+    "value": {
+      "kind": "receipt",
+      "outcome": {
+        "operation": "swap",
+        "protocol": "kuru",
+        "sender": "0xCcCCccccCCCCcCCCCCCcCcCccCcCCCcCcccccccC",
+        "tokenIn": "native",
+        "tokenOut": "0x754704Bc059F8C67012fEd69BC8A327a5aafb603",
+        "amountIn": "10000000000000000",
+        "amountOut": "223"
+      },
+      "text": "Kuru Swap: 10000000000000000 native to 223 0x754704Bc059F8C67012fEd69BC8A327a5aafb603; 1 Trade event observed",
+      "changes": [
+        {
+          "kind": "receipt",
+          "outcome": [
+            {
+              "operation": "transfer",
+              "token": "native",
+              "from": "0xcccccccccccccccccccccccccccccccccccccccc",
+              "to": "0xd651346d7c789536ebf06dc72ae3c8502cd695cc",
+              "amount": "10000000000000000"
+            }
+          ],
+          "text": "ERC20 Transfer: 10000000000000000 native from 0xcccccccccccccccccccccccccccccccccccccccc to 0xd651346d7c789536ebf06dc72ae3c8502cd695cc",
+          "changes": [
+            {
+              "kind": "change",
+              "change": {
+                "kind": "nativeTransfer",
+                "from": "0xcccccccccccccccccccccccccccccccccccccccc",
+                "to": "0xd651346d7c789536ebf06dc72ae3c8502cd695cc",
+                "value": "10000000000000000"
+              },
+              "data": {
+                "operation": "transfer",
+                "token": "native",
+                "from": "0xcccccccccccccccccccccccccccccccccccccccc",
+                "to": "0xd651346d7c789536ebf06dc72ae3c8502cd695cc",
+                "amount": "10000000000000000"
+              },
+              "text": "ERC20 Transfer: 10000000000000000 native from 0xcccccccccccccccccccccccccccccccccccccccc to 0xd651346d7c789536ebf06dc72ae3c8502cd695cc"
+            }
+          ],
+          "protocol": "erc20"
+        },
+        {
+          "kind": "receipt",
+          "outcome": [
+            {
+              "operation": "transfer",
+              "token": "native",
+              "from": "0xd651346d7c789536ebf06dc72ae3c8502cd695cc",
+              "to": "0x122c0d8683cab344163fb73e28e741754257e3fa",
+              "amount": "10000000000000000"
+            }
+          ],
+          "text": "ERC20 Transfer: 10000000000000000 native from 0xd651346d7c789536ebf06dc72ae3c8502cd695cc to 0x122c0d8683cab344163fb73e28e741754257e3fa",
+          "changes": [
+            {
+              "kind": "change",
+              "change": {
+                "kind": "nativeTransfer",
+                "from": "0xd651346d7c789536ebf06dc72ae3c8502cd695cc",
+                "to": "0x122c0d8683cab344163fb73e28e741754257e3fa",
+                "value": "10000000000000000"
+              },
+              "data": {
+                "operation": "transfer",
+                "token": "native",
+                "from": "0xd651346d7c789536ebf06dc72ae3c8502cd695cc",
+                "to": "0x122c0d8683cab344163fb73e28e741754257e3fa",
+                "amount": "10000000000000000"
+              },
+              "text": "ERC20 Transfer: 10000000000000000 native from 0xd651346d7c789536ebf06dc72ae3c8502cd695cc to 0x122c0d8683cab344163fb73e28e741754257e3fa"
+            }
+          ],
+          "protocol": "erc20"
+        },
+        {
+          "kind": "change",
+          "change": {
+            "kind": "event",
+            "address": "0x122c0d8683cab344163fb73e28e741754257e3fa",
+            "topics": [
+              "0xb74e966bc873b8c144fab39c9981210f50130885e89caf4556c0840cec741dcd"
+            ],
+            "data": "0x0000000000000000000000000000000000000000000000000000000000028a7e000000000000000000000000000000000000000000000000000267a93f27b3bf"
+          },
+          "data": {
+            "event": "FlipOrderUpdated",
+            "emitter": "0x122c0d8683cab344163fb73e28e741754257e3fa",
+            "orderId": "166526",
+            "size": "676926560121791"
+          },
+          "text": "Flip Order Updated: order 166526 has size 676926560121791 emitted by 0x122c0d8683cab344163fb73e28e741754257e3fa"
+        },
+        {
+          "kind": "change",
+          "change": {
+            "kind": "event",
+            "address": "0x122c0d8683cab344163fb73e28e741754257e3fa",
+            "topics": [
+              "0xf16924fba1c18c108912fcacaac7450c98eb3f2d8c0a3cdf3df7066c08f21581"
+            ],
+            "data": "0x000000000000000000000000000000000000000000000000000000000002892300000000000000000000000052e1a9c819bd747522a93295901c6bf4fbdde01d0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000004fdd70de8d000000000000000000000000000000000000000000000000000000000002cb5774fc000000000000000000000000d651346d7c789536ebf06dc72ae3c8502cd695cc000000000000000000000000cccccccccccccccccccccccccccccccccccccccc000000000000000000000000000000000000000000000000000000003b9aca00"
+          },
+          "data": {
+            "event": "Trade",
+            "emitter": "0x122c0d8683cab344163fb73e28e741754257e3fa",
+            "orderId": "166179",
+            "maker": "0x52e1a9C819BD747522A93295901c6BF4fBdde01d",
+            "taker": "0xd651346d7c789536ebf06dc72aE3C8502cd695CC",
+            "price": "22480000000000000",
+            "filledSize": "1000000000"
+          },
+          "text": "Trade Event: 1000000000 at 22480000000000000 emitted by 0x122c0d8683cab344163fb73e28e741754257e3fa"
+        },
+        {
+          "kind": "receipt",
+          "outcome": [
+            {
+              "operation": "transfer",
+              "token": "0x754704bc059f8c67012fed69bc8a327a5aafb603",
+              "from": "0x2A68ba1833cDf93fa9Da1EEbd7F46242aD8E90c5",
+              "to": "0xd651346d7c789536ebf06dc72aE3C8502cd695CC",
+              "amount": "223"
+            }
+          ],
+          "text": "ERC20 Transfer: 223 0x754704bc059f8c67012fed69bc8a327a5aafb603 from 0x2A68ba1833cDf93fa9Da1EEbd7F46242aD8E90c5 to 0xd651346d7c789536ebf06dc72aE3C8502cd695CC",
+          "changes": [
+            {
+              "kind": "change",
+              "change": {
+                "kind": "event",
+                "address": "0x754704bc059f8c67012fed69bc8a327a5aafb603",
+                "topics": [
+                  "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+                  "0x0000000000000000000000002a68ba1833cdf93fa9da1eebd7f46242ad8e90c5",
+                  "0x000000000000000000000000d651346d7c789536ebf06dc72ae3c8502cd695cc"
+                ],
+                "data": "0x00000000000000000000000000000000000000000000000000000000000000df"
+              },
+              "data": {
+                "operation": "transfer",
+                "token": "0x754704bc059f8c67012fed69bc8a327a5aafb603",
+                "from": "0x2A68ba1833cDf93fa9Da1EEbd7F46242aD8E90c5",
+                "to": "0xd651346d7c789536ebf06dc72aE3C8502cd695CC",
+                "amount": "223"
+              },
+              "text": "ERC20 Transfer: 223 0x754704bc059f8c67012fed69bc8a327a5aafb603 from 0x2A68ba1833cDf93fa9Da1EEbd7F46242aD8E90c5 to 0xd651346d7c789536ebf06dc72aE3C8502cd695CC"
+            }
+          ],
+          "protocol": "erc20"
+        },
+        {
+          "kind": "receipt",
+          "outcome": [
+            {
+              "operation": "transfer",
+              "token": "native",
+              "from": "0x122c0d8683cab344163fb73e28e741754257e3fa",
+              "to": "0x2a68ba1833cdf93fa9da1eebd7f46242ad8e90c5",
+              "amount": "10000000000000000"
+            }
+          ],
+          "text": "ERC20 Transfer: 10000000000000000 native from 0x122c0d8683cab344163fb73e28e741754257e3fa to 0x2a68ba1833cdf93fa9da1eebd7f46242ad8e90c5",
+          "changes": [
+            {
+              "kind": "change",
+              "change": {
+                "kind": "nativeTransfer",
+                "from": "0x122c0d8683cab344163fb73e28e741754257e3fa",
+                "to": "0x2a68ba1833cdf93fa9da1eebd7f46242ad8e90c5",
+                "value": "10000000000000000"
+              },
+              "data": {
+                "operation": "transfer",
+                "token": "native",
+                "from": "0x122c0d8683cab344163fb73e28e741754257e3fa",
+                "to": "0x2a68ba1833cdf93fa9da1eebd7f46242ad8e90c5",
+                "amount": "10000000000000000"
+              },
+              "text": "ERC20 Transfer: 10000000000000000 native from 0x122c0d8683cab344163fb73e28e741754257e3fa to 0x2a68ba1833cdf93fa9da1eebd7f46242ad8e90c5"
+            }
+          ],
+          "protocol": "erc20"
+        },
+        {
+          "kind": "change",
+          "change": {
+            "kind": "event",
+            "address": "0xd651346d7c789536ebf06dc72ae3c8502cd695cc",
+            "topics": [
+              "0xae71e8ae9695e4f3523d27453a24d99edc4738fea8130c1cb33eb9ef95f53354"
+            ],
+            "data": "0x000000000000000000000000cccccccccccccccccccccccccccccccccccccccc0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000754704bc059f8c67012fed69bc8a327a5aafb603000000000000000000000000000000000000000000000000002386f26fc1000000000000000000000000000000000000000000000000000000000000000000df"
+          },
+          "data": {
+            "operation": "swap",
+            "protocol": "kuru",
+            "sender": "0xCcCCccccCCCCcCCCCCCcCcCccCcCCCcCcccccccC",
+            "tokenIn": "native",
+            "tokenOut": "0x754704Bc059F8C67012fEd69BC8A327a5aafb603",
+            "amountIn": "10000000000000000",
+            "amountOut": "223"
+          },
+          "text": "Kuru Swap: 10000000000000000 native to 223 0x754704Bc059F8C67012fEd69BC8A327a5aafb603 by 0xCcCCccccCCCCcCCCCCCcCcCccCcCCCcCcccccccC"
+        },
+        {
+          "kind": "receipt",
+          "outcome": [
+            {
+              "operation": "transfer",
+              "token": "0x754704bc059f8c67012fed69bc8a327a5aafb603",
+              "from": "0xd651346d7c789536ebf06dc72aE3C8502cd695CC",
+              "to": "0xCcCCccccCCCCcCCCCCCcCcCccCcCCCcCcccccccC",
+              "amount": "223"
+            }
+          ],
+          "text": "ERC20 Transfer: 223 0x754704bc059f8c67012fed69bc8a327a5aafb603 from 0xd651346d7c789536ebf06dc72aE3C8502cd695CC to 0xCcCCccccCCCCcCCCCCCcCcCccCcCCCcCcccccccC",
+          "changes": [
+            {
+              "kind": "change",
+              "change": {
+                "kind": "event",
+                "address": "0x754704bc059f8c67012fed69bc8a327a5aafb603",
+                "topics": [
+                  "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+                  "0x000000000000000000000000d651346d7c789536ebf06dc72ae3c8502cd695cc",
+                  "0x000000000000000000000000cccccccccccccccccccccccccccccccccccccccc"
+                ],
+                "data": "0x00000000000000000000000000000000000000000000000000000000000000df"
+              },
+              "data": {
+                "operation": "transfer",
+                "token": "0x754704bc059f8c67012fed69bc8a327a5aafb603",
+                "from": "0xd651346d7c789536ebf06dc72aE3C8502cd695CC",
+                "to": "0xCcCCccccCCCCcCCCCCCcCcCccCcCCCcCcccccccC",
+                "amount": "223"
+              },
+              "text": "ERC20 Transfer: 223 0x754704bc059f8c67012fed69bc8a327a5aafb603 from 0xd651346d7c789536ebf06dc72aE3C8502cd695CC to 0xCcCCccccCCCCcCCCCCCcCcCccCcCCCcCcccccccC"
+            }
+          ],
+          "protocol": "erc20"
+        }
+      ],
+      "protocol": "kuru"
+    },
+    "source": "moss",
+    "reproducibility": "REPRODUCIBLE",
+    "blockNumber": "94112901",
+    "fetchedAt": "2026-08-08T04:39:40.097Z"
+  },
+  "outcome": {
+    "value": {
+      "operation": "swap",
+      "protocol": "kuru",
+      "sender": "0xCcCCccccCCCCcCCCCCCcCcCccCcCCCcCcccccccC",
+      "tokenIn": "native",
+      "tokenOut": "0x754704Bc059F8C67012fEd69BC8A327a5aafb603",
+      "amountIn": "10000000000000000",
+      "amountOut": "223"
+    },
+    "source": "moss",
+    "reproducibility": "REPRODUCIBLE",
+    "blockNumber": "94112901",
+    "fetchedAt": "2026-08-08T04:39:40.097Z"
+  },
+  "assetChanges": {
+    "value": [
+      {
+        "kind": "nativeTransfer",
+        "from": "0xcccccccccccccccccccccccccccccccccccccccc",
+        "to": "0xd651346d7c789536ebf06dc72ae3c8502cd695cc",
+        "value": "10000000000000000"
+      },
+      {
+        "kind": "nativeTransfer",
+        "from": "0xd651346d7c789536ebf06dc72ae3c8502cd695cc",
+        "to": "0x122c0d8683cab344163fb73e28e741754257e3fa",
+        "value": "10000000000000000"
+      },
+      {
+        "kind": "event",
+        "address": "0x122c0d8683cab344163fb73e28e741754257e3fa",
+        "topics": [
+          "0xb74e966bc873b8c144fab39c9981210f50130885e89caf4556c0840cec741dcd"
+        ],
+        "data": "0x0000000000000000000000000000000000000000000000000000000000028a7e000000000000000000000000000000000000000000000000000267a93f27b3bf"
+      },
+      {
+        "kind": "event",
+        "address": "0x122c0d8683cab344163fb73e28e741754257e3fa",
+        "topics": [
+          "0xf16924fba1c18c108912fcacaac7450c98eb3f2d8c0a3cdf3df7066c08f21581"
+        ],
+        "data": "0x000000000000000000000000000000000000000000000000000000000002892300000000000000000000000052e1a9c819bd747522a93295901c6bf4fbdde01d0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000004fdd70de8d000000000000000000000000000000000000000000000000000000000002cb5774fc000000000000000000000000d651346d7c789536ebf06dc72ae3c8502cd695cc000000000000000000000000cccccccccccccccccccccccccccccccccccccccc000000000000000000000000000000000000000000000000000000003b9aca00"
+      },
+      {
+        "kind": "event",
+        "address": "0x754704bc059f8c67012fed69bc8a327a5aafb603",
+        "topics": [
+          "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+          "0x0000000000000000000000002a68ba1833cdf93fa9da1eebd7f46242ad8e90c5",
+          "0x000000000000000000000000d651346d7c789536ebf06dc72ae3c8502cd695cc"
+        ],
+        "data": "0x00000000000000000000000000000000000000000000000000000000000000df"
+      },
+      {
+        "kind": "nativeTransfer",
+        "from": "0x122c0d8683cab344163fb73e28e741754257e3fa",
+        "to": "0x2a68ba1833cdf93fa9da1eebd7f46242ad8e90c5",
+        "value": "10000000000000000"
+      },
+      {
+        "kind": "event",
+        "address": "0xd651346d7c789536ebf06dc72ae3c8502cd695cc",
+        "topics": [
+          "0xae71e8ae9695e4f3523d27453a24d99edc4738fea8130c1cb33eb9ef95f53354"
+        ],
+        "data": "0x000000000000000000000000cccccccccccccccccccccccccccccccccccccccc0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000754704bc059f8c67012fed69bc8a327a5aafb603000000000000000000000000000000000000000000000000002386f26fc1000000000000000000000000000000000000000000000000000000000000000000df"
+      },
+      {
+        "kind": "event",
+        "address": "0x754704bc059f8c67012fed69bc8a327a5aafb603",
+        "topics": [
+          "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+          "0x000000000000000000000000d651346d7c789536ebf06dc72ae3c8502cd695cc",
+          "0x000000000000000000000000cccccccccccccccccccccccccccccccccccccccc"
+        ],
+        "data": "0x00000000000000000000000000000000000000000000000000000000000000df"
+      }
+    ],
+    "source": "moss",
+    "reproducibility": "REPRODUCIBLE",
+    "blockNumber": "94112901",
+    "fetchedAt": "2026-08-08T04:39:40.097Z"
+  },
+  "assetChangeAssessment": "EXPLAINED",
+  "warnings": {
+    "value": [],
+    "source": "moss",
+    "reproducibility": "REPRODUCIBLE",
+    "blockNumber": "94112901",
+    "fetchedAt": "2026-08-08T04:39:40.097Z"
+  },
+  "revertReason": {
+    "value": null,
+    "source": "unknown",
+    "reproducibility": "REPRODUCIBLE",
+    "blockNumber": "94112901",
+    "fetchedAt": "2026-08-08T04:39:40.097Z",
+    "limitation": "No corresponding recorded evidence is available."
+  },
+  "gas": {
+    "value": ["528696"],
+    "source": "moss",
+    "reproducibility": "REPRODUCIBLE",
+    "blockNumber": "94112901",
+    "fetchedAt": "2026-08-08T04:39:40.097Z"
+  },
+  "simulationCoverage": {
+    "value": {
+      "expectedTransactions": 1,
+      "observedResults": 1,
+      "unmatchedResultIndexes": [],
+      "halted": false,
+      "complete": true,
+      "missingTransactionIndexes": []
+    },
+    "source": "derived",
+    "reproducibility": "REPRODUCIBLE",
+    "blockNumber": "94112901",
+    "fetchedAt": "2026-08-08T04:39:40.097Z",
+    "formula": "Expected transactions are derived from the action capability tree; observed results are derived from the simulator result list."
+  },
+  "errors": {
+    "value": [],
+    "source": "unknown",
+    "reproducibility": "REPRODUCIBLE",
+    "blockNumber": "94112901",
+    "fetchedAt": "2026-08-08T04:39:40.097Z",
+    "formula": "Structured errors are normalized from live stage errors."
+  },
+  "blockNumber": {
+    "value": "94112901",
+    "source": "rpc",
+    "reproducibility": "REPRODUCIBLE",
+    "blockNumber": "94112901",
+    "fetchedAt": "2026-08-08T04:39:40.097Z",
+    "formula": "Latest block read across live stages; simulatorPinnedBlock records the simulator's exact pinned block when the runtime exposes it."
+  },
+  "mossVersion": "@themoss/protocol-kuru@0.1.0",
+  "mossCommit": "ef15448e166f31c891e80dba5073dae04a052a2b",
+  "runtimeVersion": "0.1.0",
+  "runtimeRevision": "ef15448e166f31c891e80dba5073dae04a052a2b",
+  "simulatorPinnedBlock": "94112902",
+  "fetchedAt": "2026-08-08T04:39:40.097Z",
+  "isReplay": false,
+  "isMock": false,
+  "source": "moss",
+  "replayMode": false,
+  "approval": {
+    "value": "NOT_APPLICABLE",
+    "source": "derived",
+    "reproducibility": "REPRODUCIBLE",
+    "blockNumber": "94112901",
+    "fetchedAt": "2026-08-08T04:39:40.097Z",
+    "formula": "Native MON input has no ERC-20 approval action."
+  },
+  "walletAffordabilityChecked": false,
+  "limitations": [
+    "Moss trace simulation synthetic-prefunds native MON only and does not prove ERC-20 affordability.",
+    "No signing, broadcast, custody, or wallet mutation occurred; the action stage only constructed unsigned calldata."
+  ]
+}

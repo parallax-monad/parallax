@@ -1,0 +1,96 @@
+{
+  "runId": "kuru-live-1786163979273",
+  "startedAt": "2026-08-08T04:39:39.273Z",
+  "finishedAt": "2026-08-08T04:39:49.599Z",
+  "nodeVersion": "v22.23.2",
+  "pnpmVersion": "pnpm/11.10.0 npm/? node/v22.23.2 darwin arm64",
+  "parallaxCommit": "938f62fe5c872626f5cfa2f0a58c975d53e4a8de",
+  "mossRuntimeVersion": "0.1.0",
+  "mossRuntimeRevision": "ef15448e166f31c891e80dba5073dae04a052a2b",
+  "chainId": "143",
+  "sender": "0xcccccccccccccccccccccccccccccccccccccccc",
+  "tokenIn": "MON",
+  "tokenOut": "0x754704Bc059F8C67012fEd69BC8A327a5aafb603",
+  "amountIn": "0.01",
+  "protocol": "kuru",
+  "direction": "MON_TO_USDC",
+  "rpcType": "environment-supplied",
+  "replayMode": false,
+  "isReplay": false,
+  "isMock": false,
+  "status": "PARTIALLY_VERIFIED",
+  "liveSuccess": true,
+  "failureStage": null,
+  "failureCode": null,
+  "p0DecisionCandidate": "P0_LIVE_READY",
+  "apiCheckStatus": 200,
+  "apiCheckSchemaValid": true,
+  "apiVerdict": "PROCEED",
+  "apiCheckAcceptance": true,
+  "apiCheckProvenanceMatches": true,
+  "observedChainId": 143,
+  "simulatorPinnedBlock": "94112902",
+  "stageStatuses": [
+    {
+      "stage": "DISCOVER",
+      "status": "OK",
+      "blockNumber": "94112883",
+      "durationMs": 0,
+      "error": null
+    },
+    {
+      "stage": "LOAD",
+      "status": "OK",
+      "blockNumber": "94112883",
+      "durationMs": 0,
+      "error": null
+    },
+    {
+      "stage": "QUOTE",
+      "status": "OK",
+      "blockNumber": "94112883",
+      "durationMs": 3063,
+      "error": null
+    },
+    {
+      "stage": "ACTION",
+      "status": "OK",
+      "blockNumber": "94112883",
+      "durationMs": 1962,
+      "error": null
+    },
+    {
+      "stage": "SIMULATE",
+      "status": "OK",
+      "blockNumber": "94112901",
+      "durationMs": 2065,
+      "error": null
+    }
+  ],
+  "blockProvenance": {
+    "initial": "94112901",
+    "perStage": [
+      { "stage": "DISCOVER", "blockNumber": "94112883" },
+      { "stage": "LOAD", "blockNumber": "94112883" },
+      { "stage": "QUOTE", "blockNumber": "94112883" },
+      { "stage": "ACTION", "blockNumber": "94112883" },
+      { "stage": "SIMULATE", "blockNumber": "94112901" }
+    ]
+  },
+  "simulationCoverage": {
+    "expectedTransactions": 1,
+    "observedResults": 1,
+    "unmatchedResultIndexes": [],
+    "halted": false,
+    "complete": true,
+    "missingTransactionIndexes": []
+  },
+  "executionStatus": "SUCCESS",
+  "integrationStatus": "OK",
+  "limitations": [
+    "Moss trace simulation synthetic-prefunds native MON only and does not prove ERC-20 affordability.",
+    "No signing, broadcast, custody, or wallet mutation occurred; the action stage only constructed unsigned calldata."
+  ],
+  "fixtureType": "LIVE_SIMULATION",
+  "real": true
+}

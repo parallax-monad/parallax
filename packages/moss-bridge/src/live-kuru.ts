@@ -440,7 +440,17 @@ function blockNumberString(value: unknown): string | undefined {
   if (typeof value === "number" && Number.isSafeInteger(value) && value >= 0) {
     return String(value);
   }
-  if (typeof value === "string" && /^\d+$/.test(value)) return value;
+  if (typeof value === "string") {
+    if (/^\d+$/.test(value)) return value;
+    // Moss `getPinnedBlockNumber()` returns the simulator's base block as Hex
+    // (0x...) from eth_blockNumber. Normalize to a decimal string so the
+    // RunResult/acceptance contracts (which require /^\d+$/) can consume it.
+    // A stage or route blockNumber is never accepted as a substitute here.
+    if (/^0x[0-9a-fA-F]+$/.test(value)) {
+      const parsed = BigInt(value);
+      return parsed >= 0n ? parsed.toString() : undefined;
+    }
+  }
   return undefined;
 }
 
@@ -667,11 +677,16 @@ export async function runKuruLiveSwapWithBundle(
     }
 
     const simulatorPinnedBlockAfter = await readSimulatorPinnedBlock(simulator);
+    // Moss resets the exposed pin at the start of every simulate() and sets it
+    // to the exact resolved base block, so on a fresh simulator the pre-run
+    // read is undefined by design. A divergent non-undefined pre-run value
+    // means overlapping runs (not concurrency-safe per Moss) and fails closed.
     const simulatorPinnedBlock =
-      simulatorPinnedBlockBefore !== undefined &&
-      simulatorPinnedBlockBefore === simulatorPinnedBlockAfter
-        ? simulatorPinnedBlockBefore
-        : undefined;
+      simulatorPinnedBlockBefore === undefined
+        ? simulatorPinnedBlockAfter
+        : simulatorPinnedBlockBefore === simulatorPinnedBlockAfter
+          ? simulatorPinnedBlockBefore
+          : undefined;
 
     const evidence = normalizeLiveKuruEvidence({
       intent: input.intent,

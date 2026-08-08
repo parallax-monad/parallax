@@ -1,6 +1,6 @@
 # Frontend API Handoff (`/api/check` + `/api/replay`)
 
-Status: BACKEND HANDOFF FOR ANALYZE 联调 — LIVE SUCCESS NOT CLAIMED
+Status: BACKEND HANDOFF FOR ANALYZE 联调 — LIVE SIMULATION SUCCEEDED ON THE TEMPORARY MOSS PIN; FIXTURE REGENERATED ON NODE v22.23.2
 
 Owner: Clare (`apps/api`)
 Consumers: Antony (`apps/web`)
@@ -32,7 +32,8 @@ Out of scope:
 - Durable Run persistence (process-memory store only)
 - Signing, broadcast, wallet custody
 - Non-`amountIn` Action Gate fields (protocol / tokenPair / slippage) beyond the fixture path
-- Claiming Live Kuru MON → USDC SUCCESS (Moss-blocked; see live runtime doc)
+- Live evidence fixture regeneration is complete (Node v22.23.2, 2026-08-08;
+  see live runtime doc)
 
 ## 2. Startup runbook
 
@@ -64,7 +65,7 @@ Log / error hygiene: do not print `MONAD_RPC_URL`, `MOSS_RPC_URL`, or URL userin
 | Config | `POST /api/check` |
 | --- | --- |
 | No `MOSS_RUNTIME_PATH` | HTTP **502**, `error.code = "UNSUPPORTED"`, Run envelope `verdict = UNKNOWN`, `retryable = false` |
-| Valid pinned path | Live Agent Flow runs; still fail-closed without trustworthy pinned-block / runtime provenance. Live SUCCESS is not claimed in this handoff. |
+| Valid pinned path | Live Agent Flow runs; fail-closed without trustworthy pinned-block / runtime provenance. Live simulation SUCCESS is proven on the temporary pin (see [moss-kuru-live-runtime.md](./moss-kuru-live-runtime.md)); the committed evidence fixture was regenerated on Node v22.23.2. |
 
 Recorded Replay is **only** via `/api/replay/:id`. It is never used as a fallback for live Check.
 
@@ -314,7 +315,7 @@ Frontend must display Live vs Recorded Replay explicitly. Do not upgrade
 1. Start API without `MOSS_RUNTIME_PATH` → `POST /api/check` returns `UNSUPPORTED`.
 2. `GET /api/replay/mon-to-usdc` returns 200 with `replayMode: true`, `verdict: UNKNOWN` in current fixtures.
 3. Confirm CORS from the web origin.
-4. (Optional) Configure Moss path per [moss-kuru-live-runtime.md](./moss-kuru-live-runtime.md); expect fail-closed Live until Moss SUCCESS exists — do not block UI on Live SUCCESS.
+4. (Optional) Configure Moss path per [moss-kuru-live-runtime.md](./moss-kuru-live-runtime.md). Live simulation SUCCESS has been achieved on the temporary pin; treat `PROCEED` as "no blocking evidence within the checked scope" (never a guaranteed outcome). The committed fixture was regenerated on Node v22.23.2.
 5. Re-run only against in-process Check `runId`s; handle `PARENT_NOT_FOUND` after API restart.
 6. CTA / retry: use `error.retryable` and closed reason codes from this page and Product delivery docs.
 
