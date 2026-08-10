@@ -56,6 +56,10 @@ describe("real Node backend listener", () => {
 
     try {
       const baseUrl = `http://127.0.0.1:${address.port}`;
+      const health = await fetch(`${baseUrl}/health`);
+      expect(health.status).toBe(200);
+      await expect(health.json()).resolves.toEqual({ status: "ok" });
+
       const preflight = await fetch(`${baseUrl}/api/check`, {
         method: "OPTIONS",
         headers: {

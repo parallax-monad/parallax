@@ -48,6 +48,38 @@ function checkRequest() {
 }
 
 describe("backend Node runtime", () => {
+  it("serves a lightweight health response without invoking business services", async () => {
+    let agentFlowCalled = false;
+    let quoteFlowCalled = false;
+    const app = createBackendApp({
+      runtime: bootstrapBackendRuntime({ environment, tokenRegistry }),
+      agentFlow: {
+        async check() {
+          agentFlowCalled = true;
+          throw new Error("health must not invoke Agent Flow");
+        },
+      },
+      quoteFlow: {
+        async quote() {
+          quoteFlowCalled = true;
+          throw new Error("health must not invoke quote flow");
+        },
+      },
+    });
+
+    const response = await app.fetch(
+      new Request("https://api.example.test/health"),
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toBe(
+      "application/json; charset=utf-8",
+    );
+    await expect(response.json()).resolves.toEqual({ status: "ok" });
+    expect(agentFlowCalled).toBe(false);
+    expect(quoteFlowCalled).toBe(false);
+  });
+
   it("fails closed when production runtime configuration is incomplete", () => {
     expect(() =>
       bootstrapBackendApp({ environment: {}, tokenRegistry }),
