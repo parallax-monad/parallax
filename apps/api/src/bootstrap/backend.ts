@@ -22,6 +22,7 @@ import {
   UnsupportedAgentFlowError,
 } from "../ports.js";
 import { QuoteApplicationService } from "../quote-application.js";
+import { createHealthApp } from "../routes/health.js";
 import { createReplayApp } from "../routes/replay.js";
 import {
   type BackendRuntime,
@@ -116,6 +117,7 @@ export function createBackendApp(dependencies: BackendAppDependencies): Hono {
   });
 
   const app = new Hono();
+  app.route("/", createHealthApp());
   app.use(
     "/api/*",
     cors({
