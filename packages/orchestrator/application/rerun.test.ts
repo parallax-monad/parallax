@@ -1,6 +1,6 @@
 import type { NormalizedSwapIntent, RunResult } from "@parallax/contracts";
 import { describe, expect, it } from "vitest";
-import { type RerunRunStore, resolveRerun } from "./rerun.js";
+import { type RerunRunRecord, resolveRerun } from "./rerun.js";
 
 const intent: NormalizedSwapIntent = {
   chainId: 143,
@@ -33,18 +33,17 @@ const baseline: RunResult = {
   route: { availability: "unavailable", reason: "test" },
 } as RunResult;
 
-const store: RerunRunStore = {
-  get() {
-    return { status: "completed", result: baseline };
-  },
+const completedParent: RerunRunRecord = {
+  status: "completed",
+  result: baseline,
 };
 
 describe("Re-run application use case", () => {
-  it("returns a discriminated child context with one normalized change", () => {
+  it("resolves from a parent record preloaded by the application", () => {
     const result = resolveRerun(
       "run-1",
       { ...intent, amountInAtomic: "2000000000000000000" },
-      store,
+      completedParent,
     );
 
     expect(result).toEqual({
@@ -75,7 +74,7 @@ describe("Re-run application use case", () => {
         amountInAtomic: "2000000000000000000",
         protocol: "pancake",
       },
-      store,
+      completedParent,
     );
 
     expect(result).toEqual({
@@ -89,7 +88,7 @@ describe("Re-run application use case", () => {
     const result = resolveRerun(
       "run-1",
       { ...intent, recipientSource: "explicit" },
-      store,
+      completedParent,
     );
 
     expect(result).toEqual({
@@ -107,7 +106,7 @@ describe("Re-run application use case", () => {
         recipient: "0x2222222222222222222222222222222222222222",
         recipientSource: "explicit",
       },
-      store,
+      completedParent,
     );
 
     expect(result).toMatchObject({
@@ -143,21 +142,17 @@ describe("Re-run application use case", () => {
         },
       },
       {
-        get() {
-          return {
-            status: "completed",
-            result: {
-              ...baseline,
-              intent: {
-                ...intent,
-                economicBoundary: {
-                  availability: "available",
-                  minimumReceivedAtomic: "1000000",
-                  source: "user_declared",
-                },
-              },
+        status: "completed",
+        result: {
+          ...baseline,
+          intent: {
+            ...intent,
+            economicBoundary: {
+              availability: "available",
+              minimumReceivedAtomic: "1000000",
+              source: "user_declared",
             },
-          };
+          },
         },
       },
     );
@@ -171,17 +166,13 @@ describe("Re-run application use case", () => {
   });
 
   it("distinguishes missing and incomplete parents", () => {
-    expect(resolveRerun("missing", intent, { get: () => undefined })).toEqual({
+    expect(resolveRerun("missing", intent, undefined)).toEqual({
       success: false,
       reason: "PARENT_NOT_FOUND",
       message: "The parent Run was not found",
     });
 
-    expect(
-      resolveRerun("started", intent, {
-        get: () => ({ status: "started" }),
-      }),
-    ).toEqual({
+    expect(resolveRerun("started", intent, { status: "started" })).toEqual({
       success: false,
       reason: "PARENT_NOT_COMPLETED",
       message: "The parent Run is not completed",
@@ -194,10 +185,8 @@ describe("Re-run application use case", () => {
         "replay",
         { ...intent, amountInAtomic: "2000000000000000000" },
         {
-          get: () => ({
-            status: "completed",
-            result: { ...baseline, runId: "replay", replayMode: true },
-          }),
+          status: "completed",
+          result: { ...baseline, runId: "replay", replayMode: true },
         },
       ),
     ).toEqual({
@@ -211,10 +200,8 @@ describe("Re-run application use case", () => {
         "child",
         { ...intent, amountInAtomic: "2000000000000000000" },
         {
-          get: () => ({
-            status: "completed",
-            result: { ...baseline, runId: "child", parentRunId: "run-0" },
-          }),
+          status: "completed",
+          result: { ...baseline, runId: "child", parentRunId: "run-0" },
         },
       ),
     ).toEqual({

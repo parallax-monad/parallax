@@ -1,8 +1,10 @@
 import type { NormalizedSwapIntent, RunResult } from "@parallax/contracts";
 import { describe, expect, it } from "vitest";
 import {
+  actionGateVerificationRunIds,
   buildVerifiedAdjustBaseline,
   childRunPassesActionGate,
+  closeUnverifiedAdjust,
   isActionGateCandidate,
   proposeAmountInAdjustment,
 } from "./action-gate.js";
@@ -212,6 +214,39 @@ describe("Action Gate fixture helpers", () => {
           item.verificationRunId === "run-2",
       ),
     ).toBe(true);
+  });
+
+  it("resolves a verified ADJUST from application-loaded child records", () => {
+    const baseline = economicFailStopResult(assets, "run-1", availableIntent);
+    const adjustment = proposeAmountInAdjustment(baseline.intent);
+    const child: Completed = {
+      ...economicPassChildResult(assets, "run-2", adjustment.nextIntent),
+      parentRunId: "run-1",
+      diff: {
+        previousRunId: "run-1",
+        previousVerdict: "STOP",
+        changedFields: [
+          {
+            field: "amountInAtomic",
+            before: adjustment.before,
+            after: adjustment.after,
+          },
+        ],
+      },
+    };
+    const verified = buildVerifiedAdjustBaseline(baseline, child, adjustment);
+
+    expect(actionGateVerificationRunIds(verified)).toEqual(["run-2"]);
+    expect(
+      closeUnverifiedAdjust(
+        verified,
+        new Map([["run-2", { status: "completed", result: child }]]),
+      ),
+    ).toBe(verified);
+    expect(closeUnverifiedAdjust(verified, new Map())).toMatchObject({
+      verdict: "STOP",
+      recommendedActions: [],
+    });
   });
 
   it("rejects a child that fails a required Gate rule", () => {

@@ -45,7 +45,7 @@ export interface RunStore {
     failure: CheckRunFailureCode,
     result: FailedRunResult,
   ): Promise<void>;
-  get(runId: string): CheckRunRecord | undefined;
+  get(runId: string): Promise<CheckRunRecord | undefined>;
 }
 
 /** Process-local placeholder; production persistence remains undecided. */
@@ -112,7 +112,7 @@ export class InMemoryRunStore implements RunStore {
     );
   }
 
-  public get(runId: string): CheckRunRecord | undefined {
+  public async get(runId: string): Promise<CheckRunRecord | undefined> {
     const record = this.runs.get(runId);
     return record === undefined ? undefined : clone(record);
   }

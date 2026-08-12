@@ -17,6 +17,11 @@ const REQUIRED_CHILD_RULE_IDS = [
 
 type CompletedRun = Extract<RunResult, { status: "completed" }>;
 
+export type ActionGateRunRecord =
+  | { status: "started" }
+  | { status: "failed" }
+  | { status: "completed"; result: RunResult };
+
 type EvidenceProvenance = {
   key: string;
   source: EvidenceRef["source"];
@@ -144,6 +149,87 @@ export function childRunPassesActionGate(
       (rule) => rule.ruleId === ruleId && rule.status === "PASS",
     ),
   );
+}
+
+function findActionGateAttestation(
+  result: CompletedRun,
+  evaluation: CompletedRun["recommendedActions"][number],
+): ActionVerificationEvidence | undefined {
+  if (
+    evaluation.action.kind !== "TRANSACTION_ADJUSTMENT" ||
+    evaluation.proposedChange === undefined
+  ) {
+    return undefined;
+  }
+
+  const field = evaluation.action.field;
+  return result.evidence.find(
+    (evidence): evidence is ActionVerificationEvidence =>
+      evidence.kind === "action_verification" &&
+      evidence.baselineRunId === result.runId &&
+      evidence.verificationRunId !== result.runId &&
+      evidence.field === field &&
+      evidence.actionReasonCode === evaluation.actionReasonCode &&
+      evidence.beforeValue === evaluation.proposedChange?.before &&
+      evidence.afterValue === evaluation.proposedChange?.after &&
+      evaluation.evidenceRefs.some(
+        (reference) => reference.key === evidence.key,
+      ),
+  );
+}
+
+/** Returns the child Runs the application must load before Gate validation. */
+export function actionGateVerificationRunIds(result: CompletedRun): string[] {
+  if (result.verdict !== "ADJUST") return [];
+
+  return [
+    ...new Set(
+      result.recommendedActions.flatMap((evaluation) => {
+        const attestation = findActionGateAttestation(result, evaluation);
+        return attestation === undefined ? [] : [attestation.verificationRunId];
+      }),
+    ),
+  ];
+}
+
+/** Fails an unattested or non-terminal ADJUST closed without Store access. */
+export function closeUnverifiedAdjust(
+  result: RunResult,
+  verificationChildren: ReadonlyMap<string, ActionGateRunRecord | undefined>,
+): RunResult {
+  if (
+    result.status !== "completed" ||
+    result.verdict !== "ADJUST" ||
+    hasVerifiedActionGate(result, verificationChildren)
+  ) {
+    return result;
+  }
+
+  return completedRunResultSchema.parse({
+    ...result,
+    verdict: "STOP",
+    summary: "No verified child Run and Action Gate attestation is available",
+    recommendedActions: [],
+  });
+}
+
+function hasVerifiedActionGate(
+  result: CompletedRun,
+  verificationChildren: ReadonlyMap<string, ActionGateRunRecord | undefined>,
+): boolean {
+  if (result.recommendedActions.length === 0) return false;
+
+  return result.recommendedActions.every((evaluation) => {
+    const attestation = findActionGateAttestation(result, evaluation);
+    if (attestation === undefined) return false;
+
+    const childRecord = verificationChildren.get(attestation.verificationRunId);
+    return (
+      childRecord?.status === "completed" &&
+      childRecord.result.status === "completed" &&
+      childRunPassesActionGate(childRecord.result, result.runId)
+    );
+  });
 }
 
 export function evidenceRefFromItem(evidence: EvidenceProvenance): EvidenceRef {
