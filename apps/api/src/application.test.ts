@@ -375,7 +375,9 @@ describe("CheckApplicationService", () => {
     const service = createService(
       {
         async check(input) {
-          expect(store.get(input.runId)).toMatchObject({ status: "started" });
+          expect(await store.get(input.runId)).toMatchObject({
+            status: "started",
+          });
           receivedIntent = input.intent;
           receivedMoss = input.moss;
           return integrationErrorResult(input.runId, input.intent);
@@ -393,7 +395,7 @@ describe("CheckApplicationService", () => {
       recipientSource: "defaulted_from_sender",
     });
     expect(receivedMoss).toEqual(runtime.config.moss);
-    expect(store.get("run-1")).toMatchObject({
+    expect(await store.get("run-1")).toMatchObject({
       runId: "run-1",
       status: "completed",
       intent: receivedIntent,
@@ -501,12 +503,12 @@ describe("CheckApplicationService", () => {
         },
       },
     });
-    expect(store.get("run-1")).toMatchObject({
+    expect(await store.get("run-1")).toMatchObject({
       status: "completed",
       parentRunId: undefined,
       result: baselineResponse.body,
     });
-    expect(store.get("run-2")).toMatchObject({
+    expect(await store.get("run-2")).toMatchObject({
       status: "completed",
       parentRunId: "run-1",
       result: response.body,
@@ -561,7 +563,7 @@ describe("CheckApplicationService", () => {
       status: 400,
       body: { error: { code: "INVALID_RERUN" } },
     });
-    expect(store.get("run-2")).toBeUndefined();
+    expect(await store.get("run-2")).toBeUndefined();
 
     const provenanceOnlyRerun = createService(
       {
@@ -586,7 +588,7 @@ describe("CheckApplicationService", () => {
         },
       },
     });
-    expect(store.get("run-3")).toBeUndefined();
+    expect(await store.get("run-3")).toBeUndefined();
 
     const recipientRerun = createService(
       {
@@ -619,6 +621,41 @@ describe("CheckApplicationService", () => {
         },
       },
     });
+  });
+
+  it("does not call Agent Flow when loading a Re-run parent fails", async () => {
+    let agentFlowCalled = false;
+    const service = createService(
+      {
+        async check() {
+          agentFlowCalled = true;
+          throw new Error("must not run");
+        },
+      },
+      {
+        async start() {},
+        async complete() {},
+        async fail() {},
+        async get() {
+          throw new Error("database connection details");
+        },
+      },
+    );
+
+    const response = await service.check(
+      publicRequest({ parentRunId: "run-1", amountIn: "2" }),
+    );
+
+    expect(response).toEqual({
+      status: 500,
+      body: {
+        error: {
+          code: "RUN_STORE_ERROR",
+          message: "The check run lifecycle could not be stored",
+        },
+      },
+    });
+    expect(agentFlowCalled).toBe(false);
   });
 
   it("rejects a Re-run that changes more than one Intent condition", async () => {
@@ -664,7 +701,7 @@ describe("CheckApplicationService", () => {
     });
 
     expect(agentFlowCalled).toBe(false);
-    expect(store.get("run-2")).toBeUndefined();
+    expect(await store.get("run-2")).toBeUndefined();
   });
 
   it("preserves baseline ownership and Economic Boundary during a Re-run", async () => {
@@ -729,7 +766,7 @@ describe("CheckApplicationService", () => {
       },
     });
 
-    expect(store.get("run-2")).toBeUndefined();
+    expect(await store.get("run-2")).toBeUndefined();
   });
 
   it("preserves the Diff on a failed child and rejects nested Re-runs", async () => {
@@ -789,7 +826,7 @@ describe("CheckApplicationService", () => {
         },
       },
     });
-    expect(store.get("run-3")).toBeUndefined();
+    expect(await store.get("run-3")).toBeUndefined();
   });
 
   it("preserves parent and Diff when Agent Flow throws during a Re-run", async () => {
@@ -834,7 +871,7 @@ describe("CheckApplicationService", () => {
         },
       },
     });
-    expect(store.get("run-2")).toMatchObject({
+    expect(await store.get("run-2")).toMatchObject({
       status: "failed",
       failure: "AGENT_FLOW_ERROR",
       parentRunId: "run-1",
@@ -893,7 +930,7 @@ describe("CheckApplicationService", () => {
         },
       },
     });
-    expect(store.get("run-2")).toMatchObject({
+    expect(await store.get("run-2")).toMatchObject({
       status: "failed",
       failure: "INVALID_AGENT_FLOW_RESPONSE",
       parentRunId: "run-1",
@@ -991,7 +1028,7 @@ describe("CheckApplicationService", () => {
       },
     });
     expect(agentFlowCalls).toBe(0);
-    expect(store.get("run-must-not-start")).toBeUndefined();
+    expect(await store.get("run-must-not-start")).toBeUndefined();
   });
 
   it.each([
@@ -1029,7 +1066,7 @@ describe("CheckApplicationService", () => {
         status: 502,
         body: { error: { code: "INVALID_AGENT_FLOW_RESPONSE" } },
       });
-      expect(store.get("run-1")).toMatchObject({
+      expect(await store.get("run-1")).toMatchObject({
         status: "failed",
         failure: "INVALID_AGENT_FLOW_RESPONSE",
       });
@@ -1050,7 +1087,7 @@ describe("CheckApplicationService", () => {
     const response = await service.check(publicRequest());
 
     expect(response.status).toBe(200);
-    expect(store.get("run-1")).toMatchObject({
+    expect(await store.get("run-1")).toMatchObject({
       status: "completed",
       result: response.body,
     });
@@ -1152,6 +1189,11 @@ describe("CheckApplicationService", () => {
               input.intent,
             );
           }
+          expect(await store.get(input.runId)).toMatchObject({
+            runId: "run-2",
+            parentRunId: "run-1",
+            status: "started",
+          });
           return economicPassChildResult(
             actionGateAssets,
             input.runId,
@@ -1192,7 +1234,7 @@ describe("CheckApplicationService", () => {
         ],
       },
     });
-    expect(store.get("run-2")).toMatchObject({
+    expect(await store.get("run-2")).toMatchObject({
       status: "completed",
       parentRunId: "run-1",
       result: {
@@ -1245,7 +1287,7 @@ describe("CheckApplicationService", () => {
         recommendedActions: [],
       },
     });
-    expect(store.get("run-2")).toMatchObject({
+    expect(await store.get("run-2")).toMatchObject({
       status: "completed",
       parentRunId: "run-1",
       result: {
@@ -1298,7 +1340,7 @@ describe("CheckApplicationService", () => {
         recommendedActions: [],
       },
     });
-    expect(store.get("run-2")).toMatchObject({
+    expect(await store.get("run-2")).toMatchObject({
       status: "failed",
       parentRunId: "run-1",
       result: {
@@ -1307,6 +1349,62 @@ describe("CheckApplicationService", () => {
         error: { code: "TIMEOUT", retryable: true },
       },
     });
+  });
+
+  it("does not call verification Agent Flow when the child cannot start", async () => {
+    const inner = new InMemoryRunStore();
+    const store: RunStore = {
+      async start(runId, intent, parentRunId) {
+        if (parentRunId !== undefined) {
+          throw new Error("child start unavailable");
+        }
+        await inner.start(runId, intent, parentRunId);
+      },
+      complete: (result) => inner.complete(result),
+      fail: (runId, failure, result) => inner.fail(runId, failure, result),
+      get: (runId) => inner.get(runId),
+    };
+    let verificationCalled = false;
+    let nextId = 1;
+    const service = createService(
+      {
+        async check(input) {
+          if (input.runId === "run-1") {
+            return economicFailStopResult(
+              actionGateAssets,
+              input.runId,
+              input.intent,
+            );
+          }
+          verificationCalled = true;
+          return economicPassChildResult(
+            actionGateAssets,
+            input.runId,
+            input.intent,
+          );
+        },
+      },
+      store,
+      () => `run-${nextId++}`,
+    );
+
+    const response = await service.check(
+      publicRequest({
+        economicBoundary: {
+          availability: "available",
+          minimumReceived: "0.02",
+          source: "user_declared",
+        },
+      }),
+    );
+
+    expect(response).toMatchObject({
+      status: 500,
+      body: { error: { code: "RUN_STORE_ERROR" } },
+    });
+    expect(verificationCalled).toBe(false);
+    expect(await store.get("run-1")).toMatchObject({ status: "started" });
+    expect(await store.get("run-2")).toBeUndefined();
   });
 
   it("fail-closes to STOP when child complete fails but fail terminalizes the child", async () => {
@@ -1363,7 +1461,7 @@ describe("CheckApplicationService", () => {
         recommendedActions: [],
       },
     });
-    expect(store.get("run-2")).toMatchObject({
+    expect(await store.get("run-2")).toMatchObject({
       status: "failed",
       parentRunId: "run-1",
       result: { status: "integration_error" },
@@ -1427,8 +1525,8 @@ describe("CheckApplicationService", () => {
         },
       },
     });
-    expect(store.get("run-1")).toMatchObject({ status: "started" });
-    expect(store.get("run-2")).toMatchObject({ status: "started" });
+    expect(await store.get("run-1")).toMatchObject({ status: "started" });
+    expect(await store.get("run-2")).toMatchObject({ status: "started" });
   });
 
   it("preserves simulator pinned-block provenance through the API Run and Evidence", async () => {
@@ -1497,7 +1595,7 @@ describe("CheckApplicationService", () => {
       status: 502,
       body: { error: { code: "INVALID_AGENT_FLOW_RESPONSE" } },
     });
-    expect(store.get("run-1")).toMatchObject({
+    expect(await store.get("run-1")).toMatchObject({
       status: "failed",
       failure: "INVALID_AGENT_FLOW_RESPONSE",
     });
@@ -1533,7 +1631,7 @@ describe("CheckApplicationService", () => {
       status: 502,
       body: { error: { code: "INVALID_AGENT_FLOW_RESPONSE" } },
     });
-    expect(store.get("run-1")).toMatchObject({
+    expect(await store.get("run-1")).toMatchObject({
       status: "failed",
       failure: "INVALID_AGENT_FLOW_RESPONSE",
     });
@@ -1621,7 +1719,7 @@ describe("CheckApplicationService", () => {
       },
     });
     expect(JSON.stringify(response)).not.toContain("secret RPC credential");
-    expect(store.get("run-1")).toMatchObject({
+    expect(await store.get("run-1")).toMatchObject({
       status: "failed",
       failure: "AGENT_FLOW_ERROR",
     });
@@ -1701,7 +1799,7 @@ describe("CheckApplicationService", () => {
         },
       },
     });
-    expect(store.get("run-1")).toMatchObject({
+    expect(await store.get("run-1")).toMatchObject({
       status: "failed",
       failure: "UNSUPPORTED",
     });
@@ -1724,7 +1822,7 @@ describe("CheckApplicationService", () => {
       status: 502,
       body: { error: { code: "INVALID_AGENT_FLOW_RESPONSE" } },
     });
-    expect(store.get("run-1")).toMatchObject({
+    expect(await store.get("run-1")).toMatchObject({
       status: "failed",
       failure: "INVALID_AGENT_FLOW_RESPONSE",
     });
@@ -1750,7 +1848,7 @@ describe("CheckApplicationService", () => {
       status: 502,
       body: { error: { code: "INVALID_AGENT_FLOW_RESPONSE" } },
     });
-    expect(store.get("run-1")).toMatchObject({
+    expect(await store.get("run-1")).toMatchObject({
       status: "failed",
       failure: "INVALID_AGENT_FLOW_RESPONSE",
     });
@@ -1791,7 +1889,7 @@ describe("CheckApplicationService", () => {
           throw new Error("database connection details");
         },
         async fail() {},
-        get() {
+        async get() {
           return undefined;
         },
       },

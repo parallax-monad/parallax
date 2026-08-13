@@ -13,10 +13,6 @@ export type RerunRunRecord =
   | { status: "failed" }
   | { status: "completed"; result: RunResult };
 
-export interface RerunRunStore {
-  get(runId: string): RerunRunRecord | undefined;
-}
-
 export type RerunContext =
   | { kind: "baseline" }
   | { kind: "child"; parentRunId: string; diff: RunDiff };
@@ -33,13 +29,12 @@ export type RerunResolution =
 export function resolveRerun(
   parentRunId: string | undefined,
   intent: NormalizedSwapIntent,
-  store: RerunRunStore,
+  parent: RerunRunRecord | undefined,
 ): RerunResolution {
   if (parentRunId === undefined) {
     return { success: true, context: { kind: "baseline" } };
   }
 
-  const parent = store.get(parentRunId);
   if (parent === undefined) {
     return {
       success: false,

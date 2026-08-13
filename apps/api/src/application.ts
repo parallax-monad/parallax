@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import {
-  type ActionVerificationEvidence,
   checkSwapRequestSchema,
   completedRunResultSchema,
   type EvidenceRef,
@@ -12,9 +11,11 @@ import {
   runResultSchema,
 } from "@parallax/contracts";
 import {
+  actionGateVerificationRunIds,
   buildRunDiff,
   buildVerifiedAdjustBaseline,
   childRunPassesActionGate,
+  closeUnverifiedAdjust,
   isActionGateCandidate,
   proposeAmountInAdjustment,
   type RerunContext,
@@ -23,7 +24,7 @@ import {
 import { normalizeCheckSwapRequest } from "./normalization.js";
 import { type AgentFlowPort, isUnsupportedAgentFlowError } from "./ports.js";
 import type { BackendRuntime } from "./runtime-config.js";
-import type { CheckRunFailureCode, RunStore } from "./store.js";
+import type { CheckRunFailureCode, CheckRunRecord, RunStore } from "./store.js";
 import { tokenDecimals } from "./token-decimals.js";
 
 export type CheckApiErrorCode =
@@ -96,10 +97,20 @@ export class CheckApplicationService {
       });
     }
 
+    let parentRecord: Awaited<ReturnType<RunStore["get"]>>;
+    try {
+      parentRecord =
+        parsedRequest.data.parentRunId === undefined
+          ? undefined
+          : await this.dependencies.store.get(parsedRequest.data.parentRunId);
+    } catch {
+      return storeErrorResponse();
+    }
+
     const rerun = resolveRerun(
       parsedRequest.data.parentRunId,
       normalized.intent,
-      this.dependencies.store,
+      parentRecord,
     );
     if (!rerun.success) {
       return errorResponse(400, {
@@ -169,9 +180,18 @@ export class CheckApplicationService {
       if (gated.kind === "blocked") {
         return storeErrorResponse();
       }
+      let verificationChildren: ReadonlyMap<string, CheckRunRecord | undefined>;
+      try {
+        verificationChildren = await loadVerificationChildren(
+          gated.result,
+          this.dependencies.store,
+        );
+      } catch {
+        return storeErrorResponse();
+      }
       const gatedResult = closeUnverifiedAdjust(
         gated.result,
-        this.dependencies.store,
+        verificationChildren,
       );
       try {
         await this.dependencies.store.complete(gatedResult);
@@ -217,6 +237,16 @@ export class CheckApplicationService {
       parentRunId: baseline.runId,
       diff: diff.value,
     };
+
+    try {
+      await this.dependencies.store.start(
+        childRunId,
+        adjustment.nextIntent,
+        childFields.parentRunId,
+      );
+    } catch {
+      return { kind: "blocked" };
+    }
 
     const invoked = await this.invokeAgentFlowCheck(
       childRunId,
@@ -341,9 +371,9 @@ export class CheckApplicationService {
   }
 
   /**
-   * Persist a verification child Receipt.
+   * Terminalize a verification child that was stored before Agent Flow.
    * - `stored`: child completed as provided
-   * - `terminal_error`: child never started, or was failed after a failed complete
+   * - `terminal_error`: child was failed after a failed complete
    * - `non_terminal`: child left in `started` (baseline must not become a public Receipt)
    */
   private async persistVerificationChildResult(
@@ -351,16 +381,6 @@ export class CheckApplicationService {
     intent: Parameters<AgentFlowPort["check"]>[0]["intent"],
     result: RunResult,
   ): Promise<"stored" | "terminal_error" | "non_terminal"> {
-    try {
-      await this.dependencies.store.start(
-        childRunId,
-        intent,
-        result.parentRunId,
-      );
-    } catch {
-      return "terminal_error";
-    }
-
     try {
       await this.dependencies.store.complete(result);
       return "stored";
@@ -404,16 +424,6 @@ export class CheckApplicationService {
       childFields,
       cause,
     );
-    try {
-      await this.dependencies.store.start(
-        childRunId,
-        intent,
-        childFields.parentRunId,
-      );
-    } catch {
-      return "terminal_error";
-    }
-
     try {
       await this.dependencies.store.fail(childRunId, failure, result);
       return "terminal_error";
@@ -802,60 +812,16 @@ function isBlockNumber(value: string | undefined): boolean {
   return /^\d+$/.test(value ?? "");
 }
 
-function closeUnverifiedAdjust(result: RunResult, store: RunStore): RunResult {
-  if (
-    result.status !== "completed" ||
-    result.verdict !== "ADJUST" ||
-    hasVerifiedActionGate(result, store)
-  ) {
-    return result;
-  }
-
-  return runResultSchema.parse({
-    ...result,
-    verdict: "STOP",
-    summary: "No verified child Run and Action Gate attestation is available",
-    recommendedActions: [],
-  });
-}
-
-function hasVerifiedActionGate(
+async function loadVerificationChildren(
   result: Extract<RunResult, { status: "completed" }>,
   store: RunStore,
-): boolean {
-  if (result.recommendedActions.length === 0) return false;
-
-  return result.recommendedActions.every((evaluation) => {
-    if (
-      evaluation.action.kind !== "TRANSACTION_ADJUSTMENT" ||
-      evaluation.proposedChange === undefined
-    ) {
-      return false;
-    }
-
-    const field = evaluation.action.field;
-    const attestation = result.evidence.find(
-      (evidence): evidence is ActionVerificationEvidence =>
-        evidence.kind === "action_verification" &&
-        evidence.baselineRunId === result.runId &&
-        evidence.verificationRunId !== result.runId &&
-        evidence.field === field &&
-        evidence.actionReasonCode === evaluation.actionReasonCode &&
-        evidence.beforeValue === evaluation.proposedChange?.before &&
-        evidence.afterValue === evaluation.proposedChange?.after &&
-        evaluation.evidenceRefs.some(
-          (reference) => reference.key === evidence.key,
-        ),
-    );
-    if (attestation === undefined) return false;
-
-    const childRecord = store.get(attestation.verificationRunId);
-    return (
-      childRecord?.status === "completed" &&
-      childRecord.result.status === "completed" &&
-      childRunPassesActionGate(childRecord.result, result.runId)
-    );
-  });
+): Promise<ReadonlyMap<string, CheckRunRecord | undefined>> {
+  const records = await Promise.all(
+    actionGateVerificationRunIds(result).map(
+      async (runId) => [runId, await store.get(runId)] as const,
+    ),
+  );
+  return new Map(records);
 }
 
 function storeErrorResponse(): CheckApplicationResponse {

@@ -424,7 +424,7 @@ describe("Backend P0 acceptance matrix", () => {
         simulatorPinnedBlock,
       },
     });
-    expect(store.get("run-1")).toMatchObject({
+    expect(await store.get("run-1")).toMatchObject({
       status: "completed",
       result: response.status === 200 ? response.body : undefined,
     });
@@ -495,7 +495,7 @@ describe("Backend P0 acceptance matrix", () => {
         },
       },
     });
-    expect(store.get("run-1")).toMatchObject({ status: "completed" });
+    expect(await store.get("run-1")).toMatchObject({ status: "completed" });
   });
 
   // API boundary only: Evidence stage labels round-trip. Does not run Moss stages.
@@ -588,7 +588,7 @@ describe("Backend P0 acceptance matrix", () => {
           },
         },
       });
-      expect(store.get("run-1")).toMatchObject({ status: "failed" });
+      expect(await store.get("run-1")).toMatchObject({ status: "failed" });
     },
   );
 
@@ -613,7 +613,9 @@ describe("Backend P0 acceptance matrix", () => {
         },
       },
     });
-    expect(store.get("run-1")).toMatchObject({ failure: "UNSUPPORTED" });
+    expect(await store.get("run-1")).toMatchObject({
+      failure: "UNSUPPORTED",
+    });
   });
 
   // Replay rejection on the live path is A11, not this row.
@@ -744,7 +746,7 @@ describe("Backend P0 acceptance matrix", () => {
         },
       },
     });
-    expect(store.get("run-2")).toBeUndefined();
+    expect(await store.get("run-2")).toBeUndefined();
   });
 
   it("A13 Child Run failure: keeps parentRunId and Diff when Agent Flow fails", async () => {
@@ -794,7 +796,7 @@ describe("Backend P0 acceptance matrix", () => {
         },
       },
     });
-    expect(store.get("run-2")).toMatchObject({
+    expect(await store.get("run-2")).toMatchObject({
       status: "failed",
       parentRunId: "run-1",
       result: {
@@ -906,7 +908,7 @@ describe("Backend P0 acceptance matrix", () => {
       before: attestation.beforeValue,
       after: attestation.afterValue,
     });
-    expect(store.get("run-2")).toMatchObject({
+    expect(await store.get("run-2")).toMatchObject({
       status: "completed",
       parentRunId: "run-1",
     });
@@ -951,6 +953,6 @@ describe("Backend P0 acceptance matrix", () => {
       },
     });
     expect(agentFlowCalls).toBe(0);
-    expect(store.get("run-must-not-start")).toBeUndefined();
+    expect(await store.get("run-must-not-start")).toBeUndefined();
   });
 });
