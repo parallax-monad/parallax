@@ -5,10 +5,13 @@ import type {
   RunResult,
 } from "@parallax/contracts";
 
-export type CheckRunFailureCode =
-  | "UNSUPPORTED"
-  | "AGENT_FLOW_ERROR"
-  | "INVALID_AGENT_FLOW_RESPONSE";
+export const CHECK_RUN_FAILURE_CODES = [
+  "UNSUPPORTED",
+  "AGENT_FLOW_ERROR",
+  "INVALID_AGENT_FLOW_RESPONSE",
+] as const;
+
+export type CheckRunFailureCode = (typeof CHECK_RUN_FAILURE_CODES)[number];
 
 export type CheckRunRecord =
   | {

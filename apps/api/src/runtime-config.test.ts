@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   backendRuntimeConfigSchema,
   bootstrapBackendRuntime,
+  parseRunStoreEnvironment,
   parseTokenRegistryEnvironment,
 } from "./runtime-config.js";
 
@@ -26,6 +27,40 @@ const environment = {
 };
 
 describe("backend runtime config", () => {
+  it("defaults the RunStore backend to process-local memory", () => {
+    expect(parseRunStoreEnvironment({})).toEqual({
+      RUN_STORE_BACKEND: "memory",
+      DATABASE_URL: undefined,
+    });
+  });
+
+  it("requires a PostgreSQL URL when the persistent backend is selected", () => {
+    expect(() =>
+      parseRunStoreEnvironment({ RUN_STORE_BACKEND: "postgres" }),
+    ).toThrow("DATABASE_URL is required when RUN_STORE_BACKEND=postgres");
+    expect(() =>
+      parseRunStoreEnvironment({
+        RUN_STORE_BACKEND: "postgres",
+        DATABASE_URL: "https://database.example.test",
+      }),
+    ).toThrow(/DATABASE_URL must use the postgres/);
+  });
+
+  it("accepts both standard PostgreSQL URL schemes", () => {
+    expect(
+      parseRunStoreEnvironment({
+        RUN_STORE_BACKEND: "postgres",
+        DATABASE_URL: "postgres://user:pass@localhost:5432/parallax",
+      }),
+    ).toMatchObject({ RUN_STORE_BACKEND: "postgres" });
+    expect(
+      parseRunStoreEnvironment({
+        RUN_STORE_BACKEND: "postgres",
+        DATABASE_URL: "postgresql://user:pass@localhost:5432/parallax",
+      }),
+    ).toMatchObject({ RUN_STORE_BACKEND: "postgres" });
+  });
+
   it("parses verified token metadata from the launcher environment", () => {
     expect(
       parseTokenRegistryEnvironment({

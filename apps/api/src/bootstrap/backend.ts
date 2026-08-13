@@ -24,6 +24,7 @@ import {
 import { QuoteApplicationService } from "../quote-application.js";
 import { createHealthApp } from "../routes/health.js";
 import { createReplayApp } from "../routes/replay.js";
+import { createConfiguredRunStore } from "../run-store-factory.js";
 import {
   type BackendRuntime,
   bootstrapBackendRuntime,
@@ -197,7 +198,7 @@ export function bootstrapBackendApp(options: BootstrapBackendAppOptions): Hono {
     liveRunner: options.liveRunner,
     quoteFlow: options.quoteFlow,
     quoteRunner: options.quoteRunner,
-    store: options.store,
+    store: options.store ?? createConfiguredRunStore(environment),
     replayRepository: options.replayRepository,
   });
 }

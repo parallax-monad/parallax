@@ -86,6 +86,15 @@ describe("backend Node runtime", () => {
     ).toThrow();
   });
 
+  it("does not silently fall back to memory when PostgreSQL is selected", () => {
+    expect(() =>
+      bootstrapBackendApp({
+        environment: { ...environment, RUN_STORE_BACKEND: "postgres" },
+        tokenRegistry,
+      }),
+    ).toThrow("DATABASE_URL is required when RUN_STORE_BACKEND=postgres");
+  });
+
   it("composes Check and explicit Replay routes without a live fixture fallback", async () => {
     const app = bootstrapBackendApp({ environment, tokenRegistry });
 
