@@ -32,6 +32,51 @@ const tokenRegistryEnvironmentSchema = z.object({
   ),
 });
 
+const databaseUrlSchema = z
+  .string()
+  .trim()
+  .min(1, "DATABASE_URL is required")
+  .refine(
+    (value) =>
+      value.startsWith("postgres://") || value.startsWith("postgresql://"),
+    "DATABASE_URL must use the postgres:// or postgresql:// scheme",
+  );
+
+export const runStoreBackendSchema = z.enum(["memory", "postgres"]);
+
+export const runStoreEnvironmentSchema = z
+  .object({
+    RUN_STORE_BACKEND: z.preprocess(
+      (value) => value ?? "memory",
+      runStoreBackendSchema,
+    ),
+    DATABASE_URL: z.preprocess(
+      (value) =>
+        typeof value === "string" && value.trim() === "" ? undefined : value,
+      databaseUrlSchema.optional(),
+    ),
+  })
+  .superRefine((environment, context) => {
+    if (
+      environment.RUN_STORE_BACKEND === "postgres" &&
+      environment.DATABASE_URL === undefined
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["DATABASE_URL"],
+        message: "DATABASE_URL is required when RUN_STORE_BACKEND=postgres",
+      });
+    }
+  });
+
+export type RunStoreEnvironment = z.infer<typeof runStoreEnvironmentSchema>;
+
+export function parseRunStoreEnvironment(
+  environment: unknown,
+): RunStoreEnvironment {
+  return runStoreEnvironmentSchema.parse(environment);
+}
+
 export const mossIntegrationConfigSchema = z
   .object({
     rpcUrl: rpcUrlSchema,

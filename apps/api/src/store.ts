@@ -5,10 +5,13 @@ import type {
   RunResult,
 } from "@parallax/contracts";
 
-export type CheckRunFailureCode =
-  | "UNSUPPORTED"
-  | "AGENT_FLOW_ERROR"
-  | "INVALID_AGENT_FLOW_RESPONSE";
+export const CHECK_RUN_FAILURE_CODES = [
+  "UNSUPPORTED",
+  "AGENT_FLOW_ERROR",
+  "INVALID_AGENT_FLOW_RESPONSE",
+] as const;
+
+export type CheckRunFailureCode = (typeof CHECK_RUN_FAILURE_CODES)[number];
 
 export type CheckRunRecord =
   | {
@@ -48,9 +51,14 @@ export interface RunStore {
   get(runId: string): Promise<CheckRunRecord | undefined>;
 }
 
-/** Process-local placeholder; production persistence remains undecided. */
+/** Process-local backend for local/demo operation; PostgreSQL is configurable for production. */
 export class InMemoryRunStore implements RunStore {
   private readonly runs = new Map<string, CheckRunRecord>();
+
+  /** No-op disposer for the app-owned in-memory lifecycle. */
+  public close(): Promise<void> {
+    return Promise.resolve();
+  }
 
   public async start(
     runId: string,

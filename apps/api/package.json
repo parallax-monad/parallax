@@ -5,9 +5,11 @@
   "type": "module",
   "scripts": {
     "start": "node --env-file=../../.env --import=tsx src/server.ts",
+    "db:migrate": "node-pg-migrate up -m migrations --tsconfig-paths true",
+    "db:migrate:down": "node-pg-migrate down -m migrations --tsconfig-paths true",
     "test": "vitest run --exclude src/server.integration.test.ts",
     "test:acceptance": "vitest run src/p0-acceptance.test.ts",
-    "test:integration": "vitest run --config vitest.integration.config.ts src/server.integration.test.ts",
+    "test:integration": "vitest run --config vitest.integration.config.ts src/server.integration.test.ts src/postgres-run-store.integration.test.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
@@ -16,7 +18,12 @@
     "@parallax/moss-bridge": "workspace:*",
     "@parallax/orchestrator": "workspace:*",
     "hono": "4.12.33",
+    "node-pg-migrate": "9.0.0",
+    "pg": "8.23.0",
     "tsx": "4.23.5",
     "zod": "3.25.76"
+  },
+  "devDependencies": {
+    "@types/pg": "8.21.0"
   }
 }

@@ -1,10 +1,13 @@
+import { EventEmitter } from "node:events";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ServerType } from "@hono/node-server";
 import type { KuruLiveRunner } from "@parallax/orchestrator/agent-flow";
-import { describe, expect, it } from "vitest";
+import { Pool } from "pg";
+import { describe, expect, it, vi } from "vitest";
 import { bootstrapBackendRuntime } from "../runtime-config.js";
+import { InMemoryRunStore } from "../store.js";
 import {
   bootstrapBackendApp,
   createBackendApp,
@@ -84,6 +87,64 @@ describe("backend Node runtime", () => {
     expect(() =>
       bootstrapBackendApp({ environment: {}, tokenRegistry }),
     ).toThrow();
+  });
+
+  it("does not silently fall back to memory when PostgreSQL is selected", () => {
+    expect(() =>
+      bootstrapBackendApp({
+        environment: { ...environment, RUN_STORE_BACKEND: "postgres" },
+        tokenRegistry,
+      }),
+    ).toThrow("DATABASE_URL is required when RUN_STORE_BACKEND=postgres");
+  });
+
+  it("exposes configured PostgreSQL disposal through the app lifecycle", async () => {
+    const poolEnd = vi
+      .spyOn(Pool.prototype, "end")
+      .mockResolvedValue(undefined);
+
+    try {
+      const app = bootstrapBackendApp({
+        environment: {
+          ...environment,
+          RUN_STORE_BACKEND: "postgres",
+          DATABASE_URL: "postgres://user:pass@localhost:5432/parallax",
+        },
+        tokenRegistry,
+      });
+
+      await app.close();
+      expect(poolEnd).toHaveBeenCalledTimes(1);
+    } finally {
+      poolEnd.mockRestore();
+    }
+  });
+
+  it("does not close an injected store without an explicit disposer", async () => {
+    const store = new InMemoryRunStore();
+    const storeClose = vi.spyOn(store, "close");
+    const app = createBackendApp({
+      runtime: bootstrapBackendRuntime({ environment, tokenRegistry }),
+      store,
+    });
+
+    await app.close();
+
+    expect(storeClose).not.toHaveBeenCalled();
+  });
+
+  it("uses an explicit disposer for an injected store", async () => {
+    const disposer = vi.fn<() => Promise<void>>().mockResolvedValue(undefined);
+    const app = createBackendApp({
+      runtime: bootstrapBackendRuntime({ environment, tokenRegistry }),
+      store: new InMemoryRunStore(),
+      disposeStore: disposer,
+    });
+
+    await app.close();
+    await app.close();
+
+    expect(disposer).toHaveBeenCalledTimes(1);
   });
 
   it("composes Check and explicit Replay routes without a live fixture fallback", async () => {
@@ -250,6 +311,38 @@ describe("backend Node runtime", () => {
 
     expect(server).toBe(fakeServer);
     expect(received).toEqual({ hostname: "0.0.0.0", port: 9000 });
+  });
+
+  it("closes the configured PostgreSQL pool when the server shuts down", () => {
+    const poolEnd = vi
+      .spyOn(Pool.prototype, "end")
+      .mockResolvedValue(undefined);
+    const fakeServer = new EventEmitter();
+    Object.assign(fakeServer, {
+      close: () => {
+        fakeServer.emit("close");
+        return fakeServer;
+      },
+    });
+
+    try {
+      const server = startBackendServer({
+        environment: {
+          ...environment,
+          RUN_STORE_BACKEND: "postgres",
+          DATABASE_URL: "postgres://user:pass@localhost:5432/parallax",
+        },
+        tokenRegistry,
+        hostname: "0.0.0.0",
+        port: 9000,
+        serverFactory: () => fakeServer as unknown as ServerType,
+      });
+
+      server.close();
+      expect(poolEnd).toHaveBeenCalledTimes(1);
+    } finally {
+      poolEnd.mockRestore();
+    }
   });
 
   it("rejects an invalid listener port before opening a socket", () => {

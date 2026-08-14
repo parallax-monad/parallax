@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 import type { RunStore } from "./store.js";
 
 export type RunStoreFactory = () => RunStore | Promise<RunStore>;
+export type RunStoreContractOptions = { skip?: boolean };
 
 const intent = {
   chainId: 143,
@@ -28,7 +29,22 @@ const intent = {
 function failureResult(runId: string, parentRunId?: string): FailedRunResult {
   return {
     runId,
-    parentRunId,
+    ...(parentRunId === undefined
+      ? {}
+      : {
+          parentRunId,
+          diff: {
+            previousRunId: parentRunId,
+            previousVerdict: "UNKNOWN" as const,
+            changedFields: [
+              {
+                field: "amountInAtomic" as const,
+                before: "1",
+                after: "2",
+              },
+            ],
+          },
+        }),
     replayMode: false,
     intent,
     status: "integration_error",
@@ -60,9 +76,11 @@ function failureResult(runId: string, parentRunId?: string): FailedRunResult {
 export function runStoreContract(
   implementationName: string,
   createStore: RunStoreFactory,
+  options: RunStoreContractOptions = {},
 ): void {
+  const contractIt = options.skip === true ? it.skip : it;
   describe(`${implementationName} RunStore contract`, () => {
-    it("reads records asynchronously", async () => {
+    contractIt("reads records asynchronously", async () => {
       const store = await createStore();
       await store.start("async-run", intent);
 
@@ -75,7 +93,7 @@ export function runStoreContract(
       });
     });
 
-    it("moves a run from started to completed", async () => {
+    contractIt("moves a run from started to completed", async () => {
       const store = await createStore();
       const result = failureResult("complete-run");
 
@@ -93,83 +111,98 @@ export function runStoreContract(
       await expect(store.get("missing-run")).resolves.toBeUndefined();
     });
 
-    it("preserves a parent Run link across a child lifecycle", async () => {
-      const store = await createStore();
-      const result = failureResult("child-run", "parent-run");
+    contractIt(
+      "preserves a parent Run link across a child lifecycle",
+      async () => {
+        const store = await createStore();
+        const result = failureResult("child-run", "parent-run");
 
-      await store.start("child-run", intent, "parent-run");
-      await store.complete(result);
+        await store.start("parent-run", intent);
+        await store.start("child-run", intent, "parent-run");
+        await store.complete(result);
 
-      await expect(store.get("child-run")).resolves.toMatchObject({
-        runId: "child-run",
-        parentRunId: "parent-run",
-        status: "completed",
-        result,
-      });
-    });
-
-    it("rejects a completed result with a different parent", async () => {
-      const store = await createStore();
-      await store.start("complete-parent-mismatch", intent, "parent-run");
-
-      await expect(
-        store.complete(
-          failureResult("complete-parent-mismatch", "other-parent"),
-        ),
-      ).rejects.toThrow("parent does not match");
-    });
-
-    it("rejects duplicate starts and repeated terminal transitions", async () => {
-      const store = await createStore();
-      await store.start("failed-run", intent);
-
-      await expect(store.start("failed-run", intent)).rejects.toThrow(
-        "already exists",
-      );
-      const failed = failureResult("failed-run");
-      await store.fail("failed-run", "AGENT_FLOW_ERROR", failed);
-
-      await expect(store.get("failed-run")).resolves.toMatchObject({
-        status: "failed",
-        failure: "AGENT_FLOW_ERROR",
-        result: { status: "integration_error", verdict: "UNKNOWN" },
-      });
-      await expect(
-        store.fail("failed-run", "INVALID_AGENT_FLOW_RESPONSE", failed),
-      ).rejects.toThrow("not in the started state");
-    });
-
-    it("allows exactly one concurrent terminal transition", async () => {
-      const store = await createStore();
-      const runId = "terminal-race";
-      const terminalResult = failureResult(runId);
-      await store.start(runId, intent);
-
-      const outcomes = await Promise.allSettled([
-        store.complete(terminalResult),
-        store.fail(runId, "AGENT_FLOW_ERROR", terminalResult),
-      ]);
-
-      expect(
-        outcomes.filter((outcome) => outcome.status === "fulfilled"),
-      ).toHaveLength(1);
-      const finalRecord = await store.get(runId);
-      if (outcomes[0]?.status === "fulfilled") {
-        expect(finalRecord).toMatchObject({
+        await expect(store.get("child-run")).resolves.toMatchObject({
+          runId: "child-run",
+          parentRunId: "parent-run",
           status: "completed",
-          result: terminalResult,
+          result,
         });
-      } else {
-        expect(finalRecord).toMatchObject({
+      },
+    );
+
+    contractIt(
+      "rejects a completed result with a different parent",
+      async () => {
+        const store = await createStore();
+        await store.start("parent-run", intent);
+        await store.start("complete-parent-mismatch", intent, "parent-run");
+
+        await expect(
+          store.complete(
+            failureResult("complete-parent-mismatch", "other-parent"),
+          ),
+        ).rejects.toThrow("parent does not match");
+      },
+    );
+
+    contractIt(
+      "rejects duplicate starts and repeated terminal transitions",
+      async () => {
+        const store = await createStore();
+        await store.start("failed-run", intent);
+
+        await expect(store.start("failed-run", intent)).rejects.toThrow(
+          "already exists",
+        );
+        const failed = failureResult("failed-run");
+        await store.fail("failed-run", "AGENT_FLOW_ERROR", failed);
+
+        await expect(store.get("failed-run")).resolves.toMatchObject({
           status: "failed",
           failure: "AGENT_FLOW_ERROR",
-          result: terminalResult,
+          result: { status: "integration_error", verdict: "UNKNOWN" },
         });
-      }
-    });
+        await expect(
+          store.fail("failed-run", "INVALID_AGENT_FLOW_RESPONSE", failed),
+        ).rejects.toThrow("not in the started state");
+      },
+    );
 
-    it("rejects a failure result with a different parent", async () => {
+    contractIt(
+      "allows exactly one concurrent terminal transition",
+      async () => {
+        const store = await createStore();
+        const runId = "terminal-race";
+        const terminalResult = failureResult(runId);
+        await store.start(runId, intent);
+
+        const outcomes = await Promise.allSettled([
+          store.complete(terminalResult),
+          store.fail(runId, "AGENT_FLOW_ERROR", terminalResult),
+        ]);
+
+        expect(
+          outcomes.filter((outcome) => outcome.status === "fulfilled"),
+        ).toHaveLength(1);
+        const finalRecord = await store.get(runId);
+        if (outcomes[0]?.status === "fulfilled") {
+          expect(finalRecord).toMatchObject({
+            status: "completed",
+            result: terminalResult,
+          });
+        } else {
+          expect(finalRecord).toMatchObject({
+            status: "failed",
+            failure: "AGENT_FLOW_ERROR",
+            result: terminalResult,
+          });
+        }
+      },
+    );
+
+    contractIt("rejects a failure result with a different parent", async () => {
       const store = await createStore();
+      await store.start("parent-run", intent);
       await store.start("failure-parent-mismatch", intent, "parent-run");
 
       await expect(
@@ -181,17 +214,20 @@ export function runStoreContract(
       ).rejects.toThrow("failure result does not match");
     });
 
-    it("does not expose mutable references to stored records", async () => {
-      const store = await createStore();
-      await store.start("immutable-run", intent);
-      const first = await store.get("immutable-run");
-      if (first === undefined) throw new Error("missing test record");
+    contractIt(
+      "does not expose mutable references to stored records",
+      async () => {
+        const store = await createStore();
+        await store.start("immutable-run", intent);
+        const first = await store.get("immutable-run");
+        if (first === undefined) throw new Error("missing test record");
 
-      first.intent.amountInAtomic = "999";
+        first.intent.amountInAtomic = "999";
 
-      expect((await store.get("immutable-run"))?.intent.amountInAtomic).toBe(
-        "1",
-      );
-    });
+        expect((await store.get("immutable-run"))?.intent.amountInAtomic).toBe(
+          "1",
+        );
+      },
+    );
   });
 }

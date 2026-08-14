@@ -162,6 +162,8 @@ Vite 开发服务器会把 `/api/*` 代理到 `http://127.0.0.1:8787`。
 | `MOSS_RUNTIME_PATH` | 指向已构建、固定 Moss Git 检出目录的可选绝对路径；用于启用实时 Kuru Agent Flow |
 | `PARALLAX_TOKEN_REGISTRY_JSON` | 后端标准化使用的可信代币元数据 |
 | `CORS_ORIGIN` | 允许调用 API 的浏览器来源 |
+| `RUN_STORE_BACKEND` | Run 生命周期持久化后端（默认为 `memory`；完成迁移后才使用 `postgres`） |
+| `DATABASE_URL` | `RUN_STORE_BACKEND=postgres` 时必需的 PostgreSQL 连接 URL |
 | `HOST` / `PORT` | Node HTTP 监听配置 |
 
 实时后端要求 `MOSS_RUNTIME_PATH` 指向的 Moss 检出目录保留 `.git` 元数据、匹配已配置的版本与修订版，并能由安装了 `git` 的运行环境读取。如果没有该路径，实时报价/检查请求会以 `UNSUPPORTED` 明确关闭；记录回放始终是分开的、带有明确标签的路径。

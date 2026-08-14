@@ -163,6 +163,8 @@ The Vite development server proxies `/api/*` to `http://127.0.0.1:8787`.
 | `MOSS_RUNTIME_PATH` | Optional absolute path to the built, pinned Moss Git checkout; enables the live Kuru Agent Flow |
 | `PARALLAX_TOKEN_REGISTRY_JSON` | Trusted token metadata consumed by backend normalization |
 | `CORS_ORIGIN` | Browser origin allowed to call the API |
+| `RUN_STORE_BACKEND` | Run lifecycle persistence backend (`memory` by default; use `postgres` only after migration) |
+| `DATABASE_URL` | PostgreSQL connection URL required when `RUN_STORE_BACKEND=postgres` |
 | `HOST` / `PORT` | Node HTTP listener configuration |
 
 The live backend requires the Moss checkout at `MOSS_RUNTIME_PATH` to retain its `.git` metadata, match the configured version/revision, and be readable by a runtime with `git` available. Without that path, live quote/check requests fail closed as `UNSUPPORTED`; recorded replay remains a separate, explicitly labelled path.
