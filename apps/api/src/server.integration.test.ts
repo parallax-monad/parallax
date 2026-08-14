@@ -60,6 +60,10 @@ describe("real Node backend listener", () => {
       expect(health.status).toBe(200);
       await expect(health.json()).resolves.toEqual({ status: "ok" });
 
+      const readiness = await fetch(`${baseUrl}/readyz`);
+      expect(readiness.status).toBe(200);
+      await expect(readiness.json()).resolves.toEqual({ status: "ok" });
+
       const preflight = await fetch(`${baseUrl}/api/check`, {
         method: "OPTIONS",
         headers: {

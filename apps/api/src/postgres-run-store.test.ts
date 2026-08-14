@@ -75,4 +75,40 @@ describe("PostgresRunStore persisted-record validation", () => {
 
     expect(end).not.toHaveBeenCalled();
   });
+
+  it("probes PostgreSQL readiness with a bounded SELECT 1 query", async () => {
+    const query = vi.fn<PostgresPool["query"]>().mockResolvedValue({
+      rows: [],
+      rowCount: 0,
+      command: "SELECT",
+      oid: 0,
+      fields: [],
+    });
+    const pool = {
+      query,
+      end: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
+    } as PostgresPool;
+    const store = new PostgresRunStore({
+      pool,
+      poolOwnership: "borrowed",
+    });
+
+    await store.checkReady();
+
+    expect(query).toHaveBeenCalledWith("SELECT 1");
+  });
+
+  it("propagates PostgreSQL readiness failures to the caller", async () => {
+    const error = new Error("database unavailable");
+    const pool = {
+      query: vi.fn<PostgresPool["query"]>().mockRejectedValue(error),
+      end: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
+    } as PostgresPool;
+    const store = new PostgresRunStore({
+      pool,
+      poolOwnership: "borrowed",
+    });
+
+    await expect(store.checkReady()).rejects.toBe(error);
+  });
 });

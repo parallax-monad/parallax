@@ -4,7 +4,11 @@ import { fileURLToPath } from "node:url";
 import type { ServerType } from "@hono/node-server";
 import type { StartBackendServerOptions } from "./bootstrap/backend.js";
 import { startBackendServer } from "./bootstrap/backend.js";
-import { parseTokenRegistryEnvironment } from "./runtime-config.js";
+import {
+  parseRunStoreEnvironment,
+  parseTokenRegistryEnvironment,
+} from "./runtime-config.js";
+import { migratePostgres } from "./storage/migrations.js";
 
 export type StartConfiguredBackendServerOptions = Omit<
   StartBackendServerOptions,
@@ -22,6 +26,31 @@ export function startConfiguredBackendServer(
     environment,
     tokenRegistry: parseTokenRegistryEnvironment(environment),
   });
+}
+
+export type StartConfiguredBackendProcessOptions =
+  StartConfiguredBackendServerOptions & {
+    /** Injectable migration runner for deterministic launcher tests. */
+    migrationRunner?: (databaseUrl: string) => Promise<unknown>;
+  };
+
+/** Runs production migrations before opening the HTTP listener. */
+export async function startConfiguredBackendProcess(
+  options: StartConfiguredBackendProcessOptions = {},
+): Promise<ServerType> {
+  const environment = options.environment ?? process.env;
+  const runStoreConfig = parseRunStoreEnvironment(environment);
+  const migrationRunner = options.migrationRunner ?? migratePostgres;
+
+  if (
+    runStoreConfig.RUN_STORE_BACKEND === "postgres" &&
+    runStoreConfig.DATABASE_URL !== undefined
+  ) {
+    await migrationRunner(runStoreConfig.DATABASE_URL);
+  }
+
+  const { migrationRunner: _migrationRunner, ...serverOptions } = options;
+  return startConfiguredBackendServer({ ...serverOptions, environment });
 }
 
 export function logBackendListening(address: AddressInfo): void {
@@ -48,5 +77,10 @@ export function isMainModule(
 }
 
 if (isMainModule()) {
-  startConfiguredBackendServer({ onListening: logBackendListening });
+  void startConfiguredBackendProcess({
+    onListening: logBackendListening,
+  }).catch((error: unknown) => {
+    console.error("Failed to start Parallax API", error);
+    process.exitCode = 1;
+  });
 }

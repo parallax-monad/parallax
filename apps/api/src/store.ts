@@ -55,6 +55,11 @@ export interface RunStore {
 export class InMemoryRunStore implements RunStore {
   private readonly runs = new Map<string, CheckRunRecord>();
 
+  /** In-memory storage is ready as long as the process is running. */
+  public checkReady(): Promise<void> {
+    return Promise.resolve();
+  }
+
   /** No-op disposer for the app-owned in-memory lifecycle. */
   public close(): Promise<void> {
     return Promise.resolve();

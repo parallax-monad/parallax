@@ -6,6 +6,7 @@ import {
   isMainModule,
   logBackendListening,
   type StartConfiguredBackendServerOptions,
+  startConfiguredBackendProcess,
   startConfiguredBackendServer,
 } from "./server.js";
 
@@ -106,6 +107,68 @@ describe("configured backend launcher", () => {
 
     expect(startConfiguredBackendServer(options)).toBe(fakeServer);
     expect(received).toEqual({ hostname: "127.0.0.1", port: 8787 });
+  });
+
+  it("runs PostgreSQL migrations before opening the listener", async () => {
+    const calls: string[] = [];
+    const fakeServer = { close: () => undefined } as unknown as ServerType;
+    const databaseUrl = "postgres://user:pass@localhost:5432/parallax";
+
+    const server = await startConfiguredBackendProcess({
+      environment: {
+        ...environment,
+        RUN_STORE_BACKEND: "postgres",
+        DATABASE_URL: databaseUrl,
+      },
+      migrationRunner: async (receivedUrl) => {
+        calls.push(`migrate:${receivedUrl}`);
+      },
+      serverFactory: () => {
+        calls.push("listen");
+        return fakeServer;
+      },
+    });
+
+    expect(server).toBe(fakeServer);
+    expect(calls).toEqual([`migrate:${databaseUrl}`, "listen"]);
+  });
+
+  it("does not run PostgreSQL migrations for the memory backend", async () => {
+    let migrationCalls = 0;
+    const fakeServer = { close: () => undefined } as unknown as ServerType;
+
+    await startConfiguredBackendProcess({
+      environment,
+      migrationRunner: async () => {
+        migrationCalls += 1;
+      },
+      serverFactory: () => fakeServer,
+    });
+
+    expect(migrationCalls).toBe(0);
+  });
+
+  it("does not open the listener when PostgreSQL migration fails", async () => {
+    let serverFactoryCalls = 0;
+
+    await expect(
+      startConfiguredBackendProcess({
+        environment: {
+          ...environment,
+          RUN_STORE_BACKEND: "postgres",
+          DATABASE_URL: "postgres://user:pass@localhost:5432/parallax",
+        },
+        migrationRunner: async () => {
+          throw new Error("migration failed");
+        },
+        serverFactory: () => {
+          serverFactoryCalls += 1;
+          return { close: () => undefined } as never;
+        },
+      }),
+    ).rejects.toThrow("migration failed");
+
+    expect(serverFactoryCalls).toBe(0);
   });
 
   it("fails before opening the server when token metadata is absent", () => {

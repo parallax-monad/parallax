@@ -22,7 +22,7 @@ import {
   UnsupportedAgentFlowError,
 } from "../ports.js";
 import { QuoteApplicationService } from "../quote-application.js";
-import { createHealthApp } from "../routes/health.js";
+import { createHealthApp, type ReadinessCheck } from "../routes/health.js";
 import { createReplayApp } from "../routes/replay.js";
 import { createConfiguredRunStore } from "../run-store-factory.js";
 import {
@@ -91,6 +91,8 @@ export type BackendAppDependencies = {
   quoteFlow?: QuoteAgentFlowPort;
   quoteRunner?: KuruLiveQuoteRunner;
   store?: RunStore;
+  /** Optional dependency probe exposed through `/readyz`. */
+  readinessCheck?: ReadinessCheck;
   /** Explicit disposer for a Store owned by this application. */
   disposeStore?: () => Promise<void>;
   replayRepository?: ReplayFixtureRepository;
@@ -136,7 +138,7 @@ export function createBackendApp(
   });
 
   const app = new Hono();
-  app.route("/", createHealthApp());
+  app.route("/", createHealthApp(dependencies.readinessCheck));
   app.use(
     "/api/*",
     cors({
@@ -196,6 +198,8 @@ export type BootstrapBackendAppOptions = {
   quoteFlow?: QuoteAgentFlowPort;
   quoteRunner?: KuruLiveQuoteRunner;
   store?: RunStore;
+  /** Optional dependency probe exposed through `/readyz`. */
+  readinessCheck?: ReadinessCheck;
   /** Explicit disposer for a Store owned by this application. */
   disposeStore?: () => Promise<void>;
   replayRepository?: ReplayFixtureRepository;
@@ -229,6 +233,11 @@ export function bootstrapBackendApp(
   const disposeStore =
     options.disposeStore ??
     (configuredStore === undefined ? undefined : () => configuredStore.close());
+  const readinessCheck =
+    options.readinessCheck ??
+    (configuredStore === undefined
+      ? undefined
+      : () => configuredStore.checkReady());
 
   return createBackendApp({
     runtime,
@@ -238,6 +247,7 @@ export function bootstrapBackendApp(
     quoteFlow: options.quoteFlow,
     quoteRunner: options.quoteRunner,
     store,
+    readinessCheck,
     disposeStore,
     replayRepository: options.replayRepository,
   });

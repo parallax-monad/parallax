@@ -88,6 +88,11 @@ export class PostgresRunStore implements RunStore {
     return this.closePromise;
   }
 
+  /** Performs the bounded database probe used by the readiness endpoint. */
+  public async checkReady(): Promise<void> {
+    await this.options.pool.query("SELECT 1");
+  }
+
   public async start(
     runId: string,
     intent: NormalizedSwapIntent,
