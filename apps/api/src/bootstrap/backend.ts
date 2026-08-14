@@ -91,14 +91,32 @@ export type BackendAppDependencies = {
   quoteFlow?: QuoteAgentFlowPort;
   quoteRunner?: KuruLiveQuoteRunner;
   store?: RunStore;
+  /** Explicit disposer for a Store owned by this application. */
+  disposeStore?: () => Promise<void>;
   replayRepository?: ReplayFixtureRepository;
 };
 
+export type BackendApp = Hono & {
+  close(): Promise<void>;
+};
+
 /** Composes the live Check and explicit recorded Replay HTTP applications. */
-export function createBackendApp(dependencies: BackendAppDependencies): Hono {
+export function createBackendApp(
+  dependencies: BackendAppDependencies,
+): BackendApp {
+  const ownedStore =
+    dependencies.store === undefined ? new InMemoryRunStore() : undefined;
+  const store = dependencies.store ?? ownedStore;
+  if (store === undefined) {
+    throw new Error("Backend Store was not configured");
+  }
+  const disposeStore =
+    dependencies.disposeStore ??
+    (ownedStore === undefined ? undefined : () => ownedStore.close());
+  let closePromise: Promise<void> | undefined;
   const checkService = new CheckApplicationService({
     runtime: dependencies.runtime,
-    store: dependencies.store ?? new InMemoryRunStore(),
+    store,
     agentFlow:
       dependencies.agentFlow ??
       createConfiguredAgentFlow(dependencies.runtime, dependencies.liveRunner),
@@ -139,7 +157,12 @@ export function createBackendApp(dependencies: BackendAppDependencies): Hono {
     ),
   );
 
-  return app;
+  return Object.assign(app, {
+    close: () => {
+      closePromise ??= disposeStore?.() ?? Promise.resolve();
+      return closePromise;
+    },
+  });
 }
 
 function createConfiguredAgentFlow(
@@ -173,11 +196,15 @@ export type BootstrapBackendAppOptions = {
   quoteFlow?: QuoteAgentFlowPort;
   quoteRunner?: KuruLiveQuoteRunner;
   store?: RunStore;
+  /** Explicit disposer for a Store owned by this application. */
+  disposeStore?: () => Promise<void>;
   replayRepository?: ReplayFixtureRepository;
 };
 
 /** Validates production configuration before composing the backend app. */
-export function bootstrapBackendApp(options: BootstrapBackendAppOptions): Hono {
+export function bootstrapBackendApp(
+  options: BootstrapBackendAppOptions,
+): BackendApp {
   const environment = options.environment ?? process.env;
   const serverEnvironment = serverEnvironmentSchema.parse(environment);
   const runtime = bootstrapBackendRuntime({
@@ -191,6 +218,18 @@ export function bootstrapBackendApp(options: BootstrapBackendAppOptions): Hono {
     });
   }
 
+  const configuredStore =
+    options.store === undefined
+      ? createConfiguredRunStore(environment)
+      : undefined;
+  const store = options.store ?? configuredStore;
+  if (store === undefined) {
+    throw new Error("Backend Store was not configured");
+  }
+  const disposeStore =
+    options.disposeStore ??
+    (configuredStore === undefined ? undefined : () => configuredStore.close());
+
   return createBackendApp({
     runtime,
     corsOrigin: options.corsOrigin ?? serverEnvironment.CORS_ORIGIN,
@@ -198,7 +237,8 @@ export function bootstrapBackendApp(options: BootstrapBackendAppOptions): Hono {
     liveRunner: options.liveRunner,
     quoteFlow: options.quoteFlow,
     quoteRunner: options.quoteRunner,
-    store: options.store ?? createConfiguredRunStore(environment),
+    store,
+    disposeStore,
     replayRepository: options.replayRepository,
   });
 }
@@ -221,8 +261,7 @@ export function startBackendServer(
     PORT: options.port ?? serverEnvironment.PORT,
   });
   const app = bootstrapBackendApp({ ...options, environment });
-
-  return (options.serverFactory ?? serveNode)(
+  const server = (options.serverFactory ?? serveNode)(
     {
       fetch: app.fetch,
       hostname: listener.HOST,
@@ -230,6 +269,14 @@ export function startBackendServer(
     },
     options.onListening,
   );
+
+  if (typeof server.once === "function") {
+    server.once("close", () => {
+      void app.close();
+    });
+  }
+
+  return server;
 }
 
 function jsonError(

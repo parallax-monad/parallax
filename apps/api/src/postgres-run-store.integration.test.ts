@@ -26,14 +26,21 @@ integration("PostgresRunStore", () => {
     await pool?.end();
   });
 
-  runStoreContract("PostgresRunStore", () => new PostgresRunStore({ pool }), {
-    skip: databaseUrl === undefined,
-  });
+  runStoreContract(
+    "PostgresRunStore",
+    () => new PostgresRunStore({ pool, poolOwnership: "borrowed" }),
+    {
+      skip: databaseUrl === undefined,
+    },
+  );
 
   it("retains a terminal Run after the pool is recreated", async () => {
     if (databaseUrl === undefined) return;
     const firstPool = createPostgresPool(databaseUrl);
-    const firstStore = new PostgresRunStore({ pool: firstPool });
+    const firstStore = new PostgresRunStore({
+      pool: firstPool,
+      poolOwnership: "borrowed",
+    });
     const runId = "restart-persistence-run";
     const intent = {
       chainId: 143,
@@ -84,7 +91,10 @@ integration("PostgresRunStore", () => {
 
     const secondPool = createPostgresPool(databaseUrl);
     try {
-      const secondStore = new PostgresRunStore({ pool: secondPool });
+      const secondStore = new PostgresRunStore({
+        pool: secondPool,
+        poolOwnership: "borrowed",
+      });
       await expect(secondStore.get(runId)).resolves.toMatchObject({
         runId,
         status: "failed",
@@ -101,8 +111,12 @@ integration("PostgresRunStore", () => {
       query: async () => {
         throw new Error("database unavailable");
       },
+      end: async () => undefined,
     };
-    const store = new PostgresRunStore({ pool: failingPool });
+    const store = new PostgresRunStore({
+      pool: failingPool,
+      poolOwnership: "borrowed",
+    });
 
     await expect(store.get("database-error-run")).rejects.toThrow(
       "database unavailable",

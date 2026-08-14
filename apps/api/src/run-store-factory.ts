@@ -2,8 +2,14 @@ import { createPostgresPool, PostgresRunStore } from "./postgres-run-store.js";
 import { parseRunStoreEnvironment } from "./runtime-config.js";
 import { InMemoryRunStore, type RunStore } from "./store.js";
 
+export type CloseableRunStore = RunStore & {
+  close(): Promise<void>;
+};
+
 /** Selects the configured backend without silently falling back on failure. */
-export function createConfiguredRunStore(environment: unknown): RunStore {
+export function createConfiguredRunStore(
+  environment: unknown,
+): CloseableRunStore {
   const config = parseRunStoreEnvironment(environment);
   if (config.RUN_STORE_BACKEND === "memory") {
     return new InMemoryRunStore();
@@ -15,5 +21,6 @@ export function createConfiguredRunStore(environment: unknown): RunStore {
 
   return new PostgresRunStore({
     pool: createPostgresPool(config.DATABASE_URL),
+    poolOwnership: "owned",
   });
 }

@@ -44,10 +44,14 @@ export type PostgresPool = {
     queryText: string,
     values?: unknown[],
   ): Promise<QueryResult<Row>>;
+  end(): Promise<void>;
 };
+
+export type PostgresPoolOwnership = "owned" | "borrowed";
 
 export type PostgresRunStoreOptions = {
   pool: PostgresPool;
+  poolOwnership: PostgresPoolOwnership;
 };
 
 const failureCodeSchema = z.enum(CHECK_RUN_FAILURE_CODES);
@@ -70,7 +74,19 @@ type RawCheckRunRow = z.infer<typeof rawCheckRunRowSchema>;
 
 /** PostgreSQL-backed RunStore with atomic terminal state transitions. */
 export class PostgresRunStore implements RunStore {
+  private closePromise: Promise<void> | undefined;
+
   public constructor(private readonly options: PostgresRunStoreOptions) {}
+
+  /** Releases an owned pool; borrowed pools remain caller-managed. */
+  public close(): Promise<void> {
+    if (this.options.poolOwnership === "borrowed") {
+      return Promise.resolve();
+    }
+
+    this.closePromise ??= this.options.pool.end();
+    return this.closePromise;
+  }
 
   public async start(
     runId: string,

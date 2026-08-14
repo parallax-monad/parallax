@@ -51,9 +51,14 @@ export interface RunStore {
   get(runId: string): Promise<CheckRunRecord | undefined>;
 }
 
-/** Process-local placeholder; production persistence remains undecided. */
+/** Process-local backend for local/demo operation; PostgreSQL is configurable for production. */
 export class InMemoryRunStore implements RunStore {
   private readonly runs = new Map<string, CheckRunRecord>();
+
+  /** No-op disposer for the app-owned in-memory lifecycle. */
+  public close(): Promise<void> {
+    return Promise.resolve();
+  }
 
   public async start(
     runId: string,
