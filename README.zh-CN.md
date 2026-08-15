@@ -54,7 +54,7 @@ Parallax 是面向 Monad 兑换交易、由 Moss 驱动的只读签名前决策�
 
 MVP 接收受支持的兑换交易意图，请求报价，执行签名前检查，展示决策结果背后的证据与检查范围，并在适用时提供记录回放或受限的再次检查。
 
-`main` 上的前端适配层会调用 `POST /api/quote`、`POST /api/check` 和 `GET /api/replay/:id`。本地 Vite 开发服务器会把这些路径代理到 `127.0.0.1:8787` 上的 API 进程。
+`main` 上的前端适配层会调用 `POST /api/quote`、`POST /api/check`、`GET /api/runs/:runId` 和 `GET /api/replay/:id`。本地 Vite 开发服务器会把这些路径代理到 `127.0.0.1:8787` 上的 API 进程。
 
 ## 当前实现状态
 
@@ -62,9 +62,9 @@ MVP 接收受支持的兑换交易意图，请求报价，执行签名前检查�
 | --- | --- |
 | 落地页体验 | 已实现英文和简体中文文案，以及交互式 Three.js 证据星图 |
 | 钱包式前端 MVP | 已在 `#/analyze` 实现报价、检查、回放、证据和再次检查界面 |
-| 前端/API 适配层 | 已接入 `/api/quote`、`/api/check` 和 `/api/replay/:id`；本地 Vite 开发环境会代理到 API |
+| 前端/API 适配层 | 已接入 `/api/quote`、`/api/check`、`/api/runs/:runId` 和 `/api/replay/:id`；本地 Vite 开发环境会代理到 API |
 | 共享契约与决策规则 | 已实现当前 P0 范围，并有自动化测试覆盖 |
-| 后端 API 与编排 | 已通过 Hono 实现进程内运行记录存储、实时报价/检查边界和记录回放 |
+| 后端 API 与编排 | 已通过 Hono 实现可配置的内存/PostgreSQL 运行记录存储、实时报价/检查边界和记录回放 |
 | 实时 Moss/Kuru 后端 | 已针对固定 Kuru 运行环境和经验证范围实现；需要显式配置运行环境与 RPC |
 | Vercel 公开演示 | 前端可公开访问，并通过 Vercel 重写将同源 `/api/*` 请求转发到已部署的 Render 后端 |
 | 签名、广播、执行或托管 | 明确不实现 |
@@ -196,6 +196,10 @@ pnpm smoke:kuru:live              # 外部实时 Moss/RPC 冒烟测试
 执行由后端负责的签名前检查。请求携带标准化的兑换交易意图；处理成功后返回已完成或 Integration Error 运行封装。再次检查继续使用同一端点，通过 `parentRunId` 关联，并且只允许修改一个交易意图字段。
 
 如果没有配置实时 Moss，该端点会返回明确的 `UNSUPPORTED` 应用错误与 `UNKNOWN` 运行结果。它绝不会用记录回放替代实时结果。
+
+### `GET /api/runs/:runId`
+
+按 ID 返回一个已持久化的 Check Run。对于仍处于 `started` 状态的 Run，接口会原样返回状态，不会伪造 Receipt；对于已完成或失败的 Run，会返回存储的结果。配置了持久化 RunStore 后，页面刷新可以据此恢复 Receipt。该接口不提供按 sender 枚举的公开历史列表。
 
 ### `GET /api/replay/:id`
 

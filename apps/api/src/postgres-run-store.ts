@@ -67,6 +67,7 @@ const rawCheckRunRowSchema = z
     intent: z.unknown(),
     result: z.unknown(),
     schema_version: z.unknown(),
+    started_at: z.unknown(),
   })
   .passthrough();
 
@@ -97,6 +98,7 @@ export class PostgresRunStore implements RunStore {
     runId: string,
     intent: NormalizedSwapIntent,
     parentRunId?: string,
+    createdAt?: string,
   ): Promise<void> {
     const parsedRunId = runIdSchema.parse(runId);
     const parsedIntent = normalizedSwapIntentSchema.parse(intent);
@@ -115,15 +117,17 @@ export class PostgresRunStore implements RunStore {
             parent_run_id,
             lifecycle_state,
             intent,
-            schema_version
+            schema_version,
+            started_at
           )
-          VALUES ($1, $2, 'started', $3::jsonb, $4)
+          VALUES ($1, $2, 'started', $3::jsonb, $4, $5)
         `,
         [
           parsedRunId,
           parsedParentRunId ?? null,
           JSON.stringify(parsedIntent),
           POSTGRES_RUN_STORE_SCHEMA_VERSION,
+          createdAt ?? new Date().toISOString(),
         ],
       );
     } catch (error) {
@@ -142,6 +146,7 @@ export class PostgresRunStore implements RunStore {
   public async complete(result: RunResult): Promise<void> {
     const parsedResult = runResultSchema.parse(result);
     const current = await this.readStartedRecord(parsedResult.runId);
+    const persistedResult = withCreatedAt(parsedResult, current.createdAt);
 
     if (parsedResult.parentRunId !== current.parentRunId) {
       throw new Error(
@@ -166,7 +171,7 @@ export class PostgresRunStore implements RunStore {
           AND lifecycle_state = 'started'
         RETURNING run_id
       `,
-      [parsedResult.runId, JSON.stringify(parsedResult)],
+      [parsedResult.runId, JSON.stringify(persistedResult)],
     );
 
     if (updated.rowCount !== 1) {
@@ -183,6 +188,7 @@ export class PostgresRunStore implements RunStore {
     const parsedFailure = failureCodeSchema.parse(failure);
     const parsedResult = failedRunResultSchema.parse(result);
     const current = await this.readStartedRecord(parsedRunId);
+    const persistedResult = withCreatedAt(parsedResult, current.createdAt);
 
     if (
       parsedResult.runId !== parsedRunId ||
@@ -206,7 +212,7 @@ export class PostgresRunStore implements RunStore {
           AND lifecycle_state = 'started'
         RETURNING run_id
       `,
-      [parsedRunId, parsedFailure, JSON.stringify(parsedResult)],
+      [parsedRunId, parsedFailure, JSON.stringify(persistedResult)],
     );
 
     if (updated.rowCount !== 1) {
@@ -225,7 +231,8 @@ export class PostgresRunStore implements RunStore {
           failure_code,
           intent,
           result,
-          schema_version
+          schema_version,
+          started_at
         FROM check_runs
         WHERE run_id = $1
       `,
@@ -262,6 +269,7 @@ export function createPostgresPool(
 function deserializeCheckRun(row: RawCheckRunRow): CheckRunRecord {
   const parsedRow = rawCheckRunRowSchema.parse(row);
   const runId = runIdSchema.parse(parsedRow.run_id);
+  const createdAt = z.coerce.date().parse(parsedRow.started_at).toISOString();
   const parentRunId = nullableRunId(parsedRow.parent_run_id);
   const intent = normalizedSwapIntentSchema.parse(parsedRow.intent);
   const lifecycleState = lifecycleStateSchema.parse(parsedRow.lifecycle_state);
@@ -279,6 +287,7 @@ function deserializeCheckRun(row: RawCheckRunRow): CheckRunRecord {
     }
     return {
       runId,
+      createdAt,
       intent,
       ...(parentRunId === undefined ? {} : { parentRunId }),
       status: "started",
@@ -295,6 +304,7 @@ function deserializeCheckRun(row: RawCheckRunRow): CheckRunRecord {
     }
     const result = normalizeStoredResult(
       runResultSchema.parse(parsedRow.result),
+      createdAt,
     );
     if (
       result.runId !== runId ||
@@ -307,6 +317,7 @@ function deserializeCheckRun(row: RawCheckRunRow): CheckRunRecord {
     }
     return {
       runId,
+      createdAt,
       intent,
       ...(parentRunId === undefined ? {} : { parentRunId }),
       status: "completed",
@@ -317,6 +328,7 @@ function deserializeCheckRun(row: RawCheckRunRow): CheckRunRecord {
   const failure = failureCodeSchema.parse(parsedRow.failure_code);
   const result = normalizeStoredResult(
     failedRunResultSchema.parse(parsedRow.result),
+    createdAt,
   );
   if (
     result.runId !== runId ||
@@ -327,6 +339,7 @@ function deserializeCheckRun(row: RawCheckRunRow): CheckRunRecord {
   }
   return {
     runId,
+    createdAt,
     intent,
     ...(parentRunId === undefined ? {} : { parentRunId }),
     status: "failed",
@@ -335,10 +348,25 @@ function deserializeCheckRun(row: RawCheckRunRow): CheckRunRecord {
   };
 }
 
-function normalizeStoredResult<T extends RunResult>(result: T): T {
-  return result.parentRunId === undefined
-    ? { ...result, parentRunId: undefined }
-    : result;
+function normalizeStoredResult<T extends RunResult>(
+  result: T,
+  createdAt: string,
+): T {
+  const withParent =
+    result.parentRunId === undefined
+      ? { ...result, parentRunId: undefined }
+      : result;
+  return withCreatedAt(withParent, createdAt);
+}
+
+function withCreatedAt<T extends RunResult>(result: T, createdAt: string): T {
+  if (result.createdAt === undefined) {
+    return { ...result, createdAt };
+  }
+  if (result.createdAt !== createdAt) {
+    throw new Error(`Run ${result.runId} createdAt does not match its start`);
+  }
+  return result;
 }
 
 function nullableRunId(value: unknown): string | undefined {

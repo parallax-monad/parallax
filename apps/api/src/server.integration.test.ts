@@ -89,8 +89,21 @@ describe("real Node backend listener", () => {
         body: JSON.stringify(checkRequest()),
       });
       expect(check.status).toBe(502);
-      await expect(check.json()).resolves.toMatchObject({
+      const checkPayload = await check.json();
+      expect(checkPayload).toMatchObject({
         error: { code: "UNSUPPORTED" },
+        run: { status: "integration_error" },
+      });
+
+      const runId = (checkPayload as { run?: { runId?: unknown } }).run?.runId;
+      expect(typeof runId).toBe("string");
+      const recovered = await fetch(
+        `${baseUrl}/api/runs/${encodeURIComponent(String(runId))}`,
+      );
+      expect(recovered.status).toBe(200);
+      await expect(recovered.json()).resolves.toMatchObject({
+        status: "failed",
+        result: { status: "integration_error" },
       });
     } finally {
       await new Promise<void>((resolve, reject) => {

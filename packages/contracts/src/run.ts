@@ -50,6 +50,7 @@ export const runDiffSchema = z
 const runIdentitySchema = z.object({
   runId: runIdSchema,
   parentRunId: runIdSchema.optional(),
+  createdAt: z.string().datetime().optional(),
   replayMode: z.boolean(),
   intent: normalizedSwapIntentSchema,
 });

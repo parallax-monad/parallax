@@ -34,6 +34,7 @@ describe("PostgresRunStore persisted-record validation", () => {
               intent,
               result: { unexpected: true },
               schema_version: 1,
+              started_at: "2026-08-15T08:00:00.000Z",
             },
           ],
           rowCount: 1,

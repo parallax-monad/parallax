@@ -6,7 +6,13 @@ import {
   planSubmission,
   validateForm,
 } from "./form";
-import { checkSwap, fetchQuote, loadReplay } from "./service";
+import {
+  checkSwap,
+  fetchQuote,
+  formFromRunResult,
+  loadReplay,
+  loadRun,
+} from "./service";
 import type { CheckSwapInput, QuoteSwapInput } from "./types";
 
 const input: CheckSwapInput = {
@@ -35,6 +41,7 @@ const intent = {
 
 const completed = {
   runId: "run-live-1",
+  createdAt: "2026-08-15T08:00:00.000Z",
   replayMode: false,
   intent,
   simulatorPinnedBlock: "92820000",
@@ -118,8 +125,42 @@ describe("checkSwap API adapter", () => {
     expect(sent.slippage).toBeUndefined();
     expect(result.systemStatus).toBe("OK");
     expect(result.productRunMode).toBe("LIVE");
+    expect(result.createdAt).toBe(completed.createdAt);
     expect(result.quote.route.en).toBe("MON → USDC");
     expect(result.rawResponse).toEqual(completed);
+  });
+
+  test("maps a malformed successful Check response to INVALID_RESPONSE", async () => {
+    const request = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(jsonResponse({ status: "completed" }));
+
+    const result = await checkSwap(input, { fetch: request });
+
+    expect(result.systemStatus).toBe("INTEGRATION_ERROR");
+    expect(result.apiFailure).toMatchObject({
+      code: "INVALID_RESPONSE",
+      httpStatus: 200,
+      retryable: false,
+    });
+  });
+
+  test("maps an invalid JSON Check response to INVALID_JSON_RESPONSE", async () => {
+    const request = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response("not-json", {
+        status: 502,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+
+    const result = await checkSwap(input, { fetch: request });
+
+    expect(result.systemStatus).toBe("INTEGRATION_ERROR");
+    expect(result.apiFailure).toMatchObject({
+      code: "INVALID_JSON_RESPONSE",
+      httpStatus: 502,
+      retryable: true,
+    });
   });
 
   test("prefers the top-level Quote projection over the simulated output", async () => {
@@ -652,6 +693,182 @@ describe("loadReplay", () => {
     });
   });
 });
+
+describe("loadRun", () => {
+  test("maps a persisted terminal record and encodes the run ID", async () => {
+    const request = vi.fn<typeof fetch>().mockResolvedValue(
+      jsonResponse({
+        runId: "run live",
+        createdAt: completed.createdAt,
+        intent,
+        status: "completed",
+        result: { ...completed, runId: "run live", createdAt: undefined },
+      }),
+    );
+
+    const recovery = await loadRun("run live", { fetch: request });
+
+    expect(request.mock.calls[0]?.[0]).toBe("/api/runs/run%20live");
+    expect(recovery.kind).toBe("terminal");
+    if (recovery.kind === "terminal") {
+      expect(recovery.result.runId).toBe("run live");
+      expect(recovery.result.productRunMode).toBe("LIVE");
+      expect(recovery.result.createdAt).toBe(completed.createdAt);
+    }
+  });
+
+  test("keeps the Receipt creation time stable across recovery", async () => {
+    const initialRequest = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(jsonResponse(completed));
+    const initial = await checkSwap(input, { fetch: initialRequest });
+    const recoveryRequest = vi.fn<typeof fetch>().mockResolvedValue(
+      jsonResponse({
+        runId: completed.runId,
+        createdAt: completed.createdAt,
+        intent,
+        status: "completed",
+        result: completed,
+      }),
+    );
+
+    const recovery = await loadRun(completed.runId, {
+      fetch: recoveryRequest,
+    });
+
+    expect(recovery).toMatchObject({
+      kind: "terminal",
+      result: { runId: initial.runId, createdAt: initial.createdAt },
+    });
+  });
+
+  test("preserves a failed Run's API error code across recovery", async () => {
+    const failedRun = {
+      ...completed,
+      runId: "failed-run",
+      status: "integration_error",
+      systemStatus: "INTEGRATION_ERROR",
+      verdict: "UNKNOWN",
+      summary: "The check timed out.",
+      error: {
+        code: "TIMEOUT",
+        stage: "quote",
+        message: "Agent Flow timed out",
+        retryable: true,
+      },
+    };
+    const initialRequest = vi.fn<typeof fetch>().mockResolvedValue(
+      jsonResponse(
+        {
+          error: {
+            code: "AGENT_FLOW_ERROR",
+            message: "Agent Flow could not complete the check",
+          },
+          run: failedRun,
+        },
+        502,
+      ),
+    );
+
+    const initial = await checkSwap(input, { fetch: initialRequest });
+    const recoveryRequest = vi.fn<typeof fetch>().mockResolvedValue(
+      jsonResponse({
+        runId: failedRun.runId,
+        createdAt: failedRun.createdAt,
+        intent,
+        status: "failed",
+        failure: "AGENT_FLOW_ERROR",
+        result: failedRun,
+      }),
+    );
+
+    const recovery = await loadRun(failedRun.runId, {
+      fetch: recoveryRequest,
+    });
+
+    expect(initial.apiFailure).toMatchObject({
+      code: "AGENT_FLOW_ERROR",
+      stage: "quote",
+      retryable: true,
+    });
+    expect(recovery).toMatchObject({
+      kind: "terminal",
+      result: {
+        runId: failedRun.runId,
+        apiFailure: {
+          code: "AGENT_FLOW_ERROR",
+          stage: "quote",
+          retryable: true,
+        },
+      },
+    });
+  });
+
+  test("returns started state without fabricating a result", async () => {
+    const request = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(
+        jsonResponse({ runId: "started-run", intent, status: "started" }),
+      );
+
+    await expect(loadRun("started-run", { fetch: request })).resolves.toEqual({
+      kind: "started",
+      runId: "started-run",
+    });
+  });
+
+  test("maps a missing persisted Run to a non-retryable failure", async () => {
+    const request = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(
+        jsonResponse(
+          { error: { code: "RUN_NOT_FOUND", message: "missing" } },
+          404,
+        ),
+      );
+
+    await expect(loadRun("missing-run", { fetch: request })).resolves.toEqual({
+      kind: "error",
+      failure: {
+        httpStatus: 404,
+        code: "RUN_NOT_FOUND",
+        retryable: false,
+        message: "missing",
+      },
+    });
+  });
+
+  test("reconstructs the form needed to continue a recovered Run", async () => {
+    const result = await mapRunForTest({ ...completed, runId: "run-live-1" });
+
+    expect(formFromRunResult(result)).toMatchObject({
+      protocol: "kuru",
+      tokenIn: "MON",
+      tokenOut: "USDC",
+      amountIn: "0.01",
+      minimumReceived: "",
+    });
+  });
+});
+
+function mapRunForTest(raw: unknown) {
+  const request = vi.fn<typeof fetch>().mockResolvedValue(
+    jsonResponse({
+      runId: "run-live-1",
+      intent,
+      status: "completed",
+      result: raw,
+    }),
+  );
+  return loadRun("run-live-1", {
+    fetch: request,
+  }).then((recovery) => {
+    if (recovery.kind !== "terminal") {
+      throw new Error("test fixture did not produce a terminal Run");
+    }
+    return recovery.result;
+  });
+}
 
 describe("form validation and backend-supported reruns", () => {
   test("validates the initial live request", () => {

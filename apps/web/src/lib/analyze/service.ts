@@ -1,5 +1,5 @@
 import type { Copy } from "@/lib/i18n";
-import { validateForm } from "./form";
+import { type FormState, INITIAL_FORM, validateForm } from "./form";
 import type {
   ActionSuggestion,
   ApiFailure,
@@ -12,6 +12,7 @@ import type {
   QuoteSwapInput,
   RuleResult,
   RunDiff,
+  RunRecovery,
   Verdict,
 } from "./types";
 
@@ -317,6 +318,7 @@ function mapRun(
   raw: unknown,
   transportFailure?: ApiFailure,
   rawResponse: unknown = raw,
+  createdAtOverride?: string,
 ): CheckSwapResult | undefined {
   const run = obj(raw);
   const intent = obj(run?.intent);
@@ -418,7 +420,8 @@ function mapRun(
       : "unavailable",
     minimumReceivedSource: (str(boundary?.source) ??
       "unavailable") as CheckSwapResult["minimumReceivedSource"],
-    createdAt: new Date().toISOString(),
+    createdAt:
+      str(run?.createdAt) ?? createdAtOverride ?? new Date().toISOString(),
     ruleVersion:
       arr(run?.ruleResults)
         .map(obj)
@@ -715,4 +718,112 @@ export async function loadReplay(
       null,
     );
   }
+}
+
+/** Loads one persisted Check Run for page-refresh receipt recovery. */
+export async function loadRun(
+  runId: string,
+  options: CheckOptions = {},
+): Promise<RunRecovery> {
+  let response: Response;
+  try {
+    response = await (options.fetch ?? fetch)(
+      `${API_BASE}/api/runs/${encodeURIComponent(runId)}`,
+      { signal: options.signal },
+    );
+  } catch (error) {
+    const aborted =
+      error instanceof DOMException && error.name === "AbortError";
+    return {
+      kind: "error",
+      failure: {
+        code: aborted ? "REQUEST_ABORTED" : "NETWORK_ERROR",
+        retryable: !aborted,
+        message: error instanceof Error ? error.message : undefined,
+      },
+    };
+  }
+
+  let payload: unknown;
+  try {
+    payload = await response.json();
+  } catch {
+    return {
+      kind: "error",
+      failure: {
+        httpStatus: response.status,
+        code: "INVALID_JSON_RESPONSE",
+        retryable: response.status >= 500,
+      },
+    };
+  }
+
+  if (!response.ok) {
+    const error = obj(obj(payload)?.error);
+    return {
+      kind: "error",
+      failure: {
+        httpStatus: response.status,
+        code: str(error?.code) ?? `HTTP_${response.status}`,
+        retryable: response.status >= 500,
+        message: str(error?.message),
+        issues: failureIssues(error?.issues),
+      },
+    };
+  }
+
+  const record = obj(payload);
+  const status = str(record?.status);
+  const storedRunId = str(record?.runId);
+  if (status === "started" && storedRunId !== undefined) {
+    return { kind: "started", runId: storedRunId };
+  }
+
+  const persistedFailure =
+    status === "failed" ? str(record?.failure) : undefined;
+  const result = mapRun(
+    record?.result,
+    persistedFailure === undefined
+      ? undefined
+      : { code: persistedFailure, retryable: false },
+    payload,
+    str(record?.createdAt),
+  );
+  if (result !== undefined && (status === "completed" || status === "failed")) {
+    return { kind: "terminal", result };
+  }
+
+  return {
+    kind: "error",
+    failure: {
+      httpStatus: response.status,
+      code: "INVALID_RESPONSE",
+      retryable: false,
+    },
+  };
+}
+
+/** Reconstructs the editable fields needed to continue a persisted Run. */
+export function formFromRunResult(result: CheckSwapResult): FormState {
+  const envelope = obj(result.rawResponse);
+  const rawRun =
+    obj(envelope?.result) ?? obj(envelope?.run) ?? envelope ?? undefined;
+  const rawIntent = obj(rawRun?.intent);
+  const rawBoundary = obj(rawIntent?.economicBoundary);
+  const protocol = str(rawIntent?.protocol);
+
+  return {
+    ...INITIAL_FORM,
+    protocol: protocol === "kuru" || protocol === "pancake" ? protocol : "kuru",
+    tokenIn: result.intent.tokenIn,
+    tokenOut: result.intent.tokenOut,
+    amountIn: result.intent.amountIn,
+    minimumReceived:
+      rawBoundary?.availability === "available"
+        ? decimal(
+            rawBoundary.minimumReceivedAtomic,
+            decimalsFor(result.intent.tokenOut),
+          )
+        : "",
+  };
 }
