@@ -125,4 +125,67 @@ describe("WalletApp persisted Run recovery", () => {
     );
     expect(amountInput?.value).toBe("0.01");
   });
+
+  test("does not let late recovery overwrite a new Check", async () => {
+    let resolveRecovery: (response: Response) => void = () => undefined;
+    const recoveryResponse = new Promise<Response>((resolve) => {
+      resolveRecovery = resolve;
+    });
+    const request = vi
+      .fn<typeof fetch>()
+      .mockImplementation(() => recoveryResponse);
+    vi.stubGlobal("fetch", request);
+    window.sessionStorage.setItem("parallax:last-run-id", RUN_ID);
+
+    const container = document.createElement("div");
+    document.body.append(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(<WalletApp language="en" />);
+      await Promise.resolve();
+    });
+
+    const swapButton = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent?.trim() === "Swap",
+    );
+    expect(swapButton).toBeDefined();
+
+    await act(async () => {
+      swapButton?.click();
+    });
+
+    const submitButton = Array.from(
+      container.querySelectorAll<HTMLButtonElement>('button[type="submit"]'),
+    ).find((button) => button.textContent?.includes("Submit live check"));
+    expect(submitButton).toBeDefined();
+
+    await act(async () => {
+      submitButton?.click();
+    });
+    expect(container.textContent).toContain(
+      "Checking this swap before you sign.",
+    );
+
+    await act(async () => {
+      resolveRecovery(
+        new Response(
+          JSON.stringify({
+            runId: RUN_ID,
+            createdAt: CREATED_AT,
+            intent,
+            status: "completed",
+            result: recoveredRun,
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
+      );
+      await Promise.resolve();
+    });
+
+    expect(container.textContent).toContain(
+      "Checking this swap before you sign.",
+    );
+    expect(container.textContent).not.toContain("Before you sign");
+  });
 });

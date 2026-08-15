@@ -111,6 +111,9 @@ function backendRunId(result: CheckSwapResult): string | undefined {
 
 export function WalletApp({ language }: { language: Language }) {
   const [screen, setScreen] = useState<Screen>("home");
+  const screenRef = useRef<Screen>("home");
+  // A user-started flow invalidates the mount-time recovery result.
+  const recoveryCancelledRef = useRef(false);
   const [form, setForm] = useState<FormState>(INITIAL_FORM);
   const [submittedForm, setSubmittedForm] = useState<FormState | undefined>();
   const [formErrors, setFormErrors] = useState<FormFieldErrors>({});
@@ -123,6 +126,8 @@ export function WalletApp({ language }: { language: Language }) {
   const [homeVisit, setHomeVisit] = useState(0);
   const [quote, setQuote] = useState<QuoteState>({ status: "idle" });
   const schedulerRef = useRef(createStageScheduler());
+  // The mount-only recovery effect reads this from its eventual promise callback.
+  screenRef.current = screen;
 
   // Reads the ref inside the cleanup so the effect stays dependency-free and
   // still cancels an in-flight pipeline when the screen unmounts.
@@ -137,7 +142,13 @@ export function WalletApp({ language }: { language: Language }) {
 
     let active = true;
     void loadRun(runId).then((recovery) => {
-      if (!active) return;
+      if (
+        !active ||
+        recoveryCancelledRef.current ||
+        screenRef.current !== "home"
+      ) {
+        return;
+      }
       if (recovery.kind === "terminal") {
         const restoredForm = formFromRunResult(recovery.result);
         setForm(restoredForm);
@@ -209,6 +220,7 @@ export function WalletApp({ language }: { language: Language }) {
       return;
     }
 
+    recoveryCancelledRef.current = true;
     const parent = result?.systemStatus === "OK" ? result : undefined;
     const submitted = plan.submitted;
     setFormErrors({});
@@ -234,6 +246,7 @@ export function WalletApp({ language }: { language: Language }) {
   };
 
   const runReplay = () => {
+    recoveryCancelledRef.current = true;
     setFormErrors({});
     setStoredRunId(undefined);
     setResult(undefined);
@@ -256,6 +269,7 @@ export function WalletApp({ language }: { language: Language }) {
   };
 
   const discard = () => {
+    recoveryCancelledRef.current = true;
     schedulerRef.current.cancel();
     setStoredRunId(undefined);
     setResult(undefined);
@@ -312,7 +326,10 @@ export function WalletApp({ language }: { language: Language }) {
               {screen === "home" && (
                 <WalletHome
                   language={language}
-                  onSwap={() => setScreen("swap")}
+                  onSwap={() => {
+                    recoveryCancelledRef.current = true;
+                    setScreen("swap");
+                  }}
                 />
               )}
               {screen === "swap" && (
