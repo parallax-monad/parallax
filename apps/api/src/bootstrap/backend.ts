@@ -24,6 +24,8 @@ import {
 import { QuoteApplicationService } from "../quote-application.js";
 import { createHealthApp, type ReadinessCheck } from "../routes/health.js";
 import { createReplayApp } from "../routes/replay.js";
+import { createRunQueryApp } from "../routes/runs.js";
+import { RunQueryApplicationService } from "../run-query.js";
 import { createConfiguredRunStore } from "../run-store-factory.js";
 import {
   type BackendRuntime,
@@ -132,6 +134,7 @@ export function createBackendApp(
     repository:
       dependencies.replayRepository ?? new FileReplayFixtureRepository(),
   });
+  const runQueryService = new RunQueryApplicationService({ store });
   const quoteService = new QuoteApplicationService({
     runtime: dependencies.runtime,
     quoteFlow:
@@ -154,6 +157,7 @@ export function createBackendApp(
   );
   app.route("/", createCheckApp(checkService));
   app.route("/", createQuoteApp(quoteService));
+  app.route("/", createRunQueryApp(runQueryService));
   app.route("/", createReplayApp(replayService));
   app.notFound(() => jsonError(404, "NOT_FOUND", "Route not found"));
   app.onError(() =>

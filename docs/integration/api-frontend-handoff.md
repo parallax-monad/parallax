@@ -49,14 +49,15 @@ In scope:
 
 - `POST /api/quote` — live pre-submit quote (or explicit `UNSUPPORTED` when Moss path is absent)
 - `POST /api/check` — live Check (or explicit `UNSUPPORTED` when Moss path is absent)
+- `GET /api/runs/:runId` — one persisted Check Run by ID for refresh/recovery
 - `GET /api/replay/:id` — recorded Replay fixtures only
 - Re-run as a second `POST /api/check` with `parentRunId` and exactly one Intent change
 - Error codes, `retryable`, provenance fields frontend must not invent
 
 Out of scope:
 
-- SSE / Job polling / run-by-id history API
-- Durable Run persistence (process-memory store only)
+- SSE / Job polling
+- Public sender-based Run history or enumeration
 - Signing, broadcast, wallet custody
 - Quote-only Action / Simulation stages; `/api/quote` stops after Discover → Load → Quote
 - Non-`amountIn` Action Gate adjustments (protocol / tokenPair) beyond the fixture path
@@ -102,11 +103,14 @@ Recorded Replay is **only** via `/api/replay/:id`. It is never used as a fallbac
 - Configure `CORS_ORIGIN` to the Vite origin (example: `http://localhost:5173`).
 - Preflight against `/api/check` is covered by the real Node integration test path.
 
-### Process-memory Run Store
+### RunStore lifecycle and recovery
 
-Completed / failed Checks are kept in an in-memory store for the API process.
-**Restarting the API drops all `runId` values.** Frontend must not assume durable
-history. Re-run requires the parent `runId` still present in that process.
+With `RUN_STORE_BACKEND=memory`, completed / failed Checks are kept only in the
+API process and a restart drops their `runId` values. With
+`RUN_STORE_BACKEND=postgres`, `GET /api/runs/:runId` reads the durable record
+after restart. A `started` record is returned as `status: "started"` without a
+fabricated result; it is not a valid Re-run baseline until the existing Re-run
+rules accept it.
 
 ## 3. `POST /api/check`
 
@@ -372,7 +376,34 @@ Diff display: `amountInAtomic` is atomic units; `tokenPair` uses
 `native` / `erc20:<lowercase-address>`. Render human copy from full Intent +
 token registry, not by reverse-engineering Diff strings.
 
-## 6. `GET /api/replay/:id`
+## 6. `GET /api/runs/:runId`
+
+- Method: **GET** only.
+- `runId` is an opaque, non-enumerable identifier. This endpoint does not
+  enumerate Runs by sender or expose a public history list.
+- A `started` Run is returned with its normalized Intent and lifecycle status,
+  but without a fabricated `result` or Receipt.
+- A terminal Run is returned with its stored `result`; failed Runs also retain
+  the Store-level `failure` classification.
+
+Example:
+
+```bash
+curl -s "http://127.0.0.1:8787/api/runs/<runId>"
+```
+
+| HTTP | `error.code` | Meaning |
+| --- | --- | --- |
+| 404 | `RUN_NOT_FOUND` | The ID is invalid or no Check Run exists |
+| 405 | `METHOD_NOT_ALLOWED` | Non-GET request |
+| 500 | `RUN_STORE_ERROR` | The configured RunStore could not be read |
+| 500 | `INTERNAL_ERROR` | Unexpected Run query transport failure |
+
+The response body is the stored Check Run record. The `status` field is the
+Store lifecycle (`started`, `completed`, or `failed`), while a terminal
+`result.status` retains the existing public RunResult semantics.
+
+## 7. `GET /api/replay/:id`
 
 | ID | Fixture |
 | --- | --- |
@@ -408,7 +439,7 @@ Example:
 curl -s "http://127.0.0.1:8787/api/replay/mon-to-usdc"
 ```
 
-## 7. Provenance fields (required for UI)
+## 8. Provenance fields (required for UI)
 
 | Field | Rule |
 | --- | --- |
@@ -421,7 +452,7 @@ curl -s "http://127.0.0.1:8787/api/replay/mon-to-usdc"
 Frontend must display Live vs Recorded Replay explicitly. Do not upgrade
 `UNKNOWN` or Integration Error into protocol `STOP` / `PROCEED` locally.
 
-## 8. Frontend联调 checklist
+## 9. Frontend联调 checklist
 
 1. Start API without `MOSS_RUNTIME_PATH` → both live endpoints return `UNSUPPORTED`.
 2. With the runtime configured, call `POST /api/quote` first and branch on
@@ -430,13 +461,17 @@ Frontend must display Live vs Recorded Replay explicitly. Do not upgrade
 3. `GET /api/replay/mon-to-usdc` returns 200 with `replayMode: true`, `verdict: UNKNOWN` in current fixtures.
 4. Confirm CORS from the web origin.
 5. (Optional) Configure Moss path per [moss-kuru-live-runtime.md](./moss-kuru-live-runtime.md). Live simulation SUCCESS has been achieved on the temporary pin; treat `PROCEED` as "no blocking evidence within the checked scope" (never a guaranteed outcome). The committed fixture was regenerated on Node v22.23.2.
-6. Re-run only against in-process Check `runId`s. A Replay fixture `runId` is
-   not a Check parent and returns `PARENT_NOT_FOUND`; a Check `parentRunId`
-   lost after an API process restart returns the same reason.
-7. CTA / retry: use `error.retryable` and closed reason codes from this page and Product delivery docs.
+6. Use `GET /api/runs/:runId` to restore a persisted Check Run after refresh;
+   handle `status: "started"` without inventing a Receipt.
+7. Re-run only against Check `runId`s accepted by the existing Re-run rules. A
+   Replay fixture `runId` is not a Check parent and returns `PARENT_NOT_FOUND`;
+   a Check `parentRunId` lost after a memory-backend restart returns the same
+   reason.
+8. CTA / retry: use `error.retryable` and closed reason codes from this page and Product delivery docs.
 
-## 9. Non-goals reminder
+## 10. Non-goals reminder
 
 Do not implement against the early draft REST shapes (`/api/analyze`, async jobs,
 SSE) from older planning notes. The live public surfaces for P0 Analyze联调 are
-**`POST /api/quote`**, **`POST /api/check`**, and **`GET /api/replay/:id`**.
+**`POST /api/quote`**, **`POST /api/check`**, **`GET /api/runs/:runId`**, and
+**`GET /api/replay/:id`**.

@@ -126,6 +126,11 @@ export type ApiFailure = {
   issues?: ApiFailureIssue[];
 };
 
+export type RunRecovery =
+  | { kind: "terminal"; result: CheckSwapResult }
+  | { kind: "started"; runId: string }
+  | { kind: "error"; failure: ApiFailure };
+
 export type CheckSwapResult = {
   runId: string;
   parentRunId?: string;

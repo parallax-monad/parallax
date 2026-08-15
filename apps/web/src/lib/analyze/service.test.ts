@@ -6,7 +6,13 @@ import {
   planSubmission,
   validateForm,
 } from "./form";
-import { checkSwap, fetchQuote, loadReplay } from "./service";
+import {
+  checkSwap,
+  fetchQuote,
+  formFromRunResult,
+  loadReplay,
+  loadRun,
+} from "./service";
 import type { CheckSwapInput, QuoteSwapInput } from "./types";
 
 const input: CheckSwapInput = {
@@ -652,6 +658,93 @@ describe("loadReplay", () => {
     });
   });
 });
+
+describe("loadRun", () => {
+  test("maps a persisted terminal record and encodes the run ID", async () => {
+    const request = vi.fn<typeof fetch>().mockResolvedValue(
+      jsonResponse({
+        runId: "run live",
+        intent,
+        status: "completed",
+        result: { ...completed, runId: "run live" },
+      }),
+    );
+
+    const recovery = await loadRun("run live", { fetch: request });
+
+    expect(request.mock.calls[0]?.[0]).toBe("/api/runs/run%20live");
+    expect(recovery.kind).toBe("terminal");
+    if (recovery.kind === "terminal") {
+      expect(recovery.result.runId).toBe("run live");
+      expect(recovery.result.productRunMode).toBe("LIVE");
+    }
+  });
+
+  test("returns started state without fabricating a result", async () => {
+    const request = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(
+        jsonResponse({ runId: "started-run", intent, status: "started" }),
+      );
+
+    await expect(loadRun("started-run", { fetch: request })).resolves.toEqual({
+      kind: "started",
+      runId: "started-run",
+    });
+  });
+
+  test("maps a missing persisted Run to a non-retryable failure", async () => {
+    const request = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(
+        jsonResponse(
+          { error: { code: "RUN_NOT_FOUND", message: "missing" } },
+          404,
+        ),
+      );
+
+    await expect(loadRun("missing-run", { fetch: request })).resolves.toEqual({
+      kind: "error",
+      failure: {
+        httpStatus: 404,
+        code: "RUN_NOT_FOUND",
+        retryable: false,
+        message: "missing",
+      },
+    });
+  });
+
+  test("reconstructs the form needed to continue a recovered Run", async () => {
+    const result = await mapRunForTest({ ...completed, runId: "run-live-1" });
+
+    expect(formFromRunResult(result)).toMatchObject({
+      protocol: "kuru",
+      tokenIn: "MON",
+      tokenOut: "USDC",
+      amountIn: "0.01",
+      minimumReceived: "",
+    });
+  });
+});
+
+function mapRunForTest(raw: unknown) {
+  const request = vi.fn<typeof fetch>().mockResolvedValue(
+    jsonResponse({
+      runId: "run-live-1",
+      intent,
+      status: "completed",
+      result: raw,
+    }),
+  );
+  return loadRun("run-live-1", {
+    fetch: request,
+  }).then((recovery) => {
+    if (recovery.kind !== "terminal") {
+      throw new Error("test fixture did not produce a terminal Run");
+    }
+    return recovery.result;
+  });
+}
 
 describe("form validation and backend-supported reruns", () => {
   test("validates the initial live request", () => {

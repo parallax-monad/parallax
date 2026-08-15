@@ -7,6 +7,8 @@ export * from "./ports.js";
 export * from "./quote-application.js";
 export * from "./routes/health.js";
 export * from "./routes/replay.js";
+export * from "./routes/runs.js";
+export * from "./run-query.js";
 export * from "./runtime-config.js";
 export * from "./server.js";
 export * from "./store.js";

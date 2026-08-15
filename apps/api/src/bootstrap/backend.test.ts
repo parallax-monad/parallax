@@ -205,6 +205,38 @@ describe("backend Node runtime", () => {
     });
   });
 
+  it("serves a stored Run for page refresh", async () => {
+    const store = new InMemoryRunStore();
+    await store.start("refresh-run", {
+      chainId: 143,
+      protocol: "kuru",
+      sender,
+      recipient: sender,
+      recipientSource: "defaulted_from_sender",
+      tokenIn: { kind: "native" },
+      tokenOut: { kind: "erc20", address: usdcAddress },
+      amountInAtomic: "1",
+      economicBoundary: {
+        availability: "unavailable",
+        source: "unavailable",
+      },
+    });
+
+    const app = createBackendApp({
+      runtime: bootstrapBackendRuntime({ environment, tokenRegistry }),
+      store,
+    });
+    const response = await app.fetch(
+      new Request("https://api.example.test/api/runs/refresh-run"),
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      runId: "refresh-run",
+      status: "started",
+    });
+  });
+
   it("composes the Quote route independently from the full Check flow", async () => {
     const app = createBackendApp({
       runtime: bootstrapBackendRuntime({ environment, tokenRegistry }),

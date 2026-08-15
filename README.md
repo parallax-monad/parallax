@@ -55,7 +55,7 @@ The landing page is available at `#/`. Choose **Try demo** to open the wallet-st
 
 The MVP collects a supported swap intent, requests a quote, runs the pre-sign check, presents the evidence and scope behind the result, and supports recorded replay or a bounded re-run when applicable.
 
-The frontend adapter on `main` calls `POST /api/quote`, `POST /api/check`, and `GET /api/replay/:id`. Local Vite development proxies those paths to the API process at `127.0.0.1:8787`.
+The frontend adapter on `main` calls `POST /api/quote`, `POST /api/check`, `GET /api/runs/:runId`, and `GET /api/replay/:id`. Local Vite development proxies those paths to the API process at `127.0.0.1:8787`.
 
 ## Current implementation status
 
@@ -63,9 +63,9 @@ The frontend adapter on `main` calls `POST /api/quote`, `POST /api/check`, and `
 | --- | --- |
 | Landing experience | Implemented with English and Simplified Chinese copy and an interactive Three.js evidence constellation |
 | Wallet-style frontend MVP | Implemented at `#/analyze` with quote, check, replay, evidence, and re-run UI |
-| Frontend/API adapter | Implemented for `/api/quote`, `/api/check`, and `/api/replay/:id`; local Vite development proxies to the API |
+| Frontend/API adapter | Implemented for `/api/quote`, `/api/check`, `/api/runs/:runId`, and `/api/replay/:id`; local Vite development proxies to the API |
 | Shared contracts and decision rules | Implemented with automated tests for the current P0 slices |
-| Backend API and orchestration | Implemented with Hono, process-local Run storage, live check/quote boundaries, and recorded replay |
+| Backend API and orchestration | Implemented with Hono, configurable memory/PostgreSQL Run storage, live check/quote boundaries, and recorded replay |
 | Live Moss/Kuru backend | Implemented for the pinned Kuru runtime and verified scope; requires explicit runtime and RPC configuration |
 | Public Vercel demo | Frontend is publicly reachable and routes same-origin `/api/*` requests to the deployed Render backend through the Vercel rewrite |
 | Signing, broadcasting, execution, or custody | Intentionally not implemented |
@@ -197,6 +197,13 @@ Runs the exact-input live quote boundary before form submission. It returns an a
 Runs the backend-owned pre-sign check. A request carries a normalized swap Intent; successful processing returns a completed or Integration Error Run envelope. A re-run uses the same endpoint with `parentRunId` and exactly one allowed Intent change.
 
 If live Moss is not configured, the endpoint returns an explicit `UNSUPPORTED` application error and an `UNKNOWN` Run. It never substitutes recorded replay for a live result.
+
+### `GET /api/runs/:runId`
+
+Returns one persisted Check Run by ID. The response preserves `started` Runs
+without fabricating a receipt; completed and failed Runs include their stored
+result. This supports page refresh and receipt recovery when the configured
+RunStore is durable. It does not provide a public history list by sender.
 
 ### `GET /api/replay/:id`
 

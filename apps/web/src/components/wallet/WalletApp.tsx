@@ -19,7 +19,13 @@ import {
   toInput,
   validateForm,
 } from "@/lib/analyze/form";
-import { checkSwap, fetchQuote, loadReplay } from "@/lib/analyze/service";
+import {
+  checkSwap,
+  fetchQuote,
+  formFromRunResult,
+  loadReplay,
+  loadRun,
+} from "@/lib/analyze/service";
 import { createStageScheduler } from "@/lib/analyze/stageScheduler";
 import type { CheckSwapResult, QuoteState } from "@/lib/analyze/types";
 import { type Language, pick } from "@/lib/i18n";
@@ -32,6 +38,7 @@ const STAGE_MS = 380;
  * digit should not fire a live Moss Discover → Load → Quote per keystroke.
  */
 const QUOTE_DEBOUNCE_MS = 450;
+const LAST_RUN_ID_KEY = "parallax:last-run-id";
 
 type Screen = "home" | "swap" | "checking" | "result";
 
@@ -62,6 +69,46 @@ function ScreenTransition({ children }: { children: ReactNode }) {
     </div>
   );
 }
+
+function storedRunId(): string | undefined {
+  try {
+    return window.sessionStorage.getItem(LAST_RUN_ID_KEY) ?? undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function setStoredRunId(runId: string | undefined): void {
+  try {
+    if (runId === undefined) {
+      window.sessionStorage.removeItem(LAST_RUN_ID_KEY);
+    } else {
+      window.sessionStorage.setItem(LAST_RUN_ID_KEY, runId);
+    }
+  } catch {
+    // Session storage can be unavailable in privacy-restricted browsers.
+  }
+}
+
+function backendRunId(result: CheckSwapResult): string | undefined {
+  if (result.replayMode) return undefined;
+  const raw =
+    typeof result.rawResponse === "object" && result.rawResponse !== null
+      ? (result.rawResponse as Record<string, unknown>)
+      : undefined;
+  const nested =
+    typeof raw?.run === "object" && raw.run !== null
+      ? (raw.run as Record<string, unknown>)
+      : undefined;
+  const runId =
+    typeof raw?.runId === "string"
+      ? raw.runId
+      : typeof nested?.runId === "string"
+        ? nested.runId
+        : undefined;
+  return runId === result.runId ? runId : undefined;
+}
+
 export function WalletApp({ language }: { language: Language }) {
   const [screen, setScreen] = useState<Screen>("home");
   const [form, setForm] = useState<FormState>(INITIAL_FORM);
@@ -82,6 +129,36 @@ export function WalletApp({ language }: { language: Language }) {
   useEffect(() => {
     const scheduler = schedulerRef.current;
     return () => scheduler.cancel();
+  }, []);
+
+  useEffect(() => {
+    const runId = storedRunId();
+    if (runId === undefined) return;
+
+    let active = true;
+    void loadRun(runId).then((recovery) => {
+      if (!active) return;
+      if (recovery.kind === "terminal") {
+        const restoredForm = formFromRunResult(recovery.result);
+        setForm(restoredForm);
+        setSubmittedForm(restoredForm);
+        setResult(recovery.result);
+        setCheckingMode("live");
+        setScreen("result");
+        return;
+      }
+
+      if (
+        recovery.kind === "error" &&
+        recovery.failure.code === "RUN_NOT_FOUND"
+      ) {
+        setStoredRunId(undefined);
+      }
+    });
+
+    return () => {
+      active = false;
+    };
   }, []);
 
   // Quote is only meaningful while the user is editing the swap. Invalid input
@@ -135,6 +212,7 @@ export function WalletApp({ language }: { language: Language }) {
     const parent = result?.systemStatus === "OK" ? result : undefined;
     const submitted = plan.submitted;
     setFormErrors({});
+    setStoredRunId(undefined);
     setResult(undefined);
     setDrawerOpen(false);
     setStage(0);
@@ -147,6 +225,7 @@ export function WalletApp({ language }: { language: Language }) {
       onStage: setStage,
       onSettle: async () => {
         const nextResult = await checkSwap(toInput(submitted, parent?.runId));
+        setStoredRunId(backendRunId(nextResult));
         setResult(nextResult);
         setSubmittedForm(submitted);
         setScreen("result");
@@ -156,6 +235,7 @@ export function WalletApp({ language }: { language: Language }) {
 
   const runReplay = () => {
     setFormErrors({});
+    setStoredRunId(undefined);
     setResult(undefined);
     setDrawerOpen(false);
     setStage(0);
@@ -177,6 +257,7 @@ export function WalletApp({ language }: { language: Language }) {
 
   const discard = () => {
     schedulerRef.current.cancel();
+    setStoredRunId(undefined);
     setResult(undefined);
     setSubmittedForm(undefined);
     setFormErrors({});
