@@ -779,9 +779,13 @@ export async function loadRun(
     return { kind: "started", runId: storedRunId };
   }
 
+  const persistedFailure =
+    status === "failed" ? str(record?.failure) : undefined;
   const result = mapRun(
     record?.result,
-    undefined,
+    persistedFailure === undefined
+      ? undefined
+      : { code: persistedFailure, retryable: false },
     payload,
     str(record?.createdAt),
   );

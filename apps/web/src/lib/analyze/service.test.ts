@@ -130,6 +130,39 @@ describe("checkSwap API adapter", () => {
     expect(result.rawResponse).toEqual(completed);
   });
 
+  test("maps a malformed successful Check response to INVALID_RESPONSE", async () => {
+    const request = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(jsonResponse({ status: "completed" }));
+
+    const result = await checkSwap(input, { fetch: request });
+
+    expect(result.systemStatus).toBe("INTEGRATION_ERROR");
+    expect(result.apiFailure).toMatchObject({
+      code: "INVALID_RESPONSE",
+      httpStatus: 200,
+      retryable: false,
+    });
+  });
+
+  test("maps an invalid JSON Check response to INVALID_JSON_RESPONSE", async () => {
+    const request = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response("not-json", {
+        status: 502,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+
+    const result = await checkSwap(input, { fetch: request });
+
+    expect(result.systemStatus).toBe("INTEGRATION_ERROR");
+    expect(result.apiFailure).toMatchObject({
+      code: "INVALID_JSON_RESPONSE",
+      httpStatus: 502,
+      retryable: true,
+    });
+  });
+
   test("prefers the top-level Quote projection over the simulated output", async () => {
     const request = vi.fn<typeof fetch>().mockResolvedValue(
       jsonResponse({
@@ -706,6 +739,68 @@ describe("loadRun", () => {
     expect(recovery).toMatchObject({
       kind: "terminal",
       result: { runId: initial.runId, createdAt: initial.createdAt },
+    });
+  });
+
+  test("preserves a failed Run's API error code across recovery", async () => {
+    const failedRun = {
+      ...completed,
+      runId: "failed-run",
+      status: "integration_error",
+      systemStatus: "INTEGRATION_ERROR",
+      verdict: "UNKNOWN",
+      summary: "The check timed out.",
+      error: {
+        code: "TIMEOUT",
+        stage: "quote",
+        message: "Agent Flow timed out",
+        retryable: true,
+      },
+    };
+    const initialRequest = vi.fn<typeof fetch>().mockResolvedValue(
+      jsonResponse(
+        {
+          error: {
+            code: "AGENT_FLOW_ERROR",
+            message: "Agent Flow could not complete the check",
+          },
+          run: failedRun,
+        },
+        502,
+      ),
+    );
+
+    const initial = await checkSwap(input, { fetch: initialRequest });
+    const recoveryRequest = vi.fn<typeof fetch>().mockResolvedValue(
+      jsonResponse({
+        runId: failedRun.runId,
+        createdAt: failedRun.createdAt,
+        intent,
+        status: "failed",
+        failure: "AGENT_FLOW_ERROR",
+        result: failedRun,
+      }),
+    );
+
+    const recovery = await loadRun(failedRun.runId, {
+      fetch: recoveryRequest,
+    });
+
+    expect(initial.apiFailure).toMatchObject({
+      code: "AGENT_FLOW_ERROR",
+      stage: "quote",
+      retryable: true,
+    });
+    expect(recovery).toMatchObject({
+      kind: "terminal",
+      result: {
+        runId: failedRun.runId,
+        apiFailure: {
+          code: "AGENT_FLOW_ERROR",
+          stage: "quote",
+          retryable: true,
+        },
+      },
     });
   });
 
