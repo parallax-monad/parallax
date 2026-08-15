@@ -52,6 +52,7 @@ const runtime: BackendRuntime = {
 };
 
 const simulatorPinnedBlock = "92820000";
+const createdAt = "2026-08-15T08:00:00.000Z";
 
 const actionGateAssets = {
   sender,
@@ -358,12 +359,14 @@ function createService(
   agentFlow: AgentFlowPort,
   store: RunStore = new InMemoryRunStore(),
   createRunId: () => string = () => "run-1",
+  createTimestamp: () => string = () => createdAt,
 ) {
   return new CheckApplicationService({
     runtime,
     agentFlow,
     store,
     createRunId,
+    createTimestamp,
   });
 }
 
@@ -389,6 +392,7 @@ describe("CheckApplicationService", () => {
     const response = await service.check(publicRequest());
 
     expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({ createdAt });
     expect(receivedIntent).toMatchObject({
       amountInAtomic: "1500000000000000000",
       recipient: sender,
@@ -1354,11 +1358,11 @@ describe("CheckApplicationService", () => {
   it("does not call verification Agent Flow when the child cannot start", async () => {
     const inner = new InMemoryRunStore();
     const store: RunStore = {
-      async start(runId, intent, parentRunId) {
+      async start(runId, intent, parentRunId, createdAt) {
         if (parentRunId !== undefined) {
           throw new Error("child start unavailable");
         }
-        await inner.start(runId, intent, parentRunId);
+        await inner.start(runId, intent, parentRunId, createdAt);
       },
       complete: (result) => inner.complete(result),
       fail: (runId, failure, result) => inner.fail(runId, failure, result),
@@ -1410,8 +1414,8 @@ describe("CheckApplicationService", () => {
   it("fail-closes to STOP when child complete fails but fail terminalizes the child", async () => {
     const inner = new InMemoryRunStore();
     const store: RunStore = {
-      start: (runId, intent, parentRunId) =>
-        inner.start(runId, intent, parentRunId),
+      start: (runId, intent, parentRunId, createdAt) =>
+        inner.start(runId, intent, parentRunId, createdAt),
       complete: async (result) => {
         if (result.parentRunId !== undefined) {
           throw new Error("child complete unavailable");
@@ -1471,8 +1475,8 @@ describe("CheckApplicationService", () => {
   it("blocks baseline finalize when the verification child cannot reach a terminal store state", async () => {
     const inner = new InMemoryRunStore();
     const store: RunStore = {
-      start: (runId, intent, parentRunId) =>
-        inner.start(runId, intent, parentRunId),
+      start: (runId, intent, parentRunId, createdAt) =>
+        inner.start(runId, intent, parentRunId, createdAt),
       complete: async (result) => {
         if (result.parentRunId !== undefined) {
           throw new Error("child complete unavailable");

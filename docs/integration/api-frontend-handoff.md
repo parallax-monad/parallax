@@ -112,6 +112,12 @@ after restart. A `started` record is returned as `status: "started"` without a
 fabricated result; it is not a valid Re-run baseline until the existing Re-run
 rules accept it.
 
+Page-refresh recovery begins only after `POST /api/check` has returned and the
+frontend has persisted the returned `runId`. A refresh while the Check request
+is still in flight cannot be recovered automatically because the API assigns
+the Run ID server-side and SSE / job polling are out of scope. With the memory
+RunStore, an API process restart also removes the stored Run.
+
 ## 3. `POST /api/check`
 
 ### Minimal request
@@ -197,6 +203,7 @@ Illustrative completed skeleton (fields truncated):
 ```json
 {
   "runId": "…",
+  "createdAt": "2026-08-15T08:00:00.000Z",
   "replayMode": false,
   "intent": { "chainId": 143, "protocol": "kuru", "amountInAtomic": "…" },
   "simulatorPinnedBlock": "92820000",
@@ -381,6 +388,9 @@ token registry, not by reverse-engineering Diff strings.
 - Method: **GET** only.
 - `runId` is an opaque, non-enumerable identifier. This endpoint does not
   enumerate Runs by sender or expose a public history list.
+- `createdAt` is assigned by the backend when the Run starts and remains stable
+  across the initial response and later recovery. PostgreSQL-backed recovery
+  derives it from the persisted `started_at` timestamp.
 - A `started` Run is returned with its normalized Intent and lifecycle status,
   but without a fabricated `result` or Receipt.
 - A terminal Run is returned with its stored `result`; failed Runs also retain

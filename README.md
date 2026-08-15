@@ -202,8 +202,11 @@ If live Moss is not configured, the endpoint returns an explicit `UNSUPPORTED` a
 
 Returns one persisted Check Run by ID. The response preserves `started` Runs
 without fabricating a receipt; completed and failed Runs include their stored
-result. This supports page refresh and receipt recovery when the configured
-RunStore is durable. It does not provide a public history list by sender.
+result. This supports page refresh and receipt recovery after the frontend has
+received and persisted the `runId`, when the configured RunStore is durable.
+An in-flight Check cannot be automatically recovered after refresh because the
+current API assigns its Run ID server-side and does not expose SSE or job
+polling. It does not provide a public history list by sender.
 
 ### `GET /api/replay/:id`
 

@@ -44,7 +44,8 @@ function fakeStore(get: RunStore["get"]): RunStore {
 describe("RunQueryApplicationService", () => {
   it("returns a stored started Run without fabricating a receipt", async () => {
     const store = new InMemoryRunStore();
-    await store.start("refresh-run", intent);
+    const createdAt = "2026-08-15T08:00:00.000Z";
+    await store.start("refresh-run", intent, undefined, createdAt);
 
     const response = await createService({ store }).getRun(" refresh-run ");
 
@@ -52,6 +53,7 @@ describe("RunQueryApplicationService", () => {
       status: 200,
       body: {
         runId: "refresh-run",
+        createdAt,
         intent,
         status: "started",
       },

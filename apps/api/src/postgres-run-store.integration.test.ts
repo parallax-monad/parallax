@@ -42,6 +42,7 @@ integration("PostgresRunStore", () => {
       poolOwnership: "borrowed",
     });
     const runId = "restart-persistence-run";
+    const createdAt = "2026-08-15T08:00:00.000Z";
     const intent = {
       chainId: 143,
       protocol: "kuru" as const,
@@ -59,7 +60,7 @@ integration("PostgresRunStore", () => {
         source: "unavailable" as const,
       },
     };
-    await firstStore.start(runId, intent);
+    await firstStore.start(runId, intent, undefined, createdAt);
     await firstStore.fail(runId, "AGENT_FLOW_ERROR", {
       runId,
       replayMode: false,
@@ -97,8 +98,10 @@ integration("PostgresRunStore", () => {
       });
       await expect(secondStore.get(runId)).resolves.toMatchObject({
         runId,
+        createdAt,
         status: "failed",
         failure: "AGENT_FLOW_ERROR",
+        result: { createdAt },
       });
     } finally {
       await secondPool.end();

@@ -318,6 +318,7 @@ function mapRun(
   raw: unknown,
   transportFailure?: ApiFailure,
   rawResponse: unknown = raw,
+  createdAtOverride?: string,
 ): CheckSwapResult | undefined {
   const run = obj(raw);
   const intent = obj(run?.intent);
@@ -419,7 +420,8 @@ function mapRun(
       : "unavailable",
     minimumReceivedSource: (str(boundary?.source) ??
       "unavailable") as CheckSwapResult["minimumReceivedSource"],
-    createdAt: new Date().toISOString(),
+    createdAt:
+      str(run?.createdAt) ?? createdAtOverride ?? new Date().toISOString(),
     ruleVersion:
       arr(run?.ruleResults)
         .map(obj)
@@ -777,7 +779,12 @@ export async function loadRun(
     return { kind: "started", runId: storedRunId };
   }
 
-  const result = mapRun(record?.result, undefined, payload);
+  const result = mapRun(
+    record?.result,
+    undefined,
+    payload,
+    str(record?.createdAt),
+  );
   if (result !== undefined && (status === "completed" || status === "failed")) {
     return { kind: "terminal", result };
   }

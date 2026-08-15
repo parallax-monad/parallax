@@ -4,6 +4,7 @@ import { createRunQueryApp, type RunQueryService } from "./runs.js";
 
 const startedRecord: CheckRunRecord = {
   runId: "refresh-run",
+  createdAt: "2026-08-15T08:00:00.000Z",
   intent: {
     chainId: 143,
     protocol: "kuru",
@@ -47,6 +48,7 @@ describe("GET /api/runs/:runId transport", () => {
     expect(response.headers.get("content-type")).toBe(
       "application/json; charset=utf-8",
     );
+    expect(response.headers.get("cache-control")).toBe("no-store");
     await expect(response.json()).resolves.toEqual(startedRecord);
   });
 

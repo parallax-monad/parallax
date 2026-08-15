@@ -63,16 +63,20 @@ export type CheckApplicationServiceDependencies = {
   store: RunStore;
   agentFlow: AgentFlowPort;
   createRunId?: () => string;
+  createTimestamp?: () => string;
 };
 
 /** Backend-owned application boundary for POST /api/check. */
 export class CheckApplicationService {
   private readonly createRunId: () => string;
+  private readonly createTimestamp: () => string;
 
   public constructor(
     private readonly dependencies: CheckApplicationServiceDependencies,
   ) {
     this.createRunId = dependencies.createRunId ?? randomUUID;
+    this.createTimestamp =
+      dependencies.createTimestamp ?? (() => new Date().toISOString());
   }
 
   public async check(request: unknown): Promise<CheckApplicationResponse> {
@@ -123,11 +127,13 @@ export class CheckApplicationService {
     const childFields = childRunFields(rerun.context);
 
     const runId = this.createRunId();
+    const createdAt = this.createTimestamp();
     try {
       await this.dependencies.store.start(
         runId,
         normalized.intent,
         childFields?.parentRunId,
+        createdAt,
       );
     } catch {
       return storeErrorResponse();
@@ -141,6 +147,7 @@ export class CheckApplicationService {
         unsupported ? "UNSUPPORTED" : "AGENT_FLOW_ERROR",
         normalized.intent,
         childFields,
+        createdAt,
         {
           code: unsupported ? "UNSUPPORTED" : "AGENT_FLOW_ERROR",
           message: unsupported
@@ -164,6 +171,7 @@ export class CheckApplicationService {
         "INVALID_AGENT_FLOW_RESPONSE",
         normalized.intent,
         childFields,
+        createdAt,
         {
           code: "INVALID_AGENT_FLOW_RESPONSE",
           message: interpreted.message,
@@ -174,6 +182,7 @@ export class CheckApplicationService {
     const resultWithRerun = runResultSchema.parse({
       ...interpreted.result,
       ...childFields,
+      createdAt,
     });
     if (resultWithRerun.status === "completed") {
       const gated = await this.maybeApplyVerifiedActionGate(resultWithRerun);
@@ -233,6 +242,7 @@ export class CheckApplicationService {
     }
 
     const childRunId = this.createRunId();
+    const childCreatedAt = this.createTimestamp();
     const childFields: ChildRunFields = {
       parentRunId: baseline.runId,
       diff: diff.value,
@@ -243,6 +253,7 @@ export class CheckApplicationService {
         childRunId,
         adjustment.nextIntent,
         childFields.parentRunId,
+        childCreatedAt,
       );
     } catch {
       return { kind: "blocked" };
@@ -257,6 +268,7 @@ export class CheckApplicationService {
         childRunId,
         adjustment.nextIntent,
         childFields,
+        childCreatedAt,
         "AGENT_FLOW_ERROR",
         invoked.error,
       );
@@ -276,6 +288,7 @@ export class CheckApplicationService {
         childRunId,
         adjustment.nextIntent,
         childFields,
+        childCreatedAt,
         "INVALID_AGENT_FLOW_RESPONSE",
       );
       return persisted === "non_terminal"
@@ -291,6 +304,7 @@ export class CheckApplicationService {
         failedRunResultSchema.parse({
           ...child,
           ...childFields,
+          createdAt: childCreatedAt,
         }),
       );
       return persisted === "non_terminal"
@@ -303,6 +317,7 @@ export class CheckApplicationService {
         childRunId,
         adjustment.nextIntent,
         childFields,
+        childCreatedAt,
         "INVALID_AGENT_FLOW_RESPONSE",
       );
       return persisted === "non_terminal"
@@ -313,6 +328,7 @@ export class CheckApplicationService {
     const childWithParent = completedRunResultSchema.parse({
       ...child,
       ...childFields,
+      createdAt: childCreatedAt,
     });
     const persisted = await this.persistVerificationChildResult(
       childRunId,
@@ -396,6 +412,7 @@ export class CheckApplicationService {
           parentRunId: result.parentRunId,
           diff: result.diff,
         },
+        result.createdAt,
       );
       try {
         await this.dependencies.store.fail(
@@ -414,6 +431,7 @@ export class CheckApplicationService {
     childRunId: string,
     intent: Parameters<AgentFlowPort["check"]>[0]["intent"],
     childFields: ChildRunFields,
+    createdAt: string,
     failure: CheckRunFailureCode,
     cause?: unknown,
   ): Promise<"terminal_error" | "non_terminal"> {
@@ -422,6 +440,7 @@ export class CheckApplicationService {
       intent,
       failure,
       childFields,
+      createdAt,
       cause,
     );
     try {
@@ -437,6 +456,7 @@ export class CheckApplicationService {
     failure: CheckRunFailureCode,
     intent: Parameters<AgentFlowPort["check"]>[0]["intent"],
     childFields: ChildRunFields | undefined,
+    createdAt: string,
     apiError: CheckApiErrorBody["error"],
     cause?: unknown,
     partialRunResult?: FailedRunResult,
@@ -448,6 +468,7 @@ export class CheckApplicationService {
             intent,
             failure,
             childFields,
+            createdAt,
             cause,
           )
         : failedRunResultSchema.parse({
@@ -455,6 +476,7 @@ export class CheckApplicationService {
             runId,
             intent,
             ...(childFields ?? {}),
+            createdAt,
           });
     try {
       await this.dependencies.store.fail(runId, failure, result);
@@ -571,6 +593,7 @@ function createIntegrationErrorResult(
   intent: Parameters<AgentFlowPort["check"]>[0]["intent"],
   failure: CheckRunFailureCode,
   childFields: ChildRunFields | undefined,
+  createdAt?: string,
   cause?: unknown,
 ): FailedRunResult {
   return failedRunResultSchema.parse({
@@ -578,6 +601,7 @@ function createIntegrationErrorResult(
     replayMode: false,
     intent,
     ...(childFields ?? {}),
+    ...(createdAt === undefined ? {} : { createdAt }),
     status: "integration_error",
     systemStatus: "INTEGRATION_ERROR",
     verdict: "UNKNOWN",

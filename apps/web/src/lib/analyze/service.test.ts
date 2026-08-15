@@ -41,6 +41,7 @@ const intent = {
 
 const completed = {
   runId: "run-live-1",
+  createdAt: "2026-08-15T08:00:00.000Z",
   replayMode: false,
   intent,
   simulatorPinnedBlock: "92820000",
@@ -124,6 +125,7 @@ describe("checkSwap API adapter", () => {
     expect(sent.slippage).toBeUndefined();
     expect(result.systemStatus).toBe("OK");
     expect(result.productRunMode).toBe("LIVE");
+    expect(result.createdAt).toBe(completed.createdAt);
     expect(result.quote.route.en).toBe("MON → USDC");
     expect(result.rawResponse).toEqual(completed);
   });
@@ -664,9 +666,10 @@ describe("loadRun", () => {
     const request = vi.fn<typeof fetch>().mockResolvedValue(
       jsonResponse({
         runId: "run live",
+        createdAt: completed.createdAt,
         intent,
         status: "completed",
-        result: { ...completed, runId: "run live" },
+        result: { ...completed, runId: "run live", createdAt: undefined },
       }),
     );
 
@@ -677,7 +680,33 @@ describe("loadRun", () => {
     if (recovery.kind === "terminal") {
       expect(recovery.result.runId).toBe("run live");
       expect(recovery.result.productRunMode).toBe("LIVE");
+      expect(recovery.result.createdAt).toBe(completed.createdAt);
     }
+  });
+
+  test("keeps the Receipt creation time stable across recovery", async () => {
+    const initialRequest = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(jsonResponse(completed));
+    const initial = await checkSwap(input, { fetch: initialRequest });
+    const recoveryRequest = vi.fn<typeof fetch>().mockResolvedValue(
+      jsonResponse({
+        runId: completed.runId,
+        createdAt: completed.createdAt,
+        intent,
+        status: "completed",
+        result: completed,
+      }),
+    );
+
+    const recovery = await loadRun(completed.runId, {
+      fetch: recoveryRequest,
+    });
+
+    expect(recovery).toMatchObject({
+      kind: "terminal",
+      result: { runId: initial.runId, createdAt: initial.createdAt },
+    });
   });
 
   test("returns started state without fabricating a result", async () => {

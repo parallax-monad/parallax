@@ -16,12 +16,14 @@ export type CheckRunFailureCode = (typeof CHECK_RUN_FAILURE_CODES)[number];
 export type CheckRunRecord =
   | {
       runId: string;
+      createdAt: string;
       intent: NormalizedSwapIntent;
       parentRunId?: string;
       status: "started";
     }
   | {
       runId: string;
+      createdAt: string;
       intent: NormalizedSwapIntent;
       parentRunId?: string;
       status: "failed";
@@ -30,6 +32,7 @@ export type CheckRunRecord =
     }
   | {
       runId: string;
+      createdAt: string;
       intent: NormalizedSwapIntent;
       parentRunId?: string;
       status: "completed";
@@ -41,6 +44,7 @@ export interface RunStore {
     runId: string,
     intent: NormalizedSwapIntent,
     parentRunId?: string,
+    createdAt?: string,
   ): Promise<void>;
   complete(result: RunResult): Promise<void>;
   fail(
@@ -69,6 +73,7 @@ export class InMemoryRunStore implements RunStore {
     runId: string,
     intent: NormalizedSwapIntent,
     parentRunId?: string,
+    createdAt?: string,
   ): Promise<void> {
     if (this.runs.has(runId)) {
       throw new Error(`Run ${runId} already exists`);
@@ -76,12 +81,19 @@ export class InMemoryRunStore implements RunStore {
 
     this.runs.set(
       runId,
-      clone({ runId, intent, parentRunId, status: "started" }),
+      clone({
+        runId,
+        createdAt: createdAt ?? new Date().toISOString(),
+        intent,
+        parentRunId,
+        status: "started",
+      }),
     );
   }
 
   public async complete(result: RunResult): Promise<void> {
     const current = this.requireStarted(result.runId);
+    const persistedResult = withCreatedAt(result, current.createdAt);
     if (result.parentRunId !== current.parentRunId) {
       throw new Error(`Run ${result.runId} parent does not match its start`);
     }
@@ -90,10 +102,11 @@ export class InMemoryRunStore implements RunStore {
       result.runId,
       clone({
         runId: result.runId,
+        createdAt: current.createdAt,
         intent: current.intent,
         parentRunId: current.parentRunId,
         status: "completed",
-        result,
+        result: persistedResult,
       }),
     );
   }
@@ -104,6 +117,7 @@ export class InMemoryRunStore implements RunStore {
     result: FailedRunResult,
   ): Promise<void> {
     const current = this.requireStarted(runId);
+    const persistedResult = withCreatedAt(result, current.createdAt);
     if (
       result.runId !== runId ||
       result.parentRunId !== current.parentRunId ||
@@ -116,11 +130,12 @@ export class InMemoryRunStore implements RunStore {
       runId,
       clone({
         runId,
+        createdAt: current.createdAt,
         intent: current.intent,
         parentRunId: current.parentRunId,
         status: "failed",
         failure,
-        result,
+        result: persistedResult,
       }),
     );
   }
@@ -143,4 +158,14 @@ export class InMemoryRunStore implements RunStore {
 
 function clone<T>(value: T): T {
   return structuredClone(value);
+}
+
+function withCreatedAt<T extends RunResult>(result: T, createdAt: string): T {
+  if (result.createdAt === undefined) {
+    return { ...result, createdAt };
+  }
+  if (result.createdAt !== createdAt) {
+    throw new Error(`Run ${result.runId} createdAt does not match its start`);
+  }
+  return result;
 }
