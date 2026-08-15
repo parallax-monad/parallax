@@ -4,6 +4,7 @@ import { InMemoryRunStore, type RunStore } from "./store.js";
 
 export type CloseableRunStore = RunStore & {
   close(): Promise<void>;
+  checkReady(): Promise<void>;
 };
 
 /** Selects the configured backend without silently falling back on failure. */

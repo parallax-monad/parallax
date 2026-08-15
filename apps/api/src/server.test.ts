@@ -1,11 +1,13 @@
+import { EventEmitter } from "node:events";
 import { pathToFileURL } from "node:url";
 import type { ServerType } from "@hono/node-server";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { bootstrapBackendApp } from "./bootstrap/backend.js";
 import {
   isMainModule,
   logBackendListening,
   type StartConfiguredBackendServerOptions,
+  startConfiguredBackendProcess,
   startConfiguredBackendServer,
 } from "./server.js";
 
@@ -106,6 +108,108 @@ describe("configured backend launcher", () => {
 
     expect(startConfiguredBackendServer(options)).toBe(fakeServer);
     expect(received).toEqual({ hostname: "127.0.0.1", port: 8787 });
+  });
+
+  it("runs PostgreSQL migrations before opening the listener", async () => {
+    const calls: string[] = [];
+    const fakeServer = { close: () => undefined } as unknown as ServerType;
+    const databaseUrl = "postgres://user:pass@localhost:5432/parallax";
+
+    const server = await startConfiguredBackendProcess({
+      environment: {
+        ...environment,
+        RUN_STORE_BACKEND: "postgres",
+        DATABASE_URL: databaseUrl,
+      },
+      migrationRunner: async (receivedUrl) => {
+        calls.push(`migrate:${receivedUrl}`);
+      },
+      serverFactory: () => {
+        calls.push("listen");
+        return fakeServer;
+      },
+    });
+
+    expect(server).toBe(fakeServer);
+    expect(calls).toEqual([`migrate:${databaseUrl}`, "listen"]);
+  });
+
+  it("does not run PostgreSQL migrations for the memory backend", async () => {
+    let migrationCalls = 0;
+    const fakeServer = { close: () => undefined } as unknown as ServerType;
+
+    await startConfiguredBackendProcess({
+      environment,
+      migrationRunner: async () => {
+        migrationCalls += 1;
+      },
+      serverFactory: () => fakeServer,
+    });
+
+    expect(migrationCalls).toBe(0);
+  });
+
+  it("does not open the listener when PostgreSQL migration fails", async () => {
+    let serverFactoryCalls = 0;
+
+    await expect(
+      startConfiguredBackendProcess({
+        environment: {
+          ...environment,
+          RUN_STORE_BACKEND: "postgres",
+          DATABASE_URL: "postgres://user:pass@localhost:5432/parallax",
+        },
+        migrationRunner: async () => {
+          throw new Error("migration failed");
+        },
+        serverFactory: () => {
+          serverFactoryCalls += 1;
+          return { close: () => undefined } as never;
+        },
+      }),
+    ).rejects.toThrow("migration failed");
+
+    expect(serverFactoryCalls).toBe(0);
+  });
+
+  it("gracefully shuts down the HTTP server and Store on SIGTERM", async () => {
+    const signalSource = new EventEmitter();
+    const fakeServer = new EventEmitter();
+    let closeCalls = 0;
+    Object.assign(fakeServer, {
+      close(callback?: (error?: Error) => void) {
+        closeCalls += 1;
+        fakeServer.emit("close");
+        callback?.();
+        return fakeServer;
+      },
+    });
+    const disposer = vi.fn<() => Promise<void>>().mockResolvedValue(undefined);
+
+    const server = await startConfiguredBackendProcess({
+      environment,
+      store: {
+        async start() {},
+        async complete() {},
+        async fail() {},
+        async get() {
+          return undefined;
+        },
+      },
+      disposeStore: disposer,
+      signalSource,
+      serverFactory: () => fakeServer as unknown as ServerType,
+    });
+
+    signalSource.emit("SIGTERM");
+    signalSource.emit("SIGINT");
+    await server.shutdown();
+    await new Promise<void>((resolve) => setImmediate(resolve));
+
+    expect(closeCalls).toBe(1);
+    expect(disposer).toHaveBeenCalledTimes(1);
+    expect(signalSource.listenerCount("SIGTERM")).toBe(0);
+    expect(signalSource.listenerCount("SIGINT")).toBe(0);
   });
 
   it("fails before opening the server when token metadata is absent", () => {

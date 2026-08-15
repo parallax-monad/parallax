@@ -61,6 +61,16 @@ describe("backend runtime config", () => {
     ).toMatchObject({ RUN_STORE_BACKEND: "postgres" });
   });
 
+  it("rejects pooled URLs because migrations require session advisory locks", () => {
+    expect(() =>
+      parseRunStoreEnvironment({
+        RUN_STORE_BACKEND: "postgres",
+        DATABASE_URL:
+          "postgres://user:pass@ep-example-pooler.us-east-1.aws.neon.tech/neondb",
+      }),
+    ).toThrow(/must use a direct connection/);
+  });
+
   it("parses verified token metadata from the launcher environment", () => {
     expect(
       parseTokenRegistryEnvironment({

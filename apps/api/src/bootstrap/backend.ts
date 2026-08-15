@@ -22,7 +22,7 @@ import {
   UnsupportedAgentFlowError,
 } from "../ports.js";
 import { QuoteApplicationService } from "../quote-application.js";
-import { createHealthApp } from "../routes/health.js";
+import { createHealthApp, type ReadinessCheck } from "../routes/health.js";
 import { createReplayApp } from "../routes/replay.js";
 import { createConfiguredRunStore } from "../run-store-factory.js";
 import {
@@ -91,6 +91,8 @@ export type BackendAppDependencies = {
   quoteFlow?: QuoteAgentFlowPort;
   quoteRunner?: KuruLiveQuoteRunner;
   store?: RunStore;
+  /** Optional dependency probe exposed through `/readyz`. */
+  readinessCheck?: ReadinessCheck;
   /** Explicit disposer for a Store owned by this application. */
   disposeStore?: () => Promise<void>;
   replayRepository?: ReplayFixtureRepository;
@@ -98,6 +100,11 @@ export type BackendAppDependencies = {
 
 export type BackendApp = Hono & {
   close(): Promise<void>;
+};
+
+export type BackendServer = ServerType & {
+  /** Closes the HTTP listener and awaits application-owned resources. */
+  shutdown(): Promise<void>;
 };
 
 /** Composes the live Check and explicit recorded Replay HTTP applications. */
@@ -136,7 +143,7 @@ export function createBackendApp(
   });
 
   const app = new Hono();
-  app.route("/", createHealthApp());
+  app.route("/", createHealthApp(dependencies.readinessCheck));
   app.use(
     "/api/*",
     cors({
@@ -196,6 +203,8 @@ export type BootstrapBackendAppOptions = {
   quoteFlow?: QuoteAgentFlowPort;
   quoteRunner?: KuruLiveQuoteRunner;
   store?: RunStore;
+  /** Optional dependency probe exposed through `/readyz`. */
+  readinessCheck?: ReadinessCheck;
   /** Explicit disposer for a Store owned by this application. */
   disposeStore?: () => Promise<void>;
   replayRepository?: ReplayFixtureRepository;
@@ -229,6 +238,11 @@ export function bootstrapBackendApp(
   const disposeStore =
     options.disposeStore ??
     (configuredStore === undefined ? undefined : () => configuredStore.close());
+  const readinessCheck =
+    options.readinessCheck ??
+    (configuredStore === undefined
+      ? undefined
+      : () => configuredStore.checkReady());
 
   return createBackendApp({
     runtime,
@@ -238,6 +252,7 @@ export function bootstrapBackendApp(
     quoteFlow: options.quoteFlow,
     quoteRunner: options.quoteRunner,
     store,
+    readinessCheck,
     disposeStore,
     replayRepository: options.replayRepository,
   });
@@ -253,7 +268,7 @@ export type StartBackendServerOptions = BootstrapBackendAppOptions & {
 /** Bootstraps the validated runtime and starts the Node HTTP server. */
 export function startBackendServer(
   options: StartBackendServerOptions,
-): ServerType {
+): BackendServer {
   const environment = options.environment ?? process.env;
   const serverEnvironment = serverEnvironmentSchema.parse(environment);
   const listener = listenerConfigSchema.parse({
@@ -270,13 +285,35 @@ export function startBackendServer(
     options.onListening,
   );
 
+  let shutdownPromise: Promise<void> | undefined;
+  const shutdown = (): Promise<void> => {
+    shutdownPromise ??= new Promise<void>((resolve, reject) => {
+      const finish = (error?: Error): void => {
+        void app.close().then(() => {
+          if (error === undefined) {
+            resolve();
+          } else {
+            reject(error);
+          }
+        }, reject);
+      };
+
+      try {
+        server.close((error?: Error) => finish(error));
+      } catch (error) {
+        finish(error instanceof Error ? error : new Error(String(error)));
+      }
+    });
+    return shutdownPromise;
+  };
+
   if (typeof server.once === "function") {
     server.once("close", () => {
       void app.close();
     });
   }
 
-  return server;
+  return Object.assign(server, { shutdown });
 }
 
 function jsonError(

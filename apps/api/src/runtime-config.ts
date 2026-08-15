@@ -67,6 +67,18 @@ export const runStoreEnvironmentSchema = z
         message: "DATABASE_URL is required when RUN_STORE_BACKEND=postgres",
       });
     }
+    if (
+      environment.RUN_STORE_BACKEND === "postgres" &&
+      environment.DATABASE_URL !== undefined &&
+      isPooledDatabaseUrl(environment.DATABASE_URL)
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["DATABASE_URL"],
+        message:
+          "DATABASE_URL must use a direct connection; pooled -pooler URLs do not support migration advisory locks",
+      });
+    }
   });
 
 export type RunStoreEnvironment = z.infer<typeof runStoreEnvironmentSchema>;
@@ -75,6 +87,14 @@ export function parseRunStoreEnvironment(
   environment: unknown,
 ): RunStoreEnvironment {
   return runStoreEnvironmentSchema.parse(environment);
+}
+
+function isPooledDatabaseUrl(databaseUrl: string): boolean {
+  try {
+    return new URL(databaseUrl).hostname.includes("-pooler.");
+  } catch {
+    return false;
+  }
 }
 
 export const mossIntegrationConfigSchema = z

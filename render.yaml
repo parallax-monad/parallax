@@ -4,12 +4,17 @@ services:
     runtime: docker
     plan: free
     dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
     envVars:
       - key: MONAD_RPC_URL
         sync: false
       - key: PARALLAX_TOKEN_REGISTRY_JSON
         sync: false
       - key: CORS_ORIGIN
+        sync: false
+      - key: RUN_STORE_BACKEND
+        value: postgres
+      - key: DATABASE_URL
         sync: false
       - key: MOSS_RUNTIME_VERSION
         value: "0.1.0"

@@ -83,6 +83,40 @@ describe("backend Node runtime", () => {
     expect(quoteFlowCalled).toBe(false);
   });
 
+  it("reports readiness from the configured dependency probe", async () => {
+    const readinessCheck = vi
+      .fn<() => Promise<void>>()
+      .mockResolvedValue(undefined);
+    const app = createBackendApp({
+      runtime: bootstrapBackendRuntime({ environment, tokenRegistry }),
+      readinessCheck,
+    });
+
+    const response = await app.fetch(
+      new Request("https://api.example.test/readyz"),
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({ status: "ok" });
+    expect(readinessCheck).toHaveBeenCalledTimes(1);
+  });
+
+  it("fails readiness closed without exposing dependency errors", async () => {
+    const app = createBackendApp({
+      runtime: bootstrapBackendRuntime({ environment, tokenRegistry }),
+      readinessCheck: async () => {
+        throw new Error("database password must not be returned");
+      },
+    });
+
+    const response = await app.fetch(
+      new Request("https://api.example.test/readyz"),
+    );
+
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toEqual({ status: "not_ready" });
+  });
+
   it("fails closed when production runtime configuration is incomplete", () => {
     expect(() =>
       bootstrapBackendApp({ environment: {}, tokenRegistry }),
