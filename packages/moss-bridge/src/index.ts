@@ -34,5 +34,19 @@ export {
   normalizeRecordedKuruEvidence,
   replayKuruEvidence,
 } from "./normalize.js";
+export {
+  assertLiveProvenance,
+  evaluateKuruEvidence,
+  firstIntegrationError,
+  type GenericEvidenceContext,
+  hasMismatchedRuntimeProvenance,
+  type KuruLiveRunner,
+  lastFailedStage,
+  MossProvider,
+  type MossProviderOptions,
+  type MossProviderRuntime,
+  toGenericEvidence,
+  withSimulatorPinnedBlock,
+} from "./provider.js";
 export { redact, toJsonValue } from "./serialize.js";
 export type * from "./types.js";

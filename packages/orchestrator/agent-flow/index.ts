@@ -2,11 +2,16 @@ import { createHash } from "node:crypto";
 import {
   type AssetReference,
   convertAtomicAmountToHuman,
+  type EvidenceField,
   type EvidenceItem,
+  EvidenceProviderError,
   type EvidenceRef,
   evidenceItemSchema,
   type FailedRunResult,
   failedRunResultSchema,
+  type GenericEvidence,
+  type GenericProviderFailure,
+  type GenericSwapIntent,
   type NormalizedSwapIntent,
   type P0ReasonCode,
   type Quote,
@@ -20,15 +25,18 @@ import {
 } from "@parallax/contracts";
 import {
   classifyLiveError,
+  firstIntegrationError,
+  hasMismatchedRuntimeProvenance,
   type LiveKuruResult,
+  lastFailedStage,
+  MossProvider,
   type NormalizedKuruEvidence,
   type NormalizedKuruSwapIntent,
   type NormalizedMossError,
   runKuruLiveQuote,
   runKuruLiveSwap,
-  type Sourced,
 } from "@parallax/moss-bridge";
-import { evaluateKuruEvidence } from "@parallax/risk";
+import { evaluateEvidence } from "@parallax/risk";
 
 export type LiveAgentFlowRuntime = {
   rpcUrl: string;
@@ -91,9 +99,13 @@ export class UnsupportedKuruAgentFlowError extends Error {
 /**
  * Workstream D's real Agent Flow boundary.
  *
- * Moss stays behind the bridge and Risk stays behind its deterministic API.
- * This class only adapts the normalized API Intent into the live Kuru call and
- * projects the resulting Evidence + Risk result into the shared Run contract.
+ * Evidence acquisition now runs behind the Evidence Provider abstraction:
+ * `MossProvider` owns every Moss-specific concern (runtime invocation,
+ * provenance truthfulness, failure classification) and returns generic
+ * Evidence. This class only adapts the normalized API Intent into the generic
+ * evaluation input, routes the Provider failure contract into the shared
+ * `LiveAgentFlowError` shape, and projects generic Evidence + Risk output into
+ * the shared Run contract.
  */
 export class KuruLiveAgentFlow {
   public constructor(
@@ -101,94 +113,45 @@ export class KuruLiveAgentFlow {
   ) {}
 
   public async check(input: LiveAgentFlowInput): Promise<RunResult> {
-    if (input.moss.runtimePath === undefined) {
-      throw new LiveAgentFlowError({
-        code: "MOSS_UNAVAILABLE",
-        message: "The configured Moss runtime path is missing",
-        integrationStatus: "UNAVAILABLE",
-        source: "moss",
-      });
-    }
+    const provider = new MossProvider({
+      runtime: input.moss,
+      runner: this.runner,
+    });
 
-    if (input.intent.protocol !== "kuru" || input.intent.chainId !== 143) {
-      throw unsupportedIntentError();
-    }
-
-    let live: Awaited<ReturnType<KuruLiveRunner>>;
+    let evidence: GenericEvidence;
     try {
-      live = await this.runner({
+      evidence = await provider.evaluate({
         runId: input.runId,
-        intent: toMossIntent(
+        intent: toGenericIntent(
           input.intent,
           input.tokenInDecimals,
           input.tokenOutDecimals,
         ),
-        rpcUrl: input.moss.rpcUrl,
-        runtimePath: input.moss.runtimePath,
-        runtimeVersion: input.moss.runtimeVersion,
-        runtimeRevision: input.moss.runtimeRevision,
+        tokenInDecimals: input.tokenInDecimals,
+        tokenOutDecimals: input.tokenOutDecimals,
       });
     } catch (error) {
+      if (
+        error instanceof EvidenceProviderError &&
+        error.code === "UNSUPPORTED"
+      ) {
+        throw unsupportedIntentError();
+      }
       throw toLiveAgentFlowError(error);
     }
 
-    const noRoute = live.evidence.executionStatus === "NO_ROUTE";
-    assertLiveProvenance(
-      live.evidence,
-      live.runtime,
-      live.observedChainId,
-      live.simulatorPinnedBlock,
-      input.moss,
-      !noRoute && live.evidence.integrationStatus === "OK",
-    );
-
-    const evidence = withSimulatorPinnedBlock(
-      live.evidence,
-      live.simulatorPinnedBlock,
-    );
-
-    if (live.observedChainId === undefined) {
-      throw new LiveAgentFlowError({
-        code: "RPC_UNAVAILABLE",
-        message: "The configured RPC did not return a chain ID",
-        integrationStatus: "UNAVAILABLE",
-        source: "rpc",
-        stage: "DISCOVER",
-      });
-    }
-
-    const integrationError = firstIntegrationError(evidence);
-    if (integrationError !== undefined) {
-      const flowError = toLiveAgentFlowError(integrationError, {
-        stage: integrationError.stage,
-        source: integrationError.source,
-      });
-      throw new LiveAgentFlowError({
-        code: flowError.code,
-        message: flowError.message,
-        integrationStatus: flowError.integrationStatus,
-        source: flowError.source,
-        stage: flowError.stage,
-        cause: flowError,
-        partialRunResult: buildIntegrationErrorResult(
-          input.runId,
-          input.intent,
-          evidence,
-          flowError,
-        ),
-      });
-    }
-    if (evidence.integrationStatus !== "OK") {
-      const flowError = toLiveAgentFlowError(
-        {
-          code: evidence.integrationStatus,
-          message:
-            "Live Evidence reported an integration failure without details",
-          integrationStatus: evidence.integrationStatus,
-          source: "moss",
-        },
-        { stage: lastFailedStage(live) },
-      );
+    if (evidence.provider.status !== "OK") {
+      const failure = evidence.provider.failure;
+      const flowError =
+        failure === undefined
+          ? new LiveAgentFlowError({
+              code: "INTERNAL_ERROR",
+              message:
+                "The Evidence Provider failed without a classified failure",
+              integrationStatus: evidence.provider.status,
+              source: "unknown",
+            })
+          : liveAgentFlowErrorFromFailure(failure);
       throw new LiveAgentFlowError({
         code: flowError.code,
         message: flowError.message,
@@ -205,12 +168,17 @@ export class KuruLiveAgentFlow {
       });
     }
 
-    const risk = evaluateKuruEvidence(evidence);
+    const risk = evaluateEvidence(evidence);
     return buildRunResult(input.runId, input.intent, evidence, risk);
   }
 }
 
-/** Backend flow for the pre-check quote; it intentionally stops before Action. */
+/**
+ * Backend flow for the pre-check quote; it intentionally stops before Action.
+ *
+ * The Quote boundary stays Kuru-specific for this Work Package: Protocol
+ * Adapter extraction (quote/build transaction) is deferred to a follow-up.
+ */
 export class KuruLiveQuoteAgentFlow {
   public constructor(
     private readonly runner: typeof runKuruLiveQuote = runKuruLiveQuote,
@@ -290,7 +258,7 @@ export class KuruLiveQuoteAgentFlow {
           integrationStatus: live.evidence.integrationStatus,
           source: "moss",
         },
-        { stage: lastFailedStage(live) },
+        { stage: lastFailedStage(live.stages) },
       );
     }
 
@@ -310,8 +278,8 @@ function toMossIntent(
   return {
     chainId: String(intent.chainId),
     sender: intent.sender,
-    tokenIn: toMossAsset(intent.tokenIn),
-    tokenOut: toMossAsset(intent.tokenOut),
+    tokenIn: assetKey(intent.tokenIn),
+    tokenOut: assetKey(intent.tokenOut),
     amountIn: convertAtomicAmountToHuman(
       intent.amountInAtomic,
       tokenInDecimals,
@@ -328,81 +296,50 @@ function toMossIntent(
   };
 }
 
-function toMossAsset(asset: AssetReference): string {
+/**
+ * The generic provider evaluation intent: human-readable amounts, provider
+ * asset keys, and the core protocol / chain identity.
+ */
+function toGenericIntent(
+  intent: NormalizedSwapIntent,
+  tokenInDecimals: number,
+  tokenOutDecimals: number,
+): GenericSwapIntent {
+  const boundary = intent.economicBoundary;
+  return {
+    chainId: intent.chainId,
+    protocol: intent.protocol,
+    sender: intent.sender,
+    tokenIn: assetKey(intent.tokenIn),
+    tokenOut: assetKey(intent.tokenOut),
+    amountIn: convertAtomicAmountToHuman(
+      intent.amountInAtomic,
+      tokenInDecimals,
+    ),
+    ...(boundary.availability === "available"
+      ? {
+          minimumReceived: convertAtomicAmountToHuman(
+            boundary.minimumReceivedAtomic,
+            tokenOutDecimals,
+          ),
+          minimumReceivedSource: boundary.source,
+        }
+      : { minimumReceivedSource: "unavailable" }),
+  };
+}
+
+function assetKey(asset: AssetReference): string {
   return asset.kind === "native" ? "native" : asset.address;
-}
-
-type RuntimeProvenanceIdentity = {
-  runtimeVersion: string;
-  runtimeRevision: string;
-  checkoutRevision?: string;
-  packageVersions: Record<string, string>;
-};
-
-const REQUIRED_RUNTIME_PACKAGES = [
-  "@themoss/core",
-  "@themoss/erc",
-  "@themoss/protocol-kuru",
-  "@themoss/simulator",
-  "@themoss/system",
-];
-
-function hasMismatchedRuntimeProvenance(
-  evidence: NormalizedKuruEvidence,
-  runtimeIdentity: RuntimeProvenanceIdentity,
-  observedChainId: number | undefined,
-  runtime: LiveAgentFlowRuntime,
-): boolean {
-  return (
-    !/^[0-9a-f]{40}$/i.test(runtime.runtimeRevision) ||
-    (observedChainId !== undefined && observedChainId !== 143) ||
-    runtimeIdentity.runtimeVersion !== runtime.runtimeVersion ||
-    runtimeIdentity.runtimeRevision !== runtime.runtimeRevision ||
-    runtimeIdentity.checkoutRevision !== runtime.runtimeRevision ||
-    REQUIRED_RUNTIME_PACKAGES.some(
-      (name) =>
-        runtimeIdentity.packageVersions[name] !== runtime.runtimeVersion,
-    ) ||
-    evidence.replayMode !== false ||
-    evidence.isReplay !== false ||
-    evidence.isMock !== false ||
-    evidence.runtimeVersion !== runtime.runtimeVersion ||
-    evidence.runtimeRevision !== runtime.runtimeRevision
-  );
-}
-
-function assertLiveProvenance(
-  evidence: NormalizedKuruEvidence,
-  runtimeIdentity: RuntimeProvenanceIdentity,
-  observedChainId: number | undefined,
-  simulatorPinnedBlock: string | undefined,
-  runtime: LiveAgentFlowRuntime,
-  requireSimulatorPinnedBlock = true,
-): void {
-  if (
-    hasMismatchedRuntimeProvenance(
-      evidence,
-      runtimeIdentity,
-      observedChainId,
-      runtime,
-    ) ||
-    (requireSimulatorPinnedBlock &&
-      !/^\d+$/.test(simulatorPinnedBlock ?? "")) ||
-    (evidence.simulatorPinnedBlock !== undefined &&
-      evidence.simulatorPinnedBlock !== simulatorPinnedBlock)
-  ) {
-    throw new LiveAgentFlowError({
-      code: "INTERNAL_ERROR",
-      message: "Live Agent Flow returned mismatched runtime provenance",
-      integrationStatus: "INTEGRATION_ERROR",
-      source: "moss",
-    });
-  }
 }
 
 function assertQuoteProvenance(
   evidence: NormalizedKuruEvidence,
-  runtimeIdentity: RuntimeProvenanceIdentity,
+  runtimeIdentity: {
+    runtimeVersion: string;
+    runtimeRevision: string;
+    checkoutRevision?: string;
+    packageVersions: Record<string, string>;
+  },
   observedChainId: number | undefined,
   runtime: LiveAgentFlowRuntime,
 ): void {
@@ -423,32 +360,6 @@ function assertQuoteProvenance(
   }
 }
 
-function withSimulatorPinnedBlock(
-  evidence: NormalizedKuruEvidence,
-  simulatorPinnedBlock: string | undefined,
-): NormalizedKuruEvidence {
-  if (evidence.simulatorPinnedBlock === simulatorPinnedBlock) return evidence;
-  return { ...evidence, simulatorPinnedBlock };
-}
-
-function firstIntegrationError(
-  evidence: NormalizedKuruEvidence,
-): NormalizedMossError | undefined {
-  if (evidence.integrationStatus !== "OK") {
-    return evidence.errors.value?.find(
-      (error) => error.integrationStatus !== "OK",
-    );
-  }
-
-  return undefined;
-}
-
-function lastFailedStage(
-  live: Awaited<ReturnType<KuruLiveRunner>>,
-): NormalizedMossError["stage"] {
-  return [...live.stages].reverse().find((stage) => !stage.success)?.stage;
-}
-
 function toLiveAgentFlowError(
   error: unknown,
   context: {
@@ -457,6 +368,22 @@ function toLiveAgentFlowError(
   } = {},
 ): LiveAgentFlowError {
   if (error instanceof LiveAgentFlowError) return error;
+  if (error instanceof EvidenceProviderError) {
+    return liveAgentFlowErrorFromFailure({
+      code:
+        error.code === "TIMEOUT"
+          ? "TIMEOUT"
+          : error.code === "UNAVAILABLE"
+            ? "UNAVAILABLE"
+            : "INTEGRATION_ERROR",
+      message: error.message,
+      integrationStatus: error.integrationStatus ?? "INTEGRATION_ERROR",
+      source: error.source ?? "unknown",
+      stage: error.stage,
+      normalization: "PRESERVED",
+      retryable: error.retryable,
+    });
+  }
 
   const classified = classifyLiveError(error, context);
   const source = classified.source;
@@ -492,6 +419,27 @@ function toLiveAgentFlowError(
   });
 }
 
+/** Maps the provider failure contract into the API's Agent Flow error shape. */
+function liveAgentFlowErrorFromFailure(
+  failure: GenericProviderFailure,
+): LiveAgentFlowError {
+  const code =
+    failure.code === "TIMEOUT"
+      ? "TIMEOUT"
+      : failure.integrationStatus === "UNAVAILABLE" && failure.source === "rpc"
+        ? "RPC_UNAVAILABLE"
+        : failure.integrationStatus === "UNAVAILABLE"
+          ? "MOSS_UNAVAILABLE"
+          : "INTERNAL_ERROR";
+  return new LiveAgentFlowError({
+    code,
+    message: failure.message,
+    integrationStatus: failure.integrationStatus,
+    source: failure.source,
+    stage: failure.stage,
+  });
+}
+
 function unsupportedIntentError(): UnsupportedKuruAgentFlowError {
   return new UnsupportedKuruAgentFlowError(
     "Live Kuru Agent Flow supports Monad Kuru checks only",
@@ -508,7 +456,7 @@ type CollectedLiveEvidence = {
 
 function collectLiveEvidence(
   collector: EvidenceCollector,
-  evidence: NormalizedKuruEvidence,
+  evidence: GenericEvidence,
   partial: boolean,
 ): CollectedLiveEvidence {
   const prefix = partial ? "Partial live" : "Live";
@@ -553,7 +501,7 @@ function collectLiveEvidence(
   );
   const coverage = collector.addGenericEvidence(
     "simulation-coverage",
-    evidence.simulationCoverage,
+    evidence.simulation,
     "SIMULATE",
     `${prefix} simulation coverage Evidence`,
   );
@@ -569,15 +517,15 @@ function collectLiveEvidence(
 function buildRunResult(
   runId: string,
   intent: NormalizedSwapIntent,
-  evidence: NormalizedKuruEvidence,
-  risk: ReturnType<typeof evaluateKuruEvidence>,
+  evidence: GenericEvidence,
+  risk: ReturnType<typeof evaluateEvidence>,
 ): RunResult {
   const collector = new EvidenceCollector(evidence);
   const { quote, receipt, outcome, assetChanges, coverage } =
     collectLiveEvidence(collector, evidence, false);
 
   const noRoute =
-    evidence.executionStatus === "NO_ROUTE"
+    evidence.execution.status === "NO_ROUTE"
       ? collector.noRouteClassification(intent, evidence)
       : undefined;
   const pathComplete =
@@ -586,7 +534,7 @@ function buildRunResult(
   const completeness = collector.addGenericEvidence(
     "completeness",
     {
-      ...evidence.simulationCoverage,
+      ...evidence.simulation,
       value: pathComplete ? {} : null,
       source: "derived",
       reproducibility: "REPRODUCIBLE",
@@ -600,7 +548,7 @@ function buildRunResult(
   const route = buildRoute(intent, quote, evidence);
   const simulatedOutput =
     intent.economicBoundary.availability === "available" &&
-    evidence.executionStatus === "SUCCESS"
+    evidence.execution.status === "SUCCESS"
       ? collector.simulatedTokenOut(intent, evidence, {
           receipt,
           outcome,
@@ -625,14 +573,14 @@ function buildRunResult(
   const ruleResults = [completenessRule, executionRule, economicRule];
   const scope = buildScope(ruleResults, evidence, noRoute);
   const verdict = effectiveVerdict(risk.verdict, ruleResults, scope);
-  const quoteResult = projectQuote(evidence);
+  const quoteResult = projectGenericQuote(evidence);
 
   return runResultSchema.parse({
     runId,
     replayMode: false,
     intent,
-    ...(evidence.simulatorPinnedBlock
-      ? { simulatorPinnedBlock: evidence.simulatorPinnedBlock }
+    ...(evidence.provenance.simulatorPinnedBlock
+      ? { simulatorPinnedBlock: evidence.provenance.simulatorPinnedBlock }
       : {}),
     status: "completed",
     systemStatus: "OK",
@@ -651,7 +599,7 @@ function buildRunResult(
 function buildIntegrationErrorResult(
   runId: string,
   intent: NormalizedSwapIntent,
-  evidence: NormalizedKuruEvidence,
+  evidence: GenericEvidence,
   flowError: LiveAgentFlowError,
 ): FailedRunResult {
   const collector = new EvidenceCollector(evidence);
@@ -660,7 +608,7 @@ function buildIntegrationErrorResult(
   const route = buildRoute(intent, quote, evidence);
   const executionPreserved =
     route.availability === "available" && quote !== undefined;
-  const quoteResult = projectQuote(evidence);
+  const quoteResult = projectGenericQuote(evidence);
   const ruleResults: RuleResult[] = executionPreserved
     ? [
         {
@@ -676,8 +624,8 @@ function buildIntegrationErrorResult(
     runId,
     replayMode: false,
     intent,
-    ...(evidence.simulatorPinnedBlock
-      ? { simulatorPinnedBlock: evidence.simulatorPinnedBlock }
+    ...(evidence.provenance.simulatorPinnedBlock
+      ? { simulatorPinnedBlock: evidence.provenance.simulatorPinnedBlock }
       : {}),
     status: "integration_error",
     systemStatus: "INTEGRATION_ERROR",
@@ -694,6 +642,41 @@ function buildIntegrationErrorResult(
   });
 }
 
+/**
+ * Generic Quote projection used by the live Check path. The pre-check Quote
+ * flow keeps its own Kuru-bound projection (see `projectQuote`).
+ */
+function projectGenericQuote(evidence: GenericEvidence): Quote | undefined {
+  if (
+    evidence.quote.source !== "quote" ||
+    evidence.provenance.runtimeVersion === undefined ||
+    evidence.provenance.runtimeRevision === undefined ||
+    evidence.quote.value === null
+  ) {
+    return undefined;
+  }
+
+  const estimatedAmountOut = evidence.quote.value.estimatedAmountOut;
+  const minimumAmountOut = evidence.quote.value.minimumAmountOut;
+  const candidate = {
+    estimatedAmountOut,
+    ...(minimumAmountOut === undefined ? {} : { minimumAmountOut }),
+    source: "quote" as const,
+    ...(evidence.quote.blockNumber
+      ? { blockNumber: evidence.quote.blockNumber }
+      : {}),
+    ...(evidence.quote.fetchedAt
+      ? { fetchedAt: evidence.quote.fetchedAt }
+      : {}),
+    runtimeVersion: evidence.provenance.runtimeVersion,
+    runtimeRevision: evidence.provenance.runtimeRevision,
+  };
+
+  const parsed = quoteSchema.safeParse(candidate);
+  return parsed.success ? parsed.data : undefined;
+}
+
+/** Kuru-bound Quote projection retained for the deferred Quote boundary. */
 function projectQuote(evidence: NormalizedKuruEvidence): Quote | undefined {
   if (
     evidence.quote.source !== "quote" ||
@@ -780,7 +763,7 @@ function integrationErrorStage(
 }
 
 function integrationScope(
-  evidence: NormalizedKuruEvidence,
+  evidence: GenericEvidence,
   stage: string | undefined,
   executionPreserved: boolean,
 ): ScopeDisclosure {
@@ -826,7 +809,7 @@ function integrationScope(
     integrationStageScope(
       "P0-CHECK-SIMULATION-COVERAGE-001",
       "Simulation coverage",
-      evidence.simulationCoverage.value !== null,
+      evidence.simulation.value !== null,
       simulationTerminalBeforeEntry,
     ),
   ];
@@ -861,7 +844,7 @@ function integrationStageScope(
 function buildRoute(
   intent: NormalizedSwapIntent,
   quote: EvidenceRef | undefined,
-  evidence: NormalizedKuruEvidence,
+  evidence: GenericEvidence,
 ) {
   if (
     quote !== undefined &&
@@ -878,7 +861,7 @@ function buildRoute(
     };
   }
 
-  if (evidence.executionStatus === "NO_ROUTE") {
+  if (evidence.execution.status === "NO_ROUTE") {
     return {
       availability: "unavailable" as const,
       reason: "No verified Kuru market path was available",
@@ -892,9 +875,9 @@ function buildRoute(
 }
 
 function completenessRuleResult(
-  completeness: ReturnType<typeof evaluateKuruEvidence>["evidenceCompleteness"],
+  completeness: ReturnType<typeof evaluateEvidence>["evidenceCompleteness"],
   evidence: EvidenceRef | undefined,
-  normalized: NormalizedKuruEvidence,
+  normalized: GenericEvidence,
   noRoute: EvidenceRef | undefined,
 ): RuleResult {
   if (
@@ -919,14 +902,14 @@ function completenessRuleResult(
 }
 
 function executionRuleResult(
-  evidence: NormalizedKuruEvidence,
+  evidence: GenericEvidence,
   route: ReturnType<typeof buildRoute>,
   quote: EvidenceRef | undefined,
   noRoute: EvidenceRef | undefined,
   coverage: EvidenceRef | undefined,
 ): RuleResult {
   if (
-    evidence.executionStatus === "SUCCESS" &&
+    evidence.execution.status === "SUCCESS" &&
     route.availability === "available" &&
     quote !== undefined
   ) {
@@ -938,7 +921,7 @@ function executionRuleResult(
     };
   }
 
-  if (evidence.executionStatus === "NO_ROUTE" && noRoute !== undefined) {
+  if (evidence.execution.status === "NO_ROUTE" && noRoute !== undefined) {
     return {
       ruleId: "P0-EXECUTION-001",
       status: "FAIL",
@@ -959,7 +942,7 @@ function executionRuleResult(
 
 function economicRuleResult(
   intent: NormalizedSwapIntent,
-  evidence: NormalizedKuruEvidence,
+  evidence: GenericEvidence,
   simulatedOutput: SimulatedTokenOutResult | undefined,
 ): RuleResult {
   if (intent.economicBoundary.availability === "unavailable") {
@@ -972,7 +955,7 @@ function economicRuleResult(
     };
   }
 
-  if (evidence.executionStatus === "NO_ROUTE") {
+  if (evidence.execution.status === "NO_ROUTE") {
     return {
       ruleId: "P0-ECONOMIC-001",
       status: "NOT_APPLICABLE",
@@ -1012,7 +995,7 @@ function economicRuleResult(
 }
 
 function effectiveVerdict(
-  riskVerdict: ReturnType<typeof evaluateKuruEvidence>["verdict"],
+  riskVerdict: ReturnType<typeof evaluateEvidence>["verdict"],
   ruleResults: RuleResult[],
   scope: ScopeDisclosure,
 ) {
@@ -1040,7 +1023,7 @@ function effectiveVerdict(
 }
 
 function summaryFor(
-  verdict: ReturnType<typeof evaluateKuruEvidence>["verdict"],
+  verdict: ReturnType<typeof evaluateEvidence>["verdict"],
   ruleResults: RuleResult[],
 ): string {
   if (
@@ -1070,7 +1053,7 @@ function summaryFor(
 
 function buildScope(
   ruleResults: RuleResult[],
-  evidence: NormalizedKuruEvidence,
+  evidence: GenericEvidence,
   noRoute: EvidenceRef | undefined,
 ): ScopeDisclosure {
   const ruleScope: ScopeDisclosure = ruleResults.map(
@@ -1106,9 +1089,10 @@ function buildScope(
   );
 
   const terminalStage =
-    noRoute !== undefined && evidence.executionStatus === "NO_ROUTE"
-      ? evidence.errors.value?.find((error) => error.code === "NO_ROUTE")
-          ?.stage === "ACTION"
+    noRoute !== undefined && evidence.execution.status === "NO_ROUTE"
+      ? evidence.provider.errors.value?.find(
+          (error) => error.code === "NO_ROUTE",
+        )?.stage === "ACTION"
         ? "ACTION"
         : "QUOTE"
       : undefined;
@@ -1127,7 +1111,7 @@ function buildScope(
   const coverageScope = stageScope(
     "P0-CHECK-SIMULATION-COVERAGE-001",
     "Simulation coverage",
-    evidence.simulationCoverage.value !== null,
+    evidence.simulation.value !== null,
     terminalStage !== undefined,
   );
 
@@ -1171,11 +1155,11 @@ function labelFor(ruleId: RuleResult["ruleId"]): string {
   }
 }
 
-function evidenceReasonCode(evidence: NormalizedKuruEvidence): P0ReasonCode {
-  if (evidence.simulationCoverage.value?.halted === true) {
+function evidenceReasonCode(evidence: GenericEvidence): P0ReasonCode {
+  if (evidence.simulation.value?.halted === true) {
     return "SIMULATION_HALTED";
   }
-  if (evidence.simulationCoverage.value?.complete !== true) {
+  if (evidence.simulation.value?.complete !== true) {
     return "SIMULATION_COVERAGE_MISSING";
   }
   if (evidence.warnings.value !== null && evidence.warnings.value.length > 0) {
@@ -1218,11 +1202,11 @@ function isTrustedRef(reference: EvidenceRef): boolean {
 class EvidenceCollector {
   public readonly items: EvidenceItem[] = [];
 
-  public constructor(private readonly normalized: NormalizedKuruEvidence) {}
+  public constructor(private readonly evidence: GenericEvidence) {}
 
   public addGenericEvidence(
     suffix: string,
-    field: Sourced<unknown>,
+    field: EvidenceField<unknown>,
     stage: "QUOTE" | "ACTION" | "SIMULATE",
     summary: string,
     extra: Record<string, unknown> = {},
@@ -1236,8 +1220,8 @@ class EvidenceCollector {
           ? "warning"
           : "confirmed");
     const item = evidenceItemSchema.parse({
-      key: `${this.normalized.mossCommit ?? "live"}:${suffix}`,
-      ...provenance(this.normalized, field),
+      key: `${this.evidence.provenance.commit ?? "live"}:${suffix}`,
+      ...provenance(this.evidence, field),
       kind: "generic",
       status,
       summary,
@@ -1251,9 +1235,9 @@ class EvidenceCollector {
 
   public noRouteClassification(
     intent: NormalizedSwapIntent,
-    evidence: NormalizedKuruEvidence,
+    evidence: GenericEvidence,
   ): EvidenceRef | undefined {
-    const error = evidence.errors.value?.find(
+    const error = evidence.provider.errors.value?.find(
       (candidate) => candidate.code === "NO_ROUTE",
     );
     if (
@@ -1266,7 +1250,7 @@ class EvidenceCollector {
     const stage = error.stage === "ACTION" ? "ACTION" : "QUOTE";
     const blockNumber = evidence.blockNumber.value ?? undefined;
     const raw = evidenceItemSchema.parse({
-      key: `${evidence.mossCommit ?? "live"}:no-route-raw`,
+      key: `${evidence.provenance.commit ?? "live"}:no-route-raw`,
       ...provenance(evidence, evidence.blockNumber),
       ...(blockNumber ? { blockNumber } : {}),
       kind: "no_route_raw_output",
@@ -1275,7 +1259,7 @@ class EvidenceCollector {
       source: error.source,
       stage,
       payloadRef: {
-        locator: `live://${evidence.mossCommit ?? "unknown"}/${stage}/error`,
+        locator: `live://${evidence.provenance.commit ?? "unknown"}/${stage}/error`,
         encoding: "json",
         fingerprint: `sha256:${createHash("sha256")
           .update(JSON.stringify(error))
@@ -1285,7 +1269,7 @@ class EvidenceCollector {
     this.items.push(raw);
 
     const classification = evidenceItemSchema.parse({
-      key: `${evidence.mossCommit ?? "live"}:no-route-classification`,
+      key: `${evidence.provenance.commit ?? "live"}:no-route-classification`,
       ...provenance(evidence, evidence.blockNumber),
       ...(blockNumber ? { blockNumber } : {}),
       kind: "no_route_classification",
@@ -1314,7 +1298,7 @@ class EvidenceCollector {
 
   public simulatedTokenOut(
     intent: NormalizedSwapIntent,
-    evidence: NormalizedKuruEvidence,
+    evidence: GenericEvidence,
     inputs: {
       receipt?: EvidenceRef;
       outcome?: EvidenceRef;
@@ -1339,7 +1323,7 @@ class EvidenceCollector {
     if (inputEvidenceRefs.length === 0) return undefined;
 
     const item = evidenceItemSchema.parse({
-      key: `${evidence.mossCommit ?? "live"}:simulated-token-out`,
+      key: `${evidence.provenance.commit ?? "live"}:simulated-token-out`,
       ...provenance(evidence, evidence.blockNumber),
       kind: "simulated_token_out",
       status: "confirmed",
@@ -1365,16 +1349,16 @@ class EvidenceCollector {
 }
 
 function provenance(
-  normalized: NormalizedKuruEvidence,
+  evidence: GenericEvidence,
   field: { blockNumber?: string; reproducibility: string },
 ): Record<string, unknown> {
   return {
     ...(field.blockNumber ? { blockNumber: field.blockNumber } : {}),
-    ...(normalized.simulatorPinnedBlock
-      ? { simulatorPinnedBlock: normalized.simulatorPinnedBlock }
+    ...(evidence.provenance.simulatorPinnedBlock
+      ? { simulatorPinnedBlock: evidence.provenance.simulatorPinnedBlock }
       : {}),
-    runtimeVersion: normalized.runtimeVersion,
-    runtimeRevision: normalized.runtimeRevision,
+    runtimeVersion: evidence.provenance.runtimeVersion,
+    runtimeRevision: evidence.provenance.runtimeRevision,
     reproducibility: field.reproducibility,
     isReplay: false,
     isMock: false,
@@ -1409,7 +1393,7 @@ type SimulatedTokenOutResult = {
 
 function extractSimulatedTokenOut(
   intent: NormalizedSwapIntent,
-  evidence: NormalizedKuruEvidence,
+  evidence: GenericEvidence,
 ): SimulatedTokenOut | undefined {
   const outcome = isRecord(evidence.outcome.value)
     ? exactOutputFromRecord(evidence.outcome.value, intent, evidence)
@@ -1450,7 +1434,7 @@ function extractSimulatedTokenOut(
 function exactOutputFromRecord(
   value: Record<string, unknown>,
   intent: NormalizedSwapIntent,
-  evidence: NormalizedKuruEvidence,
+  evidence: GenericEvidence,
 ): SimulatedTokenOut | undefined {
   const amountReceivedAtomic = firstString(value, ["amountReceivedAtomic"]);
   const amount =

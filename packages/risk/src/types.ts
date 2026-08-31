@@ -1,7 +1,7 @@
 import type {
-  IntegrationStatus,
-  NormalizedKuruEvidence,
-} from "@parallax/moss-bridge";
+  GenericExecutionStatus,
+  GenericProviderStatus,
+} from "@parallax/contracts";
 
 export type EvidenceCompleteness = "COMPLETE" | "MISSING" | "UNKNOWN";
 export type EconomicBoundaryStatus =
@@ -12,8 +12,8 @@ export type EconomicBoundaryStatus =
 export type Verdict = "PROCEED" | "ADJUST" | "STOP" | "UNKNOWN";
 
 export type RuleResult = {
-  integrationStatus: IntegrationStatus;
-  executionStatus: NormalizedKuruEvidence["executionStatus"];
+  integrationStatus: GenericProviderStatus;
+  executionStatus: GenericExecutionStatus;
   evidenceCompleteness: EvidenceCompleteness;
   economicBoundary: EconomicBoundaryStatus;
   verdict: Verdict;
