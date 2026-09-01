@@ -18,7 +18,7 @@
 目前可以被真实证据支持的结论是：
 
 1. **DeFi 执行风险和 bad execution 会造成真实经济损失。** Slippage、price impact、MEV、sandwich 和 failed transactions 都有学术或行业数据支持。
-2. **Pre-execution protection 已经被市场验证。** Flashbots、Blockaid、Hypernative 以及主流 Agent Wallet 都把交易前检查做成核心产品能力。
+2. **Pre-execution protection 已有真实采用证据。** Flashbots、Blockaid、Hypernative 以及主流 Agent Wallet 都把交易前检查做成核心产品能力；其中部分规模与价值指标来自厂商自报。
 3. **AI Agent 不能被假设为可靠的金融决策者。** 学术 benchmark 显示 LLM 的 general intelligence 并不自动转化为好的 financial risk management；最新 PACE 研究也直接测试 deterministic guard layer 对 unsafe execution 的影响。
 4. **“Should this execute?” 已经有直接竞品。** ChainSage、TickTape、Hypernative、PACE 都与这个方向重叠。
 5. **Parallax 更可信的缺口是 remediation + re-verification。** 即：不仅告诉用户/Agent“不应该执行”，而是解释 Cause、指出应该改变哪个 relevant variable，并重新验证调整是否真的解决问题。
@@ -169,6 +169,7 @@ Source: https://www.sciencedirect.com/science/article/pii/S2096720925000673
 - victim losses 约 **$409,236**
 - public sandwich victims 中约 **40%** 在 60 天内迁移到 private routing
 - repeated exposure 后上升到 **54%**
+- 按该研究的方法，首次 sandwich 后的 churn 最高约 **7.5%**，随后降至约 **1–2%**
 
 Source: https://arxiv.org/abs/2512.17602
 
@@ -248,7 +249,7 @@ Source: https://arxiv.org/abs/2203.07774
 
 # 11. Pre-execution protection 是否已经证明有实际价值？
 
-答案：**是，而且很明显。**
+相邻产品已经提供较强的真实采用和价值证据，但厂商自报结果不能直接外推为 Parallax 的效果。
 
 ---
 
@@ -272,9 +273,9 @@ Flashbots 的公开数据还说明 Protect 提供：
 
 Source: https://collective.flashbots.net/t/publishing-flashbots-protect-and-mev-share-data/3087
 
-这不是 Parallax，但证明了：
+这不是 Parallax；作为厂商公开 telemetry，它提供了相邻采用与价值证据：
 
-> **在 execution 前增加一层 independent protection 可以创造足够价值，让数千万真实交易采用。**
+> **在 execution 前增加一层 independent protection，可能创造足够价值让真实交易采用。**
 
 ---
 
@@ -290,6 +291,19 @@ CoW DAO 的历史 service agreement 报告某一年：
 - trades 获得 MEV protection
 
 Source: https://forum.cow.fi/t/cip-58-funding-for-development-services-service-agreement-no-4/2686
+
+### 2026 年规模补充
+
+CoW DAO 的 2026 年月度回顾与核心团队治理说明进一步报告：
+
+- 累计交易量超过 **$200B**；
+- 超过 **12M trades**；
+- 自 2024 年开始产生收入以来，DAO / 产品收入约 **$41.9M–$42M**；
+- 累计返还用户的 surplus 约 **$1.21B**。
+
+Sources: [CoW DAO Monthly Recap: May 2026](https://forum.cow.fi/t/cow-dao-monthly-recap-may-2026/3463), [CoW DAO's Path to Value Distribution](https://forum.cow.fi/t/cow-daos-path-to-value-distribution-core-team-view/3454)
+
+这些是 CoW DAO / 核心团队 / 社区论坛报告的规模指标，不是独立审计统计，也不证明 Parallax 的 PMF。它们支持的较窄结论是：intent-based execution / protection 已经达到有意义的真实使用规模。
 
 CoW 的模式：
 
@@ -362,7 +376,37 @@ Edge Capital case 还描述：
 
 Source: https://hypernative.io/insights/blog/how-edge-capital-scaled-transaction-security-and-expanded-defi-reach-with-hypernative-guardian
 
-这证明 Evidence / rule / decision fragmentation 不只是 retail UX 问题，也可能是 institutional operational problem。
+该厂商客户案例提示，Evidence / rule / decision fragmentation 不只是 retail UX 问题，也可能是 institutional operational problem；它不是独立审计的普遍性证明。
+
+---
+
+# GoPlus AgentGuard：runtime action security / trust guard
+
+> 证据等级：B（官方开源项目与产品说明）。
+
+[GoPlus AgentGuard](https://github.com/GoPlusSecurity/agentguard) 关注 Agent action 的运行时评估与安全/信任规则，包括：
+
+- runtime action evaluation；
+- trust registry 与 rule-based guard functionality；
+- MCP / SDK 等 Agent 接入面；
+- 在适用场景下提供 transaction simulation 或其他 security Evidence；
+- 对能力不可用时的 graceful degradation。
+
+它与 transaction/action guarding 存在重叠，但重点更偏安全与授权边界，而不是独立的用户经济意图修正。产品区分可以写成：
+
+```text
+GoPlus AgentGuard
+→ runtime security / action guard
+
+Parallax
+→ heterogeneous Evidence
+→ economic / user intent
+→ Cause
+→ targeted remediation
+→ Re-verification
+```
+
+这不是“GoPlus 没有某项能力”的断言；它只是按公开材料区分两者当前关注的决策边界。
 
 ---
 
@@ -561,6 +605,8 @@ Source: https://arxiv.org/abs/2608.17220
 > logic-level safety in a reproducible benchmark
 
 不是 production-ready guarantee。
+
+PACE 研究系统还报告了约 **29,826–31,822 gas** 的额外开销；这是该受控 benchmark 中的测量结果，不是 Parallax 的生产性能结论。
 
 ---
 
@@ -840,7 +886,7 @@ Decision
 
 ## Layer 5 — Remediation + Re-verification
 
-目前公开市场上相对最稀缺：
+目前公开市场上相对更稀缺：
 
 ```text
 Why not?
@@ -884,7 +930,7 @@ Did it fix the problem?
 
 ## 1. Block / review before funds move
 
-Blockaid / Hypernative 已证明 pre-sign guard 可以阻止或升级风险 transaction。
+Blockaid / Hypernative 的厂商资料报告了 pre-sign guard 对风险 transaction 的阻止或升级能力；这些是相邻产品证据，不是 Parallax 的效果数据。
 
 ## 2. Better execution / less MEV / less failed gas
 
@@ -900,7 +946,7 @@ PACE controlled benchmark 中 unsafe execution 从 unguarded 0.80 降到 0.00。
 
 这些都支持：
 
-> **在 execution 前插入独立判断层，可以真实改变 outcome。**
+> **相邻产品和受控研究共同支持：在 execution 前插入独立判断层，可能改变 outcome；Parallax 必须用自己的 benchmark 验证效果。**
 
 但不证明 Parallax 当前实现已经达到相同效果。
 
@@ -962,22 +1008,27 @@ Tenderly simulation
 
 ```text
 simulation = SUCCESS
-→ PROCEED
+→ execute / continue
 ```
 
-## Baseline B — Standard DEX protection
+## Baseline B — Standard transaction protection / DEX UX
 
-```text
-quote
-minimum received
-slippage
-price impact warning
-```
+可以包含：
+
+- quote；
+- 协议 `amountOutMinimum`；
+- slippage tolerance；
+- standard price-impact warning；
+- router execution protection。
+
+这些机制保护 calldata 或提供常规 UX，但不必然表达独立的用户经济约束。
 
 ## Parallax
 
 ```text
-Intent
+User Intent
++
+Independent Economic Constraints
 +
 Evidence
 ↓
@@ -987,63 +1038,67 @@ Decision
 ↓
 Relevant Action
 ↓
-Re-run
+Re-verification
 ```
+
+Benchmark 应测量 Parallax 是否能捕捉那些没有被交易 calldata / 协议保护完整强制执行的约束违规。
 
 ---
 
 # 36. 建议 scenario
 
-## Scenario 1 — Output below boundary
+## Scenario 1 — Minimum effective rate
 
 ```text
-simulation success
+simulation = SUCCESS
 BUT
-output < user minimum acceptable amount
+effectiveRate < user minEffectiveRate
 ```
 
 ## Scenario 2 — Excessive price impact
 
 ```text
-simulation success
+simulation = SUCCESS
 BUT
-price impact > user policy
+priceImpact > user maxPriceImpact
 ```
 
-## Scenario 3 — Trade size too large
+## Scenario 3 — Excessive total cost
+
+```text
+simulation = SUCCESS
+BUT
+allInCost > user maxTotalCost
+```
+
+## Scenario 4 — Trade size creates unacceptable impact
 
 ```text
 large amount
-→ bad outcome
-→ reduce amount
+→ price impact above policy
+→ reduce amount / split
 → re-run
+→ verify improvement
 ```
 
-## Scenario 4 — Stale evidence
+## Scenario 5 — Stale Evidence
 
 ```text
-initial evidence
-→ chain state changed
-→ evidence stale
-→ UNKNOWN / re-check
+Evidence valid at T0
+→ chain state changes
+→ Evidence no longer fresh
+→ UNKNOWN / requote / resimulate
 ```
 
-## Scenario 5 — Provider capability gap
+## Scenario 6 — Provider capability gap
 
 ```text
-Provider A: rich evidence
-Provider B: partial evidence
+Provider A = richer Evidence
+Provider B = partial Evidence
+→ Checked / Not Checked / Unknown remain correct
 ```
 
-验证：
-
-```text
-Checked
-Not Checked
-Unknown
-```
-
-是否正确 fail closed。
+这些 scenario 以独立用户经济约束为主，不把协议 transaction `amountOutMinimum` 当作 Parallax 的核心经济差异。如果未来保留绝对最低输出量场景，必须明确标注为独立 user economic constraint，而不是协议内置的 `amountOutMinimum`。
 
 ---
 

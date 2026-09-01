@@ -75,8 +75,6 @@ P0 不提供：
 
 在当前 Monad MVP 中，`economicBoundary.minimumReceived` 是随 Intent 传递的明确接受边界，其溯源可能是 `original_swap`、`user_declared`、`demo_preset` 或 `unavailable`；Parallax 不会降低它来制造 `PROCEED`。
 
-目标架构会将 `transactionProtection`（协议/DEX 的 `amountOutMinimum` 与滑点保护）与 `userEconomicConstraints`（如 `maxPriceImpact`、`minEffectiveRate`、`maxTotalCost`、`maxGas`）分开。这是计划中的迁移，不代表当前已合并的行为。
-
 ## 架构与技术栈
 
 长期分解为：

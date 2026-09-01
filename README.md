@@ -75,8 +75,6 @@ P0 does not provide:
 
 In the current Monad MVP, `economicBoundary.minimumReceived` is an explicit acceptance boundary carried with the Intent. Its provenance may be `original_swap`, `user_declared`, `demo_preset`, or `unavailable`; Parallax does not lower it to manufacture `PROCEED`.
 
-The target architecture separates `transactionProtection` (protocol/DEX `amountOutMinimum` and slippage protection) from `userEconomicConstraints` such as `maxPriceImpact`, `minEffectiveRate`, `maxTotalCost`, and `maxGas`. This is a planned migration, not a claim about already-merged behavior.
-
 ## Architecture and technology stack
 
 The long-term decomposition is:
