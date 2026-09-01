@@ -44,7 +44,7 @@ GMX、Aave、Pendle 等是未来金融 primitive 方向，不应在当前 Swap-o
 | P0 fallback | NativeRpcProvider | `eth_call`/`estimateGas`/state 等可验证范围；能力不足返回 `UNKNOWN` |
 | Strong/Best 可选 | EnsoProvider | 需验证实际 network/protocol/route、API key、provenance 与 freshness |
 
-Tenderly 的 Arbitrum support、simulation、trace、gas、asset changes 与 block provenance 以官方文档为依据；PR #42 当前记录的是文档 feasibility，没有 credentialed request。Native RPC 与 Enso 同样不能只凭文档升级为 verified。
+Tenderly 的 Arbitrum support、simulation、trace、gas、asset changes 与 block provenance 以官方文档为依据；在没有 credentialed probe 前仍只能作为 feasibility 依据。Native RPC 与 Enso 同样不能只凭文档升级为 verified。
 
 ## 两类 portability proof
 
@@ -70,7 +70,7 @@ Arbitrum Sepolia
 
 `DecisionReceiptRegistry` 只承诺 Receipt commitment/metadata 的可验证锚定；backend attestor 的签名与用户 Swap 分离，anchoring 必须 optional/non-blocking。最终 Contract 字段、事件、权限、批量/Merkle 策略仍未决。
 
-Arbitrum Chain、Camelot Adapter、Tenderly/Native RPC runtime、Receipt deployment 和真实 P0 E2E 都是计划/开放工作，不得从研究文件写成已部署。当前实现状态请看 [planning index](../planning/arbitrum-open-house/README.md) 和开放 PR [#41](https://github.com/parallax-monad/parallax/pull/41)、[#42](https://github.com/parallax-monad/parallax/pull/42)、[#43](https://github.com/parallax-monad/parallax/pull/43)。
+Arbitrum Chain、Camelot Adapter、Tenderly/Native RPC runtime、Receipt deployment 和真实 P0 E2E 都是计划/待验证工作，不得从研究文件写成已部署。当前实现状态请看 [planning index](../planning/arbitrum-open-house/README.md)。
 
 ## 参考资料
 

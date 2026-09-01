@@ -39,6 +39,11 @@
 
 ## 3. 时间安排（计划）
 
+- **Internal target / code-freeze-submission target:** 2026-10-01
+- **Official HackQuest submission deadline (observed 2026-08-28):** 2026-10-04 ([HackQuest listing](https://www.hackquest.io/hackathons/Arbitrum-Open-House-Singapore-Online-Buildathon))
+
+团队仍以 2026-09-30 完成最终 code freeze / video-ready build，并在 2026-10-01 完成内部 smoke、README、explorer proof、submission 与 backup。官方日期与内部 code-freeze / submission target 不同。
+
 | 时间 | 目标 | 状态规则 |
 | --- | --- | --- |
 | 8/28–9/4 | Core 抽象、Contract、Provider research、Receipt design | 研究/实现混合，逐项核验 |

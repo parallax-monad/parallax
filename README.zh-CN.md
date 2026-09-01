@@ -7,7 +7,7 @@
 
 Parallax 是面向链上操作的、与 Provider 无关的签名前修正与再次验证层。
 
-**当前已核验实现：** Monad × Kuru × Moss。Arbitrum 扩展仍在积极开发计划中，不代表已经交付。
+**当前公开演示范围：** Monad × Kuru × Moss。
 
 > Parallax 将不同来源的交易证据转换为确定性的原因和相关操作，并验证这次调整是否真正解决了问题。
 
@@ -56,19 +56,9 @@ Intent
 
 当前前端适配层调用 `POST /api/quote`、`POST /api/check`、`GET /api/runs/:runId` 和 `GET /api/replay/:id`。记录回放是单独且明确标注的路径，不会被当作实时检查的替代品。
 
-## 当前实现状态
+## 当前演示范围
 
-| 范围 | `main` 当前状态 |
-| --- | --- |
-| 落地页体验 | 已实现英文/简体中文文案与 Three.js 证据星图 |
-| 钱包式前端 MVP | 已在 `#/analyze` 实现报价、检查、回放、证据和再次检查界面 |
-| 后端 API | 已通过 Hono 实现实时报价/检查边界、记录回放以及内存/PostgreSQL Run 存储 |
-| Monad × Kuru × Moss | 当前已核验路径；实时运行需要固定运行环境和只读 RPC 配置 |
-| Generic Evidence / `MossProvider` | 位于开放的 [PR #41](https://github.com/parallax-monad/parallax/pull/41)；合并前不属于 `main` |
-| Chain Adapter / Arbitrum Provider feasibility | 位于开放的 [PR #43](https://github.com/parallax-monad/parallax/pull/43) 与 [PR #42](https://github.com/parallax-monad/parallax/pull/42)；尚未交付 |
-| 签名、广播、执行或托管 | 明确不实现 |
-
-已核验的实时范围仅限文档所述的固定 Kuru MON → USDC 路径与运行环境。它不能证明所有资产、路径、协议、运行环境修订版或未来市场条件都受支持。
+当前公开演示使用 Monad × Kuru × Moss 路径。已核验的实时范围仅限文档所述的固定 Kuru MON → USDC 路径与运行环境；这不能证明所有资产、路径、协议、运行环境修订版或未来市场条件都受支持。
 
 ## P0 范围与明确排除项
 
@@ -83,7 +73,9 @@ P0 不提供：
 - 自主 AI 判断；
 - RPC、Moss 或必要 Evidence 不可用时的实时可用性保证。
 
-`Minimum Received` 是明确的协议/DEX 接受边界，不是 Parallax 自动生成的安全阈值；Parallax 不会降低它来制造 `PROCEED`。`maxPriceImpact`、`minEffectiveRate`、`maxTotalCost` 和 `maxGas` 等目标经济条件属于独立的计划语义，除非当前 Contract/Provider 路径明确支持，否则不应描述为已实现。
+在当前 Monad MVP 中，`economicBoundary.minimumReceived` 是随 Intent 传递的明确接受边界，其溯源可能是 `original_swap`、`user_declared`、`demo_preset` 或 `unavailable`；Parallax 不会降低它来制造 `PROCEED`。
+
+目标架构会将 `transactionProtection`（协议/DEX 的 `amountOutMinimum` 与滑点保护）与 `userEconomicConstraints`（如 `maxPriceImpact`、`minEffectiveRate`、`maxTotalCost`、`maxGas`）分开。这是计划中的迁移，不代表当前已合并的行为。
 
 ## 架构与技术栈
 
@@ -249,7 +241,7 @@ GitHub Actions 使用 Node.js 22，执行依赖安装、lint、typecheck、确�
 
 - 从最新 `main` 创建短期分支开始工作；
 - 将实现、Contract 语义、Product 语义和 Evidence 陈述保留在各自负责的层中；
-- 开放 PR 和研究文档在合并或正式纳入规范计划前，不视为已交付；
+- 将研究视为背景依据；实现行为以代码和已合并的产品文档为准；
 - 不得使用 Replay 或 mock 数据证明实时用户决策；
 - 创建 PR 前运行相关检查，并邀请变更语义对应的负责人审查。
 

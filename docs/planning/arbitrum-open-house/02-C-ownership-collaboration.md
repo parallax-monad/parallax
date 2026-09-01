@@ -2,6 +2,12 @@
 
 > 状态：当前唯一的语义 Owner 映射。Owner 是责任边界，不要求每个文件只有一个贡献者。
 
+## 0. 三层审阅边界
+
+- **CODEOWNERS**：提供自动审阅覆盖；广泛技术 Owner 让实现 PR 通常有多个候选审阅者。
+- **02-C**：定义语义责任与最终决定权，不把每个文件强行归给单一 Owner。
+- **PR-specific reviewer request**：根据当前 PR 的实际语义影响，额外邀请相应 Owner；不要求所有 Owner 审阅每个 PR。
+
 ## 1. 当前 Owner 映射
 
 | Role | Owner | GitHub | Primary area |
@@ -57,4 +63,4 @@ Parallax Core 只消费统一 Evidence，不直接依赖 Moss/Tenderly/Enso 原�
 
 ## 4. API 与 Frontend 协作
 
-Frontend 提交统一 Swap Intent；Backend 选择 Chain、Protocol、Provider 并返回 Evidence、capabilities、provenance、freshness、Cause、Relevant Action、Re-run 和 Receipt。`minimumReceived` 仅表示协议保护；用户 economic constraints 如果未被当前 Contract/Provider 支持，必须公开为未检查或 `UNKNOWN`。
+Frontend 提交统一 Swap Intent；Backend 选择 Chain、Protocol、Provider 并返回 Evidence、capabilities、provenance、freshness、Cause、Relevant Action、Re-run 和 Receipt。当前 Monad 兼容路径中的 `economicBoundary.minimumReceived` 是显式接受边界，来源可为 `original_swap`、`user_declared`、`demo_preset` 或 `unavailable`。目标架构才把 Protocol/DEX `transactionProtection` 与 `userEconomicConstraints` 分离；未被当前 Contract/Provider 支持的目标条件必须公开为未检查或 `UNKNOWN`。

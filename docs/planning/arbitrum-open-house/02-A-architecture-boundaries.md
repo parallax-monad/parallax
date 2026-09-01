@@ -56,9 +56,13 @@ Arbitrum 的 Protocol/Provider 仍需真实 feasibility 和集成验证。`MossP
 
 ## 4. Evidence Contract 与经济边界
 
-`minimumReceived` 在当前 Monad 兼容路径中代表协议/DEX 的 `amountOutMinimum` 或 slippage protection。它不是完整的用户经济意图，也不能被降低来制造 `PROCEED`。
+### 当前 Monad MVP / 兼容语义
 
-目标语义可以独立表达 `maxPriceImpact`、`minEffectiveRate`、`maxTotalCost`、`maxGas` 等条件。交易可执行但不满足这些条件时，应产生对应 Cause，并进入 Action/Re-verification；这些目标条件尚未被当前 `main` 全部实现。
+`economicBoundary.minimumReceived` 是当前 Monad MVP 随 Intent 传递的明确接受边界。其 provenance 可以是 `original_swap`、`user_declared`、`demo_preset` 或 `unavailable`；它不能被降低来制造 `PROCEED`。
+
+### 目标架构语义
+
+目标架构将 `transactionProtection`（协议/DEX 的 `amountOutMinimum`、slippage protection）与 `userEconomicConstraints` 分开表达，后者可包含 `maxPriceImpact`、`minEffectiveRate`、`maxTotalCost`、`maxGas` 等条件。交易可执行但不满足这些目标条件时，应产生对应 Cause，并进入 Action/Re-verification；这套分离尚未在当前 `main` 全部实现。
 
 ## 5. Provider portability
 

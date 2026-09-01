@@ -7,7 +7,7 @@
 
 Parallax is a provider-agnostic pre-execution remediation and re-verification layer for onchain actions.
 
-**Current verified implementation:** Monad × Kuru × Moss. Arbitrum expansion is an active development plan, not a shipped capability.
+**Current public demo scope:** Monad × Kuru × Moss.
 
 > Parallax turns heterogeneous transaction evidence into a deterministic cause and relevant action, then verifies whether the adjustment actually fixed the problem.
 
@@ -56,19 +56,9 @@ The landing page is served at `#/`. The wallet-style MVP is at `#/analyze`.
 
 The current frontend adapter calls `POST /api/quote`, `POST /api/check`, `GET /api/runs/:runId`, and `GET /api/replay/:id`. Recorded Replay is a separate, explicitly labelled path and is never substituted for a live check.
 
-## Current implementation status
+## Current demo scope
 
-| Area | Status on `main` |
-| --- | --- |
-| Landing experience | Implemented with English/Simplified Chinese copy and a Three.js evidence constellation |
-| Wallet-style frontend MVP | Implemented at `#/analyze` with quote, check, replay, evidence, and re-run surfaces |
-| Backend API | Implemented with Hono, live quote/check boundaries, recorded Replay, and memory/PostgreSQL Run storage |
-| Monad × Kuru × Moss | Current verified path; live operation requires the pinned runtime and read-only RPC configuration |
-| Generic Evidence / `MossProvider` | Open compatibility work in [PR #41](https://github.com/parallax-monad/parallax/pull/41); not part of `main` until merged |
-| Chain Adapter / Arbitrum Provider feasibility | Open work in [PR #43](https://github.com/parallax-monad/parallax/pull/43) and [PR #42](https://github.com/parallax-monad/parallax/pull/42); not shipped |
-| Signing, broadcasting, execution, custody | Intentionally not implemented |
-
-The verified live scope is limited to the documented pinned Kuru MON → USDC path and runtime identity. It does not establish support for every asset, route, protocol, runtime revision, or future market condition.
+The current public demo uses the Monad × Kuru × Moss path. Its verified live scope is limited to the documented pinned Kuru MON → USDC path and runtime identity; this does not establish support for every asset, route, protocol, runtime revision, or future market condition.
 
 ## P0 scope and exclusions
 
@@ -83,7 +73,9 @@ P0 does not provide:
 - autonomous AI judgment;
 - guaranteed availability when RPC, Moss, or required Evidence is unavailable.
 
-`Minimum Received` is an explicit protocol/DEX acceptance boundary. It is not a recommended safety threshold, and Parallax does not lower it to manufacture `PROCEED`. Target economic constraints such as `maxPriceImpact`, `minEffectiveRate`, `maxTotalCost`, and `maxGas` remain separate planned semantics unless the current Contract/Provider path explicitly supports them.
+In the current Monad MVP, `economicBoundary.minimumReceived` is an explicit acceptance boundary carried with the Intent. Its provenance may be `original_swap`, `user_declared`, `demo_preset`, or `unavailable`; Parallax does not lower it to manufacture `PROCEED`.
+
+The target architecture separates `transactionProtection` (protocol/DEX `amountOutMinimum` and slippage protection) from `userEconomicConstraints` such as `maxPriceImpact`, `minEffectiveRate`, `maxTotalCost`, and `maxGas`. This is a planned migration, not a claim about already-merged behavior.
 
 ## Architecture and technology stack
 
@@ -249,7 +241,7 @@ GitHub Actions uses Node.js 22 and runs dependency installation, lint, typecheck
 
 - Start from the latest `main` on a short-lived branch.
 - Keep implementation, Contract semantics, Product semantics, and Evidence claims in their owning layers.
-- Treat open PRs and research documents as non-shipped until explicitly merged or incorporated into the normative plan.
+- Treat research as context; implementation behavior is defined by the code and merged product documentation.
 - Do not use Replay or mock data as proof of a live user decision.
 - Run the relevant checks and request review from the owners of the changed semantics.
 

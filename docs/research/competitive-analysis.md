@@ -2,7 +2,8 @@
 
 > Status: Dated research reference (evidence cutoff 2026-08-07). It informs positioning and scope but is not implementation truth.
 >
-> Current implementation status and Arbitrum planning are maintained in the repository README and [planning index](../planning/arbitrum-open-house/README.md).
+> The public demo scope is summarized in the repository README; implementation status and Arbitrum planning are maintained in the [planning index](../planning/arbitrum-open-house/README.md).
+> Newer canonical positioning and evidence synthesis: [market-positioning-and-evidence.md](./market-positioning-and-evidence.md).
 
 > Evidence cutoff: 2026-08-07
 >
@@ -52,7 +53,7 @@ This is a product hypothesis supported by competitor boundaries. It is not yet p
 
 Parallax is positioned as:
 
-> At the 2026-08-07 evidence cutoff, Parallax was being evaluated through the verified Monad × Kuru × Moss path. The research hypothesis is now a provider-agnostic pre-execution remediation and re-verification layer.
+> **Parallax is a Moss-powered pre-transaction decision layer for Monad swaps.**
 
 The intended P0 user is a light DeFi user with basic wallet and swap experience. The trigger moment is immediately before signing, or before retrying a failed swap.
 

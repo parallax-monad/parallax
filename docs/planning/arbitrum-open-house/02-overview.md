@@ -20,10 +20,11 @@ Arbitrum/Camelot/Tenderly 能力仍以 feasibility 和开放 PR 为准，不是 
 ## 不可改变的产品与架构约束
 
 1. `Cause → Relevant Action → Re-verification` 是核心产品闭环。
-2. `minimumReceived` 只表示 Protocol/DEX 的 `amountOutMinimum` 或 slippage protection；用户经济条件另行建模为 `maxPriceImpact`、`minEffectiveRate`、`maxTotalCost`、`maxGas` 等目标语义，不能把未来语义伪装成当前已实现。
-3. backend attestor 可以签名并广播可选的 Decision Receipt commitment，但不签用户 Swap；anchoring 必须 optional / non-blocking。
-4. Evidence Provider portability（同一 transaction，Tenderly vs Native RPC）与 execution-stack portability（同一 Intent，Camelot/Tenderly vs Enso）是两种不同测试。
-5. 当前只用 controlled/replay scenarios 验证规则；没有真实 usage 前，不建立“真实用户 benchmark”或市场效果声明。
+2. 当前 Monad MVP/兼容路径中的 `economicBoundary.minimumReceived` 是随 Intent 传递的明确接受边界，溯源可为 `original_swap`、`user_declared`、`demo_preset` 或 `unavailable`；它不能被降低来制造 `PROCEED`。
+3. 目标架构才将 `transactionProtection`（Protocol/DEX 的 `amountOutMinimum`、slippage protection）与 `userEconomicConstraints`（`maxPriceImpact`、`minEffectiveRate`、`maxTotalCost`、`maxGas` 等）分离；该迁移尚未在当前 `main` 完成。
+4. backend attestor 可以签名并广播可选的 Decision Receipt commitment，但不签用户 Swap；anchoring 必须 optional / non-blocking。
+5. Evidence Provider portability（同一 transaction，Tenderly vs Native RPC）与 execution-stack portability（同一 Intent，Camelot/Tenderly vs Enso）是两种不同测试。
+6. 当前只用 controlled/replay scenarios 验证规则；没有真实 usage 前，不建立“真实用户 benchmark”或市场效果声明。
 
 ## Provider 顺序
 
