@@ -4,13 +4,13 @@ import {
   type EvidenceProvider,
   EvidenceProviderError,
   type GenericEvidence,
-  type GenericEvidenceStatus,
+  type GenericEvidenceMode,
   type GenericProviderFailure,
+  type GenericProviderStatus,
   type GenericQuoteOutput,
   type GenericSwapIntent,
   genericEvidenceSchema,
 } from "@parallax/contracts";
-import { evaluateEvidence } from "@parallax/risk";
 import { classifyLiveError } from "./errors.js";
 import { KURU_PROTOCOL, MONAD_CHAIN_ID } from "./kuru.js";
 import { runKuruLiveSwap } from "./live-kuru.js";
@@ -53,7 +53,8 @@ const PROVIDER_ID = "moss-kuru";
  *
  * A NO_ROUTE terminal result is legal evidence and never requires a
  * simulatorPinnedBlock; provider failures are either thrown (no evidence at
- * all) or surfaced as `provider.status !== "OK"` with a classified failure.
+ * all) or surfaced as `provider.integrationStatus !== "OK"` with a classified
+ * failure and `provider.status = FAILED`.
  */
 export class MossProvider implements EvidenceProvider {
   public readonly providerId = PROVIDER_ID;
@@ -148,18 +149,25 @@ export type GenericEvidenceContext = {
  * Provider Adapter: maps normalized Moss/Kuru evidence into the generic
  * Evidence contract without losing provenance, freshness, failure semantics,
  * capability, or Live/Replay/Mock truthfulness.
+ *
+ * Status layering: `provider.status` is the provider evaluation status
+ * (FAILED on integration failure, SUCCESS for verified outcomes including
+ * NO_ROUTE and REVERTED, UNKNOWN when the execution outcome is undetermined),
+ * `provider.integrationStatus` preserves the legacy 4-state integration
+ * health, and `execution.status` stays the independent protocol outcome.
  */
 export function toGenericEvidence(
   evidence: NormalizedKuruEvidence,
   context: GenericEvidenceContext = {},
 ): GenericEvidence {
   const failure = evidenceFailure(evidence, context.stages);
+  const runtimeBlock = runtimeProvenance(evidence, context);
   return genericEvidenceSchema.parse({
-    status: evidenceStatus(evidence),
     intent: genericIntent(evidence.intent),
     provider: {
       providerId: PROVIDER_ID,
-      status: evidence.integrationStatus,
+      status: providerEvaluationStatus(evidence),
+      integrationStatus: evidence.integrationStatus,
       ...(failure === undefined ? {} : { failure }),
       errors: toEvidenceField(evidence.errors),
     },
@@ -175,31 +183,18 @@ export function toGenericEvidence(
     blockNumber: toEvidenceField(evidence.blockNumber),
     capabilities: ["quote", "action", "simulate"],
     provenance: {
-      ...(evidence.runtimeVersion === undefined
-        ? {}
-        : { runtimeVersion: evidence.runtimeVersion }),
-      ...(evidence.runtimeRevision === undefined
-        ? {}
-        : { runtimeRevision: evidence.runtimeRevision }),
-      ...(context.runtime?.checkoutRevision === undefined
-        ? {}
-        : { checkoutRevision: context.runtime.checkoutRevision }),
-      ...(evidence.mossCommit === undefined
-        ? {}
-        : { commit: evidence.mossCommit }),
-      replayMode: evidence.replayMode,
-      isReplay: evidence.replayMode ? true : (evidence.isReplay ?? false),
-      isMock: evidence.isMock ?? false,
-      source: evidence.source,
       ...(context.observedChainId === undefined
         ? {}
         : { observedChainId: context.observedChainId }),
-      ...(evidence.simulatorPinnedBlock === undefined
-        ? {}
-        : { simulatorPinnedBlock: evidence.simulatorPinnedBlock }),
       ...(evidence.fetchedAt === undefined
         ? {}
         : { fetchedAt: evidence.fetchedAt }),
+      mode: evidenceMode(evidence),
+      source: evidence.source,
+      ...(evidence.simulatorPinnedBlock === undefined
+        ? {}
+        : { simulationBlock: evidence.simulatorPinnedBlock }),
+      ...(runtimeBlock === undefined ? {} : { runtime: runtimeBlock }),
     },
     ...evidenceScope(evidence),
     providerData: providerData(evidence, context),
@@ -207,26 +202,63 @@ export function toGenericEvidence(
 }
 
 /**
- * Deprecated compatibility alias: `@parallax/risk` no longer accepts
- * Moss-specific Evidence. New code must use `evaluateEvidence` over generic
- * Evidence produced by `toGenericEvidence` / `MossProvider`.
- * @deprecated Use `evaluateEvidence(toGenericEvidence(evidence))` instead.
+ * Provider evaluation status. Integration failures dominate; a verified
+ * execution outcome (SUCCESS / NO_ROUTE / REVERTED) is SUCCESS; an
+ * undetermined outcome (execution UNKNOWN, e.g. unsupported receipt or
+ * incomplete coverage) is UNKNOWN. STALE/UNSUPPORTED are not produced by the
+ * Moss path.
  */
-export function evaluateKuruEvidence(evidence: NormalizedKuruEvidence) {
-  return evaluateEvidence(toGenericEvidence(evidence));
+function providerEvaluationStatus(
+  evidence: NormalizedKuruEvidence,
+): GenericProviderStatus {
+  if (evidence.integrationStatus !== "OK") return "FAILED";
+  switch (evidence.executionStatus) {
+    case "SUCCESS":
+    case "NO_ROUTE":
+    case "REVERTED":
+      return "SUCCESS";
+    default:
+      return "UNKNOWN";
+  }
 }
 
-function evidenceStatus(
+/**
+ * Normalized evidence truthfulness mode. Replay dominates over mock so the
+ * Risk replay gate keeps its historical semantics for every Moss-produced
+ * evidence shape.
+ */
+function evidenceMode(evidence: NormalizedKuruEvidence): GenericEvidenceMode {
+  if (evidence.replayMode) return "RECORDED_REPLAY";
+  if (evidence.isMock ?? false) return "MOCK";
+  return "LIVE";
+}
+
+/**
+ * Provider-specific runtime provenance (Moss runtime identity + evidence
+ * baseline commit). Absent on recorded evidence without runtime identity.
+ */
+function runtimeProvenance(
   evidence: NormalizedKuruEvidence,
-): GenericEvidenceStatus {
-  if (evidence.integrationStatus !== "OK") return "FAILED";
-  if (
-    evidence.executionStatus === "SUCCESS" ||
-    evidence.executionStatus === "NO_ROUTE"
-  ) {
-    return "SUCCESS";
-  }
-  return "UNKNOWN";
+  context: GenericEvidenceContext,
+): GenericEvidence["provenance"]["runtime"] | undefined {
+  const runtime = {
+    ...(evidence.runtimeVersion === undefined
+      ? {}
+      : { runtimeVersion: evidence.runtimeVersion }),
+    ...(evidence.runtimeRevision === undefined
+      ? {}
+      : { runtimeRevision: evidence.runtimeRevision }),
+    ...(context.runtime?.checkoutRevision === undefined
+      ? {}
+      : { checkoutRevision: context.runtime.checkoutRevision }),
+    ...(evidence.mossCommit === undefined
+      ? {}
+      : { commit: evidence.mossCommit }),
+    ...(context.runtime?.packageVersions === undefined
+      ? {}
+      : { packageVersions: context.runtime.packageVersions }),
+  };
+  return Object.keys(runtime).length === 0 ? undefined : runtime;
 }
 
 function evidenceFailure(
@@ -280,9 +312,6 @@ function providerData(
     ...(evidence.mossVersion === undefined
       ? {}
       : { mossVersion: evidence.mossVersion }),
-    ...(context.runtime?.packageVersions === undefined
-      ? {}
-      : { packageVersions: context.runtime.packageVersions }),
     ...(evidence.approval.value === null
       ? {}
       : { approval: evidence.approval.value }),

@@ -9,7 +9,7 @@ import type { EvidenceCompleteness } from "./types.js";
 export function evidenceCompleteness(
   evidence: GenericEvidence,
 ): EvidenceCompleteness {
-  if (evidence.provider.status !== "OK") return "UNKNOWN";
+  if (evidence.provider.integrationStatus !== "OK") return "UNKNOWN";
   if (evidence.simulation.value?.complete !== true) return "MISSING";
   const alwaysCritical: EvidenceField<unknown>[] = [
     evidence.quote,

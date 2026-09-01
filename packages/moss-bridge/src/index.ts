@@ -36,7 +36,6 @@ export {
 } from "./normalize.js";
 export {
   assertLiveProvenance,
-  evaluateKuruEvidence,
   firstIntegrationError,
   type GenericEvidenceContext,
   hasMismatchedRuntimeProvenance,

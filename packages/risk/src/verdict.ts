@@ -10,12 +10,17 @@ import type { EconomicBoundaryStatus, RuleResult } from "./types.js";
  * previous Moss-bound `evaluateKuruEvidence`; only the Evidence input is now
  * provider-agnostic. UNKNOWN is never PROCEED, integration failure is never a
  * protocol verdict, and NO_ROUTE stays a legal terminal STOP.
+ *
+ * The provider evaluation status, the execution outcome and the Risk verdict
+ * stay three independent layers: a verified REVERTED execution is
+ * `provider.status=SUCCESS` + `execution.status=REVERTED` while this function
+ * still returns verdict UNKNOWN.
  */
 export function evaluateEvidence(evidence: GenericEvidence): RuleResult {
   const completeness = evidenceCompleteness(evidence);
   const economicBoundary = economicBoundaryStatus(evidence);
   const reason = executionReason(evidence);
-  if (evidence.provider.status !== "OK") {
+  if (evidence.provider.integrationStatus !== "OK") {
     return result(
       evidence,
       completeness,
@@ -116,7 +121,7 @@ function economicBoundaryStatus(
   if (source === undefined) return "UNKNOWN";
 
   if (source === "demo_preset") {
-    return evidence.provenance.replayMode
+    return evidence.provenance.mode === "RECORDED_REPLAY"
       ? evaluateBoundary(evidence, minimumReceived)
       : "UNKNOWN";
   }
@@ -151,7 +156,7 @@ function result(
   actions: string[],
 ): RuleResult {
   return {
-    integrationStatus: evidence.provider.status,
+    integrationStatus: evidence.provider.integrationStatus,
     executionStatus: evidence.execution.status,
     evidenceCompleteness,
     economicBoundary,

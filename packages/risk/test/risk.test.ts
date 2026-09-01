@@ -20,7 +20,6 @@ function field<T>(
 
 function evidence(overrides: Partial<GenericEvidence> = {}): GenericEvidence {
   return {
-    status: "SUCCESS",
     intent: {
       chainId: 143,
       protocol: "kuru",
@@ -32,7 +31,8 @@ function evidence(overrides: Partial<GenericEvidence> = {}): GenericEvidence {
     },
     provider: {
       providerId: "moss-kuru",
-      status: "OK",
+      status: "SUCCESS",
+      integrationStatus: "OK",
       errors: field<GenericProviderError[]>([], "moss"),
     },
     execution: { status: "SUCCESS" },
@@ -57,9 +57,7 @@ function evidence(overrides: Partial<GenericEvidence> = {}): GenericEvidence {
     blockNumber: field("1", "rpc"),
     capabilities: ["quote", "action", "simulate"],
     provenance: {
-      replayMode: false,
-      isReplay: false,
-      isMock: false,
+      mode: "LIVE",
       source: "moss",
     },
     checkedScope: ["quote", "action", "simulation", "simulation-coverage"],
@@ -78,8 +76,11 @@ describe("deterministic generic Risk decisions", () => {
     expect(
       evaluateEvidence(
         evidence({
-          status: "FAILED",
-          provider: { ...evidence().provider, status: "INTEGRATION_ERROR" },
+          provider: {
+            ...evidence().provider,
+            status: "FAILED",
+            integrationStatus: "INTEGRATION_ERROR",
+          },
         }),
       ).verdict,
     ).toBe("UNKNOWN");
@@ -138,10 +139,10 @@ describe("deterministic generic Risk decisions", () => {
   it("keeps provider integration failures unknown", () => {
     const result = evaluateEvidence(
       evidence({
-        status: "FAILED",
         provider: {
           ...evidence().provider,
-          status: "INTEGRATION_ERROR",
+          status: "FAILED",
+          integrationStatus: "INTEGRATION_ERROR",
           failure: {
             stage: "SIMULATE",
             code: "INTEGRATION_ERROR",
@@ -326,7 +327,7 @@ describe("deterministic generic Risk decisions", () => {
     expect(
       evaluateEvidence(
         evidence({
-          provenance: { ...evidence().provenance, replayMode: false },
+          provenance: { ...evidence().provenance, mode: "LIVE" },
           intent: intent({
             minimumReceived: "9",
             minimumReceivedSource: "demo_preset",
@@ -337,7 +338,7 @@ describe("deterministic generic Risk decisions", () => {
     expect(
       evaluateEvidence(
         evidence({
-          provenance: { ...evidence().provenance, replayMode: true },
+          provenance: { ...evidence().provenance, mode: "RECORDED_REPLAY" },
           intent: intent({
             minimumReceived: "9",
             minimumReceivedSource: "demo_preset",
@@ -345,6 +346,41 @@ describe("deterministic generic Risk decisions", () => {
         }),
       ).verdict,
     ).toBe("PROCEED");
+  });
+
+  it("never inspects providerData for the canonical decision", () => {
+    const baseline = evaluateEvidence(evidence());
+    const poisoned = evaluateEvidence(
+      evidence({
+        providerData: {
+          // Conflicting provider metadata must not change the verdict.
+          runtimeVersion: "999.0.0",
+          runtimeRevision: "ffffffffffffffffffffffffffffffffffffffff",
+          approval: "REQUIRED",
+          arbitrary: { nested: true },
+        },
+      }),
+    );
+    expect(poisoned).toEqual(baseline);
+
+    const boundaryBaseline = evaluateEvidence(
+      evidence({
+        intent: intent({
+          minimumReceived: "11",
+          minimumReceivedSource: "user_declared",
+        }),
+      }),
+    );
+    const boundaryPoisoned = evaluateEvidence(
+      evidence({
+        intent: intent({
+          minimumReceived: "11",
+          minimumReceivedSource: "user_declared",
+        }),
+        providerData: { minimumReceived: "999" },
+      }),
+    );
+    expect(boundaryPoisoned).toEqual(boundaryBaseline);
   });
 
   it("returns unknown for inconsistent minimumReceived source states", () => {

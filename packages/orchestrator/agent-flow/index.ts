@@ -140,7 +140,7 @@ export class KuruLiveAgentFlow {
       throw toLiveAgentFlowError(error);
     }
 
-    if (evidence.provider.status !== "OK") {
+    if (evidence.provider.integrationStatus !== "OK") {
       const failure = evidence.provider.failure;
       const flowError =
         failure === undefined
@@ -148,7 +148,7 @@ export class KuruLiveAgentFlow {
               code: "INTERNAL_ERROR",
               message:
                 "The Evidence Provider failed without a classified failure",
-              integrationStatus: evidence.provider.status,
+              integrationStatus: evidence.provider.integrationStatus,
               source: "unknown",
             })
           : liveAgentFlowErrorFromFailure(failure);
@@ -579,8 +579,8 @@ function buildRunResult(
     runId,
     replayMode: false,
     intent,
-    ...(evidence.provenance.simulatorPinnedBlock
-      ? { simulatorPinnedBlock: evidence.provenance.simulatorPinnedBlock }
+    ...(evidence.provenance.simulationBlock
+      ? { simulatorPinnedBlock: evidence.provenance.simulationBlock }
       : {}),
     status: "completed",
     systemStatus: "OK",
@@ -624,8 +624,8 @@ function buildIntegrationErrorResult(
     runId,
     replayMode: false,
     intent,
-    ...(evidence.provenance.simulatorPinnedBlock
-      ? { simulatorPinnedBlock: evidence.provenance.simulatorPinnedBlock }
+    ...(evidence.provenance.simulationBlock
+      ? { simulatorPinnedBlock: evidence.provenance.simulationBlock }
       : {}),
     status: "integration_error",
     systemStatus: "INTEGRATION_ERROR",
@@ -649,8 +649,8 @@ function buildIntegrationErrorResult(
 function projectGenericQuote(evidence: GenericEvidence): Quote | undefined {
   if (
     evidence.quote.source !== "quote" ||
-    evidence.provenance.runtimeVersion === undefined ||
-    evidence.provenance.runtimeRevision === undefined ||
+    evidence.provenance.runtime?.runtimeVersion === undefined ||
+    evidence.provenance.runtime?.runtimeRevision === undefined ||
     evidence.quote.value === null
   ) {
     return undefined;
@@ -668,8 +668,8 @@ function projectGenericQuote(evidence: GenericEvidence): Quote | undefined {
     ...(evidence.quote.fetchedAt
       ? { fetchedAt: evidence.quote.fetchedAt }
       : {}),
-    runtimeVersion: evidence.provenance.runtimeVersion,
-    runtimeRevision: evidence.provenance.runtimeRevision,
+    runtimeVersion: evidence.provenance.runtime?.runtimeVersion,
+    runtimeRevision: evidence.provenance.runtime?.runtimeRevision,
   };
 
   const parsed = quoteSchema.safeParse(candidate);
@@ -1220,7 +1220,7 @@ class EvidenceCollector {
           ? "warning"
           : "confirmed");
     const item = evidenceItemSchema.parse({
-      key: `${this.evidence.provenance.commit ?? "live"}:${suffix}`,
+      key: `${this.evidence.provenance.runtime?.commit ?? "live"}:${suffix}`,
       ...provenance(this.evidence, field),
       kind: "generic",
       status,
@@ -1250,7 +1250,7 @@ class EvidenceCollector {
     const stage = error.stage === "ACTION" ? "ACTION" : "QUOTE";
     const blockNumber = evidence.blockNumber.value ?? undefined;
     const raw = evidenceItemSchema.parse({
-      key: `${evidence.provenance.commit ?? "live"}:no-route-raw`,
+      key: `${evidence.provenance.runtime?.commit ?? "live"}:no-route-raw`,
       ...provenance(evidence, evidence.blockNumber),
       ...(blockNumber ? { blockNumber } : {}),
       kind: "no_route_raw_output",
@@ -1259,7 +1259,7 @@ class EvidenceCollector {
       source: error.source,
       stage,
       payloadRef: {
-        locator: `live://${evidence.provenance.commit ?? "unknown"}/${stage}/error`,
+        locator: `live://${evidence.provenance.runtime?.commit ?? "unknown"}/${stage}/error`,
         encoding: "json",
         fingerprint: `sha256:${createHash("sha256")
           .update(JSON.stringify(error))
@@ -1269,7 +1269,7 @@ class EvidenceCollector {
     this.items.push(raw);
 
     const classification = evidenceItemSchema.parse({
-      key: `${evidence.provenance.commit ?? "live"}:no-route-classification`,
+      key: `${evidence.provenance.runtime?.commit ?? "live"}:no-route-classification`,
       ...provenance(evidence, evidence.blockNumber),
       ...(blockNumber ? { blockNumber } : {}),
       kind: "no_route_classification",
@@ -1323,7 +1323,7 @@ class EvidenceCollector {
     if (inputEvidenceRefs.length === 0) return undefined;
 
     const item = evidenceItemSchema.parse({
-      key: `${evidence.provenance.commit ?? "live"}:simulated-token-out`,
+      key: `${evidence.provenance.runtime?.commit ?? "live"}:simulated-token-out`,
       ...provenance(evidence, evidence.blockNumber),
       kind: "simulated_token_out",
       status: "confirmed",
@@ -1354,11 +1354,11 @@ function provenance(
 ): Record<string, unknown> {
   return {
     ...(field.blockNumber ? { blockNumber: field.blockNumber } : {}),
-    ...(evidence.provenance.simulatorPinnedBlock
-      ? { simulatorPinnedBlock: evidence.provenance.simulatorPinnedBlock }
+    ...(evidence.provenance.simulationBlock
+      ? { simulatorPinnedBlock: evidence.provenance.simulationBlock }
       : {}),
-    runtimeVersion: evidence.provenance.runtimeVersion,
-    runtimeRevision: evidence.provenance.runtimeRevision,
+    runtimeVersion: evidence.provenance.runtime?.runtimeVersion,
+    runtimeRevision: evidence.provenance.runtime?.runtimeRevision,
     reproducibility: field.reproducibility,
     isReplay: false,
     isMock: false,

@@ -18,7 +18,6 @@ function field<T>(
 
 function evidence(overrides: Partial<GenericEvidence> = {}): GenericEvidence {
   return {
-    status: "SUCCESS",
     intent: {
       chainId: 143,
       protocol: "kuru",
@@ -30,7 +29,8 @@ function evidence(overrides: Partial<GenericEvidence> = {}): GenericEvidence {
     },
     provider: {
       providerId: "moss-kuru",
-      status: "OK",
+      status: "SUCCESS",
+      integrationStatus: "OK",
       errors: field<GenericProviderError[]>([], "moss"),
     },
     execution: { status: "SUCCESS" },
@@ -55,22 +55,23 @@ function evidence(overrides: Partial<GenericEvidence> = {}): GenericEvidence {
     blockNumber: field("1", "rpc"),
     capabilities: ["quote", "action", "simulate"],
     provenance: {
-      runtimeVersion: "0.1.0",
-      runtimeRevision: "1111111111111111111111111111111111111111",
-      commit: "1111111111111111111111111111111111111111",
-      replayMode: false,
-      isReplay: false,
-      isMock: false,
+      mode: "LIVE",
       source: "moss",
       observedChainId: 143,
-      simulatorPinnedBlock: "1",
+      simulationBlock: "1",
       fetchedAt: "2026-01-01T00:00:00.000Z",
+      runtime: {
+        runtimeVersion: "0.1.0",
+        runtimeRevision: "1111111111111111111111111111111111111111",
+        checkoutRevision: "1111111111111111111111111111111111111111",
+        commit: "1111111111111111111111111111111111111111",
+        packageVersions: { "@themoss/core": "0.1.0" },
+      },
     },
     checkedScope: ["quote", "action", "simulation", "simulation-coverage"],
     unknownScope: [],
     providerData: {
       mossVersion: "@themoss/protocol-kuru@0.1.0",
-      packageVersions: { "@themoss/core": "0.1.0" },
       stages: [{ stage: "QUOTE", success: true, blockNumber: "1" }],
     },
     ...overrides,
@@ -83,7 +84,7 @@ describe("genericEvidenceSchema", () => {
     expect(parsed.success).toBe(true);
   });
 
-  it("accepts every legal evidence status", () => {
+  it("accepts every legal provider evaluation status", () => {
     for (const status of [
       "SUCCESS",
       "UNKNOWN",
@@ -91,18 +92,40 @@ describe("genericEvidenceSchema", () => {
       "FAILED",
       "STALE",
     ] as const) {
-      const parsed = genericEvidenceSchema.safeParse(evidence({ status }));
+      const parsed = genericEvidenceSchema.safeParse(
+        evidence({ provider: { ...evidence().provider, status } }),
+      );
       expect(parsed.success).toBe(true);
+    }
+  });
+
+  it("keeps provider evaluation status separate from execution outcome", () => {
+    const reverted = genericEvidenceSchema.safeParse(
+      evidence({ execution: { status: "REVERTED" } }),
+    );
+    expect(reverted.success).toBe(true);
+    if (reverted.success) {
+      expect(reverted.data.provider.status).toBe("SUCCESS");
+      expect(reverted.data.execution.status).toBe("REVERTED");
+    }
+
+    const noRoute = genericEvidenceSchema.safeParse(
+      evidence({ execution: { status: "NO_ROUTE" } }),
+    );
+    expect(noRoute.success).toBe(true);
+    if (noRoute.success) {
+      expect(noRoute.data.provider.status).toBe("SUCCESS");
+      expect(noRoute.data.execution.status).toBe("NO_ROUTE");
     }
   });
 
   it("accepts FAILED evidence with a classified provider failure", () => {
     const parsed = genericEvidenceSchema.safeParse(
       evidence({
-        status: "FAILED",
         provider: {
           ...evidence().provider,
-          status: "INTEGRATION_ERROR",
+          status: "FAILED",
+          integrationStatus: "INTEGRATION_ERROR",
           failure: {
             stage: "SIMULATE",
             code: "INTEGRATION_ERROR",
@@ -118,7 +141,7 @@ describe("genericEvidenceSchema", () => {
     expect(parsed.success).toBe(true);
   });
 
-  it("rejects a classified failure on an OK provider status", () => {
+  it("rejects a classified failure on a non-FAILED provider status", () => {
     const parsed = genericEvidenceSchema.safeParse(
       evidence({
         provider: {
@@ -137,9 +160,6 @@ describe("genericEvidenceSchema", () => {
   });
 
   it("rejects evidence without required core fields", () => {
-    const { status: _status, ...withoutStatus } = evidence();
-    expect(genericEvidenceSchema.safeParse(withoutStatus).success).toBe(false);
-
     const { provider: _provider, ...withoutProvider } = evidence();
     expect(genericEvidenceSchema.safeParse(withoutProvider).success).toBe(
       false,
@@ -157,6 +177,18 @@ describe("genericEvidenceSchema", () => {
     expect(genericEvidenceSchema.safeParse(withoutProvenance).success).toBe(
       false,
     );
+
+    const {
+      integrationStatus: _integrationStatus,
+      ...providerWithoutIntegrationStatus
+    } = evidence().provider;
+    const withoutIntegrationStatus = {
+      ...evidence(),
+      provider: providerWithoutIntegrationStatus,
+    };
+    expect(
+      genericEvidenceSchema.safeParse(withoutIntegrationStatus).success,
+    ).toBe(false);
   });
 
   it("rejects evidence with a missing required evidence field", () => {
@@ -174,30 +206,45 @@ describe("genericEvidenceSchema", () => {
     expect(genericEvidenceSchema.safeParse(extra).success).toBe(false);
   });
 
-  it("enforces the Mock provenance truthfulness boundary", () => {
+  it("enforces the Mock truthfulness boundary via mode and source", () => {
     const mockSource = evidence({
-      provenance: { ...evidence().provenance, source: "mock", isMock: false },
+      provenance: { ...evidence().provenance, source: "mock", mode: "LIVE" },
     });
     expect(genericEvidenceSchema.safeParse(mockSource).success).toBe(false);
 
-    const mockFlag = evidence({
-      provenance: { ...evidence().provenance, source: "moss", isMock: true },
+    const mockMode = evidence({
+      provenance: { ...evidence().provenance, source: "moss", mode: "MOCK" },
     });
-    expect(genericEvidenceSchema.safeParse(mockFlag).success).toBe(false);
+    expect(genericEvidenceSchema.safeParse(mockMode).success).toBe(false);
 
     const consistentMock = evidence({
-      provenance: { ...evidence().provenance, source: "mock", isMock: true },
+      provenance: { ...evidence().provenance, source: "mock", mode: "MOCK" },
     });
     expect(genericEvidenceSchema.safeParse(consistentMock).success).toBe(true);
   });
 
-  it("preserves provider-specific provenance and metadata verbatim", () => {
+  it("preserves provider-specific runtime provenance without requiring it", () => {
+    const withRuntime = genericEvidenceSchema.safeParse(evidence());
+    expect(withRuntime.success).toBe(true);
+    if (withRuntime.success) {
+      expect(withRuntime.data.provenance.runtime).toMatchObject({
+        runtimeVersion: "0.1.0",
+        runtimeRevision: "1111111111111111111111111111111111111111",
+        commit: "1111111111111111111111111111111111111111",
+      });
+    }
+
+    // A future provider may omit the provider-specific runtime block entirely.
+    const { runtime: _runtime, ...withoutRuntime } = evidence().provenance;
+    const parsed = genericEvidenceSchema.safeParse(
+      evidence({ provenance: withoutRuntime }),
+    );
+    expect(parsed.success).toBe(true);
+  });
+
+  it("preserves provider-specific metadata verbatim", () => {
     const parsed = genericEvidenceSchema.safeParse(
       evidence({
-        provenance: {
-          ...evidence().provenance,
-          checkoutRevision: "2222222222222222222222222222222222222222",
-        },
         providerData: {
           ...evidence().providerData,
           approval: "NOT_APPLICABLE",
@@ -208,9 +255,6 @@ describe("genericEvidenceSchema", () => {
     );
     expect(parsed.success).toBe(true);
     if (parsed.success) {
-      expect(parsed.data.provenance.checkoutRevision).toBe(
-        "2222222222222222222222222222222222222222",
-      );
       expect(parsed.data.providerData.approval).toBe("NOT_APPLICABLE");
       expect(parsed.data.providerData.arbitrary).toEqual({
         nested: ["value", 1, null],
@@ -218,15 +262,11 @@ describe("genericEvidenceSchema", () => {
     }
   });
 
-  it("accepts a missing simulatorPinnedBlock on a legal terminal NO_ROUTE", () => {
+  it("accepts a missing simulation block on a legal terminal NO_ROUTE", () => {
     const parsed = genericEvidenceSchema.safeParse(
       evidence({
-        status: "SUCCESS",
         execution: { status: "NO_ROUTE" },
-        provenance: {
-          ...evidence().provenance,
-          simulatorPinnedBlock: undefined,
-        },
+        provenance: { ...evidence().provenance, simulationBlock: undefined },
         checkedScope: ["no-route"],
         unknownScope: ["quote", "action", "simulation", "simulation-coverage"],
       }),

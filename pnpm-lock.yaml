@@ -121,9 +121,6 @@ importers:
       '@parallax/contracts':
         specifier: workspace:*
         version: link:../contracts
-      '@parallax/risk':
-        specifier: workspace:*
-        version: link:../risk
 
   packages/orchestrator:
     dependencies:

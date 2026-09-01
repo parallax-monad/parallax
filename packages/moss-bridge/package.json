@@ -10,7 +10,6 @@
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
-    "@parallax/contracts": "workspace:*",
-    "@parallax/risk": "workspace:*"
+    "@parallax/contracts": "workspace:*"
   }
 }

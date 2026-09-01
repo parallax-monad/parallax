@@ -5,10 +5,8 @@ import {
   type GenericSwapIntent,
   type JsonValue,
 } from "@parallax/contracts";
-import { evaluateEvidence as evaluateGenericEvidence } from "@parallax/risk";
 import { describe, expect, it } from "vitest";
 import {
-  evaluateKuruEvidence,
   type KuruLiveRunner,
   type LiveKuruResult,
   MossProvider,
@@ -142,11 +140,10 @@ describe("toGenericEvidence adapter", () => {
       observedChainId: 143,
     });
 
-    expect(generic.status).toBe("SUCCESS");
-    expect(generic.execution).toEqual({ status: "SUCCESS" });
     expect(generic.provider).toMatchObject({
       providerId: "moss-kuru",
-      status: "OK",
+      status: "SUCCESS",
+      integrationStatus: "OK",
     });
     expect(generic.provider.errors.value).toEqual([]);
     expect(generic.quote.value).toEqual({ estimatedAmountOut: "10" });
@@ -169,21 +166,22 @@ describe("toGenericEvidence adapter", () => {
     ]);
     expect(generic.unknownScope).toEqual([]);
     expect(generic.provenance).toMatchObject({
-      runtimeVersion: runtime.runtimeVersion,
-      runtimeRevision: runtime.runtimeRevision,
-      checkoutRevision: runtime.runtimeRevision,
-      commit: runtime.runtimeRevision,
-      replayMode: false,
-      isReplay: false,
-      isMock: false,
+      mode: "LIVE",
       source: "moss",
       observedChainId: 143,
-      simulatorPinnedBlock: "1",
+      simulationBlock: "1",
+      runtime: {
+        runtimeVersion: runtime.runtimeVersion,
+        runtimeRevision: runtime.runtimeRevision,
+        checkoutRevision: runtime.runtimeRevision,
+        commit: runtime.runtimeRevision,
+        packageVersions,
+      },
     });
     expect(generic.providerData.mossVersion).toBe(
       "@themoss/protocol-kuru@0.1.0",
     );
-    expect(generic.providerData.packageVersions).toEqual(packageVersions);
+    expect(generic.providerData.packageVersions).toBeUndefined();
     expect(generic.providerData.limitations).toHaveLength(2);
     expect(generic.providerData.walletAffordabilityChecked).toBe(false);
   });
@@ -214,12 +212,15 @@ describe("toGenericEvidence adapter", () => {
       }),
     );
 
-    expect(generic.status).toBe("SUCCESS");
+    expect(generic.provider).toMatchObject({
+      providerId: "moss-kuru",
+      status: "SUCCESS",
+      integrationStatus: "OK",
+    });
     expect(generic.execution.status).toBe("NO_ROUTE");
-    expect(generic.provider.status).toBe("OK");
     expect(generic.provider.failure).toBeUndefined();
     expect(generic.provider.errors.value).toEqual([noRoute]);
-    expect(generic.provenance.simulatorPinnedBlock).toBeUndefined();
+    expect(generic.provenance.simulationBlock).toBeUndefined();
     expect(generic.checkedScope).toEqual(["no-route"]);
     expect(generic.unknownScope).toEqual([
       "quote",
@@ -255,8 +256,11 @@ describe("toGenericEvidence adapter", () => {
       { stages: [], runtime: runtimeIdentity(), observedChainId: 143 },
     );
 
-    expect(generic.status).toBe("FAILED");
-    expect(generic.provider.status).toBe("INTEGRATION_ERROR");
+    expect(generic.provider).toMatchObject({
+      providerId: "moss-kuru",
+      status: "FAILED",
+      integrationStatus: "INTEGRATION_ERROR",
+    });
     expect(generic.provider.failure).toEqual(integrationError);
     expect(generic.quote.value).toEqual({ estimatedAmountOut: "10" });
     expect(generic.action.value).not.toBeNull();
@@ -272,14 +276,45 @@ describe("toGenericEvidence adapter", () => {
       { stages: [], runtime: runtimeIdentity(), observedChainId: 143 },
     );
 
-    expect(generic.status).toBe("FAILED");
-    expect(generic.provider.status).toBe("UNAVAILABLE");
+    expect(generic.provider).toMatchObject({
+      providerId: "moss-kuru",
+      status: "FAILED",
+      integrationStatus: "UNAVAILABLE",
+    });
     expect(generic.provider.failure).toMatchObject({
       code: "UNAVAILABLE",
       message: "Live Evidence reported an integration failure without details",
       integrationStatus: "UNAVAILABLE",
       source: "moss",
     });
+  });
+
+  it("separates provider status from execution outcome", () => {
+    // Verified simulation revert: provider SUCCESS, execution REVERTED.
+    // (Risk still returns UNKNOWN for REVERTED — asserted by the
+    // orchestrator Risk-compatibility matrix.)
+    const reverted = toGenericEvidence(
+      evidence({ executionStatus: "REVERTED" }),
+    );
+    expect(reverted.provider.status).toBe("SUCCESS");
+    expect(reverted.provider.integrationStatus).toBe("OK");
+    expect(reverted.execution.status).toBe("REVERTED");
+
+    // Undetermined outcome (e.g. unsupported receipt / incomplete coverage):
+    // provider UNKNOWN, execution UNKNOWN.
+    const undetermined = toGenericEvidence(
+      evidence({ executionStatus: "UNKNOWN" }),
+    );
+    expect(undetermined.provider.status).toBe("UNKNOWN");
+    expect(undetermined.provider.integrationStatus).toBe("OK");
+    expect(undetermined.execution.status).toBe("UNKNOWN");
+
+    // Integration failure dominates both axes.
+    const failed = toGenericEvidence(
+      evidence({ integrationStatus: "TIMEOUT" }),
+    );
+    expect(failed.provider.status).toBe("FAILED");
+    expect(failed.provider.integrationStatus).toBe("TIMEOUT");
   });
 
   it("keeps non-decimal quote output fail-closed instead of rejecting evidence", () => {
@@ -301,20 +336,19 @@ describe("toGenericEvidence adapter", () => {
     expect(emptyMinimum.quote.value).toEqual({ estimatedAmountOut: "10" });
   });
 
-  it("preserves Replay truthfulness", () => {
+  it("preserves Replay truthfulness as RECORDED_REPLAY mode", () => {
     const generic = toGenericEvidence(replayKuruEvidence(evidence()));
-    expect(generic.provenance.replayMode).toBe(true);
-    expect(generic.provenance.isReplay).toBe(true);
-    expect(generic.provenance.isMock).toBe(false);
+    expect(generic.provenance.mode).toBe("RECORDED_REPLAY");
+    expect(generic.provenance.source).toBe("moss");
   });
 
-  it("preserves Mock truthfulness", () => {
+  it("preserves Mock truthfulness as MOCK mode", () => {
     const generic = toGenericEvidence(
       evidence({ source: "mock", isMock: true }),
     );
     expect(generic.provenance.source).toBe("mock");
-    expect(generic.provenance.isMock).toBe(true);
-    expect(generic.status).toBe("SUCCESS");
+    expect(generic.provenance.mode).toBe("MOCK");
+    expect(generic.provider.status).toBe("SUCCESS");
   });
 
   it("preserves provider-specific provenance without flattening it", () => {
@@ -333,7 +367,12 @@ describe("toGenericEvidence adapter", () => {
       runtime: runtimeIdentity(),
       observedChainId: 143,
     });
-    expect(generic.provenance.checkoutRevision).toBe(runtime.runtimeRevision);
+    expect(generic.provenance.runtime?.checkoutRevision).toBe(
+      runtime.runtimeRevision,
+    );
+    expect(generic.provenance.runtime?.packageVersions).toEqual(
+      packageVersions,
+    );
     expect(generic.providerData.stages).toEqual([
       {
         stage: "QUOTE",
@@ -343,274 +382,6 @@ describe("toGenericEvidence adapter", () => {
         finishedAt: "2026-01-01T00:00:01.000Z",
       },
     ]);
-  });
-});
-
-describe("Risk compatibility (old Moss path == generic path)", () => {
-  const oldCases: Array<{
-    name: string;
-    overrides: Partial<NormalizedKuruEvidence>;
-    verdict: "PROCEED" | "ADJUST" | "STOP" | "UNKNOWN";
-  }> = [
-    {
-      name: "complete success without boundary",
-      overrides: {},
-      verdict: "PROCEED",
-    },
-    {
-      name: "passing supplied boundary",
-      overrides: {
-        intent: {
-          ...evidence().intent,
-          minimumReceived: "9",
-          minimumReceivedSource: "user_declared",
-        },
-      },
-      verdict: "PROCEED",
-    },
-    {
-      name: "below supplied boundary",
-      overrides: {
-        intent: {
-          ...evidence().intent,
-          minimumReceived: "11",
-          minimumReceivedSource: "user_declared",
-        },
-      },
-      verdict: "ADJUST",
-    },
-    {
-      name: "original_swap boundary below",
-      overrides: {
-        intent: {
-          ...evidence().intent,
-          minimumReceived: "11",
-          minimumReceivedSource: "original_swap",
-        },
-      },
-      verdict: "ADJUST",
-    },
-    {
-      name: "terminal NO_ROUTE",
-      overrides: { executionStatus: "NO_ROUTE" },
-      verdict: "STOP",
-    },
-    {
-      name: "execution REVERTED",
-      overrides: { executionStatus: "REVERTED" },
-      verdict: "UNKNOWN",
-    },
-    {
-      name: "integration error",
-      overrides: {
-        integrationStatus: "INTEGRATION_ERROR",
-        errors: sourced(
-          [
-            {
-              stage: "SIMULATE",
-              code: "INTEGRATION_ERROR",
-              message: "failed to decode revert data",
-              integrationStatus: "INTEGRATION_ERROR",
-              source: "moss",
-              normalization: "PRESERVED",
-            },
-          ],
-          "moss",
-        ),
-      },
-      verdict: "UNKNOWN",
-    },
-    {
-      name: "missing critical evidence",
-      overrides: {
-        receipt: sourced(null, "unknown"),
-        intent: {
-          ...evidence().intent,
-          minimumReceived: "9",
-          minimumReceivedSource: "user_declared",
-        },
-      },
-      verdict: "UNKNOWN",
-    },
-    {
-      name: "non-decimal quote output",
-      overrides: {
-        quote: sourced({ estimatedAmountOut: "not-a-decimal" }, "quote"),
-        intent: {
-          ...evidence().intent,
-          minimumReceived: "9",
-          minimumReceivedSource: "user_declared",
-        },
-      },
-      verdict: "UNKNOWN",
-    },
-    {
-      name: "halted simulation coverage",
-      overrides: {
-        simulationCoverage: sourced<SimulationCoverage>(
-          {
-            expectedTransactions: 2,
-            observedResults: 1,
-            unmatchedResultIndexes: [],
-            halted: true,
-            complete: false,
-            missingTransactionIndexes: [1],
-            haltReason: "execution halted",
-          },
-          "derived",
-        ),
-      },
-      verdict: "UNKNOWN",
-    },
-    {
-      name: "null simulation coverage",
-      overrides: {
-        simulationCoverage: {
-          value: null,
-          source: "unknown",
-          reproducibility: "UNKNOWN",
-        },
-      },
-      verdict: "UNKNOWN",
-    },
-    {
-      name: "warnings with unknown source",
-      overrides: { warnings: sourced([], "unknown") },
-      verdict: "UNKNOWN",
-    },
-    {
-      name: "warnings with unknown reproducibility",
-      overrides: { warnings: sourced([], "moss", "UNKNOWN") },
-      verdict: "UNKNOWN",
-    },
-    {
-      name: "mock-sourced warnings",
-      overrides: { warnings: sourced([], "mock") },
-      verdict: "UNKNOWN",
-    },
-    {
-      name: "empty trusted warnings",
-      overrides: { warnings: sourced([], "moss") },
-      verdict: "PROCEED",
-    },
-    {
-      name: "quote with unknown source",
-      overrides: { quote: sourced({ estimatedAmountOut: "10" }, "unknown") },
-      verdict: "UNKNOWN",
-    },
-    {
-      name: "quote with unknown reproducibility",
-      overrides: {
-        quote: sourced({ estimatedAmountOut: "10" }, "quote", "UNKNOWN"),
-      },
-      verdict: "UNKNOWN",
-    },
-    {
-      name: "mock-sourced quote",
-      overrides: { quote: sourced({ estimatedAmountOut: "10" }, "mock") },
-      verdict: "UNKNOWN",
-    },
-    {
-      name: "unexplained asset changes",
-      overrides: {
-        assetChanges: sourced([{ kind: "nativeTransfer" }], "moss"),
-        assetChangeAssessment: "UNKNOWN",
-      },
-      verdict: "UNKNOWN",
-    },
-    {
-      name: "unavailable boundary",
-      overrides: {
-        intent: { ...evidence().intent, minimumReceivedSource: "unavailable" },
-      },
-      verdict: "PROCEED",
-    },
-    {
-      name: "demo_preset boundary outside replay",
-      overrides: {
-        intent: {
-          ...evidence().intent,
-          minimumReceived: "9",
-          minimumReceivedSource: "demo_preset",
-        },
-      },
-      verdict: "UNKNOWN",
-    },
-    {
-      name: "demo_preset boundary in replay",
-      overrides: {
-        replayMode: true,
-        intent: {
-          ...evidence().intent,
-          minimumReceived: "9",
-          minimumReceivedSource: "demo_preset",
-        },
-      },
-      verdict: "PROCEED",
-    },
-    {
-      name: "minimumReceived without source",
-      overrides: {
-        intent: { ...evidence().intent, minimumReceived: "9" },
-      },
-      verdict: "UNKNOWN",
-    },
-    {
-      name: "minimumReceived with unavailable source",
-      overrides: {
-        intent: {
-          ...evidence().intent,
-          minimumReceived: "9",
-          minimumReceivedSource: "unavailable",
-        },
-      },
-      verdict: "UNKNOWN",
-    },
-    {
-      name: "source without minimumReceived",
-      overrides: {
-        intent: {
-          ...evidence().intent,
-          minimumReceivedSource: "user_declared",
-        },
-      },
-      verdict: "UNKNOWN",
-    },
-  ];
-
-  for (const testCase of oldCases) {
-    it(`keeps the old-path verdict for: ${testCase.name}`, () => {
-      const normalized = evidence(testCase.overrides);
-      const generic = toGenericEvidence(normalized);
-
-      const legacyResult = evaluateKuruEvidence(normalized);
-      const genericResult = evaluateGenericEvidence(generic);
-
-      expect(legacyResult.verdict).toBe(testCase.verdict);
-      expect(genericResult.verdict).toBe(testCase.verdict);
-      expect(genericResult).toEqual(legacyResult);
-    });
-  }
-
-  it("keeps old-path reasons and actions identical", () => {
-    const legacyResult = evaluateKuruEvidence(evidence());
-    const genericResult = evaluateGenericEvidence(
-      toGenericEvidence(evidence()),
-    );
-    expect(genericResult.reasons).toEqual(legacyResult.reasons);
-    expect(genericResult.actions).toEqual(legacyResult.actions);
-
-    const adjust = evidence({
-      intent: {
-        ...evidence().intent,
-        minimumReceived: "11",
-        minimumReceivedSource: "user_declared",
-      },
-    });
-    const legacyAdjust = evaluateKuruEvidence(adjust);
-    const genericAdjust = evaluateGenericEvidence(toGenericEvidence(adjust));
-    expect(genericAdjust.reasons).toEqual(legacyAdjust.reasons);
-    expect(genericAdjust.actions).toEqual(legacyAdjust.actions);
   });
 });
 
@@ -639,11 +410,16 @@ describe("MossProvider", () => {
       tokenOutDecimals: 6,
     });
 
-    expect(generic.status).toBe("SUCCESS");
-    expect(generic.provider.status).toBe("OK");
+    expect(generic.provider).toMatchObject({
+      providerId: "moss-kuru",
+      status: "SUCCESS",
+      integrationStatus: "OK",
+    });
     expect(generic.provenance.observedChainId).toBe(143);
-    expect(generic.provenance.simulatorPinnedBlock).toBe("1");
-    expect(generic.provenance.runtimeRevision).toBe(runtime.runtimeRevision);
+    expect(generic.provenance.simulationBlock).toBe("1");
+    expect(generic.provenance.runtime?.runtimeRevision).toBe(
+      runtime.runtimeRevision,
+    );
   });
 
   it("accepts a terminal NO_ROUTE without a simulator pinned block", async () => {
@@ -682,7 +458,7 @@ describe("MossProvider", () => {
     });
 
     expect(generic.execution.status).toBe("NO_ROUTE");
-    expect(generic.provenance.simulatorPinnedBlock).toBeUndefined();
+    expect(generic.provenance.simulationBlock).toBeUndefined();
   });
 
   it("fails closed on mismatched runtime provenance", async () => {
