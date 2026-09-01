@@ -16,3 +16,10 @@
 
 /.github/                      @chin0312 @rainypilgrimage @jzhao0 @brightheartma @antony819
 /.gitignore                    @chin0312 @rainypilgrimage @jzhao0 @brightheartma @antony819
+
+# Targeted semantic ownership; broad technical ownership remains above.
+/apps/web/                    @antony819
+/apps/api/                    @brightheartma @jzhao0
+/packages/contracts/          @rainypilgrimage @brightheartma
+/packages/moss-bridge/        @jzhao0 @brightheartma
+/packages/orchestrator/       @brightheartma @chin0312 @rainypilgrimage

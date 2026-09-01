@@ -2,7 +2,9 @@
 
 ## 1. Product Summary
 
-**Parallax is a Moss-powered pre-transaction decision layer for Monad swaps.**
+**Parallax is a provider-agnostic pre-execution remediation and re-verification layer for onchain actions.**
+
+Current verified path: **Monad × Kuru × Moss**. The Arbitrum expansion is planned and remains separate from this Monad MVP reference.
 
 Before a user signs or retries after a failure, Parallax uses real execution evidence to help the user decide whether the current transaction should:
 
