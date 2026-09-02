@@ -86,13 +86,17 @@ export function isChainAdapterError(
     chainId?: unknown;
     operation?: unknown;
     code?: unknown;
+    message?: unknown;
+    retryable?: unknown;
   };
 
   return (
     candidate.name === "ChainAdapterError" &&
     typeof candidate.chainId === "number" &&
     isChainOperation(candidate.operation) &&
-    isChainErrorCode(candidate.code)
+    isChainErrorCode(candidate.code) &&
+    typeof candidate.message === "string" &&
+    typeof candidate.retryable === "boolean"
   );
 }
 

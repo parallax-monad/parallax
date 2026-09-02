@@ -128,4 +128,29 @@ describe("ChainAdapter port", () => {
       );
     });
   });
+
+  it("rejects incomplete structural chain adapter errors", () => {
+    const baseCandidate = {
+      name: "ChainAdapterError",
+      chainId: 1,
+      operation: "connect",
+      code: "TIMEOUT",
+    };
+
+    expect(isChainAdapterError(baseCandidate)).toBe(false);
+    expect(
+      isChainAdapterError({
+        ...baseCandidate,
+        message: "Connection timed out",
+        retryable: "true",
+      }),
+    ).toBe(false);
+    expect(
+      isChainAdapterError({
+        ...baseCandidate,
+        message: "Connection timed out",
+        retryable: true,
+      }),
+    ).toBe(true);
+  });
 });
