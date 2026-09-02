@@ -1,15 +1,27 @@
-import type { NormalizedKuruEvidence } from "@parallax/moss-bridge";
+import type { GenericEvidence } from "@parallax/contracts";
 import { evidenceCompleteness } from "./evidence-completeness.js";
 import { executionReason } from "./execution.js";
 import type { EconomicBoundaryStatus, RuleResult } from "./types.js";
 
-export function evaluateKuruEvidence(
-  evidence: NormalizedKuruEvidence,
-): RuleResult {
+/**
+ * Deterministic generic Risk evaluation.
+ *
+ * Same input semantics, rule order, verdicts, reasons and actions as the
+ * previous Moss-bound `evaluateKuruEvidence`; only the Evidence input is now
+ * provider-agnostic. UNKNOWN is never PROCEED, integration failure is never a
+ * protocol verdict, and NO_ROUTE stays a legal terminal STOP.
+ *
+ * The provider evaluation status, the execution outcome and the Risk verdict
+ * stay three independent layers: a verified REVERTED execution is
+ * `provider.status=SUCCESS` + `execution.status=REVERTED` while this function
+ * still returns verdict UNKNOWN. Any provider status other than SUCCESS fails
+ * closed to UNKNOWN before execution or economic checks.
+ */
+export function evaluateEvidence(evidence: GenericEvidence): RuleResult {
   const completeness = evidenceCompleteness(evidence);
   const economicBoundary = economicBoundaryStatus(evidence);
   const reason = executionReason(evidence);
-  if (evidence.integrationStatus !== "OK") {
+  if (evidence.provider.integrationStatus !== "OK") {
     return result(
       evidence,
       completeness,
@@ -21,7 +33,19 @@ export function evaluateKuruEvidence(
       [],
     );
   }
-  if (evidence.executionStatus === "NO_ROUTE") {
+  if (evidence.provider.status !== "SUCCESS") {
+    return result(
+      evidence,
+      completeness,
+      economicBoundary,
+      "UNKNOWN",
+      [
+        "Provider evaluation did not succeed; execution evidence is not actionable.",
+      ],
+      [],
+    );
+  }
+  if (evidence.execution.status === "NO_ROUTE") {
     return result(
       evidence,
       completeness,
@@ -31,7 +55,7 @@ export function evaluateKuruEvidence(
       ["Try another route, protocol, or token pair."],
     );
   }
-  if (evidence.executionStatus !== "SUCCESS") {
+  if (evidence.execution.status !== "SUCCESS") {
     return result(
       evidence,
       completeness,
@@ -94,7 +118,7 @@ export function evaluateKuruEvidence(
 }
 
 function economicBoundaryStatus(
-  evidence: NormalizedKuruEvidence,
+  evidence: GenericEvidence,
 ): EconomicBoundaryStatus {
   const minimumReceived = evidence.intent.minimumReceived;
   const source = evidence.intent.minimumReceivedSource;
@@ -110,7 +134,7 @@ function economicBoundaryStatus(
   if (source === undefined) return "UNKNOWN";
 
   if (source === "demo_preset") {
-    return evidence.replayMode
+    return evidence.provenance.mode === "RECORDED_REPLAY"
       ? evaluateBoundary(evidence, minimumReceived)
       : "UNKNOWN";
   }
@@ -123,7 +147,7 @@ function economicBoundaryStatus(
 }
 
 function evaluateBoundary(
-  evidence: NormalizedKuruEvidence,
+  evidence: GenericEvidence,
   minimumReceived: string,
 ): EconomicBoundaryStatus {
   const quote = quoteOutput(evidence);
@@ -131,14 +155,13 @@ function evaluateBoundary(
   return compareDecimal(quote, minimumReceived) >= 0 ? "PASS" : "FAIL";
 }
 
-function quoteOutput(evidence: NormalizedKuruEvidence): string | null {
-  if (!isRecord(evidence.quote.value)) return null;
-  const value = evidence.quote.value.estimatedAmountOut;
+function quoteOutput(evidence: GenericEvidence): string | null {
+  const value = evidence.quote.value?.estimatedAmountOut;
   return typeof value === "string" ? value : null;
 }
 
 function result(
-  evidence: NormalizedKuruEvidence,
+  evidence: GenericEvidence,
   evidenceCompleteness: RuleResult["evidenceCompleteness"],
   economicBoundary: EconomicBoundaryStatus,
   verdict: RuleResult["verdict"],
@@ -146,8 +169,8 @@ function result(
   actions: string[],
 ): RuleResult {
   return {
-    integrationStatus: evidence.integrationStatus,
-    executionStatus: evidence.executionStatus,
+    integrationStatus: evidence.provider.integrationStatus,
+    executionStatus: evidence.execution.status,
     evidenceCompleteness,
     economicBoundary,
     verdict,
@@ -169,8 +192,4 @@ function compareDecimal(left: string, right: string): number {
     `${rightWhole}${rightFraction.padEnd(scale, "0")}`,
   );
   return leftScaled === rightScaled ? 0 : leftScaled > rightScaled ? 1 : -1;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
 }

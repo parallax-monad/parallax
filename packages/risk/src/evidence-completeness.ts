@@ -1,15 +1,20 @@
-import type { NormalizedKuruEvidence, Sourced } from "@parallax/moss-bridge";
+import type { EvidenceField, GenericEvidence } from "@parallax/contracts";
 import type { EvidenceCompleteness } from "./types.js";
 
+/**
+ * Deterministic completeness gate over generic Evidence. Missing or
+ * untrusted fields never count as checked; mock/unknown sources and
+ * non-reproducible fields fail closed.
+ */
 export function evidenceCompleteness(
-  evidence: NormalizedKuruEvidence,
+  evidence: GenericEvidence,
 ): EvidenceCompleteness {
-  if (evidence.integrationStatus !== "OK") return "UNKNOWN";
-  if (evidence.simulationCoverage.value?.complete !== true) return "MISSING";
-  const alwaysCritical: Sourced<unknown>[] = [
+  if (evidence.provider.integrationStatus !== "OK") return "UNKNOWN";
+  if (evidence.simulation.value?.complete !== true) return "MISSING";
+  const alwaysCritical: EvidenceField<unknown>[] = [
     evidence.quote,
     evidence.action,
-    evidence.simulationCoverage,
+    evidence.simulation,
     evidence.blockNumber,
     evidence.warnings,
   ];
@@ -22,14 +27,14 @@ export function evidenceCompleteness(
     return "MISSING";
 
   if (
-    evidence.executionStatus === "SUCCESS" &&
+    evidence.execution.status === "SUCCESS" &&
     (evidence.receipt.value === null || evidence.outcome.value === null)
   ) {
     return "MISSING";
   }
 
-  if (evidence.executionStatus === "SUCCESS") {
-    const successCritical: Sourced<unknown>[] = [
+  if (evidence.execution.status === "SUCCESS") {
+    const successCritical: EvidenceField<unknown>[] = [
       evidence.receipt,
       evidence.outcome,
       evidence.assetChanges,
@@ -49,7 +54,7 @@ export function evidenceCompleteness(
   return "COMPLETE";
 }
 
-function isTrusted(field: Sourced<unknown>): boolean {
+function isTrusted(field: EvidenceField<unknown>): boolean {
   return (
     field.source !== "unknown" &&
     field.source !== "mock" &&
