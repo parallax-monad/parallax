@@ -14,11 +14,11 @@
 
 ### Phase 1：MossProvider
 
-把现有 `Monad × Kuru × Moss` flow 封装到 Provider Interface，保持 Generic Evidence、Replay、Re-run、Action Gate、provenance 与测试回归。当前 `main` 仍以既有 Moss/Kuru 路径为 verified baseline；PR #41 是开放的 compatibility workstream，合并前不作为 `main` 能力描述。
+把现有 `Monad × Kuru × Moss` flow 封装到 Provider Interface，保持 Generic Evidence、Replay、Re-run、Action Gate、provenance 与测试回归。这是 Pre-Buildathon compatibility stage，完成后应能在不引入 Moss-specific type 依赖的情况下通过 Monad 回归。
 
 ### Phase 2：TenderlyProvider
 
-目标为 Arbitrum Sepolia P0：simulation、execution result、asset/balance changes、gas、revert、block/freshness、capabilities 与统一 Evidence。PR #42 当前仅记录文档 feasibility，状态为 `SUPPORTED_DOC_ONLY`，没有 credentialed request。
+目标为 Arbitrum Sepolia P0：simulation、execution result、asset/balance changes、gas、revert、block/freshness、capabilities 与统一 Evidence。在完成 credentialed real probe 前，Tenderly 只能保持 `SUPPORTED_DOC_ONLY`，不得描述为已验证运行时能力。
 
 ### Phase 3：NativeRpcProvider
 
@@ -64,8 +64,8 @@ Arbitrum One、可选 Enso、两类 portability test、capabilities/provenance U
 
 Provider comparison、reference integration、可选 MCP/Agent。SDK/MCP 是 distribution surface，不是 Core 的替代品。
 
-## 3. 当前可进入的工作
+## 3. 阶段 Gate 与可推进范围
 
-可以推进 Contract/Provider 接口、Moss compatibility、Registry、通用 provenance/capabilities/freshness、Contract tests、DecisionReceiptRegistry 设计和 feasibility spike；未有真实证据的 Provider 必须保持 `SUPPORTED_DOC_ONLY` 或 unresolved。
+在对应阶段内可以推进 Contract/Provider 接口、Moss compatibility、Registry、通用 provenance/capabilities/freshness、Contract tests、DecisionReceiptRegistry 设计和 feasibility spike；未有真实证据的 Provider 必须保持 `SUPPORTED_DOC_ONLY` 或 unresolved。
 
-当前不以真实用户 benchmark 作为阶段 Gate；仅在 controlled/replay scenarios 中验证 Cause、Action 和 Re-verification 规则。
+阶段 Gate 不以真实用户 benchmark 为前提；在真实 usage 建立前，仅在 controlled/replay scenarios 中验证 Cause、Action 和 Re-verification 规则。

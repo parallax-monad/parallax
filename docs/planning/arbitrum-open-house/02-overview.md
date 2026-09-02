@@ -15,7 +15,7 @@ Arbitrum Sepolia × Camelot V3 × TenderlyProvider
                                ↘ NativeRpcProvider（受控 fallback）
 ```
 
-Arbitrum/Camelot/Tenderly 能力仍以 feasibility 和开放 PR 为准，不是 `main` 的已部署声明。
+Arbitrum/Camelot/Tenderly 能力仍需以真实 feasibility 和集成 Gate 验证；计划能力不是 `main` 的已部署声明。
 
 ## 不可改变的产品与架构约束
 
@@ -39,12 +39,12 @@ Arbitrum/Camelot/Tenderly 能力仍以 feasibility 和开放 PR 为准，不是 
 
 ## 阶段总览
 
-| 阶段 | 目标 | 当前状态 |
+| 阶段 | 目标 | 交付/完成条件 |
 | --- | --- | --- |
-| Pre-Buildathon | Contract、MossProvider、Registry、feasibility、Receipt 准备 | 部分实现/研究进行中；PR #41–#43 仍开放 |
-| P0 | Sepolia × Camelot V3 × Tenderly 的真实决策闭环 | 计划中，未在 `main` 验证 |
-| Strong | Arbitrum One、第二 Provider、两类 portability proof | 计划中 |
-| Best Case | comparison、SDK/reference integration、可选 MCP | 计划中 |
+| Pre-Buildathon | Contract、MossProvider、Registry、feasibility、Receipt 准备 | 兼容抽象、Provider feasibility 与 Receipt 边界完成相应 Gate |
+| P0 | Sepolia × Camelot V3 × Tenderly 的真实决策闭环 | 计划中；以真实 quote/check/decision/re-run 与 failure matrix 为完成条件 |
+| Strong | Arbitrum One、第二 Provider、两类 portability proof | 计划中；必须建立两类 portability proof |
+| Best Case | comparison、SDK/reference integration、可选 MCP | 计划中；扩展不得替代或破坏 Core/P0 |
 
 ## 文档导航
 

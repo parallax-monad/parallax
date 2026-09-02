@@ -8,7 +8,7 @@
 
 Arbitrum Open House 提供了一个清晰的外部证明场景：在不重写 Parallax Core 的前提下，把当前 Monad × Kuru × Moss 路径扩展到一个 Arbitrum 原生的 Swap 组合。比赛的价值不是把支持的功能数量做大，而是用真实的 Chain、Protocol 和 Evidence Provider 证明边界可替换。
 
-这套叙事应保持克制：Arbitrum 扩展在当前仓库中仍是进行中的工作，不能把计划或开放 PR 当成已部署能力，也不能把外部市场数字当成 Parallax 自己的效果数据。
+这套叙事应保持克制：Arbitrum 扩展仍需按 02-A–02-D 完成真实 feasibility 与集成验证，不能把计划能力写成已部署能力，也不能把外部市场数字当成 Parallax 自己的效果数据。
 
 ## Before / During Buildathon
 

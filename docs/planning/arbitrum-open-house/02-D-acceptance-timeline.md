@@ -1,6 +1,6 @@
 # 02-D｜验收标准与时间安排
 
-> 状态：当前验收/时间参考。日期是计划，不是完成证明；开放 PR 和文档 feasibility 不等于 `main` 已交付。
+> 状态：当前验收/时间参考。日期是计划，不是完成证明；文档 feasibility 不等于运行时能力已验证。
 
 ## 1. 阶段 Gate
 
@@ -57,7 +57,7 @@
 
 Camelot Sepolia 真实池与 calldata、Tenderly credentials/rate limits、Native RPC 的最小 Evidence、目标 Token pair、Receipt registry 最终字段/事件/权限/网络、Enso 实际 route 支持、最终经济 Contract 和 freshness thresholds，都必须用真实 probe 或明确 Contract decision 确认。
 
-当前 Provider feasibility 状态：Tenderly 与 Native RPC 为 `SUPPORTED_DOC_ONLY`（PR #42 的文档研究，未执行 credentialed probe）；Arbitrum Chain/Protocol/Registry 与 DecisionReceiptRegistry 仍是 planned/open work，不能从计划表升级为 implemented。
+Tenderly 与 Native RPC 在完成 credentialed real probes 前只能视为 `SUPPORTED_DOC_ONLY`，不得升级为已验证 Provider capability；Arbitrum Chain/Protocol/Registry 与 DecisionReceiptRegistry 仍是 planned work，不能从计划表升级为 implemented。
 
 ## 5. Scope Gate
 

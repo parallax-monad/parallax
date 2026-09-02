@@ -8,14 +8,14 @@
 
 这组文档把“为什么做”和“现在要怎么做”分开：
 
-1. 代码以及已经合并到 `main` 的实现文档，是当前实现事实；开放 PR 不是已交付能力。
+1. 代码以及实现文档是当前实现事实；规划中的能力必须以代码和实现文档验证。
 2. `02-A`–`02-D` 是当前规范性的实施计划，约束架构边界、Provider 顺序、职责和验收 Gate。
 3. `00-strategy-context.md` 与 `docs/research/` 下的研究文档提供背景和理由。研究结论只有在明确写入 02 系列后，才改变执行计划。
 4. `archive/` 只保留仍有独立决策/历史价值的旧材料，不作为重复草稿的收容处。
 
-## 当前已核验基线
+## 当前产品基线
 
-截至本索引复核时，`main` 上的稳定产品路径是：
+当前稳定产品路径是：
 
 ```text
 Monad × Kuru × Moss
@@ -23,7 +23,17 @@ Monad × Kuru × Moss
 
 它包含只读的 quote/check、证据标准化、确定性决策、Replay、Re-run 和现有测试。Parallax 不签名、广播、执行或托管用户的 Swap。
 
-Generic Evidence / `MossProvider`、Chain Adapter 和 Arbitrum Provider feasibility 分别在开放的 [PR #41](https://github.com/parallax-monad/parallax/pull/41)、[PR #43](https://github.com/parallax-monad/parallax/pull/43) 和 [PR #42](https://github.com/parallax-monad/parallax/pull/42) 中推进；这些 PR 在合并前不属于 `main` 的实现事实。
+Generic Evidence / `MossProvider`、Chain Adapter 和 Arbitrum Provider feasibility 属于 Pre-Buildathon 兼容与可行性阶段；具体完成条件见 `02-B` 和 `02-D`。
+
+## 工作流阶段映射
+
+| 工作流 | 计划阶段 | 主要 Owner |
+| --- | --- | --- |
+| Generic Evidence / Moss compatibility | Pre-Buildathon | Provider + Backend + Contract |
+| Arbitrum Provider feasibility | Pre-Buildathon | Provider |
+| Generic Chain Adapter | Pre-Buildathon | Backend |
+| Camelot + Tenderly P0 | P0 | Backend + Provider |
+| Decision Receipt | P0 | Backend |
 
 ## 目标 P0
 
