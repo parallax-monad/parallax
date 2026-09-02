@@ -1,7 +1,7 @@
 import type {
-  IntegrationStatus,
-  NormalizedKuruEvidence,
-} from "@parallax/moss-bridge";
+  GenericExecutionStatus,
+  GenericIntegrationStatus,
+} from "@parallax/contracts";
 
 export type EvidenceCompleteness = "COMPLETE" | "MISSING" | "UNKNOWN";
 export type EconomicBoundaryStatus =
@@ -11,9 +11,16 @@ export type EconomicBoundaryStatus =
   | "UNKNOWN";
 export type Verdict = "PROCEED" | "ADJUST" | "STOP" | "UNKNOWN";
 
+/**
+ * Legacy provider-integration health vocabulary. This is the historical
+ * `integrationStatus` and must stay separate from the generic 5-state
+ * provider evaluation status.
+ */
+export type IntegrationStatus = GenericIntegrationStatus;
+
 export type RuleResult = {
   integrationStatus: IntegrationStatus;
-  executionStatus: NormalizedKuruEvidence["executionStatus"];
+  executionStatus: GenericExecutionStatus;
   evidenceCompleteness: EvidenceCompleteness;
   economicBoundary: EconomicBoundaryStatus;
   verdict: Verdict;

@@ -116,7 +116,11 @@ importers:
         specifier: 3.25.76
         version: 3.25.76
 
-  packages/moss-bridge: {}
+  packages/moss-bridge:
+    dependencies:
+      '@parallax/contracts':
+        specifier: workspace:*
+        version: link:../contracts
 
   packages/orchestrator:
     dependencies:
@@ -132,9 +136,9 @@ importers:
 
   packages/risk:
     dependencies:
-      '@parallax/moss-bridge':
+      '@parallax/contracts':
         specifier: workspace:*
-        version: link:../moss-bridge
+        version: link:../contracts
 
 packages:
 

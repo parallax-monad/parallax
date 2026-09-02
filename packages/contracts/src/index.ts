@@ -2,6 +2,8 @@ export * from "./amount.js";
 export * from "./common.js";
 export * from "./decision.js";
 export * from "./evidence.js";
+export * from "./evidence-provider.js";
+export * from "./generic-evidence.js";
 export * from "./intent.js";
 export * from "./normalization.js";
 export * from "./quote.js";
