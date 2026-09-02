@@ -72,6 +72,27 @@ function intent(overrides: Partial<GenericEvidence["intent"]> = {}) {
 }
 
 describe("deterministic generic Risk decisions", () => {
+  it.each(["UNKNOWN", "UNSUPPORTED", "FAILED", "STALE"] as const)(
+    "fails closed when provider evaluation status is %s",
+    (status) => {
+      const result = evaluateEvidence(
+        evidence({
+          provider: {
+            ...evidence().provider,
+            status,
+            integrationStatus: "OK",
+          },
+          execution: { status: "SUCCESS" },
+        }),
+      );
+
+      expect(result.verdict).toBe("UNKNOWN");
+      expect(result.reasons).toEqual([
+        "Provider evaluation did not succeed; execution evidence is not actionable.",
+      ]);
+    },
+  );
+
   it("does not turn integration errors into protocol risk", () => {
     expect(
       evaluateEvidence(

@@ -14,7 +14,8 @@ import type { EconomicBoundaryStatus, RuleResult } from "./types.js";
  * The provider evaluation status, the execution outcome and the Risk verdict
  * stay three independent layers: a verified REVERTED execution is
  * `provider.status=SUCCESS` + `execution.status=REVERTED` while this function
- * still returns verdict UNKNOWN.
+ * still returns verdict UNKNOWN. Any provider status other than SUCCESS fails
+ * closed to UNKNOWN before execution or economic checks.
  */
 export function evaluateEvidence(evidence: GenericEvidence): RuleResult {
   const completeness = evidenceCompleteness(evidence);
@@ -28,6 +29,18 @@ export function evaluateEvidence(evidence: GenericEvidence): RuleResult {
       "UNKNOWN",
       [
         "Integration evidence is unavailable; this is not a protocol-risk result.",
+      ],
+      [],
+    );
+  }
+  if (evidence.provider.status !== "SUCCESS") {
+    return result(
+      evidence,
+      completeness,
+      economicBoundary,
+      "UNKNOWN",
+      [
+        "Provider evaluation did not succeed; execution evidence is not actionable.",
       ],
       [],
     );

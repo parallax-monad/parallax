@@ -20,7 +20,7 @@ import type {
  *   RPC unavailable, timeout, internal failure, unsupported intent).
  * - Provider failures are never converted into successful Evidence: a
  *   classified failure is either thrown, or returned as
- *   `provider.status !== "OK"` with `provider.failure` set.
+ *   `provider.status !== "SUCCESS"` with `provider.failure` set.
  */
 export interface EvidenceProvider {
   readonly providerId: string;
