@@ -89,7 +89,7 @@ The repository currently has no configured Moss/RPC environment, so its
 verified status remains `P0_LIVE_BLOCKED_PORTABLE_RUNTIME`; when the runtime is
 configured, `FlipOrderUpdated` is expected to block the simulation/receipt path
 on this revision. Details, the runtime matrix, and the raw→normalized mapping live in
-[docs/integration/moss-kuru-live-runtime.md](moss-kuru-live-runtime.md).
+[docs/integration/moss-kuru-live-runtime.md](../integration/moss-kuru-live-runtime.md).
 `pnpm smoke:kuru:live` replaces the previous unconditional `UNAVAILABLE` smoke:
 it is a real live smoke that fails with a persisted configuration artifact until
 all required Moss/RPC inputs are configured, and fails non-zero if a live run

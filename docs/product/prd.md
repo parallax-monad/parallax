@@ -1,5 +1,9 @@
 # Parallax PRD | Hackathon MVP P0
 
+> **Status: Monad MVP P0 product specification.**
+>
+> This document records the current/original Monad × Kuru × Moss MVP scope and Product semantics. Broader Parallax positioning and the Arbitrum expansion are maintained in the current research and planning documents.
+
 ## 1. Product Summary
 
 **Parallax is a Moss-powered pre-transaction decision layer for Monad swaps.**

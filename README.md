@@ -5,9 +5,11 @@
 
 # Parallax
 
-Parallax is a read-only, Moss-powered pre-transaction decision layer for Monad swaps.
+Parallax is a provider-agnostic pre-execution remediation and re-verification layer for onchain actions.
 
-> Moss tells us what will happen. Parallax helps the user decide what to do next.
+**Current public demo scope:** Monad × Kuru × Moss.
+
+> Parallax turns heterogeneous transaction evidence into a deterministic cause and relevant action, then verifies whether the adjustment actually fixed the problem.
 
 ## Demo
 
@@ -15,66 +17,52 @@ Parallax is a read-only, Moss-powered pre-transaction decision layer for Monad s
 - [View the Demo Day presentation](https://parallax-monad.github.io/parallax/parallax-demo-day.html)
 - [Watch the product demo video](https://www.youtube.com/watch?v=j43WqH6TrTE)
 
-No demo account is required. The public frontend connects to the deployed
-backend through the Vercel API rewrite. This verified connection remains
-experimental, read-only, and limited to the documented Moss/Kuru scope; it is
-not a production-readiness or transaction-execution claim.
+## Project thesis
 
-## Product thesis
-
-Swap interfaces can expose quotes, warnings, and simulation output without connecting the observed cause to a bounded next action. Parallax turns traceable execution evidence into a scope-aware decision that a user can inspect and, when supported, test again after changing one relevant condition.
+A transaction can be valid, executable, and free of an obvious malicious signal while still failing the user's intent. Parallax organizes the evidence available before execution into a bounded decision and makes the missing evidence explicit.
 
 The core flow is:
 
 ```text
-Swap intent
-→ Moss quote/action/simulation evidence
-→ normalized evidence
-→ cause
-→ PROCEED / ADJUST / STOP / UNKNOWN
-→ relevant or irrelevant adjustment
-→ optional re-run
-→ Previous Run vs New Run
+Intent
+→ Evidence
+→ Cause
+→ Decision
+→ Relevant Action
+→ Re-verification
 ```
 
-`UNKNOWN` is not a pass. `PROCEED` means no blocking evidence was found within the checked scope; it is not a safety guarantee or investment recommendation.
+`UNKNOWN` is not a pass. `PROCEED` means that no blocking evidence was found within the checked scope; it is not a safety guarantee or investment advice.
 
-## Main features
+## What Parallax does
 
-- captures a structured, unsigned swap intent;
-- obtains and normalizes quote, prepared-action, simulation, and provenance evidence;
-- evaluates deterministic P0 rules and keeps Integration Error separate from transaction uncertainty;
-- presents `PROCEED`, `ADJUST`, `STOP`, or `UNKNOWN` with checked, unknown, and not-checked scope;
-- separates verified relevant adjustments from irrelevant changes;
-- supports recorded replay and a bounded one-change re-run comparison;
-- remains read-only: no signing, broadcasting, execution, custody, or wallet mutation.
+- accepts a structured, unsigned Swap Intent;
+- obtains and normalizes quote, prepared-action, simulation, and provenance Evidence;
+- evaluates deterministic decision rules while keeping Integration Error separate from transaction uncertainty;
+- presents `PROCEED`, `ADJUST`, `STOP`, or `UNKNOWN` with checked, not-checked, and unknown scope;
+- separates a verified Relevant Action from changes that the result does not support;
+- supports recorded Replay and a bounded one-condition Re-run comparison;
+- remains read-only: it does not sign, broadcast, execute, or custody the user's transaction.
 
 ## Demo flow
 
-The landing page is available at `#/`. Choose **Try demo** to open the wallet-style MVP at `#/analyze`.
+The landing page is served at `#/`. The wallet-style MVP is at `#/analyze`.
 
-The MVP collects a supported swap intent, requests a quote, runs the pre-sign check, presents the evidence and scope behind the result, and supports recorded replay or a bounded re-run when applicable.
+1. Enter a supported Swap Intent.
+2. Request a quote and run the pre-sign check.
+3. Review Evidence, provenance, scope, Cause, and Decision.
+4. When the result supports it, change one relevant condition and run again.
+5. Compare the Previous Run with the New Run.
 
-The frontend adapter on `main` calls `POST /api/quote`, `POST /api/check`, `GET /api/runs/:runId`, and `GET /api/replay/:id`. Local Vite development proxies those paths to the API process at `127.0.0.1:8787`.
+The current frontend adapter calls `POST /api/quote`, `POST /api/check`, `GET /api/runs/:runId`, and `GET /api/replay/:id`. Recorded Replay is a separate, explicitly labelled path and is never substituted for a live check.
 
-## Current implementation status
+## Current demo scope
 
-| Area | Status on `main` |
-| --- | --- |
-| Landing experience | Implemented with English and Simplified Chinese copy and an interactive Three.js evidence constellation |
-| Wallet-style frontend MVP | Implemented at `#/analyze` with quote, check, replay, evidence, and re-run UI |
-| Frontend/API adapter | Implemented for `/api/quote`, `/api/check`, `/api/runs/:runId`, and `/api/replay/:id`; local Vite development proxies to the API |
-| Shared contracts and decision rules | Implemented with automated tests for the current P0 slices |
-| Backend API and orchestration | Implemented with Hono, configurable memory/PostgreSQL Run storage, live check/quote boundaries, and recorded replay |
-| Live Moss/Kuru backend | Implemented for the pinned Kuru runtime and verified scope; requires explicit runtime and RPC configuration |
-| Public Vercel demo | Frontend is publicly reachable and routes same-origin `/api/*` requests to the deployed Render backend through the Vercel rewrite |
-| Signing, broadcasting, execution, or custody | Intentionally not implemented |
-
-The verified live evidence is limited to the documented pinned Kuru MON → USDC path and runtime scope. It does not establish support for every pair, protocol, asset behavior, runtime revision, or future market condition.
+The current public demo uses the Monad × Kuru × Moss path. Its verified live scope is limited to the documented pinned Kuru MON → USDC path and runtime identity; this does not establish support for every asset, route, protocol, runtime revision, or future market condition.
 
 ## P0 scope and exclusions
 
-P0 focuses on a light DeFi user who is about to sign a Monad swap or retry after a failure. It covers evidence-backed cause, scope disclosure, a bounded decision, verified action visibility, and optional re-run comparison.
+P0 uses a light DeFi user who is about to sign a Monad Swap or retry after a failure as its working user hypothesis. It focuses on evidence-backed Cause, scope disclosure, a bounded Decision, relevant-action visibility, and optional Re-verification.
 
 P0 does not provide:
 
@@ -83,51 +71,45 @@ P0 does not provide:
 - a complete protocol, token, or smart-contract security audit;
 - automatic signing, broadcasting, execution, or custody;
 - autonomous AI judgment;
-- guaranteed live availability when RPC, Moss, or required evidence is unavailable.
+- guaranteed availability when RPC, Moss, or required Evidence is unavailable.
 
-A user-supplied `Minimum Received` is an explicit acceptance boundary. Parallax does not lower it to manufacture `PROCEED`.
+In the current Monad MVP, `economicBoundary.minimumReceived` is an explicit acceptance boundary carried with the Intent. Its provenance may be `original_swap`, `user_declared`, `demo_preset`, or `unavailable`; Parallax does not lower it to manufacture `PROCEED`.
 
 ## Architecture and technology stack
+
+The long-term decomposition is:
+
+```text
+Chain × Protocol × Evidence Provider
+```
 
 | Path | Responsibility |
 | --- | --- |
 | `apps/web` | React 18 + Vite frontend, landing experience, wallet-style MVP, API adapter, and Three.js visualization |
-| `apps/api` | Node.js/Hono HTTP runtime for live quote/check and recorded replay |
-| `packages/contracts` | Shared schemas, normalized Intent/Run types, Evidence, Replay, and serialization |
-| `packages/moss-bridge` | Moss/Kuru runtime loading, live execution-evidence adapter, normalization, and provenance checks |
-| `packages/orchestrator` | Agent Flow, re-run lifecycle, Action Gate, and application orchestration |
-| `packages/risk` | Deterministic P0 rule evaluation and centralized decision policy |
-| `fixtures` | Recorded raw/normalized Evidence and replay fixtures |
-| `docs` | Product, research, risk methodology, integration, ADR, and runtime documentation |
+| `apps/api` | Node.js/Hono HTTP runtime for live quote/check and recorded Replay |
+| `packages/contracts` | Shared Intent, Run, Evidence, Replay, serialization, and compatibility schemas |
+| `packages/moss-bridge` | Moss/Kuru runtime loading, live Evidence adapter, normalization, and provenance checks |
+| `packages/orchestrator` | Agent Flow, Action Gate, Re-run lifecycle, and application orchestration |
+| `packages/risk` | Deterministic P0 rule evaluation and centralized Decision policy |
+| `fixtures` | Recorded raw/normalized Evidence and Replay fixtures |
+| `docs` | Product, research, planning, integration, methodology, and ADR references |
 | `scripts` | Deterministic and live Kuru smoke/acceptance tooling |
 
-The principal toolchain is Node.js 22, pnpm, TypeScript, React, Vite, Three.js, Hono with the Node server runtime, Vitest, and Biome.
+The current toolchain is Node.js 22, pnpm, TypeScript, React, Vite, Three.js, Hono, Vitest, and Biome.
 
 ## Repository structure
 
 ```text
-apps/
-  api/                 Backend API and runtime composition
-  web/                 Landing page and wallet-style frontend MVP
-packages/
-  contracts/           Shared contracts and serialization
-  moss-bridge/         Moss/Kuru adapter and normalization
-  orchestrator/        Agent Flow and application lifecycle
-  risk/                Rule and decision logic
-fixtures/              Evidence and replay fixtures
-docs/                  Product, research, integration, methodology, and ADRs
-scripts/               Smoke and repository-validation scripts
+apps/                  Frontend and backend applications
+packages/              Contracts, Moss bridge, orchestration, and risk
+docs/                  Product, research, planning, integration, and ADRs
+fixtures/              Evidence and Replay fixtures
+scripts/               Smoke and repository-validation tooling
 ```
 
 ## Installation and local development
 
-Requirements:
-
-- Node.js 22;
-- pnpm 11-compatible tooling;
-- Git.
-
-Install dependencies and create a local environment file:
+Requirements: Node.js 22, pnpm 11-compatible tooling, and Git.
 
 ```bash
 pnpm install --frozen-lockfile
@@ -140,15 +122,13 @@ Start the frontend:
 pnpm --filter @parallax/web dev
 ```
 
-Open the Vite URL and use `#/` for the landing page or `#/analyze` for the MVP.
-
-To use quote and check requests locally, configure `.env` and start the API in a separate terminal:
+Use `#/` for the landing page and `#/analyze` for the MVP. To run local quote/check requests, configure `.env` and start the API in another terminal:
 
 ```bash
 pnpm --filter @parallax/api start
 ```
 
-The Vite development server proxies `/api/*` to `http://127.0.0.1:8787`.
+The local Vite server proxies `/api/*` to `http://127.0.0.1:8787`.
 
 ## Environment configuration
 
@@ -156,75 +136,59 @@ The Vite development server proxies `/api/*` to `http://127.0.0.1:8787`.
 
 | Variable | Purpose |
 | --- | --- |
-| `MONAD_RPC_URL` | Read-only Monad RPC used by backend live quote/check requests |
-| `MOSS_RPC_URL` | Read-only RPC used by the local live-smoke command; not consumed automatically by the backend |
-| `MOSS_RUNTIME_VERSION` | Expected Moss package/runtime version |
+| `MONAD_RPC_URL` | Read-only Monad RPC for backend live quote/check requests |
+| `MOSS_RPC_URL` | Read-only RPC for the live smoke command |
+| `MOSS_RUNTIME_VERSION` | Expected Moss runtime version |
 | `MOSS_RUNTIME_REVISION` | Expected immutable Moss Git revision |
-| `MOSS_RUNTIME_PATH` | Optional absolute path to the built, pinned Moss Git checkout; enables the live Kuru Agent Flow |
-| `PARALLAX_TOKEN_REGISTRY_JSON` | Trusted token metadata consumed by backend normalization |
+| `MOSS_RUNTIME_PATH` | Absolute path to the built, pinned Moss checkout; enables the live Kuru Agent Flow |
+| `PARALLAX_TOKEN_REGISTRY_JSON` | Trusted token metadata for backend normalization |
 | `CORS_ORIGIN` | Browser origin allowed to call the API |
-| `RUN_STORE_BACKEND` | Run lifecycle persistence backend (`memory` by default; use `postgres` only after migration) |
-| `DATABASE_URL` | PostgreSQL connection URL required when `RUN_STORE_BACKEND=postgres` |
-| `HOST` / `PORT` | Node HTTP listener configuration |
+| `RUN_STORE_BACKEND` | `memory` by default; use `postgres` only after migration and verification |
+| `DATABASE_URL` | PostgreSQL URL required when `RUN_STORE_BACKEND=postgres` |
+| `HOST` / `PORT` | Node HTTP listener settings |
 
-The live backend requires the Moss checkout at `MOSS_RUNTIME_PATH` to retain its `.git` metadata, match the configured version/revision, and be readable by a runtime with `git` available. Without that path, live quote/check requests fail closed as `UNSUPPORTED`; recorded replay remains a separate, explicitly labelled path.
+Live Moss operation requires `MOSS_RUNTIME_PATH` to retain `.git` metadata and match the configured version/revision. Without it, live quote/check requests fail closed as `UNSUPPORTED`; recorded Replay remains separate.
 
 Never commit RPC credentials or populated `.env` files.
 
 ## Development commands
 
 ```bash
-pnpm lint                         # Biome checks
-pnpm typecheck                    # root and workspace TypeScript checks
-pnpm test                         # deterministic Vitest suite
-pnpm test:acceptance              # backend P0 acceptance matrix
-pnpm test:integration             # real Node listener integration test
-pnpm --filter @parallax/web build # production frontend build
-pnpm smoke:kuru                   # deterministic Kuru smoke
-pnpm smoke:kuru:live              # external live Moss/RPC smoke
+pnpm lint
+pnpm typecheck
+pnpm test
+pnpm test:acceptance
+pnpm test:integration
+pnpm --filter @parallax/web build
+pnpm smoke:kuru
+pnpm smoke:kuru:live
 ```
 
-`pnpm smoke:kuru:live` requires the pinned Moss runtime and read-only RPC configuration. It is not part of the default CI path.
+The live smoke requires the pinned Moss runtime and read-only RPC configuration and is not part of the default CI path.
 
 ## API overview
 
 ### `POST /api/quote`
 
-Runs the exact-input live quote boundary before form submission. It returns an available quote, an explicit no-route/unavailable result, or a scoped error. It does not run the full simulation or produce a transaction decision.
+Runs the exact-input live quote boundary. It returns a quote, an explicit unavailable/no-route result, or a scoped error; it does not run the full simulation or create a Decision.
 
 ### `POST /api/check`
 
-Runs the backend-owned pre-sign check. A request carries a normalized swap Intent; successful processing returns a completed or Integration Error Run envelope. A re-run uses the same endpoint with `parentRunId` and exactly one allowed Intent change.
-
-If live Moss is not configured, the endpoint returns an explicit `UNSUPPORTED` application error and an `UNKNOWN` Run. It never substitutes recorded replay for a live result.
+Runs the backend pre-sign check for a normalized Swap Intent. A Re-run uses `parentRunId` and exactly one allowed Intent change. If live Moss is not configured, the endpoint returns an explicit `UNSUPPORTED` error and an `UNKNOWN` Run rather than substituting Replay.
 
 ### `GET /api/runs/:runId`
 
-Returns one persisted Check Run by ID. The response preserves `started` Runs
-without fabricating a receipt; completed and failed Runs include their stored
-result. This supports page refresh and receipt recovery after the frontend has
-received and persisted the `runId`, when the configured RunStore is durable.
-An in-flight Check cannot be automatically recovered after refresh because the
-current API assigns its Run ID server-side and does not expose SSE or job
-polling. It does not provide a public history list by sender.
+Returns one persisted Check Run by ID. Durable PostgreSQL storage can recover completed/failed Runs after restart; an in-flight Run is not fabricated into a receipt.
 
 ### `GET /api/replay/:id`
 
-Returns a frozen recorded replay fixture. Replay preserves recorded provenance but is not a current live Run and cannot be used as a live check parent.
+Returns a frozen recorded Replay fixture. It preserves recorded provenance but is not a current live Run and cannot be used as a live Check parent.
 
-See the [frontend API handoff](docs/integration/api-frontend-handoff.md) for payloads, error mappings, CORS, and startup details.
+See the [frontend API handoff](docs/integration/api-frontend-handoff.md) for payloads, errors, CORS, and startup details.
 
 ## Deployment
 
-The frontend demo is publicly deployed on Vercel:
-
-**[https://parallax-web-snowy.vercel.app](https://parallax-web-snowy.vercel.app)**
-
-No demo account is required. The public frontend routes same-origin `/api/*`
-requests through Vercel to the deployed Render backend. The documented Kuru
-MON → USDC quote flow has been verified through that public origin. Availability
-still depends on the external backend, RPC, and pinned Moss runtime, and the
-deployment is not a production-readiness or broader protocol-support claim.
+The public frontend deployment is configured on Vercel with a same-origin `/api/*` rewrite to the deployed Render backend. Availability depends on the external backend, RPC, and pinned Moss runtime; the deployment is not a production-readiness claim and does not expand the verified protocol scope.
 
 ## Documentation map
 
@@ -237,47 +201,52 @@ deployment is not a production-readiness or broader protocol-support claim.
 
 - [User Research](docs/research/user-research.md)
 - [Competitive Analysis](docs/research/competitive-analysis.md)
+- [Market positioning and evidence](docs/research/market-positioning-and-evidence.md)
+- [Arbitrum ecosystem and stack](docs/research/arbitrum-ecosystem-and-stack.md)
+
+### Planning
+
+- [Arbitrum Open House planning index](docs/planning/arbitrum-open-house/README.md)
+- [02 Overview](docs/planning/arbitrum-open-house/02-overview.md)
+- [02-A Architecture boundaries](docs/planning/arbitrum-open-house/02-A-architecture-boundaries.md)
+- [02-B Provider implementation](docs/planning/arbitrum-open-house/02-B-provider-implementation.md)
+- [02-C Ownership and collaboration](docs/planning/arbitrum-open-house/02-C-ownership-collaboration.md)
+- [02-D Acceptance and timeline](docs/planning/arbitrum-open-house/02-D-acceptance-timeline.md)
 
 ### Integration and evidence
 
 - [Frontend API handoff](docs/integration/api-frontend-handoff.md)
 - [Backend P0 acceptance matrix](docs/integration/backend-p0-acceptance.md)
 - [Moss/Kuru live runtime](docs/integration/moss-kuru-live-runtime.md)
-- [P0 Rule and Reason-to-Action specification](docs/risk-methodology/p0-rule-and-reason-action-spec.md)
+- [P0 rule and Reason-to-Action specification](docs/risk-methodology/p0-rule-and-reason-action-spec.md)
 - [Architecture Decision Records](docs/adr/)
 
 ## Testing and quality gates
 
-GitHub Actions uses Node.js 22 and runs:
-
-```text
-pnpm install --frozen-lockfile
-→ pnpm lint
-→ pnpm typecheck
-→ pnpm test
-→ pnpm test:integration
-```
-
-Live RPC/Moss smoke tests are intentionally separate because they require external runtime configuration. Evidence and runtime claims must remain scoped to the exact recorded fixture and pinned revision.
+GitHub Actions uses Node.js 22 and runs dependency installation, lint, typecheck, deterministic tests, and the Node integration test. Live RPC/Moss smoke tests are separate because they require external runtime configuration.
 
 ## Team
 
-| Member | GitHub | Area |
+| Member | GitHub | Role |
 | --- | --- | --- |
-| Kai | [@chin0312](https://github.com/chin0312) | Product, research, and demo |
-| Rei | [@rainypilgrimage](https://github.com/rainypilgrimage) | Product, risk methodology, and research |
-| Jie | [@jzhao0](https://github.com/jzhao0) | Moss integration and risk engine |
-| Clare | [@brightheartma](https://github.com/brightheartma) | API, backend, orchestration, and deployment |
-| Antony | [@antony819](https://github.com/antony819) | Web frontend |
+| Kai | [@chin0312](https://github.com/chin0312) | Product Owner |
+| Rei | [@rainypilgrimage](https://github.com/rainypilgrimage) | Contract Owner |
+| Jie | [@jzhao0](https://github.com/jzhao0) | Provider Owner |
+| Clare | [@brightheartma](https://github.com/brightheartma) | Backend Owner |
+| Antony | [@antony819](https://github.com/antony819) | Frontend Owner |
 
 ## Collaboration
 
-- Start work from the latest `main` on a short-lived branch.
-- Keep runtime, Contract, product-copy, and Evidence claims in their owning layers.
-- Do not use recorded replay or mock data as proof of a live user decision.
-- Run the relevant checks before opening a pull request.
-- Request review from the owners of the files and semantics changed.
+- Start from the latest `main` on a short-lived branch.
+- Keep implementation, Contract semantics, Product semantics, and Evidence claims in their owning layers.
+- Treat research as context; implementation behavior is defined by the code and merged product documentation.
+- Do not use Replay or mock data as proof of a live user decision.
+- Run the relevant checks and request review from the owners of the changed semantics.
 
 ## Disclaimer
 
-Parallax is experimental software for explaining and testing pre-transaction decisions. It does not provide investment advice and does not sign, broadcast, execute, or custody transactions. Evidence may be incomplete or unavailable; users must independently verify transaction details and understand that `PROCEED` is scope-bounded, not a guarantee of safety.
+Parallax is experimental software for explaining and testing bounded pre-execution decisions. It does not provide investment advice and does not sign, broadcast, execute, or custody transactions. Evidence may be incomplete or unavailable; users must independently verify transaction details. `PROCEED` is scope-bounded, not a guarantee of safety.
+
+## License
+
+No repository license file is currently declared. Licensing remains a team decision.

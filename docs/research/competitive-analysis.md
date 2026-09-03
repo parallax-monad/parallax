@@ -1,5 +1,10 @@
 # Parallax P0 Competitive Analysis
 
+> Status: Dated research reference (evidence cutoff 2026-08-07). It informs positioning and scope but is not implementation truth.
+>
+> The public demo scope is summarized in the repository README; implementation status and Arbitrum planning are maintained in the [planning index](../planning/arbitrum-open-house/README.md).
+> Newer canonical positioning and evidence synthesis: [market-positioning-and-evidence.md](./market-positioning-and-evidence.md).
+
 > Evidence cutoff: 2026-08-07
 >
 > Project: [parallax-monad/parallax](https://github.com/parallax-monad/parallax)
@@ -48,7 +53,7 @@ This is a product hypothesis supported by competitor boundaries. It is not yet p
 
 Parallax is positioned as:
 
-> **A Moss-powered pre-transaction decision layer for Monad swaps.**
+> **Parallax is a Moss-powered pre-transaction decision layer for Monad swaps.**
 
 The intended P0 user is a light DeFi user with basic wallet and swap experience. The trigger moment is immediately before signing, or before retrying a failed swap.
 

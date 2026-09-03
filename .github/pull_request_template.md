@@ -29,3 +29,14 @@
 - [ ] No secrets, private keys, or sensitive values are included.
 - [ ] Relevant documentation was updated when needed.
 - [ ] Tests or validation steps are documented.
+
+## Owner / semantic impact
+
+<!-- Check the primary review context; multiple boxes are fine for cross-cutting changes. -->
+
+- [ ] Provider-specific
+- [ ] Backend / integration
+- [ ] Contract semantics
+- [ ] Product semantics
+- [ ] Frontend
+- [ ] Receipt Smart Contract
