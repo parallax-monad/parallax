@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   isProviderAdapterError,
   type ProviderAdapter,
@@ -32,14 +32,14 @@ class FakeProvider
 {
   public readonly providerId = "fake-provider";
   public readonly capabilities = ["evaluate", "simulate"] as const;
-  public readonly supportQueries: ProviderSupportQuery<FakeIntent>[] = [];
   public readonly evaluations: ProviderEvaluationInput<
     FakeIntent,
     FakeRawInput
   >[] = [];
 
+  public constructor(private readonly externalCall: () => void) {}
+
   public supports(query: ProviderSupportQuery<FakeIntent>): boolean {
-    this.supportQueries.push(query);
     return (
       query.intent?.kind === "swap" &&
       query.chainId === 901 &&
@@ -51,6 +51,7 @@ class FakeProvider
   public async evaluate(
     input: ProviderEvaluationInput<FakeIntent, FakeRawInput>,
   ) {
+    this.externalCall();
     this.evaluations.push(input);
     return {
       status: "success" as const,
@@ -64,7 +65,8 @@ class FakeProvider
 
 describe("ProviderAdapter provisional port", () => {
   it("injects a fake, evaluates generic input, and preserves opaque payloads", async () => {
-    const provider = new FakeProvider();
+    const externalCall = vi.fn();
+    const provider = new FakeProvider(externalCall);
     const rawInput: FakeRawInput = { providerOnlyTransaction: "opaque-input" };
 
     expect(
@@ -92,11 +94,52 @@ describe("ProviderAdapter provisional port", () => {
     });
     expect(provider.evaluations).toHaveLength(1);
     expect(provider.evaluations[0]?.input).toBe(rawInput);
-    expect(provider.supportQueries).toHaveLength(1);
+    expect(externalCall).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps supports side-effect free at the public seam", () => {
+    const externalCall = vi.fn();
+    const provider = new FakeProvider(externalCall);
+
+    expect(
+      provider.supports({
+        intent,
+        chainId: 901,
+        protocol: "test-protocol",
+        capability: "simulate",
+      }),
+    ).toBe(true);
+    expect(
+      provider.supports({
+        intent,
+        chainId: 901,
+        protocol: "test-protocol",
+        capability: "quote",
+      }),
+    ).toBe(false);
+    expect(
+      provider.supports({
+        intent,
+        chainId: 1,
+        protocol: "test-protocol",
+        capability: "simulate",
+      }),
+    ).toBe(false);
+    expect(
+      provider.supports({
+        intent,
+        chainId: 901,
+        protocol: "other-protocol",
+        capability: "simulate",
+      }),
+    ).toBe(false);
+
+    expect(externalCall).not.toHaveBeenCalled();
+    expect(provider.evaluations).toHaveLength(0);
   });
 
   it("keeps capability representation extensible and does not require final Evidence fields", () => {
-    const provider = new FakeProvider();
+    const provider = new FakeProvider(() => {});
     expect(provider.capabilities).toEqual(["evaluate", "simulate"]);
     expect(provider.capabilities).not.toContain("quote");
   });
