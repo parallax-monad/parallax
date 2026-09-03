@@ -20,11 +20,17 @@
 
 ### Product Owner
 
-负责产品研究与定义、定位、路线图、范围优先级、Cause/Action/STOP/ADJUST/UNKNOWN/PROCEED 语义、Re-verification acceptance、前端/产品协调、Contract 协调和 demo/pitch 叙事。
+负责产品研究与定义、定位、路线图、范围优先级、Risk Policy、用户决策体验，以及产品中纳入哪些 Cause/Action（包括 STOP/ADJUST/UNKNOWN/PROCEED 的产品呈现）。产品范围、用户价值和业务取舍由 Product Owner 决定；同时负责 Re-verification acceptance、前端/产品协调、Contract 协调和 demo/pitch 叙事。
 
 ### Contract Owner
 
-“Contract”指 Evidence/data Contract，不是 Solidity Owner。Rei 负责最小 Contract framework、跨模块语义、版本与兼容性，审核 Provider/Backend 提案并解决冲突，维护唯一 canonical 版本。
+“Contract”指 Evidence/data Contract，不是 Solidity Owner。Rei 负责最小 Contract framework、Evidence Contract 字段与状态、跨模块语义、版本与兼容性，审核 Provider/Backend 提案并解决冲突，维护唯一 canonical 版本，并对 `Evidence → Cause → Verdict → Action / UNKNOWN` 的语义验收和 canonical 兼容性作最终确认。
+
+### 产品与 Evidence Contract / Risk 语义边界
+
+- **Product Owner** 决定产品范围、用户价值、业务取舍、Risk Policy 与优先级，以及产品中应纳入哪些 Cause/Action 和用户决策体验。
+- **Contract Owner** 最终确认 Evidence Contract 的字段、状态、兼容性与验收标准，尤其是 `Evidence → Cause → Verdict → Action / UNKNOWN` 的跨模块 canonical 语义。
+- 两者发生交叉时，Product Owner 决定是否属于产品范围，Contract Owner 确认该语义能否作为跨 Provider/Backend/Core 的规范 Contract；必要时共同 Review。
 
 ### Provider Owner
 
