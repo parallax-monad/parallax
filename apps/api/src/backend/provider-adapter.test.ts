@@ -1,9 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  createProviderAdapter,
   evaluateProviderAdapter,
   isProviderAdapterError,
   type ProviderAdapter,
   ProviderAdapterError,
+  type ProviderAdapterRawImplementation,
   type ProviderEvaluationInput,
   type ProviderEvaluationResult,
   type ProviderSupportQuery,
@@ -26,13 +28,17 @@ const intent: FakeIntent = {
   protocol: "test-protocol",
 };
 
-class FakeProvider implements ProviderAdapter<FakeIntent, FakeRawInput> {
+class FakeProvider
+  implements ProviderAdapterRawImplementation<FakeIntent, FakeRawInput>
+{
   public readonly providerId = "fake-provider";
   public readonly capabilities = ["evaluate", "simulate"] as const;
   public readonly evaluations: ProviderEvaluationInput<
     FakeIntent,
     FakeRawInput
   >[] = [];
+  public readonly adapter: ProviderAdapter<FakeIntent, FakeRawInput> =
+    createProviderAdapter(this);
 
   public constructor(private readonly externalCall: () => void) {}
 
@@ -45,7 +51,7 @@ class FakeProvider implements ProviderAdapter<FakeIntent, FakeRawInput> {
     );
   }
 
-  public async evaluate(
+  public async evaluateRaw(
     input: ProviderEvaluationInput<FakeIntent, FakeRawInput>,
   ): Promise<ProviderEvaluationResult> {
     this.externalCall();
@@ -80,6 +86,26 @@ class FakeProvider implements ProviderAdapter<FakeIntent, FakeRawInput> {
   }
 }
 
+function validResult(providerId = "fake-provider") {
+  return {
+    provider: { providerId, observedAt: "2026-09-04T13:11:00.000Z" },
+    status: "success" as const,
+    responseEvidence: {
+      kind: "reference" as const,
+      reference: `fixture://${providerId}/run-1`,
+    },
+    candidateFields: [],
+  };
+}
+
+function adapterFor(output: unknown): ProviderAdapter {
+  return createProviderAdapter({
+    providerId: "fake-provider",
+    supports: () => true,
+    evaluateRaw: async () => output,
+  });
+}
+
 describe("ProviderAdapter provisional port", () => {
   it("injects a fake and returns a provisional candidate boundary", async () => {
     const externalCall = vi.fn();
@@ -87,7 +113,7 @@ describe("ProviderAdapter provisional port", () => {
     const rawInput: FakeRawInput = { providerOnlyTransaction: "opaque-input" };
 
     expect(
-      provider.supports({
+      provider.adapter.supports({
         intent,
         chainId: intent.chainId,
         protocol: intent.protocol,
@@ -96,7 +122,7 @@ describe("ProviderAdapter provisional port", () => {
     ).toBe(true);
     expect(provider.evaluations).toHaveLength(0);
 
-    const result = await evaluateProviderAdapter(provider, {
+    const result = await provider.adapter.evaluate({
       runId: "run-1",
       intent,
       chainId: intent.chainId,
@@ -140,7 +166,7 @@ describe("ProviderAdapter provisional port", () => {
     const provider = new FakeProvider(externalCall);
 
     expect(
-      provider.supports({
+      provider.adapter.supports({
         intent,
         chainId: 901,
         protocol: "test-protocol",
@@ -148,7 +174,7 @@ describe("ProviderAdapter provisional port", () => {
       }),
     ).toBe(true);
     expect(
-      provider.supports({
+      provider.adapter.supports({
         intent,
         chainId: 901,
         protocol: "test-protocol",
@@ -156,7 +182,7 @@ describe("ProviderAdapter provisional port", () => {
       }),
     ).toBe(false);
     expect(
-      provider.supports({
+      provider.adapter.supports({
         intent,
         chainId: 1,
         protocol: "test-protocol",
@@ -164,7 +190,7 @@ describe("ProviderAdapter provisional port", () => {
       }),
     ).toBe(false);
     expect(
-      provider.supports({
+      provider.adapter.supports({
         intent,
         chainId: 901,
         protocol: "other-protocol",
@@ -178,15 +204,15 @@ describe("ProviderAdapter provisional port", () => {
 
   it("keeps capability representation extensible and does not require final Evidence fields", () => {
     const provider = new FakeProvider(() => {});
-    expect(provider.capabilities).toEqual(["evaluate", "simulate"]);
-    expect(provider.capabilities).not.toContain("quote");
+    expect(provider.adapter.capabilities).toEqual(["evaluate", "simulate"]);
+    expect(provider.adapter.capabilities).not.toContain("quote");
   });
 
   it("fails closed when an adapter bypasses the provisional result factory", async () => {
-    const adapter: ProviderAdapter = {
+    const adapter = createProviderAdapter({
       providerId: "malicious-provider",
       supports: () => true,
-      evaluate: async () => ({
+      evaluateRaw: async () => ({
         provider: {
           providerId: "malicious-provider",
           observedAt: "2026-09-04T13:11:00.000Z",
@@ -207,11 +233,100 @@ describe("ProviderAdapter provisional port", () => {
           },
         ],
       }),
-    };
+    });
 
     await expect(
       evaluateProviderAdapter(adapter, { runId: "run-1", input: {} }),
     ).rejects.toThrow("candidateField.value must be a JSON-compatible value");
+  });
+
+  it("validates direct public evaluate results and does not expose the raw seam", async () => {
+    const raw = { ...validResult(), rawProviderObject: { secret: true } };
+    const adapter = createProviderAdapter({
+      providerId: "fake-provider",
+      capabilities: ["simulate"],
+      supports: () => true,
+      evaluateRaw: async () => raw,
+      rawProviderObject: raw.rawProviderObject,
+    } as ProviderAdapterRawImplementation & {
+      rawProviderObject: object;
+    });
+
+    expect(Object.isFrozen(adapter)).toBe(true);
+    expect(Object.keys(adapter)).toEqual([
+      "providerId",
+      "capabilities",
+      "supports",
+      "evaluate",
+    ]);
+    expect("evaluateRaw" in adapter).toBe(false);
+    expect(Object.values(adapter)).not.toContain(raw.rawProviderObject);
+
+    const result = await adapter.evaluate({ runId: "run-1", input: {} });
+    expect(result).toEqual({ ...validResult(), capabilities: undefined });
+    expect(result).not.toBe(raw);
+    expect(
+      (result as Record<string, unknown>).rawProviderObject,
+    ).toBeUndefined();
+  });
+
+  it.each([
+    ["non-plain result", null, "provisional result must be a plain object"],
+    [
+      "provider identity mismatch",
+      validResult("other-provider"),
+      "provider result does not match adapter providerId",
+    ],
+    [
+      "non-JSON candidate value",
+      {
+        ...validResult(),
+        candidateFields: [
+          {
+            candidatePath: "provider.raw",
+            observedShape: "object",
+            nullable: false,
+            status: "observed",
+            confidence: "unassessed",
+            value: new Date(),
+          },
+        ],
+      },
+      "candidateField.value must be a JSON-compatible value",
+    ],
+    [
+      "illegal capabilities",
+      { ...validResult(), capabilities: ["simulate", 1] },
+      "adapter capabilities must be non-empty strings",
+    ],
+    [
+      "missing response evidence",
+      (() => {
+        const result = validResult();
+        const { responseEvidence: _responseEvidence, ...withoutEvidence } =
+          result;
+        return withoutEvidence;
+      })(),
+      "response evidence must be a plain object",
+    ],
+  ] as const)(
+    "direct public evaluate fails closed for %s",
+    async (_label, output, message) => {
+      await expect(
+        adapterFor(output).evaluate({ runId: "run-1", input: {} }),
+      ).rejects.toThrow(message);
+    },
+  );
+
+  it("rejects invalid adapter capabilities at factory creation", () => {
+    expect(() =>
+      createProviderAdapter({
+        providerId: "fake-provider",
+        capabilities: ["simulate", 1] as unknown as readonly string[],
+        supports: () => true,
+        evaluateRaw: async () => validResult(),
+      }),
+    ).toThrow("adapter capabilities must be non-empty strings");
   });
 
   it.each(["UNSUPPORTED", "FAILED", "TIMEOUT", "UNKNOWN"] as const)(

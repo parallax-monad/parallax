@@ -113,37 +113,37 @@ function isProviderAdapterErrorCode(
 }
 
 /**
- * Replaceable Backend-local provider port. Implementations own all raw
- * provider translation and must keep supports(...) cheap and side-effect free.
- *
- * `evaluate` is the untrusted implementation seam and therefore returns
- * unknown. Callers must use evaluateProviderAdapter(...) rather than treating
- * its direct result as a provisional boundary value.
+ * Raw Backend-local provider implementation. This is deliberately separate
+ * from the public adapter: raw provider output may only leave this seam via
+ * the factory's validated closure.
  */
+export type ProviderAdapterRawImplementation<
+  Intent = unknown,
+  Input = unknown,
+> = {
+  readonly providerId: string;
+  readonly capabilities?: readonly ProviderCapability[];
+  supports(query: ProviderSupportQuery<Intent>): boolean;
+  evaluateRaw(input: ProviderEvaluationInput<Intent, Input>): Promise<unknown>;
+};
+
+/** Replaceable, runtime-validated Backend-local provider port. */
 export interface ProviderAdapter<Intent = unknown, Input = unknown> {
   readonly providerId: string;
   readonly capabilities?: readonly ProviderCapability[];
 
   supports(query: ProviderSupportQuery<Intent>): boolean;
-
-  evaluate(input: ProviderEvaluationInput<Intent, Input>): Promise<unknown>;
+  evaluate(
+    input: ProviderEvaluationInput<Intent, Input>,
+  ): Promise<ProviderEvaluationResult>;
 }
 
-/**
- * The only runtime-validated crossing from an adapter implementation into the
- * provisional result boundary. It rejects malformed provider output and
- * provider-context mismatches instead of exposing raw SDK values.
- */
-export async function evaluateProviderAdapter<
-  Intent = unknown,
-  Input = unknown,
->(
-  adapter: ProviderAdapter<Intent, Input>,
-  input: ProviderEvaluationInput<Intent, Input>,
-): Promise<ProviderEvaluationResult> {
-  const output = await adapter.evaluate(input);
+function normalizeAdapterEvaluation(
+  adapterProviderId: string,
+  output: unknown,
+): ProviderEvaluationResult {
   const normalized = normalizeProvisionalProviderResult(output);
-  if (normalized.provider.providerId !== adapter.providerId) {
+  if (normalized.provider.providerId !== adapterProviderId) {
     throw new TypeError("provider result does not match adapter providerId");
   }
 
@@ -166,4 +166,47 @@ export async function evaluateProviderAdapter<
     capabilities:
       capabilities === undefined ? undefined : Object.freeze([...capabilities]),
   });
+}
+
+/**
+ * Creates the only public adapter shape. The raw implementation is retained
+ * only by closures and is never attached to the returned object.
+ */
+export function createProviderAdapter<Intent = unknown, Input = unknown>(
+  raw: ProviderAdapterRawImplementation<Intent, Input>,
+): ProviderAdapter<Intent, Input> {
+  const providerId = raw.providerId;
+  if (typeof providerId !== "string" || providerId.trim().length === 0) {
+    throw new TypeError("adapter.providerId must be a non-empty string");
+  }
+  const capabilities = raw.capabilities;
+  if (
+    capabilities !== undefined &&
+    (!Array.isArray(capabilities) ||
+      !capabilities.every(
+        (capability) =>
+          typeof capability === "string" && capability.trim().length > 0,
+      ))
+  ) {
+    throw new TypeError("adapter capabilities must be non-empty strings");
+  }
+  const publicCapabilities =
+    capabilities === undefined ? undefined : Object.freeze([...capabilities]);
+  return Object.freeze({
+    providerId,
+    capabilities: publicCapabilities,
+    supports: (query: ProviderSupportQuery<Intent>) => raw.supports(query),
+    evaluate: async (
+      input: ProviderEvaluationInput<Intent, Input>,
+    ): Promise<ProviderEvaluationResult> =>
+      normalizeAdapterEvaluation(providerId, await raw.evaluateRaw(input)),
+  });
+}
+
+/** Compatibility entry point; validation is owned by the public adapter. */
+export function evaluateProviderAdapter<Intent = unknown, Input = unknown>(
+  adapter: ProviderAdapter<Intent, Input>,
+  input: ProviderEvaluationInput<Intent, Input>,
+): Promise<ProviderEvaluationResult> {
+  return adapter.evaluate(input);
 }
