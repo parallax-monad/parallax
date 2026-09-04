@@ -122,7 +122,7 @@ describe("ProviderAdapter provisional port", () => {
     ).toBe(true);
     expect(provider.evaluations).toHaveLength(0);
 
-    const result = await provider.adapter.evaluate({
+    const result = await evaluateProviderAdapter(provider.adapter, {
       runId: "run-1",
       intent,
       chainId: intent.chainId,
@@ -258,13 +258,15 @@ describe("ProviderAdapter provisional port", () => {
       "providerId",
       "capabilities",
       "supports",
-      "evaluate",
     ]);
     expect(Object.getOwnPropertySymbols(adapter)).toHaveLength(0);
     expect("evaluateRaw" in adapter).toBe(false);
     expect(Object.values(adapter)).not.toContain(raw.rawProviderObject);
 
-    const result = await adapter.evaluate({ runId: "run-1", input: {} });
+    const result = await evaluateProviderAdapter(adapter, {
+      runId: "run-1",
+      input: {},
+    });
     expect(result).toEqual({ ...validResult(), capabilities: undefined });
     expect(result).not.toBe(raw);
     expect(
@@ -272,7 +274,7 @@ describe("ProviderAdapter provisional port", () => {
     ).toBeUndefined();
   });
 
-  it("rejects forged adapters before invoking their evaluate method", async () => {
+  it("rejects forged adapters before invoking their evaluate method", () => {
     const forgedEvaluate = vi.fn(async () => validResult());
     const forgedAdapter = {
       providerId: "fake-provider",
@@ -327,10 +329,13 @@ describe("ProviderAdapter provisional port", () => {
       "response evidence must be a plain object",
     ],
   ] as const)(
-    "direct public evaluate fails closed for %s",
+    "factory evaluation fails closed for %s",
     async (_label, output, message) => {
       await expect(
-        adapterFor(output).evaluate({ runId: "run-1", input: {} }),
+        evaluateProviderAdapter(adapterFor(output), {
+          runId: "run-1",
+          input: {},
+        }),
       ).rejects.toThrow(message);
     },
   );
@@ -366,7 +371,7 @@ describe("ProviderAdapter provisional port", () => {
     });
 
     await expect(
-      adapter.evaluate({ runId: "run-1", input: {} }),
+      evaluateProviderAdapter(adapter, { runId: "run-1", input: {} }),
     ).rejects.toThrow("adapter capabilities must be a dense array");
   });
 

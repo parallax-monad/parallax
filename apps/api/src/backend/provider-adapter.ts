@@ -128,18 +128,21 @@ export type ProviderAdapterRawImplementation<
 };
 
 declare const providerAdapterBrand: unique symbol;
-const factoryCreatedAdapters = new WeakSet<object>();
+type AdapterEvaluation<Intent, Input> = (
+  input: ProviderEvaluationInput<Intent, Input>,
+) => Promise<ProviderEvaluationResult>;
+const factoryCreatedAdapters = new WeakMap<
+  object,
+  AdapterEvaluation<unknown, unknown>
+>();
 
 /** Replaceable, runtime-validated Backend-local provider port. */
-export interface ProviderAdapter<Intent = unknown, Input = unknown> {
+export interface ProviderAdapter<Intent = unknown, _Input = unknown> {
   readonly [providerAdapterBrand]: true;
   readonly providerId: string;
   readonly capabilities?: readonly ProviderCapability[];
 
   supports(query: ProviderSupportQuery<Intent>): boolean;
-  evaluate(
-    input: ProviderEvaluationInput<Intent, Input>,
-  ): Promise<ProviderEvaluationResult>;
 }
 
 function normalizeCapabilities(
@@ -217,12 +220,15 @@ export function createProviderAdapter<Intent = unknown, Input = unknown>(
     providerId,
     capabilities: publicCapabilities,
     supports: (query: ProviderSupportQuery<Intent>) => raw.supports(query),
-    evaluate: async (
-      input: ProviderEvaluationInput<Intent, Input>,
-    ): Promise<ProviderEvaluationResult> =>
-      normalizeAdapterEvaluation(providerId, await raw.evaluateRaw(input)),
   }) as ProviderAdapter<Intent, Input>;
-  factoryCreatedAdapters.add(adapter);
+  const evaluate = async (
+    input: ProviderEvaluationInput<Intent, Input>,
+  ): Promise<ProviderEvaluationResult> =>
+    normalizeAdapterEvaluation(providerId, await raw.evaluateRaw(input));
+  factoryCreatedAdapters.set(
+    adapter,
+    evaluate as AdapterEvaluation<unknown, unknown>,
+  );
   return adapter;
 }
 
@@ -238,5 +244,9 @@ export function evaluateProviderAdapter<Intent = unknown, Input = unknown>(
   ) {
     throw new TypeError("adapter must be created by createProviderAdapter");
   }
-  return adapter.evaluate(input);
+  const evaluate = factoryCreatedAdapters.get(adapter);
+  if (evaluate === undefined) {
+    throw new TypeError("adapter must be created by createProviderAdapter");
+  }
+  return evaluate(input);
 }
