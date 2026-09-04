@@ -11,8 +11,9 @@
  * 1. create a provisional result from a Provider observation;
  * 2. compare it with the previous observation and register field changes;
  * 3. keep every change pending until the Contract Owner records a decision;
- * 4. pass only explicitly approved candidates to a later contract-building
- *    layer. `getContractOwnerApprovedCandidates` is not that final layer.
+ * 4. pass only an entire, explicitly approved change set to a later
+ *    contract-building layer. `getContractOwnerApprovedCandidates` is not
+ *    that final layer.
  */
 
 export type ProvisionalJsonValue =
@@ -70,7 +71,11 @@ export type ProviderResponseEvidence =
       readonly referenceType?: string;
     };
 
-/** Input for a candidate field; review status is assigned by the boundary. */
+/**
+ * Input for a candidate field; review status is assigned by the boundary.
+ * Candidate values are constrained to JSON-compatible values so arbitrary
+ * Provider SDK instances cannot cross the boundary.
+ */
 export type ProvisionalCandidateFieldInput = {
   readonly candidatePath: string;
   readonly sourcePath?: string;
@@ -81,7 +86,7 @@ export type ProvisionalCandidateFieldInput = {
   readonly semanticNote?: string;
   readonly status: ProvisionalCandidateFieldStatus;
   readonly confidence: ProvisionalCandidateConfidence;
-  readonly value?: unknown;
+  readonly value?: ProvisionalJsonValue;
 };
 
 export type ProvisionalCandidateField = ProvisionalCandidateFieldInput & {
@@ -140,6 +145,9 @@ export type ProvisionalContractOwnerDecision = {
 
 export type ProvisionalFieldChangeRecord = {
   readonly changeId: string;
+  readonly changeSetId: string;
+  readonly changeSequence: number;
+  readonly changeSetSize: number;
   readonly changeType: ProvisionalFieldChangeType;
   readonly previous?: ProvisionalFieldDescription;
   readonly next?: ProvisionalFieldDescription;
@@ -166,18 +174,231 @@ export type ProvisionalFieldChangeDetectionInput = {
 export type ProvisionalFieldReviewDecision =
   Readonly<ProvisionalContractOwnerDecision>;
 
-export function createProvisionalProviderResult(
-  input: ProvisionalProviderResultInput,
-): ProvisionalProviderResult {
+type UnknownRecord = Record<string, unknown>;
+
+function isRecord(value: unknown): value is UnknownRecord {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return false;
+  }
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+}
+
+function assertNonEmptyString(
+  value: unknown,
+  label: string,
+): asserts value is string {
+  if (typeof value !== "string" || value.trim().length === 0) {
+    throw new TypeError(`${label} must be a non-empty string`);
+  }
+}
+
+function assertOptionalString(
+  value: unknown,
+  label: string,
+): asserts value is string | undefined {
+  if (value !== undefined && typeof value !== "string") {
+    throw new TypeError(`${label} must be a string when provided`);
+  }
+}
+
+function isProvisionalJsonValue(
+  value: unknown,
+  ancestors = new Set<object>(),
+): value is ProvisionalJsonValue {
+  if (value === null) return true;
+  if (typeof value === "string" || typeof value === "boolean") return true;
+  if (typeof value === "number") return Number.isFinite(value);
+  if (typeof value !== "object") return false;
+  if (ancestors.has(value)) return false;
+
+  const nextAncestors = new Set(ancestors);
+  nextAncestors.add(value);
+  if (Array.isArray(value)) {
+    return value.every((item) => isProvisionalJsonValue(item, nextAncestors));
+  }
+  if (!isRecord(value)) return false;
+  return Object.values(value).every((item) =>
+    isProvisionalJsonValue(item, nextAncestors),
+  );
+}
+
+function cloneProvisionalJsonValue(
+  value: ProvisionalJsonValue,
+): ProvisionalJsonValue {
+  if (value === null || typeof value !== "object") return value;
+  if (Array.isArray(value)) {
+    return value.map((item) => cloneProvisionalJsonValue(item));
+  }
+  return Object.fromEntries(
+    Object.entries(value).map(([key, item]) => [
+      key,
+      cloneProvisionalJsonValue(item),
+    ]),
+  );
+}
+
+function normalizeProviderContext(
+  provider: ProviderObservationContext,
+): ProviderObservationContext {
+  if (!isRecord(provider)) {
+    throw new TypeError("provider must be a plain object");
+  }
+  assertNonEmptyString(provider.providerId, "provider.providerId");
+  assertOptionalString(provider.providerVersion, "provider.providerVersion");
+  assertOptionalString(provider.model, "provider.model");
+  assertNonEmptyString(provider.observedAt, "provider.observedAt");
+  if (Number.isNaN(Date.parse(provider.observedAt))) {
+    throw new TypeError("provider.observedAt must be a valid timestamp");
+  }
   return {
-    provider: input.provider,
-    status: input.status,
-    responseEvidence: input.responseEvidence,
-    candidateFields: input.candidateFields.map((candidate) => ({
-      ...candidate,
-      reviewStatus: "pending_review",
-    })),
+    providerId: provider.providerId,
+    providerVersion: provider.providerVersion,
+    model: provider.model,
+    observedAt: provider.observedAt,
   };
+}
+
+function normalizeResponseEvidence(
+  evidence: ProviderResponseEvidence,
+): ProviderResponseEvidence {
+  if (!isRecord(evidence)) {
+    throw new TypeError("response evidence must be a plain object");
+  }
+  if (evidence.kind === "redacted_snapshot") {
+    assertNonEmptyString(
+      evidence.redactionProfile,
+      "responseEvidence.redactionProfile",
+    );
+    if (!isProvisionalJsonValue(evidence.snapshot)) {
+      throw new TypeError(
+        "responseEvidence.snapshot must be a JSON-compatible redacted value",
+      );
+    }
+    assertOptionalString(evidence.contentHash, "responseEvidence.contentHash");
+    return {
+      kind: "redacted_snapshot",
+      redactionProfile: evidence.redactionProfile,
+      snapshot: cloneProvisionalJsonValue(evidence.snapshot),
+      contentHash: evidence.contentHash,
+    };
+  }
+  if (evidence.kind === "reference") {
+    assertNonEmptyString(evidence.reference, "responseEvidence.reference");
+    assertOptionalString(
+      evidence.referenceType,
+      "responseEvidence.referenceType",
+    );
+    return {
+      kind: "reference",
+      reference: evidence.reference,
+      referenceType: evidence.referenceType,
+    };
+  }
+  throw new TypeError(
+    "responseEvidence.kind must be reference or redacted_snapshot",
+  );
+}
+
+function isCandidateStatus(
+  value: unknown,
+): value is ProvisionalCandidateFieldStatus {
+  return (
+    value === "observed" ||
+    value === "missing" ||
+    value === "null" ||
+    value === "invalid"
+  );
+}
+
+function isCandidateConfidence(
+  value: unknown,
+): value is ProvisionalCandidateConfidence {
+  return (
+    value === "unassessed" ||
+    value === "low" ||
+    value === "medium" ||
+    value === "high"
+  );
+}
+
+function normalizeCandidateField(
+  field: ProvisionalCandidateFieldInput,
+): ProvisionalCandidateFieldInput {
+  if (!isRecord(field)) {
+    throw new TypeError("candidate field must be a plain object");
+  }
+  assertNonEmptyString(field.candidatePath, "candidateField.candidatePath");
+  assertOptionalString(field.sourcePath, "candidateField.sourcePath");
+  assertNonEmptyString(field.observedShape, "candidateField.observedShape");
+  if (typeof field.nullable !== "boolean") {
+    throw new TypeError("candidateField.nullable must be a boolean");
+  }
+  if (
+    field.observedValues !== undefined &&
+    (!Array.isArray(field.observedValues) ||
+      !field.observedValues.every((value) => typeof value === "string"))
+  ) {
+    throw new TypeError(
+      "candidateField.observedValues must be an array of strings",
+    );
+  }
+  assertOptionalString(field.transformRule, "candidateField.transformRule");
+  assertOptionalString(field.semanticNote, "candidateField.semanticNote");
+  if (!isCandidateStatus(field.status)) {
+    throw new TypeError("candidateField.status is invalid");
+  }
+  if (!isCandidateConfidence(field.confidence)) {
+    throw new TypeError("candidateField.confidence is invalid");
+  }
+  if (field.value !== undefined && !isProvisionalJsonValue(field.value)) {
+    throw new TypeError("candidateField.value must be a JSON-compatible value");
+  }
+  return {
+    candidatePath: field.candidatePath,
+    sourcePath: field.sourcePath,
+    observedShape: field.observedShape,
+    nullable: field.nullable,
+    observedValues:
+      field.observedValues === undefined
+        ? undefined
+        : [...field.observedValues],
+    transformRule: field.transformRule,
+    semanticNote: field.semanticNote,
+    status: field.status,
+    confidence: field.confidence,
+    value:
+      field.value === undefined
+        ? undefined
+        : cloneProvisionalJsonValue(field.value),
+  };
+}
+
+function normalizeCandidateFields(
+  fields: readonly ProvisionalCandidateFieldInput[],
+): readonly ProvisionalCandidateFieldInput[] {
+  if (!Array.isArray(fields)) {
+    throw new TypeError("candidateFields must be an array");
+  }
+  const normalized = fields.map((field) => normalizeCandidateField(field));
+  const paths = new Set<string>();
+  for (const field of normalized) {
+    if (paths.has(field.candidatePath)) {
+      throw new TypeError(
+        `candidateFields contains duplicate path: ${field.candidatePath}`,
+      );
+    }
+    paths.add(field.candidatePath);
+  }
+  return normalized;
+}
+
+function isValidTimestamp(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    value.trim().length > 0 &&
+    !Number.isNaN(Date.parse(value))
+  );
 }
 
 function describeCandidateField(
@@ -188,7 +409,10 @@ function describeCandidateField(
     sourcePath: field.sourcePath,
     observedShape: field.observedShape,
     nullable: field.nullable,
-    observedValues: field.observedValues,
+    observedValues:
+      field.observedValues === undefined
+        ? undefined
+        : [...field.observedValues],
     transformRule: field.transformRule,
     semanticNote: field.semanticNote,
     status: field.status,
@@ -217,6 +441,9 @@ function createChangeRecord(
 ): ProvisionalFieldChangeRecord {
   return {
     changeId: `${input.changeIdPrefix}:${sequence}`,
+    changeSetId: input.changeIdPrefix,
+    changeSequence: sequence,
+    changeSetSize: 0,
     changeType,
     previous: previous ? describeCandidateField(previous) : undefined,
     next: next ? describeCandidateField(next) : undefined,
@@ -272,6 +499,37 @@ function addPairedChanges(
   }
 }
 
+export function createProvisionalProviderResult(
+  input: ProvisionalProviderResultInput,
+): ProvisionalProviderResult {
+  if (!isRecord(input)) {
+    throw new TypeError("provisional result input must be a plain object");
+  }
+  const provider = normalizeProviderContext(input.provider);
+  const responseEvidence = normalizeResponseEvidence(input.responseEvidence);
+  if (
+    input.status !== "success" &&
+    input.status !== "unknown" &&
+    input.status !== "unsupported" &&
+    input.status !== "failed" &&
+    input.status !== "timeout" &&
+    input.status !== "stale" &&
+    input.status !== "invalid"
+  ) {
+    throw new TypeError("provisional result status is invalid");
+  }
+  const candidateFields = normalizeCandidateFields(input.candidateFields);
+  return {
+    provider,
+    status: input.status,
+    responseEvidence,
+    candidateFields: candidateFields.map((candidate) => ({
+      ...candidate,
+      reviewStatus: "pending_review" as const,
+    })),
+  };
+}
+
 /**
  * Detects observational drift only. Every returned record starts at
  * `pending_review`, including fields seen for the first time without a
@@ -280,106 +538,327 @@ function addPairedChanges(
 export function detectProvisionalFieldChanges(
   input: ProvisionalFieldChangeDetectionInput,
 ): readonly ProvisionalFieldChangeRecord[] {
+  if (!isRecord(input)) {
+    throw new TypeError("change detection input must be a plain object");
+  }
+  const provider = normalizeProviderContext(input.provider);
+  const evidence = normalizeResponseEvidence(input.evidence);
+  const previous =
+    input.previous === undefined
+      ? undefined
+      : normalizeCandidateFields(input.previous);
+  const current = normalizeCandidateFields(input.current);
+  assertNonEmptyString(input.impact, "change.impact");
+  assertNonEmptyString(input.proposedBy, "change.proposedBy");
+  if (!isValidTimestamp(input.proposedAt)) {
+    throw new TypeError("change.proposedAt must be a valid timestamp");
+  }
+  assertNonEmptyString(input.changeIdPrefix, "change.changeIdPrefix");
+
+  const normalizedInput: ProvisionalFieldChangeDetectionInput = {
+    previous,
+    current,
+    provider,
+    evidence,
+    impact: input.impact,
+    proposedBy: input.proposedBy,
+    proposedAt: input.proposedAt,
+    changeIdPrefix: input.changeIdPrefix,
+  };
   const previousByPath = new Map(
-    (input.previous ?? []).map((field) => [field.candidatePath, field]),
+    (previous ?? []).map((field) => [field.candidatePath, field]),
   );
   const matchedPreviousPaths = new Set<string>();
   const matchedCurrentPaths = new Set<string>();
   const changes: ProvisionalFieldChangeRecord[] = [];
   const sequence = { value: 0 };
 
-  for (const current of input.current) {
-    const samePathPrevious = previousByPath.get(current.candidatePath);
+  for (const currentField of current) {
+    const samePathPrevious = previousByPath.get(currentField.candidatePath);
     if (samePathPrevious) {
       matchedPreviousPaths.add(samePathPrevious.candidatePath);
-      matchedCurrentPaths.add(current.candidatePath);
-      addPairedChanges(input, samePathPrevious, current, sequence, changes);
+      matchedCurrentPaths.add(currentField.candidatePath);
+      addPairedChanges(
+        normalizedInput,
+        samePathPrevious,
+        currentField,
+        sequence,
+        changes,
+      );
       continue;
     }
 
-    const sameSourcePrevious = (input.previous ?? []).filter(
-      (previous) =>
-        previous.sourcePath !== undefined &&
-        previous.sourcePath === current.sourcePath &&
-        !matchedPreviousPaths.has(previous.candidatePath),
+    const sameSourcePrevious = (previous ?? []).filter(
+      (previousField) =>
+        previousField.sourcePath !== undefined &&
+        previousField.sourcePath === currentField.sourcePath &&
+        !matchedPreviousPaths.has(previousField.candidatePath),
     );
     const renamedPrevious = sameSourcePrevious[0];
     if (
-      current.sourcePath !== undefined &&
+      currentField.sourcePath !== undefined &&
       sameSourcePrevious.length === 1 &&
       renamedPrevious !== undefined
     ) {
       matchedPreviousPaths.add(renamedPrevious.candidatePath);
-      matchedCurrentPaths.add(current.candidatePath);
-      addPairedChanges(input, renamedPrevious, current, sequence, changes);
+      matchedCurrentPaths.add(currentField.candidatePath);
+      addPairedChanges(
+        normalizedInput,
+        renamedPrevious,
+        currentField,
+        sequence,
+        changes,
+      );
       continue;
     }
 
-    matchedCurrentPaths.add(current.candidatePath);
+    matchedCurrentPaths.add(currentField.candidatePath);
     sequence.value += 1;
     changes.push(
-      createChangeRecord(input, sequence.value, "added", undefined, current),
+      createChangeRecord(
+        normalizedInput,
+        sequence.value,
+        "added",
+        undefined,
+        currentField,
+      ),
     );
   }
 
-  for (const previous of input.previous ?? []) {
-    if (matchedPreviousPaths.has(previous.candidatePath)) {
+  for (const previousField of previous ?? []) {
+    if (matchedPreviousPaths.has(previousField.candidatePath)) {
       continue;
     }
     sequence.value += 1;
     changes.push(
-      createChangeRecord(input, sequence.value, "removed", previous, undefined),
+      createChangeRecord(
+        normalizedInput,
+        sequence.value,
+        "removed",
+        previousField,
+        undefined,
+      ),
     );
   }
 
-  // Keep this set as an explicit invariant: every current field is either
-  // paired with a baseline or registered as an addition.
-  if (matchedCurrentPaths.size !== input.current.length) {
+  if (matchedCurrentPaths.size !== current.length) {
     throw new Error("Every current provisional field must be classified");
   }
 
-  return changes;
+  return changes.map((change) => ({
+    ...change,
+    changeSetSize: changes.length,
+  }));
 }
 
 export function reviewProvisionalFieldChange(
   change: ProvisionalFieldChangeRecord,
   decision: ProvisionalFieldReviewDecision,
 ): ProvisionalFieldChangeRecord {
+  if (!isRecord(change)) {
+    throw new TypeError("change record must be a plain object");
+  }
+  if (
+    decision.status !== "approved" &&
+    decision.status !== "rejected" &&
+    decision.status !== "needs_evidence"
+  ) {
+    throw new TypeError("Contract Owner decision status is invalid");
+  }
+  assertNonEmptyString(decision.decidedBy, "decision.decidedBy");
+  if (!isValidTimestamp(decision.decidedAt)) {
+    throw new TypeError("decision.decidedAt must be a valid timestamp");
+  }
+  assertOptionalString(decision.note, "decision.note");
   return {
     ...change,
     reviewStatus: decision.status,
-    contractOwnerDecision: decision,
+    contractOwnerDecision: {
+      status: decision.status,
+      decidedBy: decision.decidedBy,
+      decidedAt: decision.decidedAt,
+      note: decision.note,
+    },
   };
+}
+
+function sameProviderContext(
+  left: ProviderObservationContext,
+  right: ProviderObservationContext,
+): boolean {
+  return (
+    left.providerId === right.providerId &&
+    left.providerVersion === right.providerVersion &&
+    left.model === right.model &&
+    left.observedAt === right.observedAt
+  );
+}
+
+function sameJsonValue(
+  left: ProvisionalJsonValue,
+  right: ProvisionalJsonValue,
+): boolean {
+  if (left === right) return true;
+  if (left === null || right === null) return false;
+  if (typeof left !== "object" || typeof right !== "object") {
+    return false;
+  }
+  if (Array.isArray(left) || Array.isArray(right)) {
+    if (
+      !Array.isArray(left) ||
+      !Array.isArray(right) ||
+      left.length !== right.length
+    ) {
+      return false;
+    }
+    return left.every((value, index) => {
+      const rightValue = right[index];
+      return rightValue !== undefined && sameJsonValue(value, rightValue);
+    });
+  }
+  const leftObject = left as { readonly [key: string]: ProvisionalJsonValue };
+  const rightObject = right as { readonly [key: string]: ProvisionalJsonValue };
+  const leftKeys = Object.keys(leftObject).sort();
+  const rightKeys = Object.keys(rightObject).sort();
+  return (
+    leftKeys.length === rightKeys.length &&
+    leftKeys.every((key, index) => {
+      const rightKey = rightKeys[index];
+      const leftValue = leftObject[key];
+      const rightValue =
+        rightKey === undefined ? undefined : rightObject[rightKey];
+      return (
+        key === rightKey &&
+        leftValue !== undefined &&
+        rightValue !== undefined &&
+        sameJsonValue(leftValue, rightValue)
+      );
+    })
+  );
+}
+
+function sameResponseEvidence(
+  left: ProviderResponseEvidence,
+  right: ProviderResponseEvidence,
+): boolean {
+  if (left.kind !== right.kind) return false;
+  if (left.kind === "reference" && right.kind === "reference") {
+    return (
+      left.reference === right.reference &&
+      left.referenceType === right.referenceType
+    );
+  }
+  if (left.kind !== "redacted_snapshot" || right.kind !== "redacted_snapshot") {
+    return false;
+  }
+  return (
+    left.redactionProfile === right.redactionProfile &&
+    left.contentHash === right.contentHash &&
+    sameJsonValue(left.snapshot, right.snapshot)
+  );
+}
+
+function sameFieldDescription(
+  left: ProvisionalFieldDescription,
+  right: ProvisionalFieldDescription,
+): boolean {
+  return (
+    left.candidatePath === right.candidatePath &&
+    left.sourcePath === right.sourcePath &&
+    left.observedShape === right.observedShape &&
+    left.nullable === right.nullable &&
+    valuesChanged(left.observedValues, right.observedValues) === false &&
+    left.transformRule === right.transformRule &&
+    left.semanticNote === right.semanticNote &&
+    left.status === right.status &&
+    left.confidence === right.confidence
+  );
+}
+
+function isApprovedChange(change: ProvisionalFieldChangeRecord): boolean {
+  return (
+    change.reviewStatus === "approved" &&
+    change.contractOwnerDecision?.status === "approved" &&
+    typeof change.contractOwnerDecision.decidedBy === "string" &&
+    change.contractOwnerDecision.decidedBy.trim().length > 0 &&
+    isValidTimestamp(change.contractOwnerDecision.decidedAt)
+  );
+}
+
+function isCompleteApprovedChangeSet(
+  result: ProvisionalProviderResult,
+  changes: readonly ProvisionalFieldChangeRecord[],
+): boolean {
+  if (changes.length === 0) return false;
+  const first = changes[0];
+  if (first === undefined || first.changeSetSize !== changes.length) {
+    return false;
+  }
+  const sequences = new Set<number>();
+  for (const change of changes) {
+    if (
+      change.changeSetId !== first.changeSetId ||
+      change.changeSetSize !== first.changeSetSize ||
+      change.changeSequence < 1 ||
+      change.changeSequence > changes.length ||
+      sequences.has(change.changeSequence) ||
+      !sameProviderContext(change.provider, result.provider) ||
+      !sameResponseEvidence(change.evidence, result.responseEvidence) ||
+      !isApprovedChange(change)
+    ) {
+      return false;
+    }
+    sequences.add(change.changeSequence);
+  }
+  if (sequences.size !== changes.length) return false;
+
+  const currentDescriptions = new Map(
+    result.candidateFields.map((candidate) => [
+      candidate.candidatePath,
+      describeCandidateField(candidate),
+    ]),
+  );
+  const nextChanges = changes.filter((change) => change.next !== undefined);
+  const nextPaths = new Set(
+    nextChanges.flatMap((change) =>
+      change.next === undefined ? [] : [change.next.candidatePath],
+    ),
+  );
+  if (
+    nextPaths.size !== currentDescriptions.size ||
+    [...currentDescriptions.keys()].some((path) => !nextPaths.has(path))
+  ) {
+    return false;
+  }
+  return [...currentDescriptions.entries()].every(([path, description]) => {
+    const relatedChanges = nextChanges.filter(
+      (change) => change.next?.candidatePath === path,
+    );
+    return (
+      relatedChanges.length > 0 &&
+      relatedChanges.every(
+        (change) =>
+          change.next !== undefined &&
+          sameFieldDescription(change.next, description),
+      )
+    );
+  });
 }
 
 /**
  * Returns approved candidate observations for a downstream contract-building
  * layer. It never returns a final Evidence Contract and does not mutate the
- * provisional result. A candidate is visible only when all records associated
- * with its path contain an explicit Contract Owner approval decision.
+ * provisional result. A candidate is visible only when the complete change
+ * set for the current observation is present, bound to the same provider and
+ * evidence, and explicitly approved by the Contract Owner.
  */
 export function getContractOwnerApprovedCandidates(
   result: ProvisionalProviderResult,
   changes: readonly ProvisionalFieldChangeRecord[],
 ): readonly ProvisionalCandidateField[] {
-  return result.candidateFields.flatMap((candidate) => {
-    const relatedChanges = changes.filter(
-      (change) =>
-        change.next?.candidatePath === candidate.candidatePath ||
-        change.previous?.candidatePath === candidate.candidatePath,
-    );
-    const approved =
-      relatedChanges.length > 0 &&
-      relatedChanges.every(
-        (change) =>
-          change.reviewStatus === "approved" &&
-          change.contractOwnerDecision?.status === "approved" &&
-          change.contractOwnerDecision.decidedBy.length > 0 &&
-          change.contractOwnerDecision.decidedAt.length > 0,
-      );
-
-    return approved
-      ? [{ ...candidate, reviewStatus: "approved" as const }]
-      : [];
-  });
+  if (!isCompleteApprovedChangeSet(result, changes)) return [];
+  return result.candidateFields.map((candidate) => ({
+    ...candidate,
+    reviewStatus: "approved" as const,
+  }));
 }

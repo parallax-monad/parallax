@@ -83,6 +83,21 @@ describe("provisional provider result boundary", () => {
     expect(result.candidateFields[0]?.value).toBe("redacted");
   });
 
+  it("rejects arbitrary non-serializable candidate values at runtime", () => {
+    const invalidCandidate = field({
+      value: new Date() as unknown as ProvisionalCandidateFieldInput["value"],
+    });
+
+    expect(() =>
+      createProvisionalProviderResult({
+        provider: providerContext,
+        status: "success",
+        responseEvidence,
+        candidateFields: [invalidCandidate],
+      }),
+    ).toThrow("candidateField.value must be a JSON-compatible value");
+  });
+
   it("records added and unknown provider fields without promoting them to the boundary", () => {
     const previous = [field()];
     const current = [
@@ -226,12 +241,25 @@ describe("provisional provider result boundary", () => {
       decidedAt: "2026-09-04T13:04:30.000Z",
       note: "Insufficient evidence.",
     });
+    const approvedSecond = reviewProvisionalFieldChange(secondChange, {
+      status: "approved",
+      decidedBy: "contract-owner",
+      decidedAt: "2026-09-04T13:04:45.000Z",
+      note: "Approved after review.",
+    });
 
     expect(
       getContractOwnerApprovedCandidates(result, [approved, rejected]),
+    ).toEqual([]);
+    expect(
+      getContractOwnerApprovedCandidates(result, [approved, approvedSecond]),
     ).toEqual([
       expect.objectContaining({
         candidatePath: "execution.success",
+        reviewStatus: "approved",
+      }),
+      expect.objectContaining({
+        candidatePath: "execution.unknown",
         reviewStatus: "approved",
       }),
     ]);
@@ -241,5 +269,99 @@ describe("provisional provider result boundary", () => {
       decidedBy: "contract-owner",
       decidedAt: "2026-09-04T13:04:00.000Z",
     });
+  });
+
+  it("fails closed for partial, stale, foreign, and unrelated approvals", () => {
+    const previous = [field()];
+    const current = [
+      field({
+        observedShape: "object",
+        transformRule: "changed-mapping",
+      }),
+    ];
+    const result = createProvisionalProviderResult({
+      provider: providerContext,
+      status: "success",
+      responseEvidence,
+      candidateFields: current,
+    });
+    const changes = detectProvisionalFieldChanges({
+      previous,
+      current: result.candidateFields,
+      provider: providerContext,
+      evidence: responseEvidence,
+      proposedBy: "backend-owner",
+      proposedAt: "2026-09-04T13:05:00.000Z",
+      changeIdPrefix: "fail-closed-change",
+      impact: "Candidate drift requires complete review.",
+    });
+    expect(changes.map((change) => change.changeType)).toEqual([
+      "type_changed",
+      "mapping_changed",
+    ]);
+
+    const firstChange = changes[0];
+    const secondChange = changes[1];
+    expect(firstChange).toBeDefined();
+    expect(secondChange).toBeDefined();
+    if (firstChange === undefined || secondChange === undefined) {
+      throw new Error("Expected two candidate change records");
+    }
+    const approval = {
+      status: "approved" as const,
+      decidedBy: "contract-owner",
+      decidedAt: "2026-09-04T13:06:00.000Z",
+    };
+    const approvedFirst = reviewProvisionalFieldChange(firstChange, approval);
+    const approvedSecond = reviewProvisionalFieldChange(secondChange, approval);
+
+    expect(getContractOwnerApprovedCandidates(result, [approvedFirst])).toEqual(
+      [],
+    );
+    expect(
+      getContractOwnerApprovedCandidates(result, [
+        approvedFirst,
+        approvedSecond,
+      ]),
+    ).toHaveLength(1);
+
+    const staleResult = createProvisionalProviderResult({
+      provider: providerContext,
+      status: "success",
+      responseEvidence,
+      candidateFields: [field({ observedShape: "number" })],
+    });
+    expect(
+      getContractOwnerApprovedCandidates(staleResult, [
+        approvedFirst,
+        approvedSecond,
+      ]),
+    ).toEqual([]);
+
+    const foreignResult = createProvisionalProviderResult({
+      provider: { ...providerContext, providerId: "other-provider" },
+      status: "success",
+      responseEvidence,
+      candidateFields: current,
+    });
+    expect(
+      getContractOwnerApprovedCandidates(foreignResult, [
+        approvedFirst,
+        approvedSecond,
+      ]),
+    ).toEqual([]);
+
+    const unrelatedResult = createProvisionalProviderResult({
+      provider: providerContext,
+      status: "success",
+      responseEvidence,
+      candidateFields: [field({ candidatePath: "unrelated.path" })],
+    });
+    expect(
+      getContractOwnerApprovedCandidates(unrelatedResult, [
+        approvedFirst,
+        approvedSecond,
+      ]),
+    ).toEqual([]);
   });
 });
