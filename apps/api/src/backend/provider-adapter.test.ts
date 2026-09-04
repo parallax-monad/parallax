@@ -4,8 +4,10 @@ import {
   type ProviderAdapter,
   ProviderAdapterError,
   type ProviderEvaluationInput,
+  type ProviderEvaluationResult,
   type ProviderSupportQuery,
 } from "./provider-adapter.js";
+import { createProvisionalProviderResult } from "./provider-result-boundary.js";
 
 type FakeIntent = {
   readonly kind: "swap";
@@ -17,19 +19,13 @@ type FakeRawInput = {
   readonly providerOnlyTransaction: string;
 };
 
-type FakeRawOutput = {
-  readonly providerOnlyEvidence: string;
-};
-
 const intent: FakeIntent = {
   kind: "swap",
   chainId: 901,
   protocol: "test-protocol",
 };
 
-class FakeProvider
-  implements ProviderAdapter<FakeIntent, FakeRawInput, FakeRawOutput>
-{
+class FakeProvider implements ProviderAdapter<FakeIntent, FakeRawInput> {
   public readonly providerId = "fake-provider";
   public readonly capabilities = ["evaluate", "simulate"] as const;
   public readonly evaluations: ProviderEvaluationInput<
@@ -50,21 +46,41 @@ class FakeProvider
 
   public async evaluate(
     input: ProviderEvaluationInput<FakeIntent, FakeRawInput>,
-  ) {
+  ): Promise<ProviderEvaluationResult> {
     this.externalCall();
     this.evaluations.push(input);
     return {
-      status: "success" as const,
-      output: {
-        providerOnlyEvidence: input.input.providerOnlyTransaction,
-      },
+      ...createProvisionalProviderResult({
+        provider: {
+          providerId: this.providerId,
+          providerVersion: "fixture-v1",
+          observedAt: "2026-09-04T13:05:00.000Z",
+        },
+        status: "success",
+        responseEvidence: {
+          kind: "reference",
+          reference: "fixture://fake-provider/run-1",
+        },
+        candidateFields: [
+          {
+            candidatePath: "provider.observedValue",
+            sourcePath: "$.providerOnlyEvidence",
+            observedShape: "string",
+            nullable: false,
+            transformRule: "fixture-identity",
+            status: "observed",
+            confidence: "unassessed",
+            value: input.input.providerOnlyTransaction,
+          },
+        ],
+      }),
       capabilities: this.capabilities,
     };
   }
 }
 
 describe("ProviderAdapter provisional port", () => {
-  it("injects a fake, evaluates generic input, and preserves opaque payloads", async () => {
+  it("injects a fake and returns a provisional candidate boundary", async () => {
     const externalCall = vi.fn();
     const provider = new FakeProvider(externalCall);
     const rawInput: FakeRawInput = { providerOnlyTransaction: "opaque-input" };
@@ -79,19 +95,40 @@ describe("ProviderAdapter provisional port", () => {
     ).toBe(true);
     expect(provider.evaluations).toHaveLength(0);
 
-    await expect(
-      provider.evaluate({
-        runId: "run-1",
-        intent,
-        chainId: intent.chainId,
-        protocol: intent.protocol,
-        input: rawInput,
-      }),
-    ).resolves.toEqual({
+    const result = await provider.evaluate({
+      runId: "run-1",
+      intent,
+      chainId: intent.chainId,
+      protocol: intent.protocol,
+      input: rawInput,
+    });
+    expect(result).toEqual({
       status: "success",
-      output: { providerOnlyEvidence: "opaque-input" },
+      provider: {
+        providerId: "fake-provider",
+        providerVersion: "fixture-v1",
+        observedAt: "2026-09-04T13:05:00.000Z",
+      },
+      responseEvidence: {
+        kind: "reference",
+        reference: "fixture://fake-provider/run-1",
+      },
+      candidateFields: [
+        {
+          candidatePath: "provider.observedValue",
+          sourcePath: "$.providerOnlyEvidence",
+          observedShape: "string",
+          nullable: false,
+          transformRule: "fixture-identity",
+          status: "observed",
+          confidence: "unassessed",
+          value: "opaque-input",
+          reviewStatus: "pending_review",
+        },
+      ],
       capabilities: ["evaluate", "simulate"],
     });
+    expect((result as Record<string, unknown>).output).toBeUndefined();
     expect(provider.evaluations).toHaveLength(1);
     expect(provider.evaluations[0]?.input).toBe(rawInput);
     expect(externalCall).toHaveBeenCalledTimes(1);

@@ -2,9 +2,11 @@
  * Internal provisional ProviderAdapter boundary.
  *
  * This port deliberately does not model the final Evidence Contract. Provider
- * implementations may keep SDK/runtime-specific input and output types behind
- * the generic parameters; this module never imports a concrete provider.
+ * implementations may keep SDK/runtime-specific input types behind the generic
+ * parameters; this module never imports a concrete provider.
  */
+
+import type { ProvisionalProviderResult } from "./provider-result-boundary.js";
 
 /**
  * Extensible capability identifier. The string representation is intentionally
@@ -29,18 +31,17 @@ export type ProviderEvaluationInput<Intent = unknown, Input = unknown> = {
   readonly input: Input;
 };
 
-/** Provisional result; it is not an Evidence or Risk result. */
-export type ProviderEvaluationResult<Output = unknown> =
-  | {
-      readonly status: "success";
-      readonly output: Output;
-      readonly capabilities?: readonly ProviderCapability[];
-    }
-  | {
-      readonly status: "unknown";
-      readonly reason?: string;
-      readonly capabilities?: readonly ProviderCapability[];
-    };
+/**
+ * Provider output after crossing the internal provisional boundary.
+ *
+ * Raw Provider output is intentionally absent. The adapter must translate it
+ * into candidate observations and controlled response evidence before it can
+ * be returned to a caller. Capabilities remain an adapter concern and do not
+ * imply approval of any candidate field.
+ */
+export type ProviderEvaluationResult = ProvisionalProviderResult & {
+  readonly capabilities?: readonly ProviderCapability[];
+};
 
 export type ProviderAdapterErrorCode =
   | "UNSUPPORTED"
@@ -112,11 +113,7 @@ function isProviderAdapterErrorCode(
  * Replaceable Backend-local provider port. Implementations own all raw
  * provider translation and must keep supports(...) cheap and side-effect free.
  */
-export interface ProviderAdapter<
-  Intent = unknown,
-  Input = unknown,
-  Output = unknown,
-> {
+export interface ProviderAdapter<Intent = unknown, Input = unknown> {
   readonly providerId: string;
   readonly capabilities?: readonly ProviderCapability[];
 
@@ -124,5 +121,5 @@ export interface ProviderAdapter<
 
   evaluate(
     input: ProviderEvaluationInput<Intent, Input>,
-  ): Promise<ProviderEvaluationResult<Output>>;
+  ): Promise<ProviderEvaluationResult>;
 }
