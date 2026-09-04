@@ -253,6 +253,7 @@ describe("ProviderAdapter provisional port", () => {
     });
 
     expect(Object.isFrozen(adapter)).toBe(true);
+    expect(Object.isFrozen(adapter.capabilities)).toBe(true);
     expect(Object.keys(adapter)).toEqual([
       "providerId",
       "capabilities",
@@ -319,6 +320,17 @@ describe("ProviderAdapter provisional port", () => {
   );
 
   it("rejects invalid adapter capabilities at factory creation", () => {
+    const sparseCapabilities = [] as string[];
+    sparseCapabilities.length = 1;
+    expect(() =>
+      createProviderAdapter({
+        providerId: "fake-provider",
+        capabilities: sparseCapabilities,
+        supports: () => true,
+        evaluateRaw: async () => validResult(),
+      }),
+    ).toThrow("adapter capabilities must be a dense array");
+
     expect(() =>
       createProviderAdapter({
         providerId: "fake-provider",
@@ -327,6 +339,33 @@ describe("ProviderAdapter provisional port", () => {
         evaluateRaw: async () => validResult(),
       }),
     ).toThrow("adapter capabilities must be non-empty strings");
+  });
+
+  it("rejects sparse capabilities returned by the raw implementation", async () => {
+    const sparseCapabilities = [] as string[];
+    sparseCapabilities.length = 1;
+    const adapter = adapterFor({
+      ...validResult(),
+      capabilities: sparseCapabilities,
+    });
+
+    await expect(
+      adapter.evaluate({ runId: "run-1", input: {} }),
+    ).rejects.toThrow("adapter capabilities must be a dense array");
+  });
+
+  it("snapshots valid factory capabilities independently", () => {
+    const rawCapabilities = ["simulate"];
+    const adapter = createProviderAdapter({
+      providerId: "fake-provider",
+      capabilities: rawCapabilities,
+      supports: () => true,
+      evaluateRaw: async () => validResult(),
+    });
+
+    rawCapabilities[0] = "mutated";
+    expect(adapter.capabilities).toEqual(["simulate"]);
+    expect(Object.isFrozen(adapter.capabilities)).toBe(true);
   });
 
   it.each(["UNSUPPORTED", "FAILED", "TIMEOUT", "UNKNOWN"] as const)(

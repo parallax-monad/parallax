@@ -138,6 +138,41 @@ export interface ProviderAdapter<Intent = unknown, Input = unknown> {
   ): Promise<ProviderEvaluationResult>;
 }
 
+function normalizeCapabilities(
+  value: unknown,
+): readonly ProviderCapability[] | undefined {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value)) {
+    throw new TypeError("adapter capabilities must be an array");
+  }
+  const length = value.length;
+  const ownNames = Object.getOwnPropertyNames(value);
+  if (
+    Object.getOwnPropertySymbols(value).length > 0 ||
+    ownNames.length !== length + 1 ||
+    !ownNames.every(
+      (key) =>
+        key === "length" ||
+        (/^(0|[1-9]\d*)$/.test(key) && Number(key) < length),
+    )
+  ) {
+    throw new TypeError("adapter capabilities must be a dense array");
+  }
+
+  const normalized: ProviderCapability[] = [];
+  for (let index = 0; index < length; index += 1) {
+    if (!Object.hasOwn(value, index)) {
+      throw new TypeError("adapter capabilities must be a dense array");
+    }
+    const capability = value[index];
+    if (typeof capability !== "string" || capability.trim().length === 0) {
+      throw new TypeError("adapter capabilities must be non-empty strings");
+    }
+    normalized.push(capability);
+  }
+  return normalized;
+}
+
 function normalizeAdapterEvaluation(
   adapterProviderId: string,
   output: unknown,
@@ -150,17 +185,9 @@ function normalizeAdapterEvaluation(
   if (typeof output !== "object" || output === null || Array.isArray(output)) {
     return normalized;
   }
-  const capabilities = (output as { capabilities?: unknown }).capabilities;
-  if (
-    capabilities !== undefined &&
-    (!Array.isArray(capabilities) ||
-      !capabilities.every(
-        (capability) =>
-          typeof capability === "string" && capability.trim().length > 0,
-      ))
-  ) {
-    throw new TypeError("adapter capabilities must be non-empty strings");
-  }
+  const capabilities = normalizeCapabilities(
+    (output as { capabilities?: unknown }).capabilities,
+  );
   return Object.freeze({
     ...normalized,
     capabilities:
@@ -179,17 +206,7 @@ export function createProviderAdapter<Intent = unknown, Input = unknown>(
   if (typeof providerId !== "string" || providerId.trim().length === 0) {
     throw new TypeError("adapter.providerId must be a non-empty string");
   }
-  const capabilities = raw.capabilities;
-  if (
-    capabilities !== undefined &&
-    (!Array.isArray(capabilities) ||
-      !capabilities.every(
-        (capability) =>
-          typeof capability === "string" && capability.trim().length > 0,
-      ))
-  ) {
-    throw new TypeError("adapter capabilities must be non-empty strings");
-  }
+  const capabilities = normalizeCapabilities(raw.capabilities);
   const publicCapabilities =
     capabilities === undefined ? undefined : Object.freeze([...capabilities]);
   return Object.freeze({
