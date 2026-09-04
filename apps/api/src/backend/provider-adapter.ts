@@ -127,8 +127,12 @@ export type ProviderAdapterRawImplementation<
   evaluateRaw(input: ProviderEvaluationInput<Intent, Input>): Promise<unknown>;
 };
 
+declare const providerAdapterBrand: unique symbol;
+const factoryCreatedAdapters = new WeakSet<object>();
+
 /** Replaceable, runtime-validated Backend-local provider port. */
 export interface ProviderAdapter<Intent = unknown, Input = unknown> {
+  readonly [providerAdapterBrand]: true;
   readonly providerId: string;
   readonly capabilities?: readonly ProviderCapability[];
 
@@ -209,7 +213,7 @@ export function createProviderAdapter<Intent = unknown, Input = unknown>(
   const capabilities = normalizeCapabilities(raw.capabilities);
   const publicCapabilities =
     capabilities === undefined ? undefined : Object.freeze([...capabilities]);
-  return Object.freeze({
+  const adapter = Object.freeze({
     providerId,
     capabilities: publicCapabilities,
     supports: (query: ProviderSupportQuery<Intent>) => raw.supports(query),
@@ -217,7 +221,9 @@ export function createProviderAdapter<Intent = unknown, Input = unknown>(
       input: ProviderEvaluationInput<Intent, Input>,
     ): Promise<ProviderEvaluationResult> =>
       normalizeAdapterEvaluation(providerId, await raw.evaluateRaw(input)),
-  });
+  }) as ProviderAdapter<Intent, Input>;
+  factoryCreatedAdapters.add(adapter);
+  return adapter;
 }
 
 /** Compatibility entry point; validation is owned by the public adapter. */
@@ -225,5 +231,12 @@ export function evaluateProviderAdapter<Intent = unknown, Input = unknown>(
   adapter: ProviderAdapter<Intent, Input>,
   input: ProviderEvaluationInput<Intent, Input>,
 ): Promise<ProviderEvaluationResult> {
+  if (
+    typeof adapter !== "object" ||
+    adapter === null ||
+    !factoryCreatedAdapters.has(adapter)
+  ) {
+    throw new TypeError("adapter must be created by createProviderAdapter");
+  }
   return adapter.evaluate(input);
 }

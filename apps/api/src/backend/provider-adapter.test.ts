@@ -260,6 +260,7 @@ describe("ProviderAdapter provisional port", () => {
       "supports",
       "evaluate",
     ]);
+    expect(Object.getOwnPropertySymbols(adapter)).toHaveLength(0);
     expect("evaluateRaw" in adapter).toBe(false);
     expect(Object.values(adapter)).not.toContain(raw.rawProviderObject);
 
@@ -269,6 +270,21 @@ describe("ProviderAdapter provisional port", () => {
     expect(
       (result as Record<string, unknown>).rawProviderObject,
     ).toBeUndefined();
+  });
+
+  it("rejects forged adapters before invoking their evaluate method", async () => {
+    const forgedEvaluate = vi.fn(async () => validResult());
+    const forgedAdapter = {
+      providerId: "fake-provider",
+      capabilities: [],
+      supports: () => true,
+      evaluate: forgedEvaluate,
+    } as unknown as ProviderAdapter;
+
+    expect(() =>
+      evaluateProviderAdapter(forgedAdapter, { runId: "run-1", input: {} }),
+    ).toThrow("adapter must be created by createProviderAdapter");
+    expect(forgedEvaluate).not.toHaveBeenCalled();
   });
 
   it.each([
