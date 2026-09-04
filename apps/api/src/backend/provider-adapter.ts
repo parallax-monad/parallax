@@ -6,7 +6,10 @@
  * parameters; this module never imports a concrete provider.
  */
 
-import type { ProvisionalProviderResult } from "./provider-result-boundary.js";
+import {
+  normalizeProvisionalProviderResult,
+  type ProvisionalProviderResult,
+} from "./provider-result-boundary.js";
 
 /**
  * Extensible capability identifier. The string representation is intentionally
@@ -112,6 +115,10 @@ function isProviderAdapterErrorCode(
 /**
  * Replaceable Backend-local provider port. Implementations own all raw
  * provider translation and must keep supports(...) cheap and side-effect free.
+ *
+ * `evaluate` is the untrusted implementation seam and therefore returns
+ * unknown. Callers must use evaluateProviderAdapter(...) rather than treating
+ * its direct result as a provisional boundary value.
  */
 export interface ProviderAdapter<Intent = unknown, Input = unknown> {
   readonly providerId: string;
@@ -119,7 +126,44 @@ export interface ProviderAdapter<Intent = unknown, Input = unknown> {
 
   supports(query: ProviderSupportQuery<Intent>): boolean;
 
-  evaluate(
-    input: ProviderEvaluationInput<Intent, Input>,
-  ): Promise<ProviderEvaluationResult>;
+  evaluate(input: ProviderEvaluationInput<Intent, Input>): Promise<unknown>;
+}
+
+/**
+ * The only runtime-validated crossing from an adapter implementation into the
+ * provisional result boundary. It rejects malformed provider output and
+ * provider-context mismatches instead of exposing raw SDK values.
+ */
+export async function evaluateProviderAdapter<
+  Intent = unknown,
+  Input = unknown,
+>(
+  adapter: ProviderAdapter<Intent, Input>,
+  input: ProviderEvaluationInput<Intent, Input>,
+): Promise<ProviderEvaluationResult> {
+  const output = await adapter.evaluate(input);
+  const normalized = normalizeProvisionalProviderResult(output);
+  if (normalized.provider.providerId !== adapter.providerId) {
+    throw new TypeError("provider result does not match adapter providerId");
+  }
+
+  if (typeof output !== "object" || output === null || Array.isArray(output)) {
+    return normalized;
+  }
+  const capabilities = (output as { capabilities?: unknown }).capabilities;
+  if (
+    capabilities !== undefined &&
+    (!Array.isArray(capabilities) ||
+      !capabilities.every(
+        (capability) =>
+          typeof capability === "string" && capability.trim().length > 0,
+      ))
+  ) {
+    throw new TypeError("adapter capabilities must be non-empty strings");
+  }
+  return Object.freeze({
+    ...normalized,
+    capabilities:
+      capabilities === undefined ? undefined : Object.freeze([...capabilities]),
+  });
 }

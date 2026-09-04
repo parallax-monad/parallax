@@ -393,11 +393,32 @@ function normalizeCandidateFields(
   return normalized;
 }
 
+function deepFreeze<T>(value: T): T {
+  if (typeof value !== "object" || value === null || Object.isFrozen(value)) {
+    return value;
+  }
+  for (const child of Object.values(value as UnknownRecord)) {
+    if (typeof child === "object" && child !== null) {
+      deepFreeze(child);
+    }
+  }
+  return Object.freeze(value);
+}
+
 function isValidTimestamp(value: unknown): value is string {
   return (
     typeof value === "string" &&
     value.trim().length > 0 &&
     !Number.isNaN(Date.parse(value))
+  );
+}
+
+function isReviewStatus(value: unknown): value is ProvisionalFieldReviewStatus {
+  return (
+    value === "pending_review" ||
+    value === "approved" ||
+    value === "rejected" ||
+    value === "needs_evidence"
   );
 }
 
@@ -420,6 +441,49 @@ function describeCandidateField(
   };
 }
 
+function normalizeFieldDescription(
+  description: ProvisionalFieldDescription,
+): ProvisionalFieldDescription {
+  if (!isRecord(description)) {
+    throw new TypeError("field description must be a plain object");
+  }
+  assertNonEmptyString(description.candidatePath, "field.candidatePath");
+  assertOptionalString(description.sourcePath, "field.sourcePath");
+  assertNonEmptyString(description.observedShape, "field.observedShape");
+  if (typeof description.nullable !== "boolean") {
+    throw new TypeError("field.nullable must be a boolean");
+  }
+  if (
+    description.observedValues !== undefined &&
+    (!Array.isArray(description.observedValues) ||
+      !description.observedValues.every((value) => typeof value === "string"))
+  ) {
+    throw new TypeError("field.observedValues must be an array of strings");
+  }
+  assertOptionalString(description.transformRule, "field.transformRule");
+  assertOptionalString(description.semanticNote, "field.semanticNote");
+  if (!isCandidateStatus(description.status)) {
+    throw new TypeError("field.status is invalid");
+  }
+  if (!isCandidateConfidence(description.confidence)) {
+    throw new TypeError("field.confidence is invalid");
+  }
+  return {
+    candidatePath: description.candidatePath,
+    sourcePath: description.sourcePath,
+    observedShape: description.observedShape,
+    nullable: description.nullable,
+    observedValues:
+      description.observedValues === undefined
+        ? undefined
+        : [...description.observedValues],
+    transformRule: description.transformRule,
+    semanticNote: description.semanticNote,
+    status: description.status,
+    confidence: description.confidence,
+  };
+}
+
 function valuesChanged(
   previous: readonly string[] | undefined,
   current: readonly string[] | undefined,
@@ -429,6 +493,21 @@ function valuesChanged(
   return (
     previousValues.length !== currentValues.length ||
     previousValues.some((value, index) => value !== currentValues[index])
+  );
+}
+
+function sameOptionalStringArray(
+  previous: readonly string[] | undefined,
+  current: readonly string[] | undefined,
+): boolean {
+  if (previous === undefined || current === undefined) {
+    return previous === current;
+  }
+  const previousValues = [...previous].sort();
+  const currentValues = [...current].sort();
+  return (
+    previousValues.length === currentValues.length &&
+    previousValues.every((value, index) => value === currentValues[index])
   );
 }
 
@@ -453,6 +532,170 @@ function createChangeRecord(
     proposedBy: input.proposedBy,
     proposedAt: input.proposedAt,
     reviewStatus: "pending_review",
+  };
+}
+
+function isChangeType(value: unknown): value is ProvisionalFieldChangeType {
+  return (
+    value === "added" ||
+    value === "removed" ||
+    value === "renamed" ||
+    value === "type_changed" ||
+    value === "nullability_changed" ||
+    value === "enum_changed" ||
+    value === "semantic_changed" ||
+    value === "mapping_changed" ||
+    value === "observation_status_changed" ||
+    value === "confidence_changed"
+  );
+}
+
+function normalizeDecision(
+  decision: ProvisionalFieldReviewDecision,
+  expectedContractOwnerId?: string,
+): ProvisionalContractOwnerDecision {
+  if (!isRecord(decision)) {
+    throw new TypeError("Contract Owner decision must be a plain object");
+  }
+  if (
+    decision.status !== "approved" &&
+    decision.status !== "rejected" &&
+    decision.status !== "needs_evidence"
+  ) {
+    throw new TypeError("Contract Owner decision status is invalid");
+  }
+  assertNonEmptyString(decision.decidedBy, "decision.decidedBy");
+  if (
+    expectedContractOwnerId !== undefined &&
+    decision.decidedBy !== expectedContractOwnerId
+  ) {
+    throw new TypeError("decision.decidedBy does not match Contract Owner");
+  }
+  if (!isValidTimestamp(decision.decidedAt)) {
+    throw new TypeError("decision.decidedAt must be a valid timestamp");
+  }
+  assertOptionalString(decision.note, "decision.note");
+  return {
+    status: decision.status,
+    decidedBy: decision.decidedBy,
+    decidedAt: decision.decidedAt,
+    note: decision.note,
+  };
+}
+
+function hasValidChangeSemantics(
+  changeType: ProvisionalFieldChangeType,
+  previous: ProvisionalFieldDescription | undefined,
+  next: ProvisionalFieldDescription | undefined,
+): boolean {
+  if (changeType === "added") {
+    return previous === undefined && next !== undefined;
+  }
+  if (changeType === "removed") {
+    return previous !== undefined && next === undefined;
+  }
+  if (previous === undefined || next === undefined) return false;
+  switch (changeType) {
+    case "renamed":
+      return previous.candidatePath !== next.candidatePath;
+    case "type_changed":
+      return previous.observedShape !== next.observedShape;
+    case "nullability_changed":
+      return previous.nullable !== next.nullable;
+    case "enum_changed":
+      return !sameOptionalStringArray(
+        previous.observedValues,
+        next.observedValues,
+      );
+    case "semantic_changed":
+      return previous.semanticNote !== next.semanticNote;
+    case "mapping_changed":
+      return (
+        previous.sourcePath !== next.sourcePath ||
+        previous.transformRule !== next.transformRule
+      );
+    case "observation_status_changed":
+      return previous.status !== next.status;
+    case "confidence_changed":
+      return previous.confidence !== next.confidence;
+    default:
+      return false;
+  }
+}
+
+function normalizeChangeRecord(
+  change: ProvisionalFieldChangeRecord,
+): ProvisionalFieldChangeRecord {
+  if (!isRecord(change)) {
+    throw new TypeError("change record must be a plain object");
+  }
+  assertNonEmptyString(change.changeId, "change.changeId");
+  assertNonEmptyString(change.changeSetId, "change.changeSetId");
+  if (
+    !Number.isInteger(change.changeSequence) ||
+    change.changeSequence < 1 ||
+    !Number.isInteger(change.changeSetSize) ||
+    change.changeSetSize < 1
+  ) {
+    throw new TypeError(
+      "change sequence and set size must be positive integers",
+    );
+  }
+  if (change.changeId !== `${change.changeSetId}:${change.changeSequence}`) {
+    throw new TypeError("change.changeId is not bound to its sequence");
+  }
+  if (!isChangeType(change.changeType)) {
+    throw new TypeError("change.changeType is invalid");
+  }
+  const previous =
+    change.previous === undefined
+      ? undefined
+      : normalizeFieldDescription(change.previous);
+  const next =
+    change.next === undefined
+      ? undefined
+      : normalizeFieldDescription(change.next);
+  if (!hasValidChangeSemantics(change.changeType, previous, next)) {
+    throw new TypeError("change record semantics do not match change type");
+  }
+  const provider = normalizeProviderContext(change.provider);
+  const evidence = normalizeResponseEvidence(change.evidence);
+  assertNonEmptyString(change.impact, "change.impact");
+  assertNonEmptyString(change.proposedBy, "change.proposedBy");
+  if (!isValidTimestamp(change.proposedAt)) {
+    throw new TypeError("change.proposedAt must be a valid timestamp");
+  }
+  if (!isReviewStatus(change.reviewStatus)) {
+    throw new TypeError("change.reviewStatus is invalid");
+  }
+  const contractOwnerDecision =
+    change.contractOwnerDecision === undefined
+      ? undefined
+      : normalizeDecision(change.contractOwnerDecision);
+  if (
+    (change.reviewStatus === "pending_review" &&
+      contractOwnerDecision !== undefined) ||
+    (change.reviewStatus !== "pending_review" &&
+      (contractOwnerDecision === undefined ||
+        contractOwnerDecision.status !== change.reviewStatus))
+  ) {
+    throw new TypeError("change review status and decision do not match");
+  }
+  return {
+    changeId: change.changeId,
+    changeSetId: change.changeSetId,
+    changeSequence: change.changeSequence,
+    changeSetSize: change.changeSetSize,
+    changeType: change.changeType,
+    previous,
+    next,
+    provider,
+    evidence,
+    impact: change.impact,
+    proposedBy: change.proposedBy,
+    proposedAt: change.proposedAt,
+    reviewStatus: change.reviewStatus,
+    contractOwnerDecision,
   };
 }
 
@@ -519,7 +762,7 @@ export function createProvisionalProviderResult(
     throw new TypeError("provisional result status is invalid");
   }
   const candidateFields = normalizeCandidateFields(input.candidateFields);
-  return {
+  return deepFreeze({
     provider,
     status: input.status,
     responseEvidence,
@@ -527,7 +770,7 @@ export function createProvisionalProviderResult(
       ...candidate,
       reviewStatus: "pending_review" as const,
     })),
-  };
+  });
 }
 
 /**
@@ -645,41 +888,27 @@ export function detectProvisionalFieldChanges(
     throw new Error("Every current provisional field must be classified");
   }
 
-  return changes.map((change) => ({
-    ...change,
-    changeSetSize: changes.length,
-  }));
+  return deepFreeze(
+    changes.map((change) => ({
+      ...change,
+      changeSetSize: changes.length,
+    })),
+  );
 }
 
 export function reviewProvisionalFieldChange(
   change: ProvisionalFieldChangeRecord,
   decision: ProvisionalFieldReviewDecision,
+  contractOwnerId: string,
 ): ProvisionalFieldChangeRecord {
-  if (!isRecord(change)) {
-    throw new TypeError("change record must be a plain object");
-  }
-  if (
-    decision.status !== "approved" &&
-    decision.status !== "rejected" &&
-    decision.status !== "needs_evidence"
-  ) {
-    throw new TypeError("Contract Owner decision status is invalid");
-  }
-  assertNonEmptyString(decision.decidedBy, "decision.decidedBy");
-  if (!isValidTimestamp(decision.decidedAt)) {
-    throw new TypeError("decision.decidedAt must be a valid timestamp");
-  }
-  assertOptionalString(decision.note, "decision.note");
-  return {
-    ...change,
-    reviewStatus: decision.status,
-    contractOwnerDecision: {
-      status: decision.status,
-      decidedBy: decision.decidedBy,
-      decidedAt: decision.decidedAt,
-      note: decision.note,
-    },
-  };
+  assertNonEmptyString(contractOwnerId, "contractOwnerId");
+  const normalizedChange = normalizeChangeRecord(change);
+  const normalizedDecision = normalizeDecision(decision, contractOwnerId);
+  return deepFreeze({
+    ...normalizedChange,
+    reviewStatus: normalizedDecision.status,
+    contractOwnerDecision: normalizedDecision,
+  });
 }
 
 function sameProviderContext(
@@ -767,7 +996,7 @@ function sameFieldDescription(
     left.sourcePath === right.sourcePath &&
     left.observedShape === right.observedShape &&
     left.nullable === right.nullable &&
-    valuesChanged(left.observedValues, right.observedValues) === false &&
+    sameOptionalStringArray(left.observedValues, right.observedValues) &&
     left.transformRule === right.transformRule &&
     left.semanticNote === right.semanticNote &&
     left.status === right.status &&
@@ -775,19 +1004,24 @@ function sameFieldDescription(
   );
 }
 
-function isApprovedChange(change: ProvisionalFieldChangeRecord): boolean {
+function isApprovedChange(
+  change: ProvisionalFieldChangeRecord,
+  contractOwnerId: string,
+): boolean {
+  const decision = change.contractOwnerDecision;
   return (
     change.reviewStatus === "approved" &&
-    change.contractOwnerDecision?.status === "approved" &&
-    typeof change.contractOwnerDecision.decidedBy === "string" &&
-    change.contractOwnerDecision.decidedBy.trim().length > 0 &&
-    isValidTimestamp(change.contractOwnerDecision.decidedAt)
+    decision !== undefined &&
+    decision.status === "approved" &&
+    decision.decidedBy === contractOwnerId &&
+    isValidTimestamp(decision.decidedAt)
   );
 }
 
 function isCompleteApprovedChangeSet(
   result: ProvisionalProviderResult,
   changes: readonly ProvisionalFieldChangeRecord[],
+  contractOwnerId: string,
 ): boolean {
   if (changes.length === 0) return false;
   const first = changes[0];
@@ -800,17 +1034,24 @@ function isCompleteApprovedChangeSet(
       change.changeSetId !== first.changeSetId ||
       change.changeSetSize !== first.changeSetSize ||
       change.changeSequence < 1 ||
-      change.changeSequence > changes.length ||
+      change.changeSequence > first.changeSetSize ||
       sequences.has(change.changeSequence) ||
       !sameProviderContext(change.provider, result.provider) ||
       !sameResponseEvidence(change.evidence, result.responseEvidence) ||
-      !isApprovedChange(change)
+      !isApprovedChange(change, contractOwnerId)
     ) {
       return false;
     }
     sequences.add(change.changeSequence);
   }
-  if (sequences.size !== changes.length) return false;
+  if (
+    sequences.size !== changes.length ||
+    Array.from({ length: changes.length }, (_, index) => index + 1).some(
+      (sequence) => !sequences.has(sequence),
+    )
+  ) {
+    return false;
+  }
 
   const currentDescriptions = new Map(
     result.candidateFields.map((candidate) => [
@@ -845,6 +1086,27 @@ function isCompleteApprovedChangeSet(
   });
 }
 
+export function normalizeProvisionalProviderResult(
+  input: unknown,
+): ProvisionalProviderResult {
+  if (!isRecord(input)) {
+    throw new TypeError("provisional result must be a plain object");
+  }
+  return createProvisionalProviderResult({
+    provider: input.provider as ProviderObservationContext,
+    status: input.status as ProvisionalProviderResultInput["status"],
+    responseEvidence: input.responseEvidence as ProviderResponseEvidence,
+    candidateFields:
+      input.candidateFields as readonly ProvisionalCandidateFieldInput[],
+  });
+}
+
+function normalizeResultForApproval(
+  result: ProvisionalProviderResult,
+): ProvisionalProviderResult {
+  return normalizeProvisionalProviderResult(result);
+}
+
 /**
  * Returns approved candidate observations for a downstream contract-building
  * layer. It never returns a final Evidence Contract and does not mutate the
@@ -855,10 +1117,36 @@ function isCompleteApprovedChangeSet(
 export function getContractOwnerApprovedCandidates(
   result: ProvisionalProviderResult,
   changes: readonly ProvisionalFieldChangeRecord[],
+  contractOwnerId: string,
 ): readonly ProvisionalCandidateField[] {
-  if (!isCompleteApprovedChangeSet(result, changes)) return [];
-  return result.candidateFields.map((candidate) => ({
-    ...candidate,
-    reviewStatus: "approved" as const,
-  }));
+  if (
+    typeof contractOwnerId !== "string" ||
+    contractOwnerId.trim().length === 0
+  ) {
+    return [];
+  }
+  try {
+    const normalizedResult = normalizeResultForApproval(result);
+    if (!Array.isArray(changes)) return [];
+    const normalizedChanges = changes.map((change) =>
+      normalizeChangeRecord(change),
+    );
+    if (
+      !isCompleteApprovedChangeSet(
+        normalizedResult,
+        normalizedChanges,
+        contractOwnerId,
+      )
+    ) {
+      return [];
+    }
+    return deepFreeze(
+      normalizedResult.candidateFields.map((candidate) => ({
+        ...candidate,
+        reviewStatus: "approved" as const,
+      })),
+    );
+  } catch {
+    return [];
+  }
 }

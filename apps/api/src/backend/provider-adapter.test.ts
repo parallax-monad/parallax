@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  evaluateProviderAdapter,
   isProviderAdapterError,
   type ProviderAdapter,
   ProviderAdapterError,
@@ -95,7 +96,7 @@ describe("ProviderAdapter provisional port", () => {
     ).toBe(true);
     expect(provider.evaluations).toHaveLength(0);
 
-    const result = await provider.evaluate({
+    const result = await evaluateProviderAdapter(provider, {
       runId: "run-1",
       intent,
       chainId: intent.chainId,
@@ -179,6 +180,38 @@ describe("ProviderAdapter provisional port", () => {
     const provider = new FakeProvider(() => {});
     expect(provider.capabilities).toEqual(["evaluate", "simulate"]);
     expect(provider.capabilities).not.toContain("quote");
+  });
+
+  it("fails closed when an adapter bypasses the provisional result factory", async () => {
+    const adapter: ProviderAdapter = {
+      providerId: "malicious-provider",
+      supports: () => true,
+      evaluate: async () => ({
+        provider: {
+          providerId: "malicious-provider",
+          observedAt: "2026-09-04T13:11:00.000Z",
+        },
+        status: "success",
+        responseEvidence: {
+          kind: "reference",
+          reference: "fixture://malicious-provider/run-1",
+        },
+        candidateFields: [
+          {
+            candidatePath: "provider.raw",
+            observedShape: "object",
+            nullable: false,
+            status: "observed",
+            confidence: "unassessed",
+            value: new Date(),
+          },
+        ],
+      }),
+    };
+
+    await expect(
+      evaluateProviderAdapter(adapter, { runId: "run-1", input: {} }),
+    ).rejects.toThrow("candidateField.value must be a JSON-compatible value");
   });
 
   it.each(["UNSUPPORTED", "FAILED", "TIMEOUT", "UNKNOWN"] as const)(

@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
+  getContractOwnerApprovedCandidates as approvalGate,
   createProvisionalProviderResult,
   detectProvisionalFieldChanges,
-  getContractOwnerApprovedCandidates,
   type ProvisionalCandidateFieldInput,
-  reviewProvisionalFieldChange,
+  type ProvisionalFieldChangeRecord,
+  type ProvisionalProviderResult,
+  reviewProvisionalFieldChange as reviewChange,
 } from "./provider-result-boundary.js";
 
 const providerContext = {
@@ -21,6 +23,22 @@ const responseEvidence = {
     execution: { success: true, gas: "redacted" },
   },
 };
+
+const contractOwnerId = "contract-owner";
+
+function approvedCandidates(
+  result: Parameters<typeof approvalGate>[0],
+  changes: Parameters<typeof approvalGate>[1],
+) {
+  return approvalGate(result, changes, contractOwnerId);
+}
+
+function reviewProvisionalFieldChange(
+  change: Parameters<typeof reviewChange>[0],
+  decision: Parameters<typeof reviewChange>[1],
+) {
+  return reviewChange(change, decision, contractOwnerId);
+}
 
 function field(
   overrides: Partial<ProvisionalCandidateFieldInput> = {},
@@ -55,7 +73,7 @@ describe("provisional provider result boundary", () => {
       reviewStatus: "pending_review",
     });
     expect(result.responseEvidence).toEqual(responseEvidence);
-    expect(getContractOwnerApprovedCandidates(result, [])).toEqual([]);
+    expect(approvedCandidates(result, [])).toEqual([]);
     expect((result as Record<string, unknown>).evidence).toBeUndefined();
     expect((result as Record<string, unknown>).verdict).toBeUndefined();
   });
@@ -248,12 +266,8 @@ describe("provisional provider result boundary", () => {
       note: "Approved after review.",
     });
 
-    expect(
-      getContractOwnerApprovedCandidates(result, [approved, rejected]),
-    ).toEqual([]);
-    expect(
-      getContractOwnerApprovedCandidates(result, [approved, approvedSecond]),
-    ).toEqual([
+    expect(approvedCandidates(result, [approved, rejected])).toEqual([]);
+    expect(approvedCandidates(result, [approved, approvedSecond])).toEqual([
       expect.objectContaining({
         candidatePath: "execution.success",
         reviewStatus: "approved",
@@ -263,7 +277,7 @@ describe("provisional provider result boundary", () => {
         reviewStatus: "approved",
       }),
     ]);
-    expect(getContractOwnerApprovedCandidates(result, [rejected])).toEqual([]);
+    expect(approvedCandidates(result, [rejected])).toEqual([]);
     expect(approved.contractOwnerDecision).toMatchObject({
       status: "approved",
       decidedBy: "contract-owner",
@@ -315,14 +329,9 @@ describe("provisional provider result boundary", () => {
     const approvedFirst = reviewProvisionalFieldChange(firstChange, approval);
     const approvedSecond = reviewProvisionalFieldChange(secondChange, approval);
 
-    expect(getContractOwnerApprovedCandidates(result, [approvedFirst])).toEqual(
-      [],
-    );
+    expect(approvedCandidates(result, [approvedFirst])).toEqual([]);
     expect(
-      getContractOwnerApprovedCandidates(result, [
-        approvedFirst,
-        approvedSecond,
-      ]),
+      approvedCandidates(result, [approvedFirst, approvedSecond]),
     ).toHaveLength(1);
 
     const staleResult = createProvisionalProviderResult({
@@ -332,10 +341,7 @@ describe("provisional provider result boundary", () => {
       candidateFields: [field({ observedShape: "number" })],
     });
     expect(
-      getContractOwnerApprovedCandidates(staleResult, [
-        approvedFirst,
-        approvedSecond,
-      ]),
+      approvedCandidates(staleResult, [approvedFirst, approvedSecond]),
     ).toEqual([]);
 
     const foreignResult = createProvisionalProviderResult({
@@ -345,10 +351,7 @@ describe("provisional provider result boundary", () => {
       candidateFields: current,
     });
     expect(
-      getContractOwnerApprovedCandidates(foreignResult, [
-        approvedFirst,
-        approvedSecond,
-      ]),
+      approvedCandidates(foreignResult, [approvedFirst, approvedSecond]),
     ).toEqual([]);
 
     const unrelatedResult = createProvisionalProviderResult({
@@ -358,10 +361,127 @@ describe("provisional provider result boundary", () => {
       candidateFields: [field({ candidatePath: "unrelated.path" })],
     });
     expect(
-      getContractOwnerApprovedCandidates(unrelatedResult, [
-        approvedFirst,
-        approvedSecond,
-      ]),
+      approvedCandidates(unrelatedResult, [approvedFirst, approvedSecond]),
     ).toEqual([]);
+  });
+
+  it("freezes normalized results and rejects forged records or identity mismatches", () => {
+    const result = createProvisionalProviderResult({
+      provider: providerContext,
+      status: "success",
+      responseEvidence,
+      candidateFields: [field()],
+    });
+    expect(Object.isFrozen(result)).toBe(true);
+    expect(Object.isFrozen(result.candidateFields)).toBe(true);
+    expect(Object.isFrozen(result.candidateFields[0])).toBe(true);
+
+    const changes = detectProvisionalFieldChanges({
+      previous: undefined,
+      current: result.candidateFields,
+      provider: providerContext,
+      evidence: responseEvidence,
+      proposedBy: "backend-owner",
+      proposedAt: "2026-09-04T13:07:00.000Z",
+      changeIdPrefix: "containment-change",
+      impact: "Candidate requires explicit Contract Owner review.",
+    });
+    const change = changes[0];
+    expect(change).toBeDefined();
+    if (change === undefined) {
+      throw new Error("Expected a candidate change record");
+    }
+    const approval = {
+      status: "approved" as const,
+      decidedBy: contractOwnerId,
+      decidedAt: "2026-09-04T13:08:00.000Z",
+    };
+    const approved = reviewProvisionalFieldChange(change, approval);
+
+    expect(
+      approvalGate(result, [approved], "different-contract-owner"),
+    ).toEqual([]);
+
+    const malformedResult = {
+      ...result,
+      candidateFields: [
+        {
+          ...result.candidateFields[0],
+          value: new Date(),
+        },
+      ],
+    } as unknown as ProvisionalProviderResult;
+    expect(approvalGate(malformedResult, [approved], contractOwnerId)).toEqual(
+      [],
+    );
+
+    const forgedChange = {
+      ...approved,
+      provider: {
+        ...providerContext,
+        providerVersion: { forged: true },
+      },
+    } as unknown as ProvisionalFieldChangeRecord;
+    expect(() => reviewChange(forgedChange, approval, contractOwnerId)).toThrow(
+      "provider.providerVersion",
+    );
+  });
+
+  it("rejects duplicate or non-contiguous change sequences and stale descriptions", () => {
+    const result = createProvisionalProviderResult({
+      provider: providerContext,
+      status: "success",
+      responseEvidence,
+      candidateFields: [field({ observedValues: [] })],
+    });
+    const changes = detectProvisionalFieldChanges({
+      previous: undefined,
+      current: result.candidateFields,
+      provider: providerContext,
+      evidence: responseEvidence,
+      proposedBy: "backend-owner",
+      proposedAt: "2026-09-04T13:09:00.000Z",
+      changeIdPrefix: "sequence-change",
+      impact: "Candidate requires complete review.",
+    });
+    const change = changes[0];
+    expect(change).toBeDefined();
+    if (change === undefined) {
+      throw new Error("Expected a candidate change record");
+    }
+    const approved = reviewProvisionalFieldChange(change, {
+      status: "approved",
+      decidedBy: contractOwnerId,
+      decidedAt: "2026-09-04T13:10:00.000Z",
+    });
+
+    const duplicateSequence = {
+      ...approved,
+      changeSequence: 1,
+      changeId: `${approved.changeSetId}:1`,
+    };
+    expect(
+      approvalGate(result, [approved, duplicateSequence], contractOwnerId),
+    ).toEqual([]);
+
+    const nonContiguousSequence = {
+      ...approved,
+      changeSequence: 2,
+      changeId: `${approved.changeSetId}:2`,
+    };
+    expect(
+      approvalGate(result, [nonContiguousSequence], contractOwnerId),
+    ).toEqual([]);
+
+    if (approved.next === undefined) {
+      throw new Error("Expected an added candidate description");
+    }
+    const staleDescription = {
+      ...approved,
+      next: { ...approved.next, observedValues: undefined },
+    };
+    expect(approvalGate(result, [staleDescription], contractOwnerId)).toEqual(
+      [],
+    );
   });
 });
