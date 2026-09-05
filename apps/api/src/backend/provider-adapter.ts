@@ -2,9 +2,14 @@
  * Internal provisional ProviderAdapter boundary.
  *
  * This port deliberately does not model the final Evidence Contract. Provider
- * implementations may keep SDK/runtime-specific input and output types behind
- * the generic parameters; this module never imports a concrete provider.
+ * implementations may keep SDK/runtime-specific input types behind the generic
+ * parameters; this module never imports a concrete provider.
  */
+
+import {
+  normalizeProvisionalProviderResult,
+  type ProvisionalProviderResult,
+} from "./provider-result-boundary.js";
 
 /**
  * Extensible capability identifier. The string representation is intentionally
@@ -29,18 +34,17 @@ export type ProviderEvaluationInput<Intent = unknown, Input = unknown> = {
   readonly input: Input;
 };
 
-/** Provisional result; it is not an Evidence or Risk result. */
-export type ProviderEvaluationResult<Output = unknown> =
-  | {
-      readonly status: "success";
-      readonly output: Output;
-      readonly capabilities?: readonly ProviderCapability[];
-    }
-  | {
-      readonly status: "unknown";
-      readonly reason?: string;
-      readonly capabilities?: readonly ProviderCapability[];
-    };
+/**
+ * Provider output after crossing the internal provisional boundary.
+ *
+ * Raw Provider output is intentionally absent. The adapter must translate it
+ * into candidate observations and controlled response evidence before it can
+ * be returned to a caller. Capabilities remain an adapter concern and do not
+ * imply approval of any candidate field.
+ */
+export type ProviderEvaluationResult = ProvisionalProviderResult & {
+  readonly capabilities?: readonly ProviderCapability[];
+};
 
 export type ProviderAdapterErrorCode =
   | "UNSUPPORTED"
@@ -109,20 +113,140 @@ function isProviderAdapterErrorCode(
 }
 
 /**
- * Replaceable Backend-local provider port. Implementations own all raw
- * provider translation and must keep supports(...) cheap and side-effect free.
+ * Raw Backend-local provider implementation. This is deliberately separate
+ * from the public adapter: raw provider output may only leave this seam via
+ * the factory's validated closure.
  */
-export interface ProviderAdapter<
+export type ProviderAdapterRawImplementation<
   Intent = unknown,
   Input = unknown,
-  Output = unknown,
-> {
+> = {
+  readonly providerId: string;
+  readonly capabilities?: readonly ProviderCapability[];
+  supports(query: ProviderSupportQuery<Intent>): boolean;
+  evaluateRaw(input: ProviderEvaluationInput<Intent, Input>): Promise<unknown>;
+};
+
+declare const providerAdapterBrand: unique symbol;
+type AdapterEvaluation<Intent, Input> = (
+  input: ProviderEvaluationInput<Intent, Input>,
+) => Promise<ProviderEvaluationResult>;
+const factoryCreatedAdapters = new WeakMap<
+  object,
+  AdapterEvaluation<unknown, unknown>
+>();
+
+/** Replaceable, runtime-validated Backend-local provider port. */
+export interface ProviderAdapter<Intent = unknown, _Input = unknown> {
+  readonly [providerAdapterBrand]: true;
   readonly providerId: string;
   readonly capabilities?: readonly ProviderCapability[];
 
   supports(query: ProviderSupportQuery<Intent>): boolean;
+}
 
-  evaluate(
+function normalizeCapabilities(
+  value: unknown,
+): readonly ProviderCapability[] | undefined {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value)) {
+    throw new TypeError("adapter capabilities must be an array");
+  }
+  const length = value.length;
+  const ownNames = Object.getOwnPropertyNames(value);
+  if (
+    Object.getOwnPropertySymbols(value).length > 0 ||
+    ownNames.length !== length + 1 ||
+    !ownNames.every(
+      (key) =>
+        key === "length" ||
+        (/^(0|[1-9]\d*)$/.test(key) && Number(key) < length),
+    )
+  ) {
+    throw new TypeError("adapter capabilities must be a dense array");
+  }
+
+  const normalized: ProviderCapability[] = [];
+  for (let index = 0; index < length; index += 1) {
+    if (!Object.hasOwn(value, index)) {
+      throw new TypeError("adapter capabilities must be a dense array");
+    }
+    const capability = value[index];
+    if (typeof capability !== "string" || capability.trim().length === 0) {
+      throw new TypeError("adapter capabilities must be non-empty strings");
+    }
+    normalized.push(capability);
+  }
+  return normalized;
+}
+
+function normalizeAdapterEvaluation(
+  adapterProviderId: string,
+  output: unknown,
+): ProviderEvaluationResult {
+  const normalized = normalizeProvisionalProviderResult(output);
+  if (normalized.provider.providerId !== adapterProviderId) {
+    throw new TypeError("provider result does not match adapter providerId");
+  }
+
+  if (typeof output !== "object" || output === null || Array.isArray(output)) {
+    return normalized;
+  }
+  const capabilities = normalizeCapabilities(
+    (output as { capabilities?: unknown }).capabilities,
+  );
+  return Object.freeze({
+    ...normalized,
+    capabilities:
+      capabilities === undefined ? undefined : Object.freeze([...capabilities]),
+  });
+}
+
+/**
+ * Creates the only public adapter shape. The raw implementation is retained
+ * only by closures and is never attached to the returned object.
+ */
+export function createProviderAdapter<Intent = unknown, Input = unknown>(
+  raw: ProviderAdapterRawImplementation<Intent, Input>,
+): ProviderAdapter<Intent, Input> {
+  const providerId = raw.providerId;
+  if (typeof providerId !== "string" || providerId.trim().length === 0) {
+    throw new TypeError("adapter.providerId must be a non-empty string");
+  }
+  const capabilities = normalizeCapabilities(raw.capabilities);
+  const publicCapabilities =
+    capabilities === undefined ? undefined : Object.freeze([...capabilities]);
+  const adapter = Object.freeze({
+    providerId,
+    capabilities: publicCapabilities,
+    supports: (query: ProviderSupportQuery<Intent>) => raw.supports(query),
+  }) as ProviderAdapter<Intent, Input>;
+  const evaluate = async (
     input: ProviderEvaluationInput<Intent, Input>,
-  ): Promise<ProviderEvaluationResult<Output>>;
+  ): Promise<ProviderEvaluationResult> =>
+    normalizeAdapterEvaluation(providerId, await raw.evaluateRaw(input));
+  factoryCreatedAdapters.set(
+    adapter,
+    evaluate as AdapterEvaluation<unknown, unknown>,
+  );
+  return adapter;
+}
+
+/** Compatibility entry point; validation is owned by the public adapter. */
+export function evaluateProviderAdapter<Intent = unknown, Input = unknown>(
+  adapter: ProviderAdapter<Intent, Input>,
+  input: ProviderEvaluationInput<Intent, Input>,
+): Promise<ProviderEvaluationResult> {
+  if (
+    typeof adapter !== "object" ||
+    adapter === null ||
+    !factoryCreatedAdapters.has(adapter)
+  ) {
+    throw new TypeError("adapter must be created by createProviderAdapter");
+  }
+  const evaluate = factoryCreatedAdapters.get(adapter);
+  if (evaluate === undefined) {
+    throw new TypeError("adapter must be created by createProviderAdapter");
+  }
+  return evaluate(input);
 }
