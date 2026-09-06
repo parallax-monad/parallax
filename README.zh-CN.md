@@ -11,6 +11,8 @@
 [文档索引](docs/README.md) ·
 [演示视频](https://www.youtube.com/watch?v=j43WqH6TrTE)
 
+<sub><a href="./README.md">English</a> · 简体中文</sub>
+
 </div>
 
 Parallax 是面向链上操作的、与 Provider 无关的签名前修正与再次验证层。当前公开演示使用 Monad × Kuru × Moss 路径。

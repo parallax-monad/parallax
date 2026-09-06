@@ -11,6 +11,8 @@
 [Documentation](docs/README.md) ·
 [Demo Video](https://www.youtube.com/watch?v=j43WqH6TrTE)
 
+<sub>English · <a href="./README.zh-CN.md">简体中文</a></sub>
+
 </div>
 
 Parallax is a provider-agnostic pre-execution remediation and re-verification layer for onchain actions. The public demo currently uses the Monad × Kuru × Moss path.
