@@ -1,10 +1,5 @@
 <div align="center">
 
-<p>
-  <a href="./README.md">English</a> |
-  <a href="./README.zh-CN.md">简体中文</a>
-</p>
-
 # Parallax
 
 ### Pre-execution diagnosis, remediation, and re-verification for onchain actions
@@ -101,12 +96,12 @@ The intended decomposition is `Chain × Protocol × Evidence Provider`. It keeps
 - Do not guess intent; use explicit objectives and thresholds when the caller provides them.
 - Diagnose the observed gap and explain the Cause in plain language.
 - Expose controllable variables and quantify candidate changes.
-- When intent is not explicit, show multiple plausible, verified counterfactual options rather than silently choosing one.
+- When intent is not explicit, show multiple plausible counterfactual options with explicit verification status rather than silently choosing one.
 - Verify recommendations against fresh quote, prepared unsigned transaction, simulation, and outcome Evidence.
 - Treat verification as state-bound: a changed chain state requires a new check.
 - Keep the final decision with the user.
 
-The beginner experience does not require explicit thresholds: Parallax can present several verified counterfactual options. Advanced DeFi users, developers, SDKs, and agents can supply constraints such as price impact, effective rate, gas, total cost, or target output and use the same diagnosis → quantitative remediation → re-verification model.
+The beginner experience does not require explicit thresholds: Parallax can present multiple counterfactual options and clearly distinguish verified transaction adjustments from conditional guidance that requires a future re-check. Advanced DeFi users, developers, SDKs, and agents can supply constraints such as price impact, effective rate, gas, total cost, or target output and use the same diagnosis → quantitative remediation → re-verification model.
 
 ## Boundaries
 
