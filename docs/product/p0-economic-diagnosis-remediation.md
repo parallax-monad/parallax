@@ -678,6 +678,8 @@ Parallax may produce:
 | **Wait for the previous economics** | Wait until quote condition reaches ≥ X | re-check required | Current state cannot reproduce the selected economics |
 | **Use a bounded verified alternative** | Candidate path B | ~4.785 ETH | This tested path currently produces a better verified result |
 
+The wait row is **conditional guidance**, not a verified improvement. It may be shown as a re-check trigger without claiming that the future state has already been verified. The other transaction-adjustment rows are recommendable only when their candidate quote, prepared unsigned transaction, simulation, and outcome have been verified.
+
 Parallax does not need to ask the beginner to formally specify the objective before producing this option set.
 
 The user can choose the option that best matches the real intent.
@@ -807,7 +809,9 @@ Instead:
 
 Product output:
 
-> Reduce the trade to approximately **6,700 USDC or less** to satisfy the current 0.60% price-impact limit.
+> In this demonstrated sample, approximately **6,700 USDC** is a verified candidate that satisfies the current 0.60% price-impact limit.
+
+This is a candidate result for the demonstrated search, not a generally proven “6,700 USDC or less” bound. Any range or maximum claim requires an explicit search domain and supporting monotonicity assumptions.
 
 Backend may use:
 
@@ -824,9 +828,9 @@ Product requires:
 
 # 13. Conditional remediation
 
-Some useful Actions are not immediate transaction edits.
+Some useful guidance is not an immediate transaction edit.
 
-They are **conditions under which the transaction should be checked again**.
+It is a **condition under which the transaction should be checked again**. This is conditional guidance, not a verified transaction adjustment: it may be displayed as a re-check trigger without claiming that an improvement has already been verified.
 
 Example objective:
 
@@ -863,9 +867,14 @@ The Product flow is:
 ```text
 condition becomes true
 → fresh quote
+→ prepared unsigned transaction / `PreparedExecution` representation
 → fresh simulation
+→ outcome verification
 → new decision
+→ publish a verified transaction adjustment only if the lifecycle succeeds
 ```
+
+A conditional trigger starts this same state-bound lifecycle when its condition is satisfied; it does not bypass verification or become a verified improvement in advance.
 
 Conditional remediation is especially compatible with future agent / MCP workflows.
 
@@ -995,8 +1004,10 @@ maxPriceImpact = 0.60%
 Action:
 
 ```text
-find maximum amountIn satisfying 0.60%
+find a verified amountIn satisfying 0.60%
 ```
+
+Call a candidate a maximum or publish a range only when the search domain and supporting monotonicity assumptions justify that claim.
 
 ---
 
@@ -1193,10 +1204,10 @@ Parallax should preserve this distinction.
 | Candidate A | preserve input and show current achievable output |
 | Candidate B | reduce input to move execution rate closer to prior economics |
 | Candidate C | increase input to preserve target output |
-| Candidate D | derive a re-check condition for the desired economics |
+| Candidate D | derive a re-check condition for the desired economics; conditional guidance only |
 | Candidate E | evaluate a bounded alternative path |
 | Quantification | calculate before / after values and predicted outcome |
-| Re-verification | every recommendable candidate must be freshly quoted / simulated |
+| Re-verification | every recommendable transaction adjustment must complete fresh quote → prepared unsigned transaction → simulation → outcome verification; Candidate D starts this lifecycle only after its condition is satisfied |
 | Beginner copy | “Your quote has changed. Here are the different ways you can respond.” |
 | API / advanced | baseline + observation delta + Cause + candidate Actions + predicted outcomes + verification |
 
