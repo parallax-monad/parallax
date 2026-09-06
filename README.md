@@ -25,6 +25,8 @@ Parallax closes that decision gap by turning heterogeneous Evidence into a bound
 
 ## Product loop
 
+> **Target P0 behavior:** The loop below is the intended Product model for P0. It is a target reference, not a statement that the current public demo or API supports every constraint, candidate solver, or verified counterfactual described here. Current support remains limited to the documented Monad × Kuru × Moss scope.
+
 The user-facing interpretation is:
 
 ```mermaid
@@ -103,7 +105,7 @@ The intended decomposition is `Chain × Protocol × Evidence Provider`. It keeps
 - Treat verification as state-bound: a changed chain state requires a new check.
 - Keep the final decision with the user.
 
-The beginner experience does not require explicit thresholds: Parallax can present multiple counterfactual options and clearly distinguish verified transaction adjustments from conditional guidance that requires a future re-check. Advanced DeFi users, developers, SDKs, and agents can supply constraints such as price impact, effective rate, gas, total cost, or target output and use the same diagnosis → quantitative remediation → re-verification model.
+In the target P0 model, the beginner experience does not require explicit thresholds: Parallax can present multiple counterfactual options and clearly distinguish verified transaction adjustments from conditional guidance that requires a future re-check. Advanced DeFi users, developers, SDKs, and agents can supply constraints such as price impact, effective rate, gas, total cost, or target output and use the same diagnosis → quantitative remediation → re-verification model. These are target semantics, not a claim that every constraint or solver is currently supported by the public API.
 
 ## Boundaries
 
