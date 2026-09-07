@@ -6,6 +6,11 @@
  * boundary and their chain client.
  */
 
+import {
+  BackendControlError,
+  controlStatusForCode,
+} from "./control-boundary.js";
+
 export type ChainOperation =
   | "connect"
   | "getBlockContext"
@@ -59,7 +64,7 @@ export type ChainAdapterErrorInput = {
  * Normalized chain-integration failure. It is intentionally separate from
  * application errors and protocol/risk decisions.
  */
-export class ChainAdapterError extends Error {
+export class ChainAdapterError extends BackendControlError {
   public readonly name = "ChainAdapterError";
   public readonly chainId: number;
   public readonly operation: ChainOperation;
@@ -67,7 +72,13 @@ export class ChainAdapterError extends Error {
   public readonly retryable: boolean;
 
   public constructor(input: ChainAdapterErrorInput) {
-    super(input.message, { cause: input.cause });
+    super({
+      code: input.code,
+      message: input.message,
+      retryable: input.retryable ?? false,
+      status: controlStatusForCode(input.code),
+      cause: input.cause,
+    });
     this.chainId = input.chainId;
     this.operation = input.operation;
     this.code = input.code;

@@ -1127,6 +1127,9 @@ export function getContractOwnerApprovedCandidates(
   }
   try {
     const normalizedResult = normalizeResultForApproval(result);
+    if (normalizedResult.status !== "success") {
+      return [];
+    }
     if (!Array.isArray(changes)) return [];
     const normalizedChanges = changes.map((change) =>
       normalizeChangeRecord(change),

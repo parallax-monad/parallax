@@ -1,4 +1,8 @@
 import type { NormalizedSwapIntent } from "@parallax/contracts";
+import {
+  BackendControlError,
+  controlStatusForCode,
+} from "./control-boundary.js";
 
 /**
  * Protocol transaction payload kept opaque to the generic Backend boundary.
@@ -20,17 +24,24 @@ export type ProtocolAdapterErrorInput = {
   code: ProtocolAdapterErrorCode;
   message: string;
   protocol?: string;
+  retryable?: boolean;
   cause?: unknown;
 };
 
 /** Normalized failure boundary for protocol-specific adapter operations. */
-export class ProtocolAdapterError extends Error {
+export class ProtocolAdapterError extends BackendControlError {
   public readonly name = "ProtocolAdapterError";
   public readonly code: ProtocolAdapterErrorCode;
   public readonly protocol?: string;
 
   public constructor(input: ProtocolAdapterErrorInput) {
-    super(input.message, { cause: input.cause });
+    super({
+      code: input.code,
+      message: input.message,
+      retryable: input.retryable ?? false,
+      status: controlStatusForCode(input.code),
+      cause: input.cause,
+    });
     this.code = input.code;
     this.protocol = input.protocol;
   }

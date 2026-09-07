@@ -7,6 +7,11 @@
  */
 
 import {
+  BackendControlError,
+  controlStatusForCode,
+  isBackendControlStatus,
+} from "./control-boundary.js";
+import {
   normalizeProvisionalProviderResult,
   type ProvisionalProviderResult,
 } from "./provider-result-boundary.js";
@@ -50,7 +55,8 @@ export type ProviderAdapterErrorCode =
   | "UNSUPPORTED"
   | "FAILED"
   | "TIMEOUT"
-  | "UNKNOWN";
+  | "UNKNOWN"
+  | "STALE";
 
 export type ProviderAdapterErrorInput = {
   readonly providerId: string;
@@ -64,17 +70,22 @@ export type ProviderAdapterErrorInput = {
  * Typed ProviderAdapter control failure. It must remain distinguishable from a
  * successful result and carries no Risk verdict or final Evidence semantics.
  */
-export class ProviderAdapterError extends Error {
+export class ProviderAdapterError extends BackendControlError {
   public readonly name = "ProviderAdapterError";
   public readonly providerId: string;
   public readonly code: ProviderAdapterErrorCode;
   public readonly retryable: boolean;
 
   public constructor(input: ProviderAdapterErrorInput) {
-    super(input.message, { cause: input.cause });
+    const retryable = input.retryable ?? false;
+    super({
+      ...input,
+      status: controlStatusForCode(input.code),
+      retryable,
+    });
     this.providerId = input.providerId;
     this.code = input.code;
-    this.retryable = input.retryable ?? false;
+    this.retryable = retryable;
   }
 }
 
@@ -90,6 +101,7 @@ export function isProviderAdapterError(
     code?: unknown;
     message?: unknown;
     retryable?: unknown;
+    status?: unknown;
   };
 
   return (
@@ -97,7 +109,10 @@ export function isProviderAdapterError(
     typeof candidate.providerId === "string" &&
     isProviderAdapterErrorCode(candidate.code) &&
     typeof candidate.message === "string" &&
-    typeof candidate.retryable === "boolean"
+    typeof candidate.retryable === "boolean" &&
+    (candidate.status === undefined ||
+      (isBackendControlStatus(candidate.status) &&
+        candidate.status === controlStatusForCode(candidate.code)))
   );
 }
 
@@ -108,7 +123,8 @@ function isProviderAdapterErrorCode(
     value === "UNSUPPORTED" ||
     value === "FAILED" ||
     value === "TIMEOUT" ||
-    value === "UNKNOWN"
+    value === "UNKNOWN" ||
+    value === "STALE"
   );
 }
 

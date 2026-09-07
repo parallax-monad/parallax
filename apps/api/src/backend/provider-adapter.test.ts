@@ -389,9 +389,15 @@ describe("ProviderAdapter provisional port", () => {
     expect(Object.isFrozen(adapter.capabilities)).toBe(true);
   });
 
-  it.each(["UNSUPPORTED", "FAILED", "TIMEOUT", "UNKNOWN"] as const)(
+  it.each([
+    ["UNSUPPORTED", "unsupported"],
+    ["FAILED", "failed"],
+    ["TIMEOUT", "timeout"],
+    ["UNKNOWN", "unknown"],
+    ["STALE", "stale"],
+  ] as const)(
     "identifies a %s error without converting it to success",
-    (code) => {
+    (code, status) => {
       const cause = { code: "provider-native-error" };
       const error = new ProviderAdapterError({
         providerId: "fake-provider",
@@ -404,9 +410,9 @@ describe("ProviderAdapter provisional port", () => {
       expect(isProviderAdapterError(error)).toBe(true);
       expect(error.providerId).toBe("fake-provider");
       expect(error.code).toBe(code);
+      expect(error.status).toBe(status);
       expect(error.retryable).toBe(code === "TIMEOUT");
       expect(error.cause).toBe(cause);
-      expect((error as { status?: unknown }).status).toBeUndefined();
       expect((error as { verdict?: unknown }).verdict).toBeUndefined();
     },
   );

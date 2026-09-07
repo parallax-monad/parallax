@@ -1,4 +1,5 @@
 import type { NormalizedSwapIntent } from "@parallax/contracts";
+import { BackendControlError } from "./backend/control-boundary.js";
 import type { MossIntegrationConfig } from "./runtime-config.js";
 
 export type AgentFlowCheckInput = {
@@ -10,12 +11,17 @@ export type AgentFlowCheckInput = {
 };
 
 /** Identifies the explicit no-runtime state where Live Agent Flow is unavailable. */
-export class UnsupportedAgentFlowError extends Error {
+export class UnsupportedAgentFlowError extends BackendControlError {
+  public readonly name = "UnsupportedAgentFlowError";
   public readonly code = "UNSUPPORTED" as const;
 
   public constructor() {
-    super("The live Agent Flow is not configured");
-    this.name = "UnsupportedAgentFlowError";
+    super({
+      status: "unsupported",
+      code: "UNSUPPORTED",
+      message: "The live Agent Flow is not configured",
+      retryable: false,
+    });
   }
 }
 

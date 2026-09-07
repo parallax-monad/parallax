@@ -8,6 +8,7 @@ import {
   type GasEstimate,
   isChainAdapterError,
 } from "./chain-adapter.js";
+import { isBackendControlError } from "./control-boundary.js";
 
 type FakeTransaction = {
   opaquePayload: string;
@@ -124,9 +125,28 @@ describe("ChainAdapter port", () => {
         received.chainId === 901 &&
         received.code === "TIMEOUT" &&
         received.operation === "estimateGas" &&
-        received.retryable === true
+        received.retryable === true &&
+        isBackendControlError(received) &&
+        received.status === "timeout"
       );
     });
+  });
+
+  it.each([
+    ["UNAVAILABLE", "failed"],
+    ["UNKNOWN", "unknown"],
+    ["CANCELLED", "failed"],
+    ["INVALID_REQUEST", "invalid"],
+  ] as const)("maps %s to the shared %s control status", (code, status) => {
+    const error = new ChainAdapterError({
+      chainId: 901,
+      code,
+      operation: "connect",
+      message: `${code} chain error`,
+    });
+
+    expect(isBackendControlError(error)).toBe(true);
+    expect(error.status).toBe(status);
   });
 
   it("rejects incomplete structural chain adapter errors", () => {
