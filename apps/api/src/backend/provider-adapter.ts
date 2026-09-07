@@ -9,7 +9,7 @@
 import {
   BackendControlError,
   controlStatusForCode,
-  isBackendControlStatus,
+  isBackendControlError,
 } from "./control-boundary.js";
 import {
   normalizeProvisionalProviderResult,
@@ -92,27 +92,13 @@ export class ProviderAdapterError extends BackendControlError {
 export function isProviderAdapterError(
   error: unknown,
 ): error is ProviderAdapterError {
-  if (error instanceof ProviderAdapterError) return true;
-  if (typeof error !== "object" || error === null) return false;
-
-  const candidate = error as {
-    name?: unknown;
-    providerId?: unknown;
-    code?: unknown;
-    message?: unknown;
-    retryable?: unknown;
-    status?: unknown;
-  };
+  if (!isBackendControlError(error)) return false;
 
   return (
-    candidate.name === "ProviderAdapterError" &&
-    typeof candidate.providerId === "string" &&
-    isProviderAdapterErrorCode(candidate.code) &&
-    typeof candidate.message === "string" &&
-    typeof candidate.retryable === "boolean" &&
-    (candidate.status === undefined ||
-      (isBackendControlStatus(candidate.status) &&
-        candidate.status === controlStatusForCode(candidate.code)))
+    error.name === "ProviderAdapterError" &&
+    typeof error.providerId === "string" &&
+    isProviderAdapterErrorCode(error.code) &&
+    error.status === controlStatusForCode(error.code)
   );
 }
 

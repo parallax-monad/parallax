@@ -428,4 +428,44 @@ describe("ProviderAdapter provisional port", () => {
       }),
     ).toBe(false);
   });
+
+  it.each([
+    [
+      "missing status",
+      {
+        name: "ProviderAdapterError",
+        providerId: "fake-provider",
+        code: "TIMEOUT",
+        message: "timed out",
+        retryable: true,
+      },
+    ],
+    [
+      "empty providerId",
+      {
+        name: "ProviderAdapterError",
+        status: "timeout",
+        providerId: "",
+        code: "TIMEOUT",
+        message: "timed out",
+        retryable: true,
+      },
+    ],
+    [
+      "empty message",
+      {
+        name: "ProviderAdapterError",
+        status: "timeout",
+        providerId: "fake-provider",
+        code: "TIMEOUT",
+        message: " ",
+        retryable: true,
+      },
+    ],
+  ] as const)(
+    "rejects structurally incomplete provider errors: %s",
+    (_label, error) => {
+      expect(isProviderAdapterError(error)).toBe(false);
+    },
+  );
 });
