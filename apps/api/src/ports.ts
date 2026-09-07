@@ -34,6 +34,7 @@ export function isUnsupportedAgentFlowError(
   return (
     error instanceof UnsupportedAgentFlowError ||
     (isBackendControlError(error) &&
+      error.name === "UnsupportedAgentFlowError" &&
       error.status === "unsupported" &&
       error.code === "UNSUPPORTED")
   );

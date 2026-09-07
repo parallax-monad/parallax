@@ -87,12 +87,18 @@ export class LiveAgentFlowError extends Error {
   }
 }
 
+/**
+ * Cross-package unsupported control error. Keep the public fields structural so
+ * the API can classify this error after it crosses the orchestrator boundary.
+ */
 export class UnsupportedKuruAgentFlowError extends Error {
+  public readonly name = "UnsupportedAgentFlowError" as const;
+  public readonly status = "unsupported" as const;
   public readonly code = "UNSUPPORTED" as const;
+  public readonly retryable = false as const;
 
   public constructor(message: string) {
     super(message);
-    this.name = "UnsupportedKuruAgentFlowError";
   }
 }
 

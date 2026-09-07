@@ -29,5 +29,14 @@ describe("Agent Flow control errors", () => {
         retryable: false,
       }),
     ).toBe(false);
+    expect(
+      isUnsupportedAgentFlowError({
+        name: "ProviderAdapterError",
+        status: "unsupported",
+        code: "UNSUPPORTED",
+        message: "not an Agent Flow unsupported control",
+        retryable: false,
+      }),
+    ).toBe(false);
   });
 });
