@@ -17,4 +17,17 @@ describe("Agent Flow control errors", () => {
     expect((error as { verdict?: unknown }).verdict).toBeUndefined();
     expect((error as { evidence?: unknown }).evidence).toBeUndefined();
   });
+
+  it("does not classify a bare or mismatched unsupported code as Agent Flow control", () => {
+    expect(isUnsupportedAgentFlowError({ code: "UNSUPPORTED" })).toBe(false);
+    expect(
+      isUnsupportedAgentFlowError({
+        name: "UnsupportedAgentFlowError",
+        status: "failed",
+        code: "UNSUPPORTED",
+        message: "not an unsupported control state",
+        retryable: false,
+      }),
+    ).toBe(false);
+  });
 });

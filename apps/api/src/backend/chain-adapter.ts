@@ -9,6 +9,7 @@
 import {
   BackendControlError,
   controlStatusForCode,
+  isBackendControlError,
 } from "./control-boundary.js";
 
 export type ChainOperation =
@@ -90,7 +91,7 @@ export function isChainAdapterError(
   error: unknown,
 ): error is ChainAdapterError {
   if (error instanceof ChainAdapterError) return true;
-  if (typeof error !== "object" || error === null) return false;
+  if (!isBackendControlError(error)) return false;
 
   const candidate = error as {
     name?: unknown;
@@ -99,6 +100,7 @@ export function isChainAdapterError(
     code?: unknown;
     message?: unknown;
     retryable?: unknown;
+    status?: unknown;
   };
 
   return (
@@ -107,7 +109,8 @@ export function isChainAdapterError(
     isChainOperation(candidate.operation) &&
     isChainErrorCode(candidate.code) &&
     typeof candidate.message === "string" &&
-    typeof candidate.retryable === "boolean"
+    typeof candidate.retryable === "boolean" &&
+    candidate.status === controlStatusForCode(candidate.code)
   );
 }
 

@@ -2,6 +2,7 @@ import type { NormalizedSwapIntent } from "@parallax/contracts";
 import {
   BackendControlError,
   controlStatusForCode,
+  isBackendControlError,
 } from "./control-boundary.js";
 
 /**
@@ -51,20 +52,23 @@ export function isProtocolAdapterError(
   error: unknown,
 ): error is ProtocolAdapterError {
   if (error instanceof ProtocolAdapterError) return true;
-  if (typeof error !== "object" || error === null) return false;
+  if (!isBackendControlError(error)) return false;
 
   const candidate = error as {
     name?: unknown;
     code?: unknown;
     message?: unknown;
     protocol?: unknown;
+    status?: unknown;
   };
 
   return (
     candidate.name === "ProtocolAdapterError" &&
     isProtocolAdapterErrorCode(candidate.code) &&
     typeof candidate.message === "string" &&
-    (candidate.protocol === undefined || typeof candidate.protocol === "string")
+    (candidate.protocol === undefined ||
+      typeof candidate.protocol === "string") &&
+    candidate.status === controlStatusForCode(candidate.code)
   );
 }
 

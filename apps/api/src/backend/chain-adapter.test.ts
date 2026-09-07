@@ -170,7 +170,22 @@ describe("ChainAdapter port", () => {
         ...baseCandidate,
         message: "Connection timed out",
         retryable: true,
+        status: "timeout",
       }),
     ).toBe(true);
+  });
+
+  it("rejects a cross-runtime chain error with a mismatched control status", () => {
+    expect(
+      isChainAdapterError({
+        name: "ChainAdapterError",
+        chainId: 901,
+        operation: "connect",
+        code: "TIMEOUT",
+        message: "Connection timed out",
+        retryable: true,
+        status: "failed",
+      }),
+    ).toBe(false);
   });
 });

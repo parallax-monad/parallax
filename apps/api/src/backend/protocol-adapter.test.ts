@@ -139,4 +139,28 @@ describe("ProtocolAdapter port", () => {
         received.code === "UNSUPPORTED_PROTOCOL",
     );
   });
+
+  it("requires the shared control fields on a cross-runtime protocol error", () => {
+    expect(
+      isProtocolAdapterError({
+        name: "ProtocolAdapterError",
+        code: "QUOTE_FAILED",
+        message: "The protocol quote failed",
+        protocol: "test-protocol",
+      }),
+    ).toBe(false);
+  });
+
+  it("rejects a cross-runtime protocol error with a mismatched control status", () => {
+    expect(
+      isProtocolAdapterError({
+        name: "ProtocolAdapterError",
+        code: "QUOTE_FAILED",
+        message: "The protocol quote failed",
+        protocol: "test-protocol",
+        retryable: false,
+        status: "unsupported",
+      }),
+    ).toBe(false);
+  });
 });

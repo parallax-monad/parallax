@@ -1,5 +1,8 @@
 import type { NormalizedSwapIntent } from "@parallax/contracts";
-import { BackendControlError } from "./backend/control-boundary.js";
+import {
+  BackendControlError,
+  isBackendControlError,
+} from "./backend/control-boundary.js";
 import type { MossIntegrationConfig } from "./runtime-config.js";
 
 export type AgentFlowCheckInput = {
@@ -30,9 +33,8 @@ export function isUnsupportedAgentFlowError(
 ): error is UnsupportedAgentFlowError {
   return (
     error instanceof UnsupportedAgentFlowError ||
-    (typeof error === "object" &&
-      error !== null &&
-      "code" in error &&
+    (isBackendControlError(error) &&
+      error.status === "unsupported" &&
       error.code === "UNSUPPORTED")
   );
 }
