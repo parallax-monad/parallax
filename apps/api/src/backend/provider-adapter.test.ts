@@ -389,9 +389,15 @@ describe("ProviderAdapter provisional port", () => {
     expect(Object.isFrozen(adapter.capabilities)).toBe(true);
   });
 
-  it.each(["UNSUPPORTED", "FAILED", "TIMEOUT", "UNKNOWN"] as const)(
+  it.each([
+    ["UNSUPPORTED", "unsupported"],
+    ["FAILED", "failed"],
+    ["TIMEOUT", "timeout"],
+    ["UNKNOWN", "unknown"],
+    ["STALE", "stale"],
+  ] as const)(
     "identifies a %s error without converting it to success",
-    (code) => {
+    (code, status) => {
       const cause = { code: "provider-native-error" };
       const error = new ProviderAdapterError({
         providerId: "fake-provider",
@@ -404,9 +410,9 @@ describe("ProviderAdapter provisional port", () => {
       expect(isProviderAdapterError(error)).toBe(true);
       expect(error.providerId).toBe("fake-provider");
       expect(error.code).toBe(code);
+      expect(error.status).toBe(status);
       expect(error.retryable).toBe(code === "TIMEOUT");
       expect(error.cause).toBe(cause);
-      expect((error as { status?: unknown }).status).toBeUndefined();
       expect((error as { verdict?: unknown }).verdict).toBeUndefined();
     },
   );
@@ -422,4 +428,44 @@ describe("ProviderAdapter provisional port", () => {
       }),
     ).toBe(false);
   });
+
+  it.each([
+    [
+      "missing status",
+      {
+        name: "ProviderAdapterError",
+        providerId: "fake-provider",
+        code: "TIMEOUT",
+        message: "timed out",
+        retryable: true,
+      },
+    ],
+    [
+      "empty providerId",
+      {
+        name: "ProviderAdapterError",
+        status: "timeout",
+        providerId: "",
+        code: "TIMEOUT",
+        message: "timed out",
+        retryable: true,
+      },
+    ],
+    [
+      "empty message",
+      {
+        name: "ProviderAdapterError",
+        status: "timeout",
+        providerId: "fake-provider",
+        code: "TIMEOUT",
+        message: " ",
+        retryable: true,
+      },
+    ],
+  ] as const)(
+    "rejects structurally incomplete provider errors: %s",
+    (_label, error) => {
+      expect(isProviderAdapterError(error)).toBe(false);
+    },
+  );
 });

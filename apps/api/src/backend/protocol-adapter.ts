@@ -1,4 +1,9 @@
 import type { NormalizedSwapIntent } from "@parallax/contracts";
+import {
+  BackendControlError,
+  controlStatusForCode,
+  isBackendControlError,
+} from "./control-boundary.js";
 
 /**
  * Protocol transaction payload kept opaque to the generic Backend boundary.
@@ -20,17 +25,24 @@ export type ProtocolAdapterErrorInput = {
   code: ProtocolAdapterErrorCode;
   message: string;
   protocol?: string;
+  retryable?: boolean;
   cause?: unknown;
 };
 
 /** Normalized failure boundary for protocol-specific adapter operations. */
-export class ProtocolAdapterError extends Error {
+export class ProtocolAdapterError extends BackendControlError {
   public readonly name = "ProtocolAdapterError";
   public readonly code: ProtocolAdapterErrorCode;
   public readonly protocol?: string;
 
   public constructor(input: ProtocolAdapterErrorInput) {
-    super(input.message, { cause: input.cause });
+    super({
+      code: input.code,
+      message: input.message,
+      retryable: input.retryable ?? false,
+      status: controlStatusForCode(input.code),
+      cause: input.cause,
+    });
     this.code = input.code;
     this.protocol = input.protocol;
   }
@@ -40,20 +52,23 @@ export function isProtocolAdapterError(
   error: unknown,
 ): error is ProtocolAdapterError {
   if (error instanceof ProtocolAdapterError) return true;
-  if (typeof error !== "object" || error === null) return false;
+  if (!isBackendControlError(error)) return false;
 
   const candidate = error as {
     name?: unknown;
     code?: unknown;
     message?: unknown;
     protocol?: unknown;
+    status?: unknown;
   };
 
   return (
     candidate.name === "ProtocolAdapterError" &&
     isProtocolAdapterErrorCode(candidate.code) &&
     typeof candidate.message === "string" &&
-    (candidate.protocol === undefined || typeof candidate.protocol === "string")
+    (candidate.protocol === undefined ||
+      typeof candidate.protocol === "string") &&
+    candidate.status === controlStatusForCode(candidate.code)
   );
 }
 

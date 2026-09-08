@@ -1,4 +1,5 @@
 export * from "./application.js";
+export * from "./backend/control-boundary.js";
 export * from "./bootstrap/backend.js";
 export * from "./bootstrap/replay.js";
 export * from "./http.js";
