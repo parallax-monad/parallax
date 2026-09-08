@@ -1,0 +1,38 @@
+{
+  "schemaVersion": "be-011-native-rpc-surface-v1",
+  "qualificationStatus": "QUALIFIED_CONTROLLED_PARTIAL_EVIDENCE",
+  "real": true,
+  "providerCandidate": {
+    "providerId": "native-rpc-arbitrum",
+    "implementationStatus": "NOT_IMPLEMENTED",
+    "identityNote": "Observed client identity is endpoint metadata, not a NativeRpcProvider version."
+  },
+  "endpointClass": "arbitrum-official-public",
+  "retrievalStartedAt": "2026-09-08T16:31:03.566Z",
+  "retrievalFinishedAt": "2026-09-08T16:31:07.456Z",
+  "nodeVersion": "v22.23.2",
+  "repositoryHeadAtCapture": "920d3247abd9470552eac3bb3e621ac998f14e5b",
+  "chainId": 421614,
+  "pinnedBlock": {
+    "number": "306783026",
+    "hash": "0xf186086f93dd6472f084b063dcd9476ebc3905efa0047840ab2a00d1bee86164",
+    "timestamp": "1788885063",
+    "timestampIso": "2026-09-08T16:31:03.000Z"
+  },
+  "clientVersion": "nitro/v3.11.4-rc.3-7d5ac27/linux-amd64/go1.25.14",
+  "protocol": null,
+  "intent": null,
+  "scope": "native-rpc-provider-surface-qualification",
+  "reproducibility": "Sanitized response snapshot is reproducible offline; a live rerun selects a new head and requires network access.",
+  "redaction": "Endpoint values, headers, cookies, access tokens, authorization values, and secrets are neither recorded nor printed.",
+  "noSigningOrBroadcast": "No signing, broadcast, transaction submission, faucet use, or chain write occurred.",
+  "failure": null,
+  "limitations": [
+    "Controlled partial evidence fallback only; this is not a NativeRpcProvider implementation.",
+    "The WETH probe qualifies deterministic read-only RPC mechanics and is not a Camelot transaction.",
+    "Protocol and Intent remain null; no PreparedExecution support is inferred.",
+    "Standard RPC does not prove hypothetical receipts, logs, state diffs, complete asset changes, or complete balance changes.",
+    "No Provider outage, natural network timeout, or rate limit was intentionally produced or claimed.",
+    "No final freshness threshold or cross-Provider normalization semantic is established."
+  ]
+}

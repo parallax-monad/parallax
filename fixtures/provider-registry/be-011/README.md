@@ -22,8 +22,12 @@ It exists so Backend can discover deterministic BE-011 evidence without treating
 | Moss missing evidence | mock/rule input | `fixtures/chain-evidence/kuru/missing-evidence/` |
 | Moss no route | inspect per-entry metadata before use | `fixtures/chain-evidence/kuru/no-route/` |
 | Moss reverted | mock/rule input (`real=false`) | `fixtures/chain-evidence/kuru/reverted/` |
+| Native RPC controlled partial surface | real | `fixtures/provider-registry/be-011/native-rpc/arbitrum-sepolia-public-2026-09-08/` |
 
 The BE-011 capability manifest is `manifest.json`.
 
-Tenderly and Native RPC real-response entries remain pending until safe credentialed/read-only probes are available.
-
+The Native RPC fixture proves only the recorded Arbitrum Sepolia public RPC
+read/error surface. It is not a Camelot transaction, complete simulation,
+`PreparedExecution`, or `NativeRpcProvider` implementation. Native RPC outage,
+natural timeout, rate-limit, and stale-response evidence remain unavailable or
+`UNKNOWN`. Tenderly real-response entries remain pending.

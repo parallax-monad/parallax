@@ -1,6 +1,6 @@
 # BE-011 Provider Owner Input Package
 
-> **Status:** Draft checkpoint v0  
+> **Status:** Draft checkpoint v1 — Native RPC real surface qualification
 > **Owner:** Provider Owner (`jzhao0`)  
 > **Related issue:** #50  
 > **Purpose:** ProviderRegistry input collection only.  
@@ -90,6 +90,20 @@ Tenderly / Native RPC must later fail closed when that input is missing or misma
 
 Standard EVM JSON-RPC is a **partial evidence** source, not a semantic replacement for Tenderly.
 
+Real read-only qualification fixture:
+
+```text
+fixtures/provider-registry/be-011/native-rpc/arbitrum-sepolia-public-2026-09-08/
+```
+
+The fixture records the official Arbitrum Sepolia public endpoint class, the
+observed Nitro client identity, `chainId=421614`, one pinned block, non-empty
+WETH code, successful pinned `decimals()` and `balanceOf()` reads, a controlled
+WETH `transfer` revert envelope, a successful pinned `eth_estimateGas`, and one
+real method-not-found envelope. Protocol and Intent are deliberately `null`:
+this WETH probe is not a Camelot transaction and does not qualify
+`PreparedExecution` or a `NativeRpcProvider` implementation.
+
 The intended minimum probe surface is:
 
 ```text
@@ -113,21 +127,21 @@ Enso remains optional Strong/Best-stage work. It is not a P0 prerequisite and mu
 
 | Capability | `moss-kuru` | Tenderly / Arbitrum Sepolia | Native RPC / Arbitrum Sepolia | Enso |
 | --- | --- | --- | --- | --- |
-| Provider identity/version | `VERIFIED_RUNTIME` for observed Moss fixture | `UNKNOWN` runtime version | `UNKNOWN` until vendor/client selected | `UNKNOWN` |
+| Provider identity/version | `VERIFIED_RUNTIME` for observed Moss fixture | `UNKNOWN` runtime version | endpoint client identity `VERIFIED_RUNTIME`; `NativeRpcProvider` version not applicable because it is not implemented | `UNKNOWN` |
 | Swap/check Intent | `VERIFIED_RUNTIME` | `SUPPORTED_DOC_ONLY` via future PreparedExecution | `SUPPORTED_DOC_ONLY` via future PreparedExecution | `UNKNOWN` |
-| Chain | `143` `VERIFIED_RUNTIME` | `421614` `SUPPORTED_DOC_ONLY` | `421614` `SUPPORTED_DOC_ONLY` | `UNKNOWN` |
-| Protocol | `kuru` `VERIFIED_RUNTIME` | `camelot-v3` `SUPPORTED_DOC_ONLY` project target | `camelot-v3` `SUPPORTED_DOC_ONLY` project target | `UNKNOWN` |
+| Chain | `143` `VERIFIED_RUNTIME` | `421614` `SUPPORTED_DOC_ONLY` | `421614` `VERIFIED_RUNTIME` at the captured endpoint | `UNKNOWN` |
+| Protocol | `kuru` `VERIFIED_RUNTIME` | `camelot-v3` `SUPPORTED_DOC_ONLY` project target | `camelot-v3` remains `SUPPORTED_DOC_ONLY`; the real WETH surface probe has `protocol=null` | `UNKNOWN` |
 | Quote | `VERIFIED_RUNTIME` compatibility path | `UNSUPPORTED` by Provider ownership | `UNSUPPORTED` by Provider ownership | `UNKNOWN` |
 | Unsigned tx construction | `VERIFIED_RUNTIME` compatibility ACTION stage | `UNSUPPORTED` by Provider ownership | `UNSUPPORTED` by Provider ownership | `UNKNOWN` |
-| Simulation/evaluation | `VERIFIED_RUNTIME` | `SUPPORTED_DOC_ONLY` | `SUPPORTED_DOC_ONLY`, partial | `UNKNOWN` |
-| Execution result | `VERIFIED_RUNTIME` | `SUPPORTED_DOC_ONLY` | `SUPPORTED_DOC_ONLY`, `eth_call` only | `UNKNOWN` |
+| Simulation/evaluation | `VERIFIED_RUNTIME` | `SUPPORTED_DOC_ONLY` | pinned `eth_call` read/revert mechanics `VERIFIED_RUNTIME`; complete transaction simulation remains unverified | `UNKNOWN` |
+| Execution result | `VERIFIED_RUNTIME` | `SUPPORTED_DOC_ONLY` | pinned `eth_call` return/error envelope `VERIFIED_RUNTIME`; hypothetical receipt unsupported | `UNKNOWN` |
 | Asset changes | `VERIFIED_RUNTIME` | `SUPPORTED_DOC_ONLY` | `UNSUPPORTED` on standard hypothetical RPC | `UNKNOWN` |
 | Balance changes | `UNKNOWN` as a distinct capability | `SUPPORTED_DOC_ONLY` | `UNSUPPORTED` as generic hypothetical post-state change; balance reads are separate | `UNKNOWN` |
-| Gas | `VERIFIED_RUNTIME` | `SUPPORTED_DOC_ONLY` | `SUPPORTED_DOC_ONLY` estimate only | `UNKNOWN` |
-| Revert reason | `UNKNOWN` for **real** BE-011 response coverage | `SUPPORTED_DOC_ONLY` | `UNKNOWN` provider/client shape | `UNKNOWN` |
-| Block context | `VERIFIED_RUNTIME` | `SUPPORTED_DOC_ONLY` | `SUPPORTED_DOC_ONLY` | `UNKNOWN` |
-| Provenance | `VERIFIED_RUNTIME` | `SUPPORTED_DOC_ONLY` | `SUPPORTED_DOC_ONLY` | `UNKNOWN` |
-| Freshness evidence | `VERIFIED_RUNTIME` block/time provenance; no universal stale threshold | block provenance `SUPPORTED_DOC_ONLY`, policy `UNKNOWN` | head/block lag `SUPPORTED_DOC_ONLY`, policy threshold external | `UNKNOWN` |
+| Gas | `VERIFIED_RUNTIME` | `SUPPORTED_DOC_ONLY` | pinned `eth_estimateGas` `VERIFIED_RUNTIME`; estimate only, not gas used | `UNKNOWN` |
+| Revert reason | `UNKNOWN` for **real** BE-011 response coverage | `SUPPORTED_DOC_ONLY` | real revert error message/data envelope `VERIFIED_RUNTIME`; final Provider normalization remains `UNKNOWN` | `UNKNOWN` |
+| Block context | `VERIFIED_RUNTIME` | `SUPPORTED_DOC_ONLY` | `VERIFIED_RUNTIME` for captured head/block/hash/time | `UNKNOWN` |
+| Provenance | `VERIFIED_RUNTIME` | `SUPPORTED_DOC_ONLY` | `VERIFIED_RUNTIME` for request timestamps and pinned block; final Provider mapping unimplemented | `UNKNOWN` |
+| Freshness evidence | `VERIFIED_RUNTIME` block/time provenance; no universal stale threshold | block provenance `SUPPORTED_DOC_ONLY`, policy `UNKNOWN` | captured head/block/time inputs `VERIFIED_RUNTIME`; policy threshold remains `UNKNOWN` | `UNKNOWN` |
 
 ### Registry-facing consequences
 
@@ -135,7 +149,10 @@ The matrix currently supports these safe design conclusions:
 
 1. `moss-kuru` may be selected only for the Monad/Kuru compatibility path it actually supports.
 2. Tenderly is **not yet** a runtime-selectable verified Provider for Arbitrum Sepolia.
-3. Native RPC is **not yet** a runtime-selectable verified Provider and, even after qualification, must advertise a narrower capability set than Tenderly.
+3. Native RPC now has a runtime-verified controlled partial RPC surface, but no
+   `NativeRpcProvider` implementation exists and it is not a verified complete
+   simulation Provider. Any future adapter must advertise a narrower
+   capability set than Tenderly.
 4. `quote` and unsigned transaction construction must not become requirements that force future Tenderly/Native Providers to own Protocol responsibilities.
 5. Required capability mismatch must fail closed; registry selection must never silently downgrade a required full-simulation request to partial Native RPC evidence.
 6. Enso is not a current registry candidate.
@@ -225,10 +242,38 @@ No fabricated Tenderly JSON may be committed.
 Current state:
 
 ```text
-NO QUALIFYING ARBITRUM SEPOLIA RPC RESPONSE CAPTURED
+REAL CONTROLLED PARTIAL SURFACE QUALIFICATION CAPTURED
 ```
 
-A future probe must identify the actual RPC vendor/client endpoint class before any vendor-specific failure, rate-limit, or timeout semantics are claimed.
+Source:
+
+```text
+fixtures/provider-registry/be-011/native-rpc/arbitrum-sepolia-public-2026-09-08/
+```
+
+Observed facts at pinned block `306783026`:
+
+- endpoint class `arbitrum-official-public`;
+- endpoint client identity
+  `nitro/v3.11.4-rc.3-7d5ac27/linux-amd64/go1.25.14` (metadata only, not a
+  `NativeRpcProvider` version);
+- `eth_chainId=0x66eee` / `421614`;
+- block hash and timestamp captured with `eth_getBlockByNumber`;
+- non-empty code at the official Arbitrum Sepolia L2 WETH address;
+- WETH `decimals()` returned `18` through pinned `eth_call`;
+- deterministic probe sender WETH `balanceOf()` returned zero at the same
+  block;
+- controlled WETH `transfer(..., 1)` through `eth_call` returned JSON-RPC error
+  code `3`, the observed error message, and revert data; no separate Provider
+  revert-reason semantic was inferred;
+- pinned `eth_estimateGas` for `decimals()` returned `31109`;
+- a Parallax-namespaced nonexistent method returned JSON-RPC error `-32601`.
+
+The success, controlled revert, and unsupported-method envelopes are real and
+sanitized. They do not prove Provider outage, natural network timeout, rate
+limit, stale evidence, Camelot V3 evaluation, complete transaction simulation,
+hypothetical receipt/logs, state diff, or complete asset/balance changes. Those
+remain explicit unavailable/`UNKNOWN` evidence rather than fabricated cases.
 
 ## 6. Authentication / rate / timeout inventory
 
@@ -237,7 +282,7 @@ A future probe must identify the actual RPC vendor/client endpoint class before 
 | Moss | local runtime path + environment-supplied RPC; RPC auth is endpoint-specific | `UNKNOWN` as a universal Moss value | classified in code; no universal numeric timeout claimed |
 | Tenderly Node | secret network-specific RPC URL/access key | `UNKNOWN` actual account throttling until probe | `UNKNOWN`; client probe must enforce deadline |
 | Tenderly Simulation API | `X-Access-Key` + account/project path | `UNKNOWN` actual account throttling until probe | `UNKNOWN`; client probe must enforce deadline |
-| Native RPC | vendor-specific endpoint credential, if any | vendor-specific `UNKNOWN` | vendor/client-specific `UNKNOWN` |
+| Native RPC | official public endpoint required no credential for this capture; other endpoints remain vendor-specific | not intentionally exercised; `UNKNOWN` | no natural timeout observed; client uses an 8-second deadline that is not Provider-timeout evidence |
 | Enso | deferred | `UNKNOWN` | `UNKNOWN` |
 
 Secrets must never appear in:
@@ -278,27 +323,34 @@ Required observations:
 
 Sanitize before committing.
 
-### 7.2 Native RPC — once an Arbitrum Sepolia RPC endpoint is configured
+### 7.2 Native RPC — completed real public-endpoint checkpoint
 
-Minimum read-only sequence:
+Implemented read-only sequence:
 
 ```text
+web3_clientVersion
 eth_chainId
 eth_blockNumber
+eth_getBlockByNumber(pinnedBlock, false)
 eth_getCode(target, pinnedBlock)
-eth_call(preparedTx, pinnedBlock)
-eth_estimateGas(preparedTx, pinnedBlock where supported)
+eth_call(WETH decimals(), pinnedBlock)
+eth_call(WETH balanceOf(probeSender), pinnedBlock)
+eth_call(WETH transfer(...), pinnedBlock)  # controlled revert, never broadcast
+eth_estimateGas(WETH decimals(), pinnedBlock)
+parallax_be011_nonexistentMethod
 ```
 
-Optional same-block reads:
+Probe source:
 
 ```text
-eth_getBalance
-ERC-20 balanceOf via eth_call
-ERC-20 allowance via eth_call
+scripts/provider-probes/arbitrum-sepolia-native-rpc.ts
 ```
 
-Record provider/client-specific error envelopes exactly before normalization.
+All calls were sequential with unique request IDs and request timestamps. The
+chain ID was a hard gate before contract calls. No endpoint URL, header,
+credential, wallet secret, signing material, or authorization value was
+persisted. The probe remains a surface qualification only; it did not receive a
+Protocol/Backend prepared transaction.
 
 ## 8. Offline fixture plan
 
@@ -317,9 +369,9 @@ tenderly/revert-real         [pending]
 tenderly/unsupported-real    [pending]
 tenderly/failure-real        [pending]
 tenderly/timeout-real        [pending]
-native-rpc/success-real      [pending]
-native-rpc/revert-real       [pending]
-native-rpc/unsupported       [pending]
+native-rpc/success-real      [available: controlled partial RPC reads]
+native-rpc/revert-real       [available: controlled eth_call error envelope]
+native-rpc/unsupported       [available: method-not-found observation]
 native-rpc/failure-real      [pending]
 native-rpc/timeout-real      [pending]
 ```
@@ -359,6 +411,8 @@ Repository evidence:
 - `docs/integration/moss-kuru-live-runtime.md`
 - `fixtures/chain-evidence/kuru/live-success-mon-to-usdc/`
 - `fixtures/chain-evidence/kuru/reverted/metadata.json`
+- `scripts/provider-probes/arbitrum-sepolia-native-rpc.ts`
+- `fixtures/provider-registry/be-011/native-rpc/arbitrum-sepolia-public-2026-09-08/`
 - PR #42 `docs/research/arbitrum-evidence-provider-feasibility.md`
 - `docs/planning/arbitrum-open-house/02-B-provider-implementation.md`
 
@@ -380,4 +434,3 @@ Provider Owner input is ready for Backend Registry implementation only when:
 - deterministic fixtures do not require external services or secrets;
 - no Provider-specific raw type leaks into Core;
 - no final Contract semantics are frozen by this package.
-

@@ -1,5 +1,5 @@
 {
-  "schemaVersion": "be-011-provider-input-v0",
+  "schemaVersion": "be-011-provider-input-v1",
   "status": "DRAFT_EVIDENCE_INVENTORY",
   "nonAuthorityNotice": "Research/Provider Owner input only. This file does not freeze ProviderRegistry, the final Evidence Contract, Risk semantics, or public API fields.",
   "supportStates": [
@@ -186,8 +186,24 @@
       "scope": "P0_CONTROLLED_FALLBACK",
       "versionEvidence": {
         "state": "UNKNOWN",
-        "note": "RPC vendor/client is not selected or probed yet."
+        "note": "NativeRpcProvider is not implemented, so no Provider implementation version exists."
       },
+      "endpointMetadata": {
+        "state": "VERIFIED_RUNTIME",
+        "observedEndpointClientVersion": "nitro/v3.11.4-rc.3-7d5ac27/linux-amd64/go1.25.14",
+        "evidence": "fixtures/provider-registry/be-011/native-rpc/arbitrum-sepolia-public-2026-09-08/metadata.json",
+        "note": "Observed endpoint metadata only; not a NativeRpcProvider version."
+      },
+      "realEvidence": [
+        {
+          "path": "fixtures/provider-registry/be-011/native-rpc/arbitrum-sepolia-public-2026-09-08/",
+          "real": true,
+          "scope": "native-rpc-provider-surface-qualification",
+          "endpointClass": "arbitrum-official-public",
+          "protocol": null,
+          "intent": null
+        }
+      ],
       "intentTypes": [
         {
           "value": "swap/check via PreparedExecution",
@@ -197,13 +213,15 @@
       "chainIds": [
         {
           "value": 421614,
-          "state": "SUPPORTED_DOC_ONLY"
+          "state": "VERIFIED_RUNTIME",
+          "evidence": "fixtures/provider-registry/be-011/native-rpc/arbitrum-sepolia-public-2026-09-08/normalized-observations.json"
         }
       ],
       "protocols": [
         {
           "value": "camelot-v3",
-          "state": "SUPPORTED_DOC_ONLY"
+          "state": "SUPPORTED_DOC_ONLY",
+          "note": "Project target only. The real WETH surface probe has protocol=null and does not qualify Camelot."
         }
       ],
       "capabilities": {
@@ -215,9 +233,25 @@
           "state": "UNSUPPORTED",
           "note": "Protocol/Backend must construct exact unsigned transaction(s)."
         },
+        "chainIdentity": {
+          "state": "VERIFIED_RUNTIME",
+          "note": "Official public endpoint returned eth_chainId=0x66eee / 421614."
+        },
+        "contractCodeRead": {
+          "state": "VERIFIED_RUNTIME",
+          "note": "Pinned eth_getCode returned non-empty code for the official Arbitrum Sepolia L2 WETH contract."
+        },
+        "ethCallRead": {
+          "state": "VERIFIED_RUNTIME",
+          "note": "Pinned WETH decimals() and balanceOf() calls succeeded; this is a controlled read capability, not complete transaction simulation."
+        },
+        "ethCallRevertErrorEnvelope": {
+          "state": "VERIFIED_RUNTIME",
+          "note": "After same-block zero-balance confirmation, pinned WETH transfer(..., 1) returned real JSON-RPC error code/message/data through eth_call only."
+        },
         "simulationOrEvaluation": {
           "state": "SUPPORTED_DOC_ONLY",
-          "note": "eth_call/eth_estimateGas provide controlled partial evaluation only."
+          "note": "Complete prepared-transaction simulation remains unverified. Only narrower eth_call/eth_estimateGas mechanics have real evidence."
         },
         "executionResult": {
           "state": "SUPPORTED_DOC_ONLY",
@@ -232,27 +266,33 @@
           "note": "Standard JSON-RPC can read balances but does not return generic hypothetical post-state balance changes."
         },
         "gas": {
-          "state": "SUPPORTED_DOC_ONLY",
-          "note": "eth_estimateGas is an estimate, not actual simulated gas used."
+          "state": "VERIFIED_RUNTIME",
+          "note": "Pinned eth_estimateGas for WETH decimals() returned 31109. This is an estimate, not actual simulated gas used."
         },
         "revertReason": {
           "state": "UNKNOWN",
-          "note": "Revert data/reason shape is client/provider dependent and must be probed."
+          "note": "A real endpoint error message and revert data were captured, but no final Provider normalization/reason semantic is approved."
+        },
+        "unsupportedCapabilityObservation": {
+          "state": "VERIFIED_RUNTIME",
+          "note": "One Parallax-namespaced nonexistent method returned JSON-RPC -32601. This observation is not mapped to final Provider Contract semantics."
         },
         "blockContext": {
-          "state": "SUPPORTED_DOC_ONLY"
+          "state": "VERIFIED_RUNTIME",
+          "note": "eth_blockNumber plus eth_getBlockByNumber captured block 306783026, hash, and timestamp."
         },
         "provenance": {
-          "state": "SUPPORTED_DOC_ONLY"
+          "state": "VERIFIED_RUNTIME",
+          "note": "Every request records start/end timestamps; state/call/gas probes use pinned block 306783026."
         },
         "freshness": {
           "state": "SUPPORTED_DOC_ONLY",
-          "note": "Head plus explicit block context permits lag calculation; threshold remains Product/Contract policy."
+          "note": "Head/block/time inputs are runtime-verified, but the freshness threshold remains Product/Contract policy."
         }
       },
       "auth": {
         "state": "UNKNOWN",
-        "note": "Depends on selected RPC vendor/endpoint."
+        "note": "The official public endpoint required no credential for this capture; other endpoints remain vendor-specific."
       },
       "rateLimits": {
         "state": "UNKNOWN",
@@ -260,11 +300,14 @@
       },
       "timeoutLimits": {
         "state": "UNKNOWN",
-        "note": "Vendor/client-specific; probe must enforce its own deadline."
+        "note": "No natural timeout was observed. The probe's 8-second client deadline is not Provider-timeout evidence."
       },
       "knownLimitations": [
         "Controlled partial-evidence fallback only.",
+        "This WETH read probe is not a Camelot transaction and has protocol=null / intent=null.",
+        "No NativeRpcProvider or PreparedExecution support was implemented or inferred.",
         "No standard hypothetical receipt/log/state-diff/complete asset-change set.",
+        "Provider outage, natural timeout, rate limit, and stale-response evidence remain unavailable or UNKNOWN.",
         "Must fail closed when required Evidence is unavailable."
       ]
     },
