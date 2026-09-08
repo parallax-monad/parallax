@@ -1,0 +1,295 @@
+{
+  "schemaVersion": "be-011-provider-input-v0",
+  "status": "DRAFT_EVIDENCE_INVENTORY",
+  "nonAuthorityNotice": "Research/Provider Owner input only. This file does not freeze ProviderRegistry, the final Evidence Contract, Risk semantics, or public API fields.",
+  "supportStates": [
+    "VERIFIED_RUNTIME",
+    "SUPPORTED_DOC_ONLY",
+    "UNSUPPORTED",
+    "UNKNOWN"
+  ],
+  "providers": [
+    {
+      "providerId": "moss-kuru",
+      "scope": "CURRENT_COMPATIBILITY",
+      "versionEvidence": {
+        "state": "VERIFIED_RUNTIME",
+        "observedRuntimeVersion": "0.1.0",
+        "observedRuntimeRevision": "ef15448e166f31c891e80dba5073dae04a052a2b",
+        "evidence": "fixtures/chain-evidence/kuru/live-success-mon-to-usdc/metadata.json"
+      },
+      "intentTypes": [
+        {
+          "value": "swap/check (GenericSwapIntent compatibility path)",
+          "state": "VERIFIED_RUNTIME"
+        }
+      ],
+      "chainIds": [
+        {
+          "value": 143,
+          "state": "VERIFIED_RUNTIME"
+        }
+      ],
+      "protocols": [
+        {
+          "value": "kuru",
+          "state": "VERIFIED_RUNTIME"
+        }
+      ],
+      "capabilities": {
+        "quote": {
+          "state": "VERIFIED_RUNTIME",
+          "note": "Compatibility path; quote observed in real live fixture."
+        },
+        "unsignedTransactionConstruction": {
+          "state": "VERIFIED_RUNTIME",
+          "note": "ACTION stage constructs unsigned calldata; no signing/broadcast."
+        },
+        "simulationOrEvaluation": {
+          "state": "VERIFIED_RUNTIME",
+          "note": "Real live simulation fixture with complete simulation coverage."
+        },
+        "executionResult": {
+          "state": "VERIFIED_RUNTIME",
+          "note": "Real live fixture executionStatus=SUCCESS."
+        },
+        "assetChanges": {
+          "state": "VERIFIED_RUNTIME",
+          "note": "Real live normalized fixture contains assetChanges."
+        },
+        "balanceChanges": {
+          "state": "UNKNOWN",
+          "note": "No separate generic balance-change capability is proven; walletAffordabilityChecked=false."
+        },
+        "gas": {
+          "state": "VERIFIED_RUNTIME",
+          "note": "Real live normalized fixture contains gas.value=[\"528696\"]."
+        },
+        "revertReason": {
+          "state": "UNKNOWN",
+          "note": "Revert normalization is tested, but the catalogued reverted fixture is mock/rule input rather than a real live Provider response."
+        },
+        "blockContext": {
+          "state": "VERIFIED_RUNTIME",
+          "note": "Observed chain and per-stage/simulator pinned block are recorded."
+        },
+        "provenance": {
+          "state": "VERIFIED_RUNTIME",
+          "note": "Runtime version/revision and block/time provenance are retained."
+        },
+        "freshness": {
+          "state": "VERIFIED_RUNTIME",
+          "note": "Block/time provenance exists; universal stale threshold is intentionally not defined."
+        }
+      },
+      "auth": {
+        "state": "UNKNOWN",
+        "note": "Configured local runtime plus environment-supplied RPC; RPC authentication is endpoint-specific."
+      },
+      "rateLimits": {
+        "state": "UNKNOWN",
+        "note": "Underlying RPC/runtime limits are not normalized as a universal Moss limit."
+      },
+      "timeoutLimits": {
+        "state": "UNKNOWN",
+        "note": "Timeout errors are classified, but no provider-wide numeric timeout is claimed."
+      },
+      "knownLimitations": [
+        "Synthetic pre-funding covers native MON only and does not prove ERC-20 affordability.",
+        "Current compatibility Provider is Monad/Kuru-specific.",
+        "No signing, broadcast, custody, or wallet mutation."
+      ]
+    },
+    {
+      "providerId": "tenderly-arbitrum",
+      "scope": "P0_TARGET",
+      "versionEvidence": {
+        "state": "UNKNOWN",
+        "note": "No credentialed runtime response captured yet."
+      },
+      "intentTypes": [
+        {
+          "value": "swap/check via PreparedExecution",
+          "state": "SUPPORTED_DOC_ONLY"
+        }
+      ],
+      "chainIds": [
+        {
+          "value": 421614,
+          "state": "SUPPORTED_DOC_ONLY"
+        }
+      ],
+      "protocols": [
+        {
+          "value": "camelot-v3",
+          "state": "SUPPORTED_DOC_ONLY"
+        }
+      ],
+      "capabilities": {
+        "quote": {
+          "state": "UNSUPPORTED",
+          "note": "Protocol quote is not a Tenderly Provider responsibility."
+        },
+        "unsignedTransactionConstruction": {
+          "state": "UNSUPPORTED",
+          "note": "Protocol/Backend must construct exact unsigned transaction(s)."
+        },
+        "simulationOrEvaluation": {
+          "state": "SUPPORTED_DOC_ONLY"
+        },
+        "executionResult": {
+          "state": "SUPPORTED_DOC_ONLY"
+        },
+        "assetChanges": {
+          "state": "SUPPORTED_DOC_ONLY"
+        },
+        "balanceChanges": {
+          "state": "SUPPORTED_DOC_ONLY"
+        },
+        "gas": {
+          "state": "SUPPORTED_DOC_ONLY"
+        },
+        "revertReason": {
+          "state": "SUPPORTED_DOC_ONLY"
+        },
+        "blockContext": {
+          "state": "SUPPORTED_DOC_ONLY"
+        },
+        "provenance": {
+          "state": "SUPPORTED_DOC_ONLY"
+        },
+        "freshness": {
+          "state": "UNKNOWN",
+          "note": "Block provenance is documented; Parallax freshness policy and real head-lag behavior remain unverified."
+        }
+      },
+      "auth": {
+        "state": "SUPPORTED_DOC_ONLY",
+        "note": "Tenderly Node uses a secret network-specific RPC URL/access key; Simulation API uses X-Access-Key plus account/project path."
+      },
+      "rateLimits": {
+        "state": "UNKNOWN",
+        "note": "Actual account throttling/rate-limit headers require a configured account probe."
+      },
+      "timeoutLimits": {
+        "state": "UNKNOWN",
+        "note": "Must be measured/controlled by probe; no universal provider timeout assumed."
+      },
+      "knownLimitations": [
+        "No credentialed Arbitrum Sepolia response has been captured.",
+        "Must reject missing/mismatched PreparedExecution fail-closed once that input exists.",
+        "Provider-only trace/state-diff/USD enrichment must not become hidden Risk dependencies."
+      ]
+    },
+    {
+      "providerId": "native-rpc-arbitrum",
+      "scope": "P0_CONTROLLED_FALLBACK",
+      "versionEvidence": {
+        "state": "UNKNOWN",
+        "note": "RPC vendor/client is not selected or probed yet."
+      },
+      "intentTypes": [
+        {
+          "value": "swap/check via PreparedExecution",
+          "state": "SUPPORTED_DOC_ONLY"
+        }
+      ],
+      "chainIds": [
+        {
+          "value": 421614,
+          "state": "SUPPORTED_DOC_ONLY"
+        }
+      ],
+      "protocols": [
+        {
+          "value": "camelot-v3",
+          "state": "SUPPORTED_DOC_ONLY"
+        }
+      ],
+      "capabilities": {
+        "quote": {
+          "state": "UNSUPPORTED",
+          "note": "Protocol quote is not an RPC Provider responsibility."
+        },
+        "unsignedTransactionConstruction": {
+          "state": "UNSUPPORTED",
+          "note": "Protocol/Backend must construct exact unsigned transaction(s)."
+        },
+        "simulationOrEvaluation": {
+          "state": "SUPPORTED_DOC_ONLY",
+          "note": "eth_call/eth_estimateGas provide controlled partial evaluation only."
+        },
+        "executionResult": {
+          "state": "SUPPORTED_DOC_ONLY",
+          "note": "eth_call can prove return/revert at a block, not a hypothetical receipt."
+        },
+        "assetChanges": {
+          "state": "UNSUPPORTED",
+          "note": "Standard JSON-RPC does not return a generic hypothetical asset-change set."
+        },
+        "balanceChanges": {
+          "state": "UNSUPPORTED",
+          "note": "Standard JSON-RPC can read balances but does not return generic hypothetical post-state balance changes."
+        },
+        "gas": {
+          "state": "SUPPORTED_DOC_ONLY",
+          "note": "eth_estimateGas is an estimate, not actual simulated gas used."
+        },
+        "revertReason": {
+          "state": "UNKNOWN",
+          "note": "Revert data/reason shape is client/provider dependent and must be probed."
+        },
+        "blockContext": {
+          "state": "SUPPORTED_DOC_ONLY"
+        },
+        "provenance": {
+          "state": "SUPPORTED_DOC_ONLY"
+        },
+        "freshness": {
+          "state": "SUPPORTED_DOC_ONLY",
+          "note": "Head plus explicit block context permits lag calculation; threshold remains Product/Contract policy."
+        }
+      },
+      "auth": {
+        "state": "UNKNOWN",
+        "note": "Depends on selected RPC vendor/endpoint."
+      },
+      "rateLimits": {
+        "state": "UNKNOWN",
+        "note": "Vendor-specific."
+      },
+      "timeoutLimits": {
+        "state": "UNKNOWN",
+        "note": "Vendor/client-specific; probe must enforce its own deadline."
+      },
+      "knownLimitations": [
+        "Controlled partial-evidence fallback only.",
+        "No standard hypothetical receipt/log/state-diff/complete asset-change set.",
+        "Must fail closed when required Evidence is unavailable."
+      ]
+    },
+    {
+      "providerId": "enso",
+      "scope": "DEFERRED_OPTIONAL",
+      "versionEvidence": {
+        "state": "UNKNOWN"
+      },
+      "intentTypes": [],
+      "chainIds": [],
+      "protocols": [],
+      "capabilities": {},
+      "auth": {
+        "state": "UNKNOWN"
+      },
+      "rateLimits": {
+        "state": "UNKNOWN"
+      },
+      "timeoutLimits": {
+        "state": "UNKNOWN"
+      },
+      "knownLimitations": [
+        "Not a P0 prerequisite. Do not make it a current ProviderRegistry candidate without explicit scope decision and qualification."
+      ]
+    }
+  ]
+}
