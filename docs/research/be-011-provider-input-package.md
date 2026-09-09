@@ -104,18 +104,13 @@ real method-not-found envelope. Protocol and Intent are deliberately `null`:
 this WETH probe is not a Camelot transaction and does not qualify
 `PreparedExecution` or a `NativeRpcProvider` implementation.
 
-The intended minimum probe surface is:
-
-```text
-eth_chainId
-eth_blockNumber
-eth_call
-eth_estimateGas
-eth_getBalance
-eth_getCode
-```
-
-plus protocol-aware ERC-20 `balanceOf` / `allowance` calls only where the caller supplies trusted addresses / ABI semantics.
+The completed real checkpoint method sequence is recorded in section 7.2. It
+includes chain and pinned-block context, `eth_getCode`, pinned `eth_call`, and
+pinned `eth_estimateGas`; it does **not** include `eth_getBalance`.
+`eth_getBalance` therefore remains a conditional future read with `UNKNOWN`
+runtime qualification and must not be promoted from this checkpoint.
+Protocol-aware ERC-20 `balanceOf` / `allowance` calls likewise require trusted
+addresses / ABI semantics; only the recorded WETH `balanceOf` call was executed.
 
 Standard RPC does not itself produce a hypothetical receipt, generic hypothetical logs, state diff, or complete asset-change set.
 
@@ -133,15 +128,35 @@ Enso remains optional Strong/Best-stage work. It is not a P0 prerequisite and mu
 | Protocol | `kuru` `VERIFIED_RUNTIME` | `camelot-v3` `SUPPORTED_DOC_ONLY` project target | `camelot-v3` remains `SUPPORTED_DOC_ONLY`; the real WETH surface probe has `protocol=null` | `UNKNOWN` |
 | Quote | `VERIFIED_RUNTIME` compatibility path | `UNSUPPORTED` by Provider ownership | `UNSUPPORTED` by Provider ownership | `UNKNOWN` |
 | Unsigned tx construction | `VERIFIED_RUNTIME` compatibility ACTION stage | `UNSUPPORTED` by Provider ownership | `UNSUPPORTED` by Provider ownership | `UNKNOWN` |
-| Simulation/evaluation | `VERIFIED_RUNTIME` | `SUPPORTED_DOC_ONLY` | pinned `eth_call` read/revert mechanics `VERIFIED_RUNTIME`; complete transaction simulation remains unverified | `UNKNOWN` |
-| Execution result | `VERIFIED_RUNTIME` | `SUPPORTED_DOC_ONLY` | pinned `eth_call` return/error envelope `VERIFIED_RUNTIME`; hypothetical receipt unsupported | `UNKNOWN` |
+| Simulation/evaluation | `VERIFIED_RUNTIME` | `SUPPORTED_DOC_ONLY` | `SUPPORTED_DOC_ONLY`; the observed `eth_call` / `eth_estimateGas` mechanics do not prove complete generic simulation or evaluation | `UNKNOWN` |
+| Execution result | `VERIFIED_RUNTIME` | `SUPPORTED_DOC_ONLY` | `SUPPORTED_DOC_ONLY`; the observed `eth_call` envelope is not a full generic execution result or hypothetical receipt | `UNKNOWN` |
 | Asset changes | `VERIFIED_RUNTIME` | `SUPPORTED_DOC_ONLY` | `UNSUPPORTED` on standard hypothetical RPC | `UNKNOWN` |
 | Balance changes | `UNKNOWN` as a distinct capability | `SUPPORTED_DOC_ONLY` | `UNSUPPORTED` as generic hypothetical post-state change; balance reads are separate | `UNKNOWN` |
 | Gas | `VERIFIED_RUNTIME` | `SUPPORTED_DOC_ONLY` | pinned `eth_estimateGas` `VERIFIED_RUNTIME`; estimate only, not gas used | `UNKNOWN` |
-| Revert reason | `UNKNOWN` for **real** BE-011 response coverage | `SUPPORTED_DOC_ONLY` | real revert error message/data envelope `VERIFIED_RUNTIME`; final Provider normalization remains `UNKNOWN` | `UNKNOWN` |
+| Revert reason | `UNKNOWN` for **real** BE-011 response coverage | `SUPPORTED_DOC_ONLY` | `UNKNOWN`; a real `eth_call` error message/data envelope was observed, but it does not prove the final generic Provider revert-reason semantic | `UNKNOWN` |
 | Block context | `VERIFIED_RUNTIME` | `SUPPORTED_DOC_ONLY` | `VERIFIED_RUNTIME` for captured head/block/hash/time | `UNKNOWN` |
 | Provenance | `VERIFIED_RUNTIME` | `SUPPORTED_DOC_ONLY` | `VERIFIED_RUNTIME` for request timestamps and pinned block; final Provider mapping unimplemented | `UNKNOWN` |
-| Freshness evidence | `VERIFIED_RUNTIME` block/time provenance; no universal stale threshold | block provenance `SUPPORTED_DOC_ONLY`, policy `UNKNOWN` | captured head/block/time inputs `VERIFIED_RUNTIME`; policy threshold remains `UNKNOWN` | `UNKNOWN` |
+| Freshness evidence | `VERIFIED_RUNTIME` block/time provenance; no universal stale threshold | block provenance `SUPPORTED_DOC_ONLY`, policy `UNKNOWN` | `SUPPORTED_DOC_ONLY`; block context/provenance inputs are observed, but final freshness semantics and threshold remain unqualified | `UNKNOWN` |
+
+### Native RPC narrower observed mechanics
+
+These states describe only the recorded RPC mechanics. They do not promote the
+top-level generic/registry capabilities above.
+
+| Observed mechanic | State | Evidence boundary |
+| --- | --- | --- |
+| `chainIdentity` | `VERIFIED_RUNTIME` | `eth_chainId=0x66eee` / `421614` from the captured endpoint. |
+| `contractCodeRead` | `VERIFIED_RUNTIME` | Pinned `eth_getCode` returned non-empty code for the recorded WETH contract. |
+| `ethCallRead` | `VERIFIED_RUNTIME` | Pinned WETH `decimals()` and `balanceOf()` reads succeeded; this is not complete transaction simulation. |
+| `ethCallRevertErrorEnvelope` | `VERIFIED_RUNTIME` | A controlled pinned WETH `transfer(..., 1)` call returned a real error code/message/data envelope; no final Provider revert-reason semantic is inferred. |
+| `gas` / pinned `eth_estimateGas` | `VERIFIED_RUNTIME` | The pinned WETH `decimals()` estimate returned `31109`; this is an estimate, not simulated gas used. |
+| `blockContext` | `VERIFIED_RUNTIME` | The captured block number, hash, and timestamp are pinned in the fixture. |
+| `provenance` | `VERIFIED_RUNTIME` | Request timestamps and the pinned block are recorded. |
+| `unsupportedCapabilityObservation` | `VERIFIED_RUNTIME` | A namespaced nonexistent method returned `-32601`; no final Provider control-state mapping is inferred. |
+
+`eth_getBalance` is not part of this verified-mechanics list: it was not
+executed in the real checkpoint and remains a conditional future read with
+`UNKNOWN` runtime qualification.
 
 ### Registry-facing consequences
 
