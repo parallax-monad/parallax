@@ -57,8 +57,8 @@ export class ProtocolRegistry<
 
   public has(chainId: number, protocol: string): boolean {
     if (!isChainId(chainId)) return false;
-    const normalizedProtocol = normalizeProtocol(protocol);
-    return this.adapters.get(chainId)?.has(normalizedProtocol) ?? false;
+    const protocolId = validateProtocol(protocol);
+    return this.adapters.get(chainId)?.has(protocolId) ?? false;
   }
 
   public register(registration: ProtocolRegistration<Adapter>): this;
@@ -88,29 +88,29 @@ export class ProtocolRegistry<
     }
 
     assertChainId(chainId);
-    const normalizedProtocol = normalizeProtocol(protocolId);
+    const exactProtocol = validateProtocol(protocolId);
     assertProtocolAdapter(registeredAdapter);
 
     const byProtocol = this.adapters.get(chainId);
-    if (byProtocol?.has(normalizedProtocol)) {
+    if (byProtocol?.has(exactProtocol)) {
       throw new ProtocolRegistryError({
         chainId,
-        protocol: normalizedProtocol,
+        protocol: exactProtocol,
         code: "DUPLICATE_PROTOCOL",
-        message: `protocol ${normalizedProtocol} is already registered for chain ${chainId}`,
+        message: `protocol ${exactProtocol} is already registered for chain ${chainId}`,
       });
     }
 
     const nextByProtocol = byProtocol ?? new Map<string, Adapter>();
-    nextByProtocol.set(normalizedProtocol, registeredAdapter);
+    nextByProtocol.set(exactProtocol, registeredAdapter);
     if (byProtocol === undefined) {
       this.adapters.set(chainId, nextByProtocol);
     }
 
     const chains =
-      this.chainsByProtocol.get(normalizedProtocol) ?? new Set<number>();
+      this.chainsByProtocol.get(exactProtocol) ?? new Set<number>();
     chains.add(chainId);
-    this.chainsByProtocol.set(normalizedProtocol, chains);
+    this.chainsByProtocol.set(exactProtocol, chains);
     this.registrationCount += 1;
     return this;
   }
@@ -118,34 +118,34 @@ export class ProtocolRegistry<
   /** Resolves only the exact chain/protocol pair; it never falls back. */
   public resolve(chainId: number, protocol: string): Adapter {
     assertChainId(chainId);
-    const normalizedProtocol = normalizeProtocol(protocol);
+    const exactProtocol = validateProtocol(protocol);
     const byProtocol = this.adapters.get(chainId);
     if (byProtocol === undefined) {
       throw new ProtocolRegistryError({
         chainId,
-        protocol: normalizedProtocol,
+        protocol: exactProtocol,
         code: "UNSUPPORTED_CHAIN",
         message: `chain ${chainId} is not registered`,
       });
     }
 
-    const adapter = byProtocol.get(normalizedProtocol);
+    const adapter = byProtocol.get(exactProtocol);
     if (adapter !== undefined) return adapter;
 
-    if (this.chainsByProtocol.get(normalizedProtocol)?.size) {
+    if (this.chainsByProtocol.get(exactProtocol)?.size) {
       throw new ProtocolRegistryError({
         chainId,
-        protocol: normalizedProtocol,
+        protocol: exactProtocol,
         code: "CHAIN_PROTOCOL_MISMATCH",
-        message: `protocol ${normalizedProtocol} is not registered for chain ${chainId}`,
+        message: `protocol ${exactProtocol} is not registered for chain ${chainId}`,
       });
     }
 
     throw new ProtocolRegistryError({
       chainId,
-      protocol: normalizedProtocol,
+      protocol: exactProtocol,
       code: "UNSUPPORTED_PROTOCOL",
-      message: `protocol ${normalizedProtocol} is not registered`,
+      message: `protocol ${exactProtocol} is not registered`,
     });
   }
 }
@@ -160,11 +160,17 @@ function isChainId(value: unknown): value is number {
   return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
 }
 
-function normalizeProtocol(value: unknown): string {
-  if (typeof value !== "string" || value.trim().length === 0) {
-    throw new TypeError("protocol must be a non-empty string");
+function validateProtocol(value: unknown): string {
+  if (
+    typeof value !== "string" ||
+    value.length === 0 ||
+    value !== value.trim()
+  ) {
+    throw new TypeError(
+      "protocol must be a non-empty string without surrounding whitespace",
+    );
   }
-  return value.trim();
+  return value;
 }
 
 function assertProtocolAdapter(

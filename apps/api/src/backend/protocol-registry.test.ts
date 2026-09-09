@@ -39,6 +39,30 @@ describe("ProtocolRegistry", () => {
     expect(registry.resolve(901, "kuru")).toBe(adapter);
   });
 
+  it.each([" kuru", "kuru "])(
+    "rejects protocol registration with non-exact identifier %j",
+    (protocol) => {
+      expect(
+        () =>
+          new ProtocolRegistry([
+            { chainId: 901, protocol, adapter: fakeProtocolAdapter() },
+          ]),
+      ).toThrowError(TypeError);
+    },
+  );
+
+  it.each([" kuru", "kuru "])(
+    "rejects protocol lookup with non-exact identifier %j",
+    (protocol) => {
+      const registry = new ProtocolRegistry([
+        { chainId: 901, protocol: "kuru", adapter: fakeProtocolAdapter() },
+      ]);
+
+      expect(() => registry.has(901, protocol)).toThrowError(TypeError);
+      expect(() => registry.resolve(901, protocol)).toThrowError(TypeError);
+    },
+  );
+
   it("fails explicitly with an unsupported control error for an unknown protocol", () => {
     const registry = new ProtocolRegistry([
       { chainId: 901, protocol: "kuru", adapter: fakeProtocolAdapter() },
