@@ -3,7 +3,15 @@
  * This is evidence collection, not a NativeRpcProvider implementation.
  */
 import { execFileSync } from "node:child_process";
-import { mkdirSync, writeFileSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -15,6 +23,8 @@ const SENDER = "0x0000000000000000000000000000000000000001";
 const RECIPIENT = "0x0000000000000000000000000000000000000002";
 const TIMEOUT_MS = 8_000;
 const UNSUPPORTED_METHOD = "parallax_be011_nonexistentMethod";
+const CONTROLLED_REVERT_REASON = "ERC20: transfer amount exceeds balance";
+const ABI_ERROR_STRING_SELECTOR = "0x08c379a0";
 const METHODS = new Set([
   "web3_clientVersion",
   "eth_chainId",
@@ -37,16 +47,18 @@ const endpointClass = override
   ? "environment-supplied"
   : "arbitrum-official-public";
 const startedAt = new Date().toISOString();
-const date = startedAt.slice(0, 10);
+const captureStamp = startedAt.replaceAll(":", "-").replaceAll(".", "-");
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
+const captureDirectoryName = `${override ? "arbitrum-sepolia-environment-supplied" : "arbitrum-sepolia-public"}-${captureStamp}`;
 const fixturePath = join(
   "fixtures",
   "provider-registry",
   "be-011",
   "native-rpc",
-  `${override ? "arbitrum-sepolia-environment-supplied" : "arbitrum-sepolia-public"}-${date}`,
+  captureDirectoryName,
 );
 const fixtureDir = join(repoRoot, fixturePath);
+const stagingDir = mkdtempSync(join(tmpdir(), "be011-native-rpc-stage-"));
 const responses: JsonObject[] = [];
 let sequence = 0;
 
@@ -220,6 +232,35 @@ function word(address: string): string {
   return value.padStart(64, "0");
 }
 
+/**
+ * Strictly validates a Solidity ABI Error(string) revert payload:
+ * selector 0x08c379a0, dynamic offset 32, declared length, and payload bytes
+ * that decode to the expected controlled reason.
+ */
+function decodeAbiErrorString(data: Json): string | null {
+  if (typeof data !== "string") return null;
+  const hex = data.startsWith("0x") ? data.slice(2) : data;
+  if (!/^[0-9a-f]*$/iu.test(hex)) return null;
+  if (hex.length < 8 + 64 + 64) return null;
+  if (hex.slice(0, 8).toLowerCase() !== ABI_ERROR_STRING_SELECTOR.slice(2)) {
+    return null;
+  }
+  if (BigInt(`0x${hex.slice(8, 8 + 64)}`) !== 32n) return null;
+  const lengthValue = BigInt(`0x${hex.slice(8 + 64, 8 + 128)}`);
+  if (lengthValue > BigInt(Number.MAX_SAFE_INTEGER)) return null;
+  const length = Number(lengthValue);
+  const dataStart = 8 + 128;
+  const dataEnd = dataStart + length * 2;
+  if (length <= 0 || hex.length < dataEnd) return null;
+  let text = "";
+  for (let i = dataStart; i < dataEnd; i += 2) {
+    text += String.fromCharCode(Number.parseInt(hex.slice(i, i + 2), 16));
+  }
+  const firstNull = text.indexOf(String.fromCharCode(0));
+  const trimmed = firstNull === -1 ? text : text.slice(0, firstNull);
+  return trimmed.length > 0 ? trimmed : null;
+}
+
 function gitHead(): string {
   try {
     return execFileSync("git", ["rev-parse", "HEAD"], {
@@ -231,17 +272,32 @@ function gitHead(): string {
   }
 }
 
-function writeJson(name: string, value: unknown): void {
-  mkdirSync(fixtureDir, { recursive: true });
+/** Evidence files are staged with exclusive-create semantics and only
+ * published into the unique capture directory after every live observation
+ * passed validation, so a failed partial run never looks like complete
+ * evidence and an existing capture is never overwritten. */
+function writeStaged(name: string, value: unknown): void {
   writeFileSync(
-    join(fixtureDir, name),
+    join(stagingDir, name),
     `${JSON.stringify(scrub(value), null, 2)}\n`,
+    { flag: "wx" },
   );
+}
+
+function publishCapture(): void {
+  mkdirSync(join(repoRoot, "fixtures/provider-registry/be-011/native-rpc"), {
+    recursive: true,
+  });
+  mkdirSync(fixtureDir);
+  for (const name of readdirSync(stagingDir)) {
+    renameSync(join(stagingDir, name), join(fixtureDir, name));
+  }
+  rmSync(stagingDir, { recursive: true, force: true });
 }
 
 function writeReproduce(): void {
   writeFileSync(
-    join(fixtureDir, "REPRODUCE.md"),
+    join(stagingDir, "REPRODUCE.md"),
     `# Reproduce the BE-011 Native RPC surface probe
 
 This fixture is a sanitized real snapshot. Re-running the probe performs only
@@ -259,12 +315,18 @@ approved HTTPS override may be supplied through \`ARBITRUM_SEPOLIA_RPC_URL\`.
 The override value is never printed or persisted. Sequencer endpoints are
 rejected.
 
+Every successful run writes a new UTC-timestamped capture directory such as
+\`arbitrum-sepolia-public-YYYY-MM-DDTHH-MM-SS-mmmZ\`. The probe fails closed
+instead of overwriting an existing capture, and the final capture directory is
+created only after all required live observations passed validation.
+
 Safety: the probe has a fixed read-only method allowlist. It never signs,
 broadcasts, submits a transaction, transfers tokens, requests faucet funds, or
 writes chain state. The WETH transfer probe is an \`eth_call\` from a
 deterministic address whose zero balance is first verified at the same pinned
 block.
 `,
+    { flag: "wx" },
   );
 }
 
@@ -407,6 +469,13 @@ async function run(): Promise<void> {
   };
   if (balance !== 0n) throw new Error("Probe sender WETH balance is not zero");
 
+  observations.ethGetBalance = {
+    state: "UNKNOWN",
+    method: "eth_getBalance",
+    reason: "NOT_EXECUTED_IN_REAL_CHECKPOINT",
+    note: "Native balance reads were not executed in the real checkpoint. The recorded balanceOf eth_call is an ERC-20 read and must not qualify eth_getBalance.",
+  };
+
   const transfer = await rpc("eth_call", [
     {
       from: SENDER,
@@ -416,10 +485,29 @@ async function run(): Promise<void> {
     },
     blockHex,
   ]);
-  if (!transfer.httpOk || !transfer.error) {
+  const transferError = transfer.error;
+  const errorCode = transferError?.code;
+  const errorMessage = transferError?.message;
+  const errorData = transferError?.data ?? null;
+  const decodedRevertReason = decodeAbiErrorString(errorData);
+  const controlledRevertValidation = {
+    httpOk: transfer.httpOk === true,
+    jsonRpcErrorPresent: transferError !== undefined,
+    errorCodeIsThree: typeof errorCode === "number" && errorCode === 3,
+    messageSemanticPresent:
+      typeof errorMessage === "string" &&
+      errorMessage.includes(CONTROLLED_REVERT_REASON),
+    abiErrorDataPresent: typeof errorData === "string" && errorData.length > 0,
+    abiErrorStringDecodesToControlledReason:
+      decodedRevertReason === CONTROLLED_REVERT_REASON,
+  };
+  if (Object.values(controlledRevertValidation).some((ok) => !ok)) {
     throw new Error(
-      "Controlled transfer did not return an RPC revert envelope",
+      `Controlled revert failed validation: ${JSON.stringify(scrub(controlledRevertValidation))}`,
     );
+  }
+  if (transferError === undefined) {
+    throw new Error("Controlled revert returned no JSON-RPC error envelope");
   }
   observations.ethCallControlledRevert = {
     state: "VERIFIED_RUNTIME",
@@ -431,9 +519,16 @@ async function run(): Promise<void> {
     amount: "1",
     zeroBalancePreconditionConfirmed: true,
     outcome: "JSON_RPC_ERROR_ENVELOPE_OBSERVED",
-    error: transfer.error,
+    error: transferError,
+    validation: {
+      errorCode: 3,
+      messageSemanticValidated: true,
+      abiErrorStringSelector: ABI_ERROR_STRING_SELECTOR,
+      abiErrorStringDecoded: decodedRevertReason,
+      abiErrorStringMatchesControlledReason: true,
+    },
     normalizedRevertReason: null,
-    note: "No reason inferred beyond the observed message/data.",
+    note: "Controlled ABI Error(string) payload validated against the expected reason; no final Provider revert-reason semantic is inferred.",
   };
 
   const estimateInput = { to: WETH, data: "0x313ce567" };
@@ -492,26 +587,32 @@ async function run(): Promise<void> {
   }
 
   const unsupported = await rpc(UNSUPPORTED_METHOD, []);
-  observations.unsupported_capability_observation =
-    unsupported.httpOk && unsupported.error
-      ? {
-          state: "VERIFIED_RUNTIME",
-          method: UNSUPPORTED_METHOD,
-          outcome: "JSON_RPC_ERROR_ENVELOPE_OBSERVED",
-          error: unsupported.error,
-          semanticBoundary:
-            "Observation only; not mapped to final Provider Contract semantics.",
-        }
-      : {
-          state: "UNKNOWN",
-          method: UNSUPPORTED_METHOD,
-          outcome:
-            unsupported.result !== undefined
-              ? "UNEXPECTED_SUCCESS"
-              : "NO_JSON_RPC_ERROR_ENVELOPE",
-          semanticBoundary:
-            "Observation only; not mapped to final Provider Contract semantics.",
-        };
+  const unsupportedError = unsupported.error;
+  const unsupportedCode = unsupportedError?.code;
+  if (
+    !(
+      unsupported.httpOk === true &&
+      unsupportedError !== undefined &&
+      typeof unsupportedCode === "number" &&
+      unsupportedCode === -32601
+    )
+  ) {
+    throw new Error(
+      `Method-not-found envelope failed validation: expected HTTP OK with JSON-RPC error code -32601, observed ${JSON.stringify(scrub({ httpOk: unsupported.httpOk, code: unsupportedCode, result: unsupported.result }))}`,
+    );
+  }
+  if (unsupportedError === undefined) {
+    throw new Error("Method-not-found envelope returned no JSON-RPC error");
+  }
+  observations.methodNotFoundEnvelope = {
+    state: "VERIFIED_RUNTIME",
+    classification: "JSON_RPC_METHOD_NOT_FOUND_ENVELOPE",
+    method: UNSUPPORTED_METHOD,
+    outcome: "JSON_RPC_METHOD_NOT_FOUND_ENVELOPE",
+    error: unsupportedError,
+    semanticBoundary:
+      "Observed JSON-RPC -32601 method-not-found envelope only; NOT final Provider UNSUPPORTED semantics.",
+  };
 
   observations.capabilitySummary = {
     promotedToVerifiedRuntime: [
@@ -521,6 +622,7 @@ async function run(): Promise<void> {
       "contractCodeRead",
       "ethCallRead",
       "ethCallRevertErrorEnvelope",
+      "methodNotFoundEnvelope",
       ...(object(observations.ethEstimateGas, "gas observation").state ===
       "VERIFIED_RUNTIME"
         ? ["ethEstimateGas"]
@@ -536,12 +638,13 @@ async function run(): Promise<void> {
       "camelotV3Evaluation",
       "preparedExecutionSupport",
       "nativeRpcProviderImplementation",
+      "nativeEthGetBalance",
       "finalFreshnessPolicy",
       "tenderlyCapability",
     ],
   };
 
-  writeJson("metadata.json", {
+  writeStaged("metadata.json", {
     schemaVersion: "be-011-native-rpc-surface-v1",
     qualificationStatus: "QUALIFIED_CONTROLLED_PARTIAL_EVIDENCE",
     real: true,
@@ -552,6 +655,8 @@ async function run(): Promise<void> {
         "Observed client identity is endpoint metadata, not a NativeRpcProvider version.",
     },
     endpointClass,
+    captureId: captureStamp,
+    captureDirectoryName,
     retrievalStartedAt: startedAt,
     retrievalFinishedAt: new Date().toISOString(),
     nodeVersion: process.version,
@@ -579,17 +684,19 @@ async function run(): Promise<void> {
       "The WETH probe qualifies deterministic read-only RPC mechanics and is not a Camelot transaction.",
       "Protocol and Intent remain null; no PreparedExecution support is inferred.",
       "Standard RPC does not prove hypothetical receipts, logs, state diffs, complete asset changes, or complete balance changes.",
+      "The controlled revert and the -32601 method-not-found envelope are observed JSON-RPC envelopes only; no final Provider revert-reason or UNSUPPORTED status is inferred.",
+      "eth_getBalance was not executed in this real checkpoint and remains UNKNOWN.",
       "No Provider outage, natural network timeout, or rate limit was intentionally produced or claimed.",
       "No final freshness threshold or cross-Provider normalization semantic is established.",
     ],
   });
-  writeJson("responses.json", {
+  writeStaged("responses.json", {
     schemaVersion: "be-011-native-rpc-responses-v1",
     real: true,
     endpointClass,
     requests: responses,
   });
-  writeJson("normalized-observations.json", {
+  writeStaged("normalized-observations.json", {
     schemaVersion: "be-011-native-rpc-observations-v1",
     real: true,
     scope: "native-rpc-provider-surface-qualification",
@@ -607,6 +714,8 @@ async function run(): Promise<void> {
   });
   writeReproduce();
 
+  publishCapture();
+
   console.log(
     `BE011_NATIVE_RPC_PROBE status=QUALIFIED_CONTROLLED_PARTIAL_EVIDENCE endpointClass=${endpointClass} chainId=${observedChainId} fixture=${relative(process.cwd(), fixtureDir)}`,
   );
@@ -615,6 +724,11 @@ async function run(): Promise<void> {
 try {
   await run();
 } catch (error) {
+  try {
+    rmSync(stagingDir, { recursive: true, force: true });
+  } catch {
+    // staging cleanup is best-effort
+  }
   console.error(`BE011_NATIVE_RPC_PROBE_FAILED reason=${safeMessage(error)}`);
   process.exitCode = 1;
 }

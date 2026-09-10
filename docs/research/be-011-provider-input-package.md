@@ -1,9 +1,9 @@
 # BE-011 Provider Owner Input Package
 
 > **Status:** Draft checkpoint v1 — Native RPC real surface qualification
-> **Owner:** Provider Owner (`jzhao0`)  
-> **Related issue:** #50  
-> **Purpose:** ProviderRegistry input collection only.  
+> **Owner:** Provider Owner (`jzhao0`)
+> **Related issue:** #50
+> **Purpose:** ProviderRegistry input collection only.
 > **Non-authority notice:** This document does **not** freeze ProviderRegistry, the final Evidence Contract, Risk semantics, public API fields, or cross-Provider business semantics.
 
 ## 1. Why this package exists
@@ -96,19 +96,34 @@ Real read-only qualification fixture:
 fixtures/provider-registry/be-011/native-rpc/arbitrum-sepolia-public-2026-09-08/
 ```
 
-The fixture records the official Arbitrum Sepolia public endpoint class, the
+That capture is retained as `HISTORICAL_PRE_GUARD_CAPTURE`: its recorded
+`repositoryHeadAtCapture` does not contain the probe source, so it does not
+prove reproducibility of the current probe. It is superseded for canonical
+qualification by the guarded recapture described in section 7.2. Its recorded
+observation values are unchanged; the provenance defect is not retroactively
+fixed.
+
+The guarded probe writes each capture into a unique UTC-timestamped directory
+(`arbitrum-sepolia-public-YYYY-MM-DDTHH-MM-SS-mmmZ`), fails instead of
+overwriting an existing capture, and only creates the final capture directory
+after every required live observation passed validation.
+
+The capture records the official Arbitrum Sepolia public endpoint class, the
 observed Nitro client identity, `chainId=421614`, one pinned block, non-empty
 WETH code, successful pinned `decimals()` and `balanceOf()` reads, a controlled
-WETH `transfer` revert envelope, a successful pinned `eth_estimateGas`, and one
-real method-not-found envelope. Protocol and Intent are deliberately `null`:
-this WETH probe is not a Camelot transaction and does not qualify
-`PreparedExecution` or a `NativeRpcProvider` implementation.
+WETH `transfer` revert envelope (JSON-RPC code `3` whose ABI `Error(string)`
+payload is validated against the expected reason), a successful pinned
+`eth_estimateGas`, and one real JSON-RPC `-32601` method-not-found envelope.
+Protocol and Intent are deliberately `null`: this WETH probe is not a Camelot
+transaction and does not qualify `PreparedExecution` or a
+`NativeRpcProvider` implementation.
 
 The completed real checkpoint method sequence is recorded in section 7.2. It
 includes chain and pinned-block context, `eth_getCode`, pinned `eth_call`, and
 pinned `eth_estimateGas`; it does **not** include `eth_getBalance`.
 `eth_getBalance` therefore remains a conditional future read with `UNKNOWN`
-runtime qualification and must not be promoted from this checkpoint.
+runtime qualification and must not be promoted from this checkpoint. The
+recorded ERC-20 `balanceOf` `eth_call` does not qualify native balance reads.
 Protocol-aware ERC-20 `balanceOf` / `allowance` calls likewise require trusted
 addresses / ABI semantics; only the recorded WETH `balanceOf` call was executed.
 
@@ -131,12 +146,12 @@ Enso remains optional Strong/Best-stage work. It is not a P0 prerequisite and mu
 | Simulation/evaluation | `VERIFIED_RUNTIME` | `SUPPORTED_DOC_ONLY` | `SUPPORTED_DOC_ONLY`; the observed `eth_call` / `eth_estimateGas` mechanics do not prove complete generic simulation or evaluation | `UNKNOWN` |
 | Execution result | `VERIFIED_RUNTIME` | `SUPPORTED_DOC_ONLY` | `SUPPORTED_DOC_ONLY`; the observed `eth_call` envelope is not a full generic execution result or hypothetical receipt | `UNKNOWN` |
 | Asset changes | `VERIFIED_RUNTIME` | `SUPPORTED_DOC_ONLY` | `UNSUPPORTED` on standard hypothetical RPC | `UNKNOWN` |
-| Balance changes | `UNKNOWN` as a distinct capability | `SUPPORTED_DOC_ONLY` | `UNSUPPORTED` as generic hypothetical post-state change; balance reads are separate | `UNKNOWN` |
-| Gas | `VERIFIED_RUNTIME` | `SUPPORTED_DOC_ONLY` | pinned `eth_estimateGas` `VERIFIED_RUNTIME`; estimate only, not gas used | `UNKNOWN` |
+| Balance changes | `UNKNOWN` as a distinct capability | `SUPPORTED_DOC_ONLY` | `UNSUPPORTED` as generic hypothetical post-state change; the recorded ERC-20 `balanceOf` `eth_call` read is `VERIFIED_RUNTIME`, but native `eth_getBalance` was not executed and is `UNKNOWN` | `UNKNOWN` |
+| Gas | `VERIFIED_RUNTIME` | `SUPPORTED_DOC_ONLY` | `SUPPORTED_DOC_ONLY` as a generic/registry-level gas capability; only the narrow pinned `eth_estimateGas` mechanic is `VERIFIED_RUNTIME` (estimate, not gas used) | `UNKNOWN` |
 | Revert reason | `UNKNOWN` for **real** BE-011 response coverage | `SUPPORTED_DOC_ONLY` | `UNKNOWN`; a real `eth_call` error message/data envelope was observed, but it does not prove the final generic Provider revert-reason semantic | `UNKNOWN` |
 | Block context | `VERIFIED_RUNTIME` | `SUPPORTED_DOC_ONLY` | `VERIFIED_RUNTIME` for captured head/block/hash/time | `UNKNOWN` |
 | Provenance | `VERIFIED_RUNTIME` | `SUPPORTED_DOC_ONLY` | `VERIFIED_RUNTIME` for request timestamps and pinned block; final Provider mapping unimplemented | `UNKNOWN` |
-| Freshness evidence | `VERIFIED_RUNTIME` block/time provenance; no universal stale threshold | block provenance `SUPPORTED_DOC_ONLY`, policy `UNKNOWN` | `SUPPORTED_DOC_ONLY`; block context/provenance inputs are observed, but final freshness semantics and threshold remain unqualified | `UNKNOWN` |
+| Freshness evidence | block/time provenance `VERIFIED_RUNTIME`; generic freshness/stale evaluation `UNKNOWN` — no universal stale threshold or freshness policy is defined or runtime-qualified | block provenance `SUPPORTED_DOC_ONLY`, policy `UNKNOWN` | `SUPPORTED_DOC_ONLY`; block context/provenance inputs are observed, but final freshness semantics and threshold remain unqualified | `UNKNOWN` |
 
 ### Native RPC narrower observed mechanics
 
@@ -148,15 +163,16 @@ top-level generic/registry capabilities above.
 | `chainIdentity` | `VERIFIED_RUNTIME` | `eth_chainId=0x66eee` / `421614` from the captured endpoint. |
 | `contractCodeRead` | `VERIFIED_RUNTIME` | Pinned `eth_getCode` returned non-empty code for the recorded WETH contract. |
 | `ethCallRead` | `VERIFIED_RUNTIME` | Pinned WETH `decimals()` and `balanceOf()` reads succeeded; this is not complete transaction simulation. |
-| `ethCallRevertErrorEnvelope` | `VERIFIED_RUNTIME` | A controlled pinned WETH `transfer(..., 1)` call returned a real error code/message/data envelope; no final Provider revert-reason semantic is inferred. |
-| `gas` / pinned `eth_estimateGas` | `VERIFIED_RUNTIME` | The pinned WETH `decimals()` estimate returned `31109`; this is an estimate, not simulated gas used. |
+| `ethCallRevertErrorEnvelope` | `VERIFIED_RUNTIME` | A controlled pinned WETH `transfer(..., 1)` call returned a real JSON-RPC code `3` envelope whose ABI `Error(string)` payload decodes to the expected controlled reason; no final Provider revert-reason semantic is inferred. |
+| `ethEstimateGas` (narrow mechanic) | `VERIFIED_RUNTIME` | The pinned WETH `decimals()` estimate returned `31109`; this is the narrow `ethEstimateGas` RPC mechanic only, an estimate, not simulated gas used. Generic/registry-level gas capability remains `SUPPORTED_DOC_ONLY` (see matrix). |
 | `blockContext` | `VERIFIED_RUNTIME` | The captured block number, hash, and timestamp are pinned in the fixture. |
 | `provenance` | `VERIFIED_RUNTIME` | Request timestamps and the pinned block are recorded. |
-| `unsupportedCapabilityObservation` | `VERIFIED_RUNTIME` | A namespaced nonexistent method returned `-32601`; no final Provider control-state mapping is inferred. |
+| `methodNotFoundEnvelope` | `VERIFIED_RUNTIME` | A namespaced nonexistent method returned the JSON-RPC `-32601` method-not-found envelope; this is an observed `-32601` envelope only, NOT a final Provider `UNSUPPORTED` classification. |
+| `eth_getBalance` | `UNKNOWN` | Not executed in the real checkpoint. Native balance-read qualification must not be inferred from the recorded ERC-20 `balanceOf` `eth_call`. |
 
-`eth_getBalance` is not part of this verified-mechanics list: it was not
-executed in the real checkpoint and remains a conditional future read with
-`UNKNOWN` runtime qualification.
+`eth_getBalance` is therefore explicitly listed as `UNKNOWN` rather than
+simply omitted: it was not executed in the real checkpoint and remains a
+conditional future read with no runtime qualification.
 
 ### Registry-facing consequences
 
@@ -260,11 +276,18 @@ Current state:
 REAL CONTROLLED PARTIAL SURFACE QUALIFICATION CAPTURED
 ```
 
-Source:
+The guarded recapture described in section 7.2 becomes the canonical
+qualification source once it lands; until then the pre-guard capture below
+remains the only real Native RPC fixture:
 
 ```text
 fixtures/provider-registry/be-011/native-rpc/arbitrum-sepolia-public-2026-09-08/
 ```
+
+That pre-guard capture is retained as `HISTORICAL_PRE_GUARD_CAPTURE`: its
+recorded `repositoryHeadAtCapture` does not contain the probe source, its
+recorded observation values are unchanged, and its provenance defect is not
+retroactively fixed.
 
 Observed facts at pinned block `306783026`:
 
@@ -279,12 +302,19 @@ Observed facts at pinned block `306783026`:
 - deterministic probe sender WETH `balanceOf()` returned zero at the same
   block;
 - controlled WETH `transfer(..., 1)` through `eth_call` returned JSON-RPC error
-  code `3`, the observed error message, and revert data; no separate Provider
-  revert-reason semantic was inferred;
-- pinned `eth_estimateGas` for `decimals()` returned `31109`;
-- a Parallax-namespaced nonexistent method returned JSON-RPC error `-32601`.
+  code `3` with the observed error message and ABI `Error(string)` revert
+  data; the guarded recapture additionally validates that the payload decodes
+  to the expected controlled reason. No separate Provider revert-reason
+  semantic is inferred;
+- pinned `eth_estimateGas` for `decimals()` returned `31109` (narrow
+  `ethEstimateGas` mechanic only; generic gas evaluation remains
+  `SUPPORTED_DOC_ONLY`);
+- a Parallax-namespaced nonexistent method returned the JSON-RPC `-32601`
+  method-not-found envelope; this is an observed envelope, NOT a final Provider
+  `UNSUPPORTED` classification;
+- `eth_getBalance` was not executed and remains `UNKNOWN`.
 
-The success, controlled revert, and unsupported-method envelopes are real and
+The success, controlled revert, and method-not-found envelopes are real and
 sanitized. They do not prove Provider outage, natural network timeout, rate
 limit, stale evidence, Camelot V3 evaluation, complete transaction simulation,
 hypothetical receipt/logs, state diff, or complete asset/balance changes. Those
@@ -367,6 +397,31 @@ credential, wallet secret, signing material, or authorization value was
 persisted. The probe remains a surface qualification only; it did not receive a
 Protocol/Backend prepared transaction.
 
+Capture safety guards:
+
+- HTTPS-only endpoint, sequencer endpoints rejected, fixed read-only method
+  allowlist, `eth_send*` prohibited, `chainId == 421614` hard gate,
+  same-pinned-block zero-WETH-balance precondition, no signing, no broadcast,
+  no faucet, no state mutation, endpoint value scrubbed, sensitive-key
+  scrubber, 8-second client deadline (explicitly NOT Provider-timeout
+  evidence).
+- Unique capture directory per run:
+  `arbitrum-sepolia-public-YYYY-MM-DDTHH-MM-SS-mmmZ`. Environment-supplied
+  endpoint captures use the endpoint class only, never the endpoint value.
+  Writes fail if the capture already exists (exclusive-create), and the final
+  capture directory is created only after all required live observations
+  passed validation.
+- Controlled revert is `VERIFIED_RUNTIME` only when HTTP is OK, the JSON-RPC
+  error code is exactly `3`, the message contains the expected semantic, and
+  the ABI `Error(string)` payload decodes to the expected controlled reason;
+  otherwise the probe fails closed.
+- The method-not-found envelope is `VERIFIED_RUNTIME` only when HTTP is OK and
+  the JSON-RPC error code is exactly `-32601`; otherwise the probe fails
+  closed. The observation stays a JSON-RPC method-not-found envelope and is
+  never mapped to a final Provider `UNSUPPORTED` status.
+- `eth_getBalance` is not called and is recorded as `UNKNOWN`
+  (`NOT_EXECUTED_IN_REAL_CHECKPOINT`).
+
 ## 8. Offline fixture plan
 
 BE-011 should reuse existing truthful Moss fixtures rather than duplicating them.
@@ -384,12 +439,22 @@ tenderly/revert-real         [pending]
 tenderly/unsupported-real    [pending]
 tenderly/failure-real        [pending]
 tenderly/timeout-real        [pending]
-native-rpc/success-real      [available: controlled partial RPC reads]
-native-rpc/revert-real       [available: controlled eth_call error envelope]
-native-rpc/unsupported       [available: method-not-found observation]
-native-rpc/failure-real      [pending]
-native-rpc/timeout-real      [pending]
+native-rpc/success-real                      [available: controlled partial RPC reads]
+native-rpc/revert-real                       [available: controlled eth_call revert envelope]
+native-rpc/method-not-found-envelope-real    [available: observed JSON-RPC -32601 envelope]
+native-rpc/eth-get-balance                   [not executed: UNKNOWN]
+native-rpc/failure-real                      [pending]
+native-rpc/timeout-real                      [pending]
 ```
+
+Each provider entry in `manifest.json` carries a machine-readable
+`fixtureIndex` so Backend can discover the deterministic evidence set without
+hardcoding paths or reading prose. Entries identify an observation case id,
+whether it is real, its existing fixture path (or `null` when unavailable),
+its evidence classification, chain/protocol where legitimately known, and a
+truthful note for mock/unavailable/documentation-only cases. `fixtureIndex`
+entries describe evidence cases and observations only; they do not freeze final
+Provider status mappings.
 
 Every fixture/entry must carry:
 
@@ -402,7 +467,7 @@ Every fixture/entry must carry:
 - `real` flag;
 - reproducibility statement;
 - redaction statement;
-- expected control state.
+- expected observation case (evidence case, not a frozen Provider status).
 
 ## 9. Open blockers / dependencies
 
@@ -426,8 +491,9 @@ Repository evidence:
 - `docs/integration/moss-kuru-live-runtime.md`
 - `fixtures/chain-evidence/kuru/live-success-mon-to-usdc/`
 - `fixtures/chain-evidence/kuru/reverted/metadata.json`
-- `scripts/provider-probes/arbitrum-sepolia-native-rpc.ts`
+- `scripts/provider-probes/arbitrum-sepolia-native-rpc.ts` (guarded probe source)
 - `fixtures/provider-registry/be-011/native-rpc/arbitrum-sepolia-public-2026-09-08/`
+  (`HISTORICAL_PRE_GUARD_CAPTURE`, superseded for canonical qualification)
 - PR #42 `docs/research/arbitrum-evidence-provider-feasibility.md`
 - `docs/planning/arbitrum-open-house/02-B-provider-implementation.md`
 

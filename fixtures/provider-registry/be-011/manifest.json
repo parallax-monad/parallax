@@ -2,6 +2,7 @@
   "schemaVersion": "be-011-provider-input-v1",
   "status": "DRAFT_EVIDENCE_INVENTORY",
   "nonAuthorityNotice": "Research/Provider Owner input only. This file does not freeze ProviderRegistry, the final Evidence Contract, Risk semantics, or public API fields.",
+  "fixtureIndexNotice": "fixtureIndex entries describe evidence cases and observations only; they do not freeze final Provider status mappings, and paths must resolve to existing files or be null.",
   "supportStates": [
     "VERIFIED_RUNTIME",
     "SUPPORTED_DOC_ONLY",
@@ -78,8 +79,8 @@
           "note": "Runtime version/revision and block/time provenance are retained."
         },
         "freshness": {
-          "state": "VERIFIED_RUNTIME",
-          "note": "Block/time provenance exists; universal stale threshold is intentionally not defined."
+          "state": "UNKNOWN",
+          "note": "Block/time provenance is runtime-observed, but no generic stale threshold or freshness policy is defined or runtime-qualified."
         }
       },
       "auth": {
@@ -98,6 +99,62 @@
         "Synthetic pre-funding covers native MON only and does not prove ERC-20 affordability.",
         "Current compatibility Provider is Monad/Kuru-specific.",
         "No signing, broadcast, custody, or wallet mutation."
+      ],
+      "fixtureIndex": [
+        {
+          "observationId": "moss-live-success-mon-to-usdc",
+          "real": true,
+          "path": "fixtures/chain-evidence/kuru/live-success-mon-to-usdc/",
+          "classification": "VERIFIED_RUNTIME",
+          "chainId": 143,
+          "protocol": "kuru",
+          "note": "Real live simulation fixture. Its own metadata says PARTIALLY_VERIFIED, so BE-011 must preserve the stated limitations rather than upgrading every field to universal runtime support."
+        },
+        {
+          "observationId": "moss-unsupported-guard",
+          "real": false,
+          "path": null,
+          "classification": "DETERMINISTIC_RULE_GUARD",
+          "chainId": null,
+          "protocol": "kuru",
+          "note": "MossProvider.supports and the evaluation guard only accept Monad/Kuru. Deterministic offline guard test; no live fixture required."
+        },
+        {
+          "observationId": "moss-integration-error",
+          "real": false,
+          "path": "fixtures/chain-evidence/kuru/integration-error/",
+          "classification": "RULE_TEST_INPUT",
+          "chainId": null,
+          "protocol": "kuru",
+          "note": "Mock/rule input exercising integration-failure classification; no chain call was made."
+        },
+        {
+          "observationId": "moss-reverted",
+          "real": false,
+          "path": "fixtures/chain-evidence/kuru/reverted/",
+          "classification": "RULE_TEST_INPUT",
+          "chainId": null,
+          "protocol": "kuru",
+          "note": "Mock/rule input for revert normalization only; must not be promoted to a real Provider observation."
+        },
+        {
+          "observationId": "moss-timeout",
+          "real": false,
+          "path": null,
+          "classification": "UNAVAILABLE",
+          "chainId": null,
+          "protocol": "kuru",
+          "note": "No catalogued real Provider timeout response exists for BE-011 yet."
+        },
+        {
+          "observationId": "moss-stale-incomplete",
+          "real": false,
+          "path": null,
+          "classification": "UNAVAILABLE",
+          "chainId": null,
+          "protocol": "kuru",
+          "note": "Current Moss evaluation does not itself produce a generic STALE status and no real stale response exists."
+        }
       ]
     },
     {
@@ -179,6 +236,44 @@
         "No credentialed Arbitrum Sepolia response has been captured.",
         "Must reject missing/mismatched PreparedExecution fail-closed once that input exists.",
         "Provider-only trace/state-diff/USD enrichment must not become hidden Risk dependencies."
+      ],
+      "fixtureIndex": [
+        {
+          "observationId": "tenderly-success-slot",
+          "real": false,
+          "path": null,
+          "classification": "UNAVAILABLE",
+          "chainId": null,
+          "protocol": "camelot-v3",
+          "note": "Tenderly remains SUPPORTED_DOC_ONLY; no credentialed response captured and no fabricated fixture may be committed."
+        },
+        {
+          "observationId": "tenderly-unsupported-slot",
+          "real": false,
+          "path": null,
+          "classification": "UNAVAILABLE",
+          "chainId": null,
+          "protocol": "camelot-v3",
+          "note": "Documentation-only status; no credentialed Tenderly response captured."
+        },
+        {
+          "observationId": "tenderly-failure-slot",
+          "real": false,
+          "path": null,
+          "classification": "UNAVAILABLE",
+          "chainId": null,
+          "protocol": "camelot-v3",
+          "note": "Documentation-only status; no credentialed Tenderly response captured."
+        },
+        {
+          "observationId": "tenderly-timeout-slot",
+          "real": false,
+          "path": null,
+          "classification": "UNAVAILABLE",
+          "chainId": null,
+          "protocol": "camelot-v3",
+          "note": "Documentation-only status; no credentialed Tenderly response captured."
+        }
       ]
     },
     {
@@ -201,7 +296,11 @@
           "scope": "native-rpc-provider-surface-qualification",
           "endpointClass": "arbitrum-official-public",
           "protocol": null,
-          "intent": null
+          "intent": null,
+          "canonical": false,
+          "status": "HISTORICAL_PRE_GUARD_CAPTURE",
+          "supersededForCanonicalQualification": true,
+          "note": "repositoryHeadAtCapture predates the probe source commit, so this capture does not prove reproducibility of the current probe. Retained as audit evidence only."
         }
       ],
       "intentTypes": [
@@ -266,16 +365,24 @@
           "note": "Standard JSON-RPC can read balances but does not return generic hypothetical post-state balance changes."
         },
         "gas": {
+          "state": "SUPPORTED_DOC_ONLY",
+          "note": "Generic/registry-level gas evaluation (Camelot, PreparedExecution, arbitrary swap execution, simulated gas used) has no real qualifying evidence."
+        },
+        "ethEstimateGas": {
           "state": "VERIFIED_RUNTIME",
-          "note": "Pinned eth_estimateGas for WETH decimals() returned 31109. This is an estimate, not actual simulated gas used."
+          "note": "Narrow RPC mechanic only: a pinned eth_estimateGas call for the WETH decimals() read. The captured numeric estimate is an observed fixture fact, not simulated gas used."
+        },
+        "ethGetBalance": {
+          "state": "UNKNOWN",
+          "note": "Not executed in the real checkpoint. Native balance reads must not be inferred from the recorded ERC-20 balanceOf eth_call."
         },
         "revertReason": {
           "state": "UNKNOWN",
           "note": "A real endpoint error message and revert data were captured, but no final Provider normalization/reason semantic is approved."
         },
-        "unsupportedCapabilityObservation": {
+        "methodNotFoundEnvelope": {
           "state": "VERIFIED_RUNTIME",
-          "note": "One Parallax-namespaced nonexistent method returned JSON-RPC -32601. This observation is not mapped to final Provider Contract semantics."
+          "note": "One Parallax-namespaced nonexistent method returned the JSON-RPC -32601 method-not-found envelope. This is an observed -32601 envelope only, NOT a final Provider UNSUPPORTED classification."
         },
         "blockContext": {
           "state": "VERIFIED_RUNTIME",
@@ -309,6 +416,80 @@
         "No standard hypothetical receipt/log/state-diff/complete asset-change set.",
         "Provider outage, natural timeout, rate limit, and stale-response evidence remain unavailable or UNKNOWN.",
         "Must fail closed when required Evidence is unavailable."
+      ],
+      "fixtureIndex": [
+        {
+          "observationId": "native-rpc-controlled-reads",
+          "real": true,
+          "path": "fixtures/provider-registry/be-011/native-rpc/arbitrum-sepolia-public-2026-09-08/",
+          "classification": "VERIFIED_RUNTIME",
+          "chainId": 421614,
+          "protocol": null,
+          "note": "Pre-guard capture (HISTORICAL_PRE_GUARD_CAPTURE): controlled chain/block/code/eth_call read mechanics. Superseded for canonical qualification by the guarded recapture."
+        },
+        {
+          "observationId": "native-rpc-controlled-revert-envelope-real",
+          "real": true,
+          "path": "fixtures/provider-registry/be-011/native-rpc/arbitrum-sepolia-public-2026-09-08/normalized-observations.json",
+          "classification": "VERIFIED_RUNTIME",
+          "chainId": 421614,
+          "protocol": null,
+          "note": "Controlled eth_call revert envelope observation (code 3, message/data observed). Pre-guard capture: the ABI Error(string) payload was not validated by the probe revision that produced it; superseded for canonical qualification by the guarded recapture."
+        },
+        {
+          "observationId": "native-rpc-method-not-found-envelope-real",
+          "real": true,
+          "path": "fixtures/provider-registry/be-011/native-rpc/arbitrum-sepolia-public-2026-09-08/normalized-observations.json",
+          "classification": "VERIFIED_RUNTIME",
+          "chainId": 421614,
+          "protocol": null,
+          "note": "Observed JSON-RPC -32601 method-not-found envelope; NOT a final Provider UNSUPPORTED status. Pre-guard capture; superseded for canonical qualification by the guarded recapture."
+        },
+        {
+          "observationId": "native-rpc-provider-outage",
+          "real": false,
+          "path": null,
+          "classification": "UNAVAILABLE",
+          "chainId": null,
+          "protocol": null,
+          "note": "No real Provider outage evidence was produced or captured."
+        },
+        {
+          "observationId": "native-rpc-natural-timeout",
+          "real": false,
+          "path": null,
+          "classification": "UNAVAILABLE",
+          "chainId": null,
+          "protocol": null,
+          "note": "No natural network timeout evidence exists; the probe's 8-second client deadline is not Provider-timeout evidence."
+        },
+        {
+          "observationId": "native-rpc-rate-limit",
+          "real": false,
+          "path": null,
+          "classification": "UNAVAILABLE",
+          "chainId": null,
+          "protocol": null,
+          "note": "Rate-limit evidence was not intentionally provoked and remains UNKNOWN."
+        },
+        {
+          "observationId": "native-rpc-stale-response",
+          "real": false,
+          "path": null,
+          "classification": "UNAVAILABLE",
+          "chainId": null,
+          "protocol": null,
+          "note": "No stale-response evidence exists and no freshness threshold is defined."
+        },
+        {
+          "observationId": "native-rpc-eth-get-balance",
+          "real": false,
+          "path": null,
+          "classification": "UNKNOWN_NOT_EXECUTED",
+          "chainId": 421614,
+          "protocol": null,
+          "note": "eth_getBalance was not executed in the real checkpoint; native balance reads must not be inferred from the recorded ERC-20 balanceOf eth_call."
+        }
       ]
     },
     {
@@ -332,6 +513,17 @@
       },
       "knownLimitations": [
         "Not a P0 prerequisite. Do not make it a current ProviderRegistry candidate without explicit scope decision and qualification."
+      ],
+      "fixtureIndex": [
+        {
+          "observationId": "enso-deferred",
+          "real": false,
+          "path": null,
+          "classification": "DEFERRED_OPTIONAL",
+          "chainId": null,
+          "protocol": null,
+          "note": "Enso remains optional Strong/Best-stage work and is not a current registry candidate."
+        }
       ]
     }
   ]
