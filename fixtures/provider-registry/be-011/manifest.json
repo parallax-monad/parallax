@@ -285,11 +285,22 @@
       },
       "endpointMetadata": {
         "state": "VERIFIED_RUNTIME",
-        "observedEndpointClientVersion": "nitro/v3.11.4-rc.3-7d5ac27/linux-amd64/go1.25.14",
-        "evidence": "fixtures/provider-registry/be-011/native-rpc/arbitrum-sepolia-public-2026-09-08/metadata.json",
+        "observedEndpointClientVersion": "nitro/v3.12.0-rc.2+19e94c6-20260901T094258Z/linux-amd64/go1.25.12",
+        "evidence": "fixtures/provider-registry/be-011/native-rpc/arbitrum-sepolia-public-2026-09-10T12-19-45-890Z/metadata.json",
         "note": "Observed endpoint metadata only; not a NativeRpcProvider version."
       },
       "realEvidence": [
+        {
+          "path": "fixtures/provider-registry/be-011/native-rpc/arbitrum-sepolia-public-2026-09-10T12-19-45-890Z/",
+          "real": true,
+          "scope": "native-rpc-provider-surface-qualification",
+          "endpointClass": "arbitrum-official-public",
+          "protocol": null,
+          "intent": null,
+          "canonical": true,
+          "status": "GUARDED_CAPTURE",
+          "note": "Guarded recapture; repositoryHeadAtCapture is the exact commit containing the probe source, so the capture is reproducible from that revision."
+        },
         {
           "path": "fixtures/provider-registry/be-011/native-rpc/arbitrum-sepolia-public-2026-09-08/",
           "real": true,
@@ -313,7 +324,7 @@
         {
           "value": 421614,
           "state": "VERIFIED_RUNTIME",
-          "evidence": "fixtures/provider-registry/be-011/native-rpc/arbitrum-sepolia-public-2026-09-08/normalized-observations.json"
+          "evidence": "fixtures/provider-registry/be-011/native-rpc/arbitrum-sepolia-public-2026-09-10T12-19-45-890Z/normalized-observations.json"
         }
       ],
       "protocols": [
@@ -386,11 +397,11 @@
         },
         "blockContext": {
           "state": "VERIFIED_RUNTIME",
-          "note": "eth_blockNumber plus eth_getBlockByNumber captured block 306783026, hash, and timestamp."
+          "note": "eth_blockNumber plus eth_getBlockByNumber captured block 307414719, hash, and timestamp in the guarded canonical capture."
         },
         "provenance": {
           "state": "VERIFIED_RUNTIME",
-          "note": "Every request records start/end timestamps; state/call/gas probes use pinned block 306783026."
+          "note": "Every request records start/end timestamps; state/call/gas probes use pinned block 307414719 in the guarded canonical capture."
         },
         "freshness": {
           "state": "SUPPORTED_DOC_ONLY",
@@ -421,29 +432,38 @@
         {
           "observationId": "native-rpc-controlled-reads",
           "real": true,
-          "path": "fixtures/provider-registry/be-011/native-rpc/arbitrum-sepolia-public-2026-09-08/",
+          "path": "fixtures/provider-registry/be-011/native-rpc/arbitrum-sepolia-public-2026-09-10T12-19-45-890Z/",
           "classification": "VERIFIED_RUNTIME",
           "chainId": 421614,
           "protocol": null,
-          "note": "Pre-guard capture (HISTORICAL_PRE_GUARD_CAPTURE): controlled chain/block/code/eth_call read mechanics. Superseded for canonical qualification by the guarded recapture."
+          "note": "Guarded canonical capture: controlled chain/block/code/eth_call read mechanics at pinned block 307414719."
         },
         {
           "observationId": "native-rpc-controlled-revert-envelope-real",
           "real": true,
-          "path": "fixtures/provider-registry/be-011/native-rpc/arbitrum-sepolia-public-2026-09-08/normalized-observations.json",
+          "path": "fixtures/provider-registry/be-011/native-rpc/arbitrum-sepolia-public-2026-09-10T12-19-45-890Z/normalized-observations.json",
           "classification": "VERIFIED_RUNTIME",
           "chainId": 421614,
           "protocol": null,
-          "note": "Controlled eth_call revert envelope observation (code 3, message/data observed). Pre-guard capture: the ABI Error(string) payload was not validated by the probe revision that produced it; superseded for canonical qualification by the guarded recapture."
+          "note": "Controlled eth_call revert envelope observation: JSON-RPC code 3, message semantic validated, ABI Error(string) payload decodes to the expected controlled reason. No final Provider revert-reason semantic is inferred."
         },
         {
           "observationId": "native-rpc-method-not-found-envelope-real",
           "real": true,
-          "path": "fixtures/provider-registry/be-011/native-rpc/arbitrum-sepolia-public-2026-09-08/normalized-observations.json",
+          "path": "fixtures/provider-registry/be-011/native-rpc/arbitrum-sepolia-public-2026-09-10T12-19-45-890Z/normalized-observations.json",
           "classification": "VERIFIED_RUNTIME",
           "chainId": 421614,
           "protocol": null,
-          "note": "Observed JSON-RPC -32601 method-not-found envelope; NOT a final Provider UNSUPPORTED status. Pre-guard capture; superseded for canonical qualification by the guarded recapture."
+          "note": "Observed JSON-RPC -32601 method-not-found envelope; NOT a final Provider UNSUPPORTED status. Guarded canonical capture."
+        },
+        {
+          "observationId": "native-rpc-controlled-reads-pre-guard",
+          "real": true,
+          "path": "fixtures/provider-registry/be-011/native-rpc/arbitrum-sepolia-public-2026-09-08/",
+          "classification": "VERIFIED_RUNTIME",
+          "chainId": 421614,
+          "protocol": null,
+          "note": "HISTORICAL_PRE_GUARD_CAPTURE: audit evidence only; superseded for canonical qualification because its recorded repositoryHeadAtCapture does not contain the probe source."
         },
         {
           "observationId": "native-rpc-provider-outage",

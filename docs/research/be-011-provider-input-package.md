@@ -90,18 +90,18 @@ Tenderly / Native RPC must later fail closed when that input is missing or misma
 
 Standard EVM JSON-RPC is a **partial evidence** source, not a semantic replacement for Tenderly.
 
-Real read-only qualification fixture:
+Canonical guarded capture:
 
 ```text
-fixtures/provider-registry/be-011/native-rpc/arbitrum-sepolia-public-2026-09-08/
+fixtures/provider-registry/be-011/native-rpc/arbitrum-sepolia-public-2026-09-10T12-19-45-890Z/
 ```
 
-That capture is retained as `HISTORICAL_PRE_GUARD_CAPTURE`: its recorded
-`repositoryHeadAtCapture` does not contain the probe source, so it does not
-prove reproducibility of the current probe. It is superseded for canonical
-qualification by the guarded recapture described in section 7.2. Its recorded
-observation values are unchanged; the provenance defect is not retroactively
-fixed.
+Its recorded `repositoryHeadAtCapture` is the exact commit containing the probe
+source, so the capture is reproducible from that revision. The earlier
+`arbitrum-sepolia-public-2026-09-08` capture is retained as
+`HISTORICAL_PRE_GUARD_CAPTURE`: its recorded `repositoryHeadAtCapture` does not
+contain the probe source. Its recorded observation values are unchanged and its
+provenance defect is not retroactively fixed.
 
 The guarded probe writes each capture into a unique UTC-timestamped directory
 (`arbitrum-sepolia-public-YYYY-MM-DDTHH-MM-SS-mmmZ`), fails instead of
@@ -164,7 +164,7 @@ top-level generic/registry capabilities above.
 | `contractCodeRead` | `VERIFIED_RUNTIME` | Pinned `eth_getCode` returned non-empty code for the recorded WETH contract. |
 | `ethCallRead` | `VERIFIED_RUNTIME` | Pinned WETH `decimals()` and `balanceOf()` reads succeeded; this is not complete transaction simulation. |
 | `ethCallRevertErrorEnvelope` | `VERIFIED_RUNTIME` | A controlled pinned WETH `transfer(..., 1)` call returned a real JSON-RPC code `3` envelope whose ABI `Error(string)` payload decodes to the expected controlled reason; no final Provider revert-reason semantic is inferred. |
-| `ethEstimateGas` (narrow mechanic) | `VERIFIED_RUNTIME` | The pinned WETH `decimals()` estimate returned `31109`; this is the narrow `ethEstimateGas` RPC mechanic only, an estimate, not simulated gas used. Generic/registry-level gas capability remains `SUPPORTED_DOC_ONLY` (see matrix). |
+| `ethEstimateGas` (narrow mechanic) | `VERIFIED_RUNTIME` | The pinned WETH `decimals()` estimate returned `31404`; this is the narrow `ethEstimateGas` RPC mechanic only, an estimate, not simulated gas used. Generic/registry-level gas capability remains `SUPPORTED_DOC_ONLY` (see matrix). |
 | `blockContext` | `VERIFIED_RUNTIME` | The captured block number, hash, and timestamp are pinned in the fixture. |
 | `provenance` | `VERIFIED_RUNTIME` | Request timestamps and the pinned block are recorded. |
 | `methodNotFoundEnvelope` | `VERIFIED_RUNTIME` | A namespaced nonexistent method returned the JSON-RPC `-32601` method-not-found envelope; this is an observed `-32601` envelope only, NOT a final Provider `UNSUPPORTED` classification. |
@@ -276,25 +276,27 @@ Current state:
 REAL CONTROLLED PARTIAL SURFACE QUALIFICATION CAPTURED
 ```
 
-The guarded recapture described in section 7.2 becomes the canonical
-qualification source once it lands; until then the pre-guard capture below
-remains the only real Native RPC fixture:
+Canonical guarded capture (section 7.2):
+
+```text
+fixtures/provider-registry/be-011/native-rpc/arbitrum-sepolia-public-2026-09-10T12-19-45-890Z/
+```
+
+The pre-guard capture below is retained as `HISTORICAL_PRE_GUARD_CAPTURE`: its
+recorded `repositoryHeadAtCapture` does not contain the probe source, its
+recorded observation values are unchanged, and its provenance defect is not
+retroactively fixed:
 
 ```text
 fixtures/provider-registry/be-011/native-rpc/arbitrum-sepolia-public-2026-09-08/
 ```
 
-That pre-guard capture is retained as `HISTORICAL_PRE_GUARD_CAPTURE`: its
-recorded `repositoryHeadAtCapture` does not contain the probe source, its
-recorded observation values are unchanged, and its provenance defect is not
-retroactively fixed.
-
-Observed facts at pinned block `306783026`:
+Observed facts at pinned block `307414719`:
 
 - endpoint class `arbitrum-official-public`;
 - endpoint client identity
-  `nitro/v3.11.4-rc.3-7d5ac27/linux-amd64/go1.25.14` (metadata only, not a
-  `NativeRpcProvider` version);
+  `nitro/v3.12.0-rc.2+19e94c6-20260901T094258Z/linux-amd64/go1.25.12`
+  (metadata only, not a `NativeRpcProvider` version);
 - `eth_chainId=0x66eee` / `421614`;
 - block hash and timestamp captured with `eth_getBlockByNumber`;
 - non-empty code at the official Arbitrum Sepolia L2 WETH address;
@@ -302,11 +304,10 @@ Observed facts at pinned block `306783026`:
 - deterministic probe sender WETH `balanceOf()` returned zero at the same
   block;
 - controlled WETH `transfer(..., 1)` through `eth_call` returned JSON-RPC error
-  code `3` with the observed error message and ABI `Error(string)` revert
-  data; the guarded recapture additionally validates that the payload decodes
-  to the expected controlled reason. No separate Provider revert-reason
-  semantic is inferred;
-- pinned `eth_estimateGas` for `decimals()` returned `31109` (narrow
+  code `3`; the message contains the expected semantic and the ABI
+  `Error(string)` payload decodes to the expected controlled reason. No
+  separate Provider revert-reason semantic is inferred;
+- pinned `eth_estimateGas` for `decimals()` returned `31404` (narrow
   `ethEstimateGas` mechanic only; generic gas evaluation remains
   `SUPPORTED_DOC_ONLY`);
 - a Parallax-namespaced nonexistent method returned the JSON-RPC `-32601`
@@ -492,6 +493,8 @@ Repository evidence:
 - `fixtures/chain-evidence/kuru/live-success-mon-to-usdc/`
 - `fixtures/chain-evidence/kuru/reverted/metadata.json`
 - `scripts/provider-probes/arbitrum-sepolia-native-rpc.ts` (guarded probe source)
+- `fixtures/provider-registry/be-011/native-rpc/arbitrum-sepolia-public-2026-09-10T12-19-45-890Z/`
+  (canonical guarded capture)
 - `fixtures/provider-registry/be-011/native-rpc/arbitrum-sepolia-public-2026-09-08/`
   (`HISTORICAL_PRE_GUARD_CAPTURE`, superseded for canonical qualification)
 - PR #42 `docs/research/arbitrum-evidence-provider-feasibility.md`
