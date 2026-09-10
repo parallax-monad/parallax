@@ -17,4 +17,8 @@ export class AdapterRegistry<Key, Value> {
   public set(key: Key, value: Value): void {
     this.values.set(key, value);
   }
+
+  public entries(): IterableIterator<[Key, Value]> {
+    return this.values.entries();
+  }
 }

@@ -2,6 +2,7 @@ export * from "./application.js";
 export * from "./backend/chain-registry.js";
 export * from "./backend/control-boundary.js";
 export * from "./backend/protocol-registry.js";
+export * from "./backend/provider-registry.js";
 export * from "./bootstrap/backend.js";
 export * from "./bootstrap/replay.js";
 export * from "./http.js";
