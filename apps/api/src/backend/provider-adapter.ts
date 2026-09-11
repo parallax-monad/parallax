@@ -147,6 +147,20 @@ export interface ProviderAdapter<Intent = unknown, _Input = unknown> {
   supports(query: ProviderSupportQuery<Intent>): boolean;
 }
 
+/**
+ * Checks the runtime provenance of an adapter without invoking provider code.
+ * Structural lookalikes are not valid adapters, even when their public fields
+ * happen to satisfy the TypeScript interface.
+ */
+export function isFactoryCreatedProviderAdapter<
+  Intent = unknown,
+  Input = unknown,
+>(adapter: unknown): adapter is ProviderAdapter<Intent, Input> {
+  return typeof adapter === "object" && adapter !== null
+    ? factoryCreatedAdapters.has(adapter)
+    : false;
+}
+
 function normalizeCapabilities(
   value: unknown,
 ): readonly ProviderCapability[] | undefined {
@@ -239,11 +253,7 @@ export function evaluateProviderAdapter<Intent = unknown, Input = unknown>(
   adapter: ProviderAdapter<Intent, Input>,
   input: ProviderEvaluationInput<Intent, Input>,
 ): Promise<ProviderEvaluationResult> {
-  if (
-    typeof adapter !== "object" ||
-    adapter === null ||
-    !factoryCreatedAdapters.has(adapter)
-  ) {
+  if (!isFactoryCreatedProviderAdapter<Intent, Input>(adapter)) {
     throw new TypeError("adapter must be created by createProviderAdapter");
   }
   const evaluate = factoryCreatedAdapters.get(adapter);

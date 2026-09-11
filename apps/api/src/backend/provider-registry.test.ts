@@ -8,6 +8,7 @@ import {
 } from "./provider-adapter.js";
 import {
   isProviderRegistryError,
+  type ProviderOverride,
   ProviderRegistry,
   ProviderRegistryError,
 } from "./provider-registry.js";
@@ -170,38 +171,56 @@ describe("ProviderRegistry", () => {
     );
   });
 
+  it("rejects structurally forged adapters at registration", () => {
+    const registry = new ProviderRegistry<FakeIntent>();
+
+    expect(() =>
+      registry.register({
+        providerId: "forged",
+        supports: () => true,
+        capabilities: ["simulate"],
+      } as unknown as ProviderAdapter<FakeIntent>),
+    ).toThrowError(
+      expect.objectContaining({
+        code: "INVALID_PROVIDER_CONFIGURATION",
+        providerId: "forged",
+      }),
+    );
+  });
+
   it("allows an explicit provider override only in development or demo configuration", () => {
     const tenderly = provider("tenderly", () => true);
-    const registry = new ProviderRegistry<FakeIntent>([
-      tenderly,
-      provider("native-rpc", () => true),
-    ]);
+    const registry = new ProviderRegistry<FakeIntent>(
+      [tenderly, provider("native-rpc", () => true)],
+      { environment: "development" },
+    );
 
     expect(
       registry.resolve(query(), {
-        override: { providerId: "tenderly", environment: "development" },
+        override: { providerId: "tenderly" },
       }),
     ).toBe(tenderly);
     expect(
       registry.resolve(query(), {
-        override: { providerId: "tenderly", environment: "demo" },
+        override: { providerId: "tenderly" },
       }),
     ).toBe(tenderly);
     expect(
       registry.resolve(query(), {
-        providerOverride: { providerId: "tenderly", environment: "demo" },
+        providerOverride: { providerId: "tenderly" },
       }),
     ).toBe(tenderly);
   });
 
   it("does not let an override bypass unsupported intent, chain, protocol, or capability", () => {
-    const registry = new ProviderRegistry<FakeIntent>([
-      provider("tenderly", () => false),
-    ]);
+    const registry = new ProviderRegistry<FakeIntent>(
+      [provider("tenderly", () => false)],
+      { environment: "demo" },
+    );
 
     expect(() =>
       registry.resolve(query(), {
-        override: { providerId: "tenderly", environment: "demo" },
+        override: { providerId: "tenderly" },
       }),
     ).toThrowError(
       expect.objectContaining({
@@ -219,7 +238,7 @@ describe("ProviderRegistry", () => {
 
     expect(() =>
       registry.resolve(query(), {
-        override: { providerId: "tenderly", environment: "production" },
+        override: { providerId: "tenderly" },
       }),
     ).toThrowError(
       expect.objectContaining({
@@ -227,11 +246,35 @@ describe("ProviderRegistry", () => {
         status: "invalid",
       }),
     );
+    const developmentRegistry = new ProviderRegistry<FakeIntent>(
+      [provider("tenderly", () => true)],
+      { environment: "development" },
+    );
     expect(() =>
-      registry.resolve(query(), {
-        override: { providerId: "tenderly", environment: "development" },
+      developmentRegistry.resolve(query(), {
+        override: { providerId: "tenderly" },
       }),
     ).not.toThrow();
+  });
+
+  it("does not let a caller-supplied override authorize a production registry", () => {
+    const registry = new ProviderRegistry<FakeIntent>([
+      provider("tenderly", () => true),
+    ]);
+
+    expect(() =>
+      registry.resolve(query(), {
+        override: {
+          providerId: "tenderly",
+          environment: "demo",
+        } as ProviderOverride & { environment: "demo" },
+      }),
+    ).toThrowError(
+      expect.objectContaining({
+        code: "PROVIDER_OVERRIDE_FORBIDDEN",
+        status: "invalid",
+      }),
+    );
   });
 
   it("rejects provider override fields embedded in the ordinary query", () => {
@@ -256,11 +299,10 @@ describe("ProviderRegistry", () => {
     const runtimeFailure = provider("runtime-failure", () => {
       throw new Error("provider support probe failed");
     });
-    const invalidResult = {
-      providerId: "invalid-result",
-      capabilities: ["simulate"],
-      supports: () => "yes",
-    } as unknown as ProviderAdapter<FakeIntent>;
+    const invalidResult = provider(
+      "invalid-result",
+      () => "yes" as unknown as boolean,
+    );
     const registry = new ProviderRegistry<FakeIntent>();
     registry.register(runtimeFailure);
 

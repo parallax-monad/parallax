@@ -1,7 +1,8 @@
-import type {
-  ProviderAdapter,
-  ProviderCapability,
-  ProviderSupportQuery,
+import {
+  isFactoryCreatedProviderAdapter,
+  type ProviderAdapter,
+  type ProviderCapability,
+  type ProviderSupportQuery,
 } from "./provider-adapter.js";
 import { AdapterRegistry } from "./registry-core.js";
 import { ProviderRegistryError } from "./registry-errors.js";
@@ -29,10 +30,14 @@ export type ProviderEnvironment = ProviderOverrideEnvironment | "production";
 /** Explicit configuration-only provider override. */
 export type ProviderOverride = {
   readonly providerId: string;
-  readonly environment: ProviderEnvironment;
 };
 
 export type ProviderOverrideConfig = ProviderOverride;
+
+/** Trusted backend/runtime configuration captured when a registry is created. */
+export type ProviderRegistryConfig = {
+  readonly environment: ProviderEnvironment;
+};
 
 export type ProviderSelectionQuery<Intent = unknown> =
   ProviderSupportQuery<Intent>;
@@ -50,6 +55,7 @@ export type ProviderSelectionOptions = {
  * chooses a default provider and never evaluates a provider while selecting.
  */
 export class ProviderRegistry<Intent = unknown> {
+  private readonly environment: ProviderEnvironment;
   private readonly adapters = new AdapterRegistry<
     string,
     ProviderAdapter<Intent, unknown>
@@ -57,7 +63,9 @@ export class ProviderRegistry<Intent = unknown> {
 
   public constructor(
     adapters: Iterable<ProviderAdapter<Intent, unknown>> = [],
+    config: ProviderRegistryConfig = { environment: "production" },
   ) {
+    this.environment = normalizeRegistryEnvironment(config);
     for (const adapter of adapters) {
       this.register(adapter);
     }
@@ -77,6 +85,13 @@ export class ProviderRegistry<Intent = unknown> {
   /** Registers an adapter once; duplicate IDs fail closed rather than replace. */
   public register(adapter: ProviderAdapter<Intent, unknown>): this {
     const providerId = readProviderId(adapter);
+    if (!isFactoryCreatedProviderAdapter(adapter)) {
+      throw new ProviderRegistryError({
+        code: "INVALID_PROVIDER_CONFIGURATION",
+        providerId,
+        message: `provider ${providerId} must be created by createProviderAdapter`,
+      });
+    }
     validateAdapterConfiguration(adapter, providerId);
     if (this.adapters.has(providerId)) {
       throw new ProviderRegistryError({
@@ -148,15 +163,12 @@ export class ProviderRegistry<Intent = unknown> {
     override: ProviderOverride,
     query: ProviderSupportQuery<Intent>,
   ): ProviderAdapter<Intent, unknown> {
-    if (
-      override.environment !== "development" &&
-      override.environment !== "demo"
-    ) {
+    if (this.environment === "production") {
       throw new ProviderRegistryError({
         code: "PROVIDER_OVERRIDE_FORBIDDEN",
         providerId: override.providerId,
         message:
-          "provider overrides are restricted to development or demo configuration",
+          "provider overrides are restricted to development or demo backend configuration",
       });
     }
     const adapter = this.adapters.get(override.providerId);
@@ -410,18 +422,38 @@ function normalizeOptions(
     Array.isArray(override) ||
     typeof override.providerId !== "string" ||
     override.providerId.trim().length === 0 ||
-    override.providerId !== override.providerId.trim() ||
-    (override.environment !== "development" &&
-      override.environment !== "demo" &&
-      override.environment !== "production")
+    override.providerId !== override.providerId.trim()
+  ) {
+    throw new ProviderRegistryError({
+      code: "INVALID_PROVIDER_CONFIGURATION",
+      message: "provider override requires a providerId",
+    });
+  }
+  return { providerId: override.providerId };
+}
+
+function normalizeRegistryEnvironment(
+  config: ProviderRegistryConfig,
+): ProviderEnvironment {
+  if (typeof config !== "object" || config === null || Array.isArray(config)) {
+    throw new ProviderRegistryError({
+      code: "INVALID_PROVIDER_CONFIGURATION",
+      message: "provider registry config must be an object",
+    });
+  }
+  const environment = config.environment;
+  if (
+    environment !== "development" &&
+    environment !== "demo" &&
+    environment !== "production"
   ) {
     throw new ProviderRegistryError({
       code: "INVALID_PROVIDER_CONFIGURATION",
       message:
-        "provider override requires a providerId and an explicit environment",
+        "provider registry config environment must be development, demo, or production",
     });
   }
-  return override;
+  return environment;
 }
 
 function validateIdentifier(value: unknown, name: string): string {
