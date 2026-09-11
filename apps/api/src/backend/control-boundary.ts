@@ -124,6 +124,7 @@ export function isBackendControlError(
       candidate.name === "ProtocolAdapterError" ||
       candidate.name === "ChainRegistryError" ||
       candidate.name === "ProtocolRegistryError" ||
+      candidate.name === "ProviderRegistryError" ||
       candidate.name === "UnsupportedAgentFlowError") &&
     isBackendControlFailureStatus(candidate.status) &&
     (candidate.providerId === undefined ||
@@ -149,6 +150,8 @@ export function controlStatusForCode(
   if (normalized.includes("TIMEOUT")) return "timeout";
   if (normalized.includes("STALE")) return "stale";
   if (normalized.includes("MISMATCH")) return "invalid";
+  if (normalized.includes("FORBIDDEN")) return "invalid";
+  if (normalized.includes("NOT_FOUND")) return "unsupported";
   if (normalized === "UNKNOWN") return "unknown";
   if (normalized.includes("INVALID")) return "invalid";
   return "failed";
