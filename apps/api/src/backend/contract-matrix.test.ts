@@ -30,9 +30,9 @@ describe("Backend adapter and registry contract matrix", () => {
   it("rejects a Chain registration that does not implement every port operation", () => {
     const malformed = { chainId: 901 };
 
-    expect(() =>
-      new ChainRegistry([malformed] as never),
-    ).toThrowError(/chain adapter.*(function|connect|operation)/i);
+    expect(() => new ChainRegistry([malformed] as never)).toThrowError(
+      /chain adapter.*(function|connect|operation)/i,
+    );
   });
 
   it("gives Protocol adapters an exact chain/protocol lookup contract", async () => {
@@ -59,10 +59,11 @@ describe("Backend adapter and registry contract matrix", () => {
   it("rejects a Protocol registration that does not implement quote and transaction ports", () => {
     const malformed = {};
 
-    expect(() =>
-      new ProtocolRegistry([
-        { chainId: 901, protocol: "kuru", adapter: malformed as never },
-      ]),
+    expect(
+      () =>
+        new ProtocolRegistry([
+          { chainId: 901, protocol: "kuru", adapter: malformed as never },
+        ]),
     ).toThrowError(/protocol adapter.*(function|quote|transaction)/i);
   });
 

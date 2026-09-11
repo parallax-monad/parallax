@@ -179,4 +179,10 @@ function assertProtocolAdapter(
   if (typeof value !== "object" || value === null) {
     throw new TypeError("protocol adapter must be an object");
   }
+
+  for (const operation of ["quote", "buildTransaction"] as const) {
+    if (typeof (value as Record<string, unknown>)[operation] !== "function") {
+      throw new TypeError(`protocol adapter ${operation} must be a function`);
+    }
+  }
 }
