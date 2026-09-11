@@ -27,6 +27,14 @@ describe("Backend adapter and registry contract matrix", () => {
     );
   });
 
+  it("rejects a Chain registration that does not implement every port operation", () => {
+    const malformed = { chainId: 901 };
+
+    expect(() =>
+      new ChainRegistry([malformed] as never),
+    ).toThrowError(/chain adapter.*(function|connect|operation)/i);
+  });
+
   it("gives Protocol adapters an exact chain/protocol lookup contract", async () => {
     const fixture = fakeBackendFixture();
     const adapter = createFakeProtocolAdapter(fixture.protocol);
@@ -46,6 +54,16 @@ describe("Backend adapter and registry contract matrix", () => {
     expect(() => registry.resolve(fixture.chain.chainId, "pancake")).toThrow(
       "not registered",
     );
+  });
+
+  it("rejects a Protocol registration that does not implement quote and transaction ports", () => {
+    const malformed = {};
+
+    expect(() =>
+      new ProtocolRegistry([
+        { chainId: 901, protocol: "kuru", adapter: malformed as never },
+      ]),
+    ).toThrowError(/protocol adapter.*(function|quote|transaction)/i);
   });
 
   it("gives Provider adapters a single-match, factory-provenance contract", async () => {
