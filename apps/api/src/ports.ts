@@ -5,6 +5,11 @@ import {
 } from "./backend/control-boundary.js";
 import type { MossIntegrationConfig } from "./runtime-config.js";
 
+export type {
+  ReceiptAnchorer,
+  ReceiptSigner,
+} from "./backend/receipt-ports.js";
+
 export type AgentFlowCheckInput = {
   runId: string;
   intent: NormalizedSwapIntent;
