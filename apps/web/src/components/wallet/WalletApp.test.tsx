@@ -234,12 +234,13 @@ describe("WalletApp persisted Run recovery", () => {
     });
 
     const applyButtons = Array.from(container.querySelectorAll("button")).filter(
-      (button) => button.textContent?.includes("Use this on the swap sheet"),
+      (button) =>
+        button.textContent?.includes("Preserve a similar effective rate"),
     );
     expect(applyButtons.length).toBeGreaterThan(0);
 
     await act(async () => {
-      applyButtons[1]?.click();
+      applyButtons[0]?.click();
     });
 
     const amountInput = container.querySelector<HTMLInputElement>(

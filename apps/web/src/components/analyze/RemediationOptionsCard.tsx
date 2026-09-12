@@ -29,8 +29,8 @@ export function RemediationOptionsCard({
       </span>
       <p className="mt-2 text-[14px] leading-[1.6] text-dim">
         {say(language, {
-          en: "Parallax does not assume which objective matters most to you. Choose a verified option to apply it on the swap sheet.",
-          zh: "Parallax 不会假设哪个目标对你最重要。选择一个已验证选项，即可套用到兑换输入。",
+          en: "Parallax does not assume which objective matters most to you. Tap a verified option to apply it on the swap sheet.",
+          zh: "Parallax 不会假设哪个目标对你最重要。点按已验证选项即可套用到兑换输入。",
         })}
       </p>
 
@@ -72,8 +72,8 @@ function RemediationOptionRow({
 
   const selectable = option.swapIntent !== undefined && onSelect !== undefined;
 
-  return (
-    <div className={`border p-4 ${verificationColor}`}>
+  const content = (
+    <>
       <div className="flex flex-wrap items-center gap-2">
         <strong className="text-[15px] font-bold">
           {say(language, option.objective)}
@@ -147,19 +147,20 @@ function RemediationOptionRow({
           </p>
         </div>
       )}
-
-      {selectable && (
-        <button
-          type="button"
-          className="btn btn-monad mt-4 w-full"
-          onClick={() => onSelect(option)}
-        >
-          {say(language, {
-            en: "Use this on the swap sheet",
-            zh: "套用到兑换输入",
-          })}
-        </button>
-      )}
-    </div>
+    </>
   );
+
+  if (selectable) {
+    return (
+      <button
+        type="button"
+        className={`w-full border p-4 text-left transition-colors hover:bg-white/5 ${verificationColor}`}
+        onClick={() => onSelect(option)}
+      >
+        {content}
+      </button>
+    );
+  }
+
+  return <div className={`border p-4 ${verificationColor}`}>{content}</div>;
 }

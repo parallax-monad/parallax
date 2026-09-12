@@ -186,7 +186,6 @@ describe("WalletResult", () => {
     expect(html).toContain("Keep spending 10,000 USDC");
     expect(html).toContain("Still receive approximately 4.812 ETH");
     expect(html).toContain("Wait for the previous economics");
-    expect(html).toContain("Use this on the swap sheet");
     expect(html).toContain("Execution economics");
     expect(html).toContain("1.08%");
     expect(html).toContain("Re-check immediately before signing");
