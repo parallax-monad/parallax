@@ -44,6 +44,7 @@ If you are implementing a feature, start from its owning specification and accep
 - [Competitive Analysis](./research/competitive-analysis.md) — dated Monad MVP competitive research snapshot.
 - [Market positioning and evidence](./research/market-positioning-and-evidence.md) — market evidence, positioning hypotheses, and claim boundaries.
 - [Arbitrum ecosystem and stack](./research/arbitrum-ecosystem-and-stack.md) — ecosystem rationale and Provider/stack selection research.
+- [BE-011 Provider Owner input package](./research/be-011-provider-input-package.md) — Provider capability evidence inventory and machine-readable fixture index for BE-011. The pre-guard Native RPC capture (`arbitrum-sepolia-public-2026-09-08`) is retained as `HISTORICAL_PRE_GUARD_CAPTURE` and is superseded for canonical qualification.
 
 ## Architecture decisions
 
