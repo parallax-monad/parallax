@@ -188,4 +188,66 @@ describe("WalletApp persisted Run recovery", () => {
     );
     expect(container.textContent).not.toContain("Before you sign");
   });
+
+  test("loads the Arbitrum sample result from the wallet home", async () => {
+    const container = document.createElement("div");
+    document.body.append(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(<WalletApp language="en" />);
+      await Promise.resolve();
+    });
+
+    const sampleButton = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent?.includes("Load Arbitrum Sample"),
+    );
+    expect(sampleButton).toBeDefined();
+
+    await act(async () => {
+      sampleButton?.click();
+    });
+
+    expect(container.textContent).toContain("Your quote has changed");
+    expect(container.textContent).toContain("Your options");
+    expect(container.textContent).toContain("Keep spending 10,000 USDC");
+    expect(container.textContent).toContain("Execution economics");
+  });
+
+  test("applies a verified option to the swap sheet", async () => {
+    const container = document.createElement("div");
+    document.body.append(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(<WalletApp language="en" />);
+      await Promise.resolve();
+    });
+
+    const sampleButton = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent?.includes("Load Arbitrum Sample"),
+    );
+    expect(sampleButton).toBeDefined();
+
+    await act(async () => {
+      sampleButton?.click();
+    });
+
+    const applyButtons = Array.from(container.querySelectorAll("button")).filter(
+      (button) => button.textContent?.includes("Use this on the swap sheet"),
+    );
+    expect(applyButtons.length).toBeGreaterThan(0);
+
+    await act(async () => {
+      applyButtons[1]?.click();
+    });
+
+    const amountInput = container.querySelector<HTMLInputElement>(
+      'input[aria-label="Amount to pay"]',
+    );
+    expect(amountInput?.value).toBe("7200");
+    expect(container.textContent).toContain("USDC");
+    expect(container.textContent).toContain("ETH");
+    expect(container.textContent).toContain("Submit live check");
+  });
 });

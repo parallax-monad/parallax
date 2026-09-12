@@ -1,5 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, test } from "vitest";
+import { arbitrumSampleSuccess } from "@/lib/analyze/arbitrum-sample-data";
 import type { CheckSwapResult } from "@/lib/analyze/types";
 import { WalletResult } from "./WalletResult";
 
@@ -34,7 +35,10 @@ function result(overrides: Partial<CheckSwapResult> = {}): CheckSwapResult {
   };
 }
 
-const render = (value: CheckSwapResult) =>
+const render = (
+  value: CheckSwapResult,
+  onSelectOption?: () => void,
+) =>
   renderToStaticMarkup(
     <WalletResult
       language="en"
@@ -43,6 +47,7 @@ const render = (value: CheckSwapResult) =>
       onKeep={() => undefined}
       onOpenEvidence={() => undefined}
       onRetry={() => undefined}
+      onSelectOption={onSelectOption}
     />,
   );
 
@@ -169,5 +174,21 @@ describe("WalletResult", () => {
     );
 
     expect(html).not.toContain("Below your Minimum Received");
+  });
+
+  test("renders the Arbitrum economic diagnosis sample", () => {
+    const html = render(arbitrumSampleSuccess, () => undefined);
+    expect(html).toContain("Your quote has changed");
+    expect(html).toContain("4.812");
+    expect(html).toContain("4.746");
+    expect(html).toContain("-1.37%");
+    expect(html).toContain("Your options");
+    expect(html).toContain("Keep spending 10,000 USDC");
+    expect(html).toContain("Still receive approximately 4.812 ETH");
+    expect(html).toContain("Wait for the previous economics");
+    expect(html).toContain("Use this on the swap sheet");
+    expect(html).toContain("Execution economics");
+    expect(html).toContain("1.08%");
+    expect(html).toContain("Re-check immediately before signing");
   });
 });

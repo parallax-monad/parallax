@@ -157,4 +157,57 @@ export type CheckSwapResult = {
   simulatorPinnedBlock?: string;
   apiFailure?: ApiFailure;
   rawResponse: unknown;
+  quoteFidelity?: QuoteFidelity;
+  remediationOptions?: RemediationOption[];
+  executionEconomics?: ExecutionEconomics;
+};
+
+/** Optional swap-form patch when a user chooses this option. */
+export type RemediationSwapIntent = {
+  amountIn: string;
+  tokenIn?: string;
+  tokenOut?: string;
+};
+
+/** Enhanced remediation option with quantification per P0 Economic spec */
+export type RemediationOption = {
+  id: string;
+  objective: Copy;
+  candidateAdjustment: Copy;
+  quantification: {
+    variable: string;
+    before: string;
+    after: string;
+    unit: string;
+  };
+  predictedOutcome: Copy;
+  tradeOff?: Copy;
+  verificationStatus: "VERIFIED" | "UNVERIFIED" | "CONDITIONAL";
+  evidenceRefs?: string[];
+  swapIntent?: RemediationSwapIntent;
+};
+
+/** Quote fidelity comparison when selected quote differs from current simulation */
+export type QuoteFidelity = {
+  selectedQuote: string;
+  currentSimulation: string;
+  difference: string;
+  relativeDelta: string;
+  observation: Copy;
+  primaryCause: Copy;
+  contributingFactors?: Copy[];
+};
+
+/** Execution economics decomposition */
+export type ExecutionEconomics = {
+  referencePrice?: string;
+  quotedExecutionPrice?: string;
+  effectiveRate?: string;
+  priceImpact?: string;
+  usableLiquidity?: string;
+  protocolFee?: string;
+  commission?: string;
+  gasEstimate?: string;
+  routeInfo?: Copy;
+  allInCost?: string;
 };

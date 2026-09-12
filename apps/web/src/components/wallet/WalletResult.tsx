@@ -1,12 +1,17 @@
 import { useState } from "react";
 import { ActionsCard } from "@/components/analyze/ActionsCard";
 import { DiffCard } from "@/components/analyze/DiffCard";
+import { ExecutionEconomicsCard } from "@/components/analyze/ExecutionEconomicsCard";
+import { QuoteFidelityCard } from "@/components/analyze/QuoteFidelityCard";
+import { RemediationOptionsCard } from "@/components/analyze/RemediationOptionsCard";
+import { StateWarningCard } from "@/components/analyze/StateWarningCard";
 import { VerdictIcon } from "@/components/analyze/StatusIcon";
 import { TokenIcon } from "@/components/analyze/TokenIcon";
 import { formatAmount } from "@/components/wallet/walletData";
 import type {
   CheckSwapResult,
   ProductRunMode,
+  RemediationOption,
   Verdict,
 } from "@/lib/analyze/types";
 import { type Copy, type Language, say } from "@/lib/i18n";
@@ -130,6 +135,7 @@ export function WalletResult({
   onRetry,
   onDiscard,
   onOpenEvidence,
+  onSelectOption,
 }: {
   result: CheckSwapResult;
   language: Language;
@@ -137,6 +143,7 @@ export function WalletResult({
   onRetry?: () => void;
   onDiscard: () => void;
   onOpenEvidence: () => void;
+  onSelectOption?: (option: RemediationOption) => void;
 }) {
   const [breakdownOpen, setBreakdownOpen] = useState(false);
   const { intent, quote, simulatedOutput, verdict } = result;
@@ -351,6 +358,14 @@ export function WalletResult({
         </section>
       )}
 
+      {result.quoteFidelity && (
+        <QuoteFidelityCard
+          language={language}
+          quoteFidelity={result.quoteFidelity}
+          tokenSymbol={intent.tokenOut}
+        />
+      )}
+
       <p className="text-[12px] leading-[1.6] text-dim">
         {say(language, MODE_EXPLANATION[result.productRunMode])}
       </p>
@@ -421,6 +436,30 @@ export function WalletResult({
           <span className="mono">{quote.blockNumber}</span>
         </div>
       </dl>
+
+      {result.executionEconomics && (
+        <ExecutionEconomicsCard
+          economics={result.executionEconomics}
+          language={language}
+        />
+      )}
+
+      {result.remediationOptions && result.remediationOptions.length > 0 && (
+        <RemediationOptionsCard
+          language={language}
+          options={result.remediationOptions}
+          onSelect={onSelectOption}
+        />
+      )}
+
+      {(verdict === "PROCEED" || verdict === "ADJUST") &&
+        result.productRunMode === "LIVE" && (
+          <StateWarningCard
+            blockNumber={result.simulatorPinnedBlock}
+            language={language}
+            timestamp={result.createdAt}
+          />
+        )}
 
       <section className="border border-line bg-ink-rail p-4">
         <strong className="block text-[13px] font-bold uppercase tracking-[0.08em] text-monad-dim">

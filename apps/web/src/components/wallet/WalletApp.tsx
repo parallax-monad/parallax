@@ -9,8 +9,10 @@ import { WalletHome } from "@/components/wallet/WalletHome";
 import { CloseIcon } from "@/components/wallet/WalletIcons";
 import { WalletResult } from "@/components/wallet/WalletResult";
 import { WalletSwap } from "@/components/wallet/WalletSwap";
+import { arbitrumSampleSuccess } from "@/lib/analyze/arbitrum-sample-data";
 import { flaggedFields } from "@/lib/analyze/fields";
 import {
+  applyRemediationOption,
   DEMO_SLIPPAGE,
   type FormFieldErrors,
   type FormState,
@@ -27,7 +29,11 @@ import {
   loadRun,
 } from "@/lib/analyze/service";
 import { createStageScheduler } from "@/lib/analyze/stageScheduler";
-import type { CheckSwapResult, QuoteState } from "@/lib/analyze/types";
+import type {
+  CheckSwapResult,
+  QuoteState,
+  RemediationOption,
+} from "@/lib/analyze/types";
 import { type Language, pick } from "@/lib/i18n";
 
 /** Milliseconds per simulated Moss stage, tuned for a sub-minute demo. */
@@ -268,6 +274,34 @@ export function WalletApp({ language }: { language: Language }) {
     });
   };
 
+  const loadArbitrumSample = () => {
+    recoveryCancelledRef.current = true;
+    schedulerRef.current.cancel();
+    const sampleForm: FormState = {
+      ...INITIAL_FORM,
+      tokenIn: arbitrumSampleSuccess.intent.tokenIn,
+      tokenOut: arbitrumSampleSuccess.intent.tokenOut,
+      amountIn: arbitrumSampleSuccess.intent.amountIn,
+    };
+    setFormErrors({});
+    setStoredRunId(undefined);
+    setDrawerOpen(false);
+    setCheckingMode("live");
+    setForm(sampleForm);
+    setSubmittedForm(sampleForm);
+    setResult(arbitrumSampleSuccess);
+    setScreen("result");
+  };
+
+  const applyOption = (option: RemediationOption) => {
+    const nextForm = applyRemediationOption(form, option);
+    if (nextForm === undefined) return;
+    setForm(nextForm);
+    setFormErrors({});
+    setQuote({ status: "idle" });
+    setScreen("swap");
+  };
+
   const discard = () => {
     recoveryCancelledRef.current = true;
     schedulerRef.current.cancel();
@@ -326,6 +360,7 @@ export function WalletApp({ language }: { language: Language }) {
               {screen === "home" && (
                 <WalletHome
                   language={language}
+                  onLoadArbitrumSample={loadArbitrumSample}
                   onSwap={() => {
                     recoveryCancelledRef.current = true;
                     setScreen("swap");
@@ -362,6 +397,7 @@ export function WalletApp({ language }: { language: Language }) {
                   onRetry={() => runCheck(true)}
                   onKeep={() => setScreen("swap")}
                   onOpenEvidence={() => setDrawerOpen(true)}
+                  onSelectOption={applyOption}
                 />
               )}
             </div>

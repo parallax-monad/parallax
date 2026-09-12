@@ -12,9 +12,11 @@ import { type Language, say } from "@/lib/i18n";
 export function WalletHome({
   language,
   onSwap,
+  onLoadArbitrumSample,
 }: {
   language: Language;
   onSwap: () => void;
+  onLoadArbitrumSample?: () => void;
 }) {
   return (
     <div className="flex flex-col gap-5 px-5 pb-6 pt-2">
@@ -41,6 +43,19 @@ export function WalletHome({
         <SwapIcon size={20} />
         {say(language, { en: "Swap", zh: "兑换" })}
       </button>
+
+      {onLoadArbitrumSample && (
+        <button
+          type="button"
+          className="btn btn-monad-outline flex w-full items-center justify-center gap-2 py-3"
+          onClick={onLoadArbitrumSample}
+        >
+          {say(language, {
+            en: "Load Arbitrum Sample (NEW)",
+            zh: "加载 Arbitrum 示例数据（新）",
+          })}
+        </button>
+      )}
 
       <section
         aria-label={say(language, {
