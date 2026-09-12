@@ -1,6 +1,6 @@
+import { describe, expect, it } from "vitest";
 import * as api from "../index.js";
 import { InMemoryRunStore } from "../store.js";
-import { describe, expect, it } from "vitest";
 
 describe("Backend foundation public entry", () => {
   it("exports and composes the replaceable backend foundation from the package entry", () => {
