@@ -1,0 +1,153 @@
+{
+  "schemaVersion": "be-011-native-rpc-observations-v1",
+  "real": true,
+  "scope": "native-rpc-provider-surface-qualification",
+  "protocol": null,
+  "intent": null,
+  "observations": {
+    "endpointClientIdentity": {
+      "classification": "OBSERVED_RUNTIME_METADATA",
+      "method": "web3_clientVersion",
+      "value": "nitro/v3.12.0-rc.2+19e94c6-20260901T094258Z/linux-amd64/go1.25.12",
+      "note": "Endpoint metadata only; not a NativeRpcProvider version."
+    },
+    "chainIdentity": {
+      "state": "VERIFIED_RUNTIME",
+      "method": "eth_chainId",
+      "chainId": 421614,
+      "rawHex": "0x66eee",
+      "expectedChainId": 421614,
+      "expectedHex": "0x66eee"
+    },
+    "blockNumber": {
+      "state": "VERIFIED_RUNTIME",
+      "method": "eth_blockNumber",
+      "blockNumber": "307414719",
+      "rawHex": "0x1252c6bf"
+    },
+    "blockContext": {
+      "state": "VERIFIED_RUNTIME",
+      "method": "eth_getBlockByNumber",
+      "blockNumber": "307414719",
+      "blockHash": "0x24c05ea6d67d9346943aa2d986b451110f52eaa72818c3718dd729cd89640136",
+      "timestamp": "1789042786",
+      "timestampIso": "2026-09-10T12:19:46.000Z",
+      "fullTransactionsRequested": false
+    },
+    "contractCode": {
+      "state": "VERIFIED_RUNTIME",
+      "method": "eth_getCode",
+      "target": "0x980B62Da83eFf3D4576C647993b0c1D7faf17c73",
+      "blockNumber": "307414719",
+      "nonEmpty": true,
+      "byteLength": 2147
+    },
+    "ethCallDecimals": {
+      "state": "VERIFIED_RUNTIME",
+      "method": "eth_call",
+      "selector": "0x313ce567",
+      "target": "0x980B62Da83eFf3D4576C647993b0c1D7faf17c73",
+      "blockNumber": "307414719",
+      "rawResult": "0x0000000000000000000000000000000000000000000000000000000000000012",
+      "normalizedDecimals": 18
+    },
+    "ethCallBalanceOf": {
+      "state": "VERIFIED_RUNTIME",
+      "method": "eth_call",
+      "selector": "0x70a08231",
+      "target": "0x980B62Da83eFf3D4576C647993b0c1D7faf17c73",
+      "probeSender": "0x0000000000000000000000000000000000000001",
+      "blockNumber": "307414719",
+      "rawResult": "0x0000000000000000000000000000000000000000000000000000000000000000",
+      "normalizedBalance": "0",
+      "zeroBalanceConfirmed": true
+    },
+    "ethGetBalance": {
+      "state": "UNKNOWN",
+      "method": "eth_getBalance",
+      "reason": "NOT_EXECUTED_IN_REAL_CHECKPOINT",
+      "note": "Native balance reads were not executed in the real checkpoint. The recorded balanceOf eth_call is an ERC-20 read and must not qualify eth_getBalance."
+    },
+    "ethCallControlledRevert": {
+      "state": "VERIFIED_RUNTIME",
+      "method": "eth_call",
+      "target": "0x980B62Da83eFf3D4576C647993b0c1D7faf17c73",
+      "blockNumber": "307414719",
+      "from": "0x0000000000000000000000000000000000000001",
+      "recipient": "0x0000000000000000000000000000000000000002",
+      "amount": "1",
+      "zeroBalancePreconditionConfirmed": true,
+      "outcome": "JSON_RPC_ERROR_ENVELOPE_OBSERVED",
+      "error": {
+        "code": 3,
+        "message": "execution reverted: ERC20: transfer amount exceeds balance",
+        "data": "0x08c379a00000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000002645524332303a207472616e7366657220616d6f756e7420657863656564732062616c616e63650000000000000000000000000000000000000000000000000000"
+      },
+      "validation": {
+        "errorCode": 3,
+        "messageSemanticValidated": true,
+        "abiErrorStringSelector": "0x08c379a0",
+        "abiErrorStringDecoded": "ERC20: transfer amount exceeds balance",
+        "abiErrorStringMatchesControlledReason": true
+      },
+      "normalizedRevertReason": null,
+      "note": "Controlled ABI Error(string) payload validated against the expected reason; no final Provider revert-reason semantic is inferred."
+    },
+    "ethEstimateGas": {
+      "state": "VERIFIED_RUNTIME",
+      "method": "eth_estimateGas",
+      "target": "0x980B62Da83eFf3D4576C647993b0c1D7faf17c73",
+      "selector": "0x313ce567",
+      "provenance": "PINNED_BLOCK",
+      "blockNumber": "307414719",
+      "rawResult": "0x7aac",
+      "normalizedGasEstimate": "31404",
+      "note": "Estimate only; no transaction was sent."
+    },
+    "methodNotFoundEnvelope": {
+      "state": "VERIFIED_RUNTIME",
+      "classification": "JSON_RPC_METHOD_NOT_FOUND_ENVELOPE",
+      "method": "parallax_be011_nonexistentMethod",
+      "outcome": "JSON_RPC_METHOD_NOT_FOUND_ENVELOPE",
+      "error": {
+        "code": -32601,
+        "message": "the method parallax_be011_nonexistentMethod does not exist/is not available",
+        "data": null
+      },
+      "semanticBoundary": "Observed JSON-RPC -32601 method-not-found envelope only; NOT final Provider UNSUPPORTED semantics."
+    },
+    "capabilitySummary": {
+      "promotedToVerifiedRuntime": [
+        "arbitrumSepoliaChainIdentity",
+        "blockNumber",
+        "blockContext",
+        "contractCodeRead",
+        "ethCallRead",
+        "ethCallRevertErrorEnvelope",
+        "methodNotFoundEnvelope",
+        "ethEstimateGas"
+      ],
+      "explicitlyNotPromoted": [
+        "completeTransactionSimulation",
+        "hypotheticalReceipt",
+        "hypotheticalLogs",
+        "stateDiff",
+        "completeAssetChanges",
+        "completeBalanceChanges",
+        "camelotV3Evaluation",
+        "preparedExecutionSupport",
+        "nativeRpcProviderImplementation",
+        "nativeEthGetBalance",
+        "finalFreshnessPolicy",
+        "tenderlyCapability"
+      ]
+    }
+  },
+  "unavailableEvidence": {
+    "providerOutage": "NOT_OBSERVED",
+    "naturalNetworkTimeout": "NOT_OBSERVED",
+    "rateLimit": "UNKNOWN_NOT_INTENTIONALLY_PROVOKED",
+    "staleResponse": "NOT_OBSERVED_NO_POLICY_THRESHOLD_DEFINED"
+  },
+  "nonAuthorityNotice": "Observed facts only; no final Evidence Contract, Provider status mapping, Camelot support, or PreparedExecution semantic is inferred."
+}
