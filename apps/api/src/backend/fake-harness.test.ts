@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { isChainAdapterError } from "./chain-adapter.js";
 import {
   createFakeChainAdapter,
   createFakeProtocolAdapter,
@@ -15,7 +16,7 @@ describe("fake Backend adapter harness", () => {
   it("provides deterministic Chain lifecycle values and forwards operation options", async () => {
     const fixture = fakeBackendFixture();
     const adapter = createFakeChainAdapter(fixture.chain);
-    const signal = AbortSignal.abort("fixture-cancelled");
+    const signal = new AbortController().signal;
     const options = { signal, timeoutMs: 100 };
     const transaction = { payload: "opaque" };
 
@@ -32,6 +33,46 @@ describe("fake Backend adapter harness", () => {
     expect(finality).toEqual({ status: "finalized" });
     expect(adapter.calls).toHaveLength(4);
     expect(adapter.calls.every((call) => call.options === options)).toBe(true);
+  });
+
+  it("rejects a pre-aborted signal for every Chain operation", async () => {
+    const fixture = fakeBackendFixture();
+    const adapter = createFakeChainAdapter(fixture.chain);
+    const signal = AbortSignal.abort("fixture-cancelled");
+    const options = { signal };
+    const blockContext = {
+      blockNumber: fixture.chain.blockNumber,
+    };
+    const operations = [
+      { operation: "connect", invoke: () => adapter.connect(options) },
+      {
+        operation: "getBlockContext",
+        invoke: () => adapter.getBlockContext(options),
+      },
+      {
+        operation: "estimateGas",
+        invoke: () => adapter.estimateGas({ payload: "opaque" }, options),
+      },
+      {
+        operation: "getFinality",
+        invoke: () => adapter.getFinality(blockContext, options),
+      },
+    ] as const;
+
+    for (const { operation, invoke } of operations) {
+      await expect(invoke()).rejects.toSatisfy((received: unknown) => {
+        return (
+          isChainAdapterError(received) &&
+          received.chainId === fixture.chain.chainId &&
+          received.operation === operation &&
+          received.code === "CANCELLED" &&
+          received.retryable === false &&
+          received.cause === signal.reason
+        );
+      });
+    }
+
+    expect(adapter.calls).toHaveLength(0);
   });
 
   it("keeps Protocol payloads opaque and marks built transactions unsigned", async () => {

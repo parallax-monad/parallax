@@ -1,10 +1,12 @@
 import { isDeepStrictEqual } from "node:util";
-import type {
-  BlockContext,
-  ChainAdapter,
-  ChainOperationOptions,
-  FinalityStatus,
-  GasEstimate,
+import {
+  type BlockContext,
+  type ChainAdapter,
+  ChainAdapterError,
+  type ChainOperation,
+  type ChainOperationOptions,
+  type FinalityStatus,
+  type GasEstimate,
 } from "./chain-adapter.js";
 import type {
   ProtocolAdapter,
@@ -52,6 +54,24 @@ export type FakeChainAdapter<Transaction = unknown> =
     readonly calls: FakeChainCall<Transaction>[];
   };
 
+function throwIfAborted(
+  fixture: FakeChainFixture,
+  operation: ChainOperation,
+  options?: ChainOperationOptions,
+): void {
+  const signal = options?.signal;
+  if (!signal?.aborted) return;
+
+  throw new ChainAdapterError({
+    chainId: fixture.chainId,
+    operation,
+    code: "CANCELLED",
+    message: `chain operation ${operation} cancelled`,
+    retryable: false,
+    cause: signal.reason,
+  });
+}
+
 /** Creates a deterministic, offline Chain adapter from a fixture. */
 export function createFakeChainAdapter<Transaction = unknown>(
   fixture: FakeChainFixture = defaultChainFixture,
@@ -61,11 +81,13 @@ export function createFakeChainAdapter<Transaction = unknown>(
     chainId: fixture.chainId,
     calls,
     async connect(options?: ChainOperationOptions): Promise<void> {
+      throwIfAborted(fixture, "connect", options);
       calls.push({ operation: "connect", options });
     },
     async getBlockContext(
       options?: ChainOperationOptions,
     ): Promise<BlockContext> {
+      throwIfAborted(fixture, "getBlockContext", options);
       calls.push({ operation: "getBlockContext", options });
       return {
         blockNumber: fixture.blockNumber,
@@ -77,6 +99,7 @@ export function createFakeChainAdapter<Transaction = unknown>(
       transaction: Transaction,
       options?: ChainOperationOptions,
     ): Promise<GasEstimate> {
+      throwIfAborted(fixture, "estimateGas", options);
       calls.push({ operation: "estimateGas", transaction, options });
       return { gasUnits: fixture.gasUnits };
     },
@@ -84,6 +107,7 @@ export function createFakeChainAdapter<Transaction = unknown>(
       blockContext: BlockContext,
       options?: ChainOperationOptions,
     ): Promise<FinalityStatus> {
+      throwIfAborted(fixture, "getFinality", options);
       calls.push({ operation: "getFinality", blockContext, options });
       return fixture.finality;
     },
