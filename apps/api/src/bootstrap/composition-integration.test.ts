@@ -620,39 +620,29 @@ describe("Backend composition application boundary", () => {
     );
     const store = new InMemoryRunStore();
     const core = vi.fn(async (intent: NormalizedSwapIntent) => intent);
-    const decision = vi.fn(async (_input: unknown, context?: unknown) => {
-      const pipelineContext = context as {
-        runId: string;
-        intent: NormalizedSwapIntent;
-      };
-      return {
-        runId: pipelineContext.runId,
-        replayMode: false,
-        intent: pipelineContext.intent,
-        status: "integration_error" as const,
-        systemStatus: "INTEGRATION_ERROR" as const,
-        verdict: "UNKNOWN" as const,
-        summary: "The composition fixture completed with an integration error",
-        error: {
-          code: "INTERNAL_ERROR" as const,
-          stage: "unknown" as const,
-          message: "The composition fixture failed closed",
-          retryable: false,
-        },
-        ruleResults: [],
-        recommendedActions: [],
-        irrelevantActions: [],
-        evidence: [],
-        scope: [
+    const decision = {
+      decide: vi.fn(async (_intent: NormalizedSwapIntent, context?: unknown) => {
+        const pipelineContext = context as {
+          runId: string;
+          intent: NormalizedSwapIntent;
+        };
+        return economicFailStopResult(
           {
-            key: "P0-CHECK-SIMULATION-001",
-            label: "Moss simulation",
-            status: "unknown" as const,
-            reason: "REQUIRED_CHECK_INTERRUPTED" as const,
+            sender: pipelineContext.intent.sender,
+            mon: { kind: "native" },
+            usdc: pipelineContext.intent.tokenOut as {
+              kind: "erc20";
+              address: string;
+            },
+            simulatorPinnedBlock: "42",
+            runtimeVersion: runtime.config.moss.runtimeVersion,
+            runtimeRevision: runtime.config.moss.runtimeRevision,
           },
-        ],
-      };
-    });
+          pipelineContext.runId,
+          pipelineContext.intent,
+        );
+      }),
+    };
     const composition = createBackendComposition({
       chainRegistry: new ChainRegistry([chain]),
       protocolRegistry: new ProtocolRegistry([
@@ -670,7 +660,7 @@ describe("Backend composition application boundary", () => {
         },
       },
       core: { evaluate: core },
-      decision: { decide: decision },
+      decision,
       runStore: store,
     });
     const pipeline = new BackendPipeline({ runtime: composition });
@@ -688,7 +678,7 @@ describe("Backend composition application boundary", () => {
       new Request("https://api.example.test/api/check", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify(checkRequest()),
+        body: JSON.stringify(economicCheckRequest()),
       }),
     );
     const baselineBody = await baselineResponse.json();
@@ -699,7 +689,7 @@ describe("Backend composition application boundary", () => {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          ...checkRequest(),
+          ...economicCheckRequest(),
           amountIn: "2",
           parentRunId: baselineRunId,
         }),
@@ -710,13 +700,18 @@ describe("Backend composition application boundary", () => {
 
     expect(baselineResponse.status).toBe(200);
     expect(baselineRunId).toEqual(expect.any(String));
+    expect(baselineBody).toMatchObject({
+      status: "completed",
+      verdict: "STOP",
+    });
     expect(rerunResponse.status).toBe(200);
     expect(rerunBody).toMatchObject({
-      status: "integration_error",
+      status: "completed",
+      verdict: "STOP",
       parentRunId: baselineRunId,
       diff: {
         previousRunId: baselineRunId,
-        previousVerdict: "UNKNOWN",
+        previousVerdict: "STOP",
         changedFields: [
           {
             field: "amountInAtomic",
@@ -737,8 +732,8 @@ describe("Backend composition application boundary", () => {
       parentRunId: baselineRunId,
       result: rerunBody,
     });
-    expect(evaluations).toHaveLength(2);
-    expect(core).toHaveBeenCalledTimes(2);
-    expect(decision).toHaveBeenCalledTimes(2);
+    expect(evaluations).toHaveLength(3);
+    expect(core).toHaveBeenCalledTimes(3);
+    expect(decision.decide).toHaveBeenCalledTimes(3);
   });
 });
