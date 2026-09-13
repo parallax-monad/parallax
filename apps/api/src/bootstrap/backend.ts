@@ -15,6 +15,7 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { z } from "zod";
 import { CheckApplicationService } from "../application.js";
+import type { BackendCompositionRuntime } from "../backend/composition.js";
 import { createCheckApp, createQuoteApp } from "../http.js";
 import {
   type AgentFlowPort,
@@ -87,6 +88,7 @@ export class UnavailableQuoteAgentFlow implements QuoteAgentFlowPort {
 
 export type BackendAppDependencies = {
   runtime: BackendRuntime;
+  composition?: BackendCompositionRuntime;
   corsOrigin?: string;
   agentFlow?: AgentFlowPort;
   liveRunner?: KuruLiveRunner;
@@ -114,8 +116,18 @@ export function createBackendApp(
   dependencies: BackendAppDependencies,
 ): BackendApp {
   const ownedStore =
-    dependencies.store === undefined ? new InMemoryRunStore() : undefined;
-  const store = dependencies.store ?? ownedStore;
+    dependencies.store === undefined && dependencies.composition === undefined
+      ? new InMemoryRunStore()
+      : undefined;
+  if (
+    dependencies.store !== undefined &&
+    dependencies.composition !== undefined &&
+    dependencies.store !== dependencies.composition.runStore
+  ) {
+    throw new Error("Backend Store must be the composition RunStore");
+  }
+  const store =
+    dependencies.store ?? dependencies.composition?.runStore ?? ownedStore;
   if (store === undefined) {
     throw new Error("Backend Store was not configured");
   }
@@ -126,6 +138,7 @@ export function createBackendApp(
   const checkService = new CheckApplicationService({
     runtime: dependencies.runtime,
     store,
+    composition: dependencies.composition,
     agentFlow:
       dependencies.agentFlow ??
       createConfiguredAgentFlow(dependencies.runtime, dependencies.liveRunner),
@@ -137,6 +150,7 @@ export function createBackendApp(
   const runQueryService = new RunQueryApplicationService({ store });
   const quoteService = new QuoteApplicationService({
     runtime: dependencies.runtime,
+    composition: dependencies.composition,
     quoteFlow:
       dependencies.quoteFlow ??
       createConfiguredQuoteAgentFlow(
@@ -201,6 +215,7 @@ function createConfiguredQuoteAgentFlow(
 export type BootstrapBackendAppOptions = {
   environment?: unknown;
   tokenRegistry: unknown;
+  composition?: BackendCompositionRuntime;
   corsOrigin?: string;
   agentFlow?: AgentFlowPort;
   liveRunner?: KuruLiveRunner;
@@ -232,10 +247,11 @@ export function bootstrapBackendApp(
   }
 
   const configuredStore =
-    options.store === undefined
+    options.store === undefined && options.composition === undefined
       ? createConfiguredRunStore(environment)
       : undefined;
-  const store = options.store ?? configuredStore;
+  const store =
+    options.store ?? options.composition?.runStore ?? configuredStore;
   if (store === undefined) {
     throw new Error("Backend Store was not configured");
   }
@@ -250,6 +266,7 @@ export function bootstrapBackendApp(
 
   return createBackendApp({
     runtime,
+    composition: options.composition,
     corsOrigin: options.corsOrigin ?? serverEnvironment.CORS_ORIGIN,
     agentFlow: options.agentFlow,
     liveRunner: options.liveRunner,

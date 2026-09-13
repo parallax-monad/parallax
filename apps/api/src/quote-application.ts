@@ -4,7 +4,11 @@ import {
   quoteRequestSchema,
   quoteResultSchema,
 } from "@parallax/contracts";
-import { normalizeQuoteRequest } from "./normalization.js";
+import type { BackendCompositionRuntime } from "./backend/composition.js";
+import {
+  coerceIntentNormalizationResult,
+  normalizeQuoteRequest,
+} from "./normalization.js";
 import {
   isUnsupportedAgentFlowError,
   type QuoteAgentFlowPort,
@@ -31,6 +35,7 @@ export type QuoteApplicationResponse =
 export type QuoteApplicationServiceDependencies = {
   runtime: BackendRuntime;
   quoteFlow: QuoteAgentFlowPort;
+  composition?: BackendCompositionRuntime;
   createRunId?: () => string;
 };
 
@@ -54,10 +59,31 @@ export class QuoteApplicationService {
       });
     }
 
-    const normalized = normalizeQuoteRequest(
-      parsedRequest.data,
-      this.dependencies.runtime.tokenRegistry,
-    );
+    let normalized: ReturnType<typeof normalizeQuoteRequest>;
+    try {
+      const candidate =
+        this.dependencies.composition === undefined
+          ? normalizeQuoteRequest(
+              parsedRequest.data,
+              this.dependencies.runtime.tokenRegistry,
+            )
+          : await this.dependencies.composition.normalize(parsedRequest.data);
+      const normalizationResult = coerceIntentNormalizationResult(candidate);
+      if (normalizationResult === undefined) {
+        return errorResponse(400, {
+          code: "NORMALIZATION_FAILED",
+          message: "The quote request could not be normalized",
+          issues: { code: "INVALID_NORMALIZATION_RESULT" },
+        });
+      }
+      normalized = normalizationResult;
+    } catch {
+      return errorResponse(400, {
+        code: "NORMALIZATION_FAILED",
+        message: "The quote request could not be normalized",
+        issues: { code: "NORMALIZATION_BOUNDARY_ERROR" },
+      });
+    }
     if (!normalized.success) {
       return errorResponse(400, {
         code: "NORMALIZATION_FAILED",

@@ -122,6 +122,36 @@ export function normalizeQuoteRequest(
   );
 }
 
+/** Runtime guard for results crossing the injected composition boundary. */
+export function isIntentNormalizationResult(
+  value: unknown,
+): value is IntentNormalizationResult {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return false;
+  }
+  const candidate = value as {
+    success?: unknown;
+    intent?: unknown;
+    error?: unknown;
+  };
+  if (candidate.success === true) {
+    return normalizedSwapIntentSchema.safeParse(candidate.intent).success;
+  }
+  return (
+    candidate.success === false &&
+    intentNormalizationErrorSchema.safeParse(candidate.error).success
+  );
+}
+
+/** Accepts either the canonical Intent or its legacy result envelope. */
+export function coerceIntentNormalizationResult(
+  value: unknown,
+): IntentNormalizationResult | undefined {
+  if (isIntentNormalizationResult(value)) return value;
+  const parsed = normalizedSwapIntentSchema.safeParse(value);
+  return parsed.success ? { success: true, intent: parsed.data } : undefined;
+}
+
 function conversionFailure(
   field: "amountIn" | "economicBoundary.minimumReceived",
   error: { code: AmountConversionErrorCode; message: string },

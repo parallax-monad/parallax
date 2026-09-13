@@ -5,8 +5,11 @@ import type { ProtocolAdapter } from "./protocol-adapter.js";
 import type { ProtocolRegistry } from "./protocol-registry.js";
 import type {
   ProviderAdapter,
+  ProviderEvaluationInput,
+  ProviderEvaluationResult,
   ProviderSupportQuery,
 } from "./provider-adapter.js";
+import { evaluateProviderAdapter } from "./provider-adapter.js";
 import type {
   ProviderRegistry,
   ProviderSelectionOptions,
@@ -29,13 +32,21 @@ export type NormalizationBoundary<Input = unknown, Output = unknown> =
   | NormalizationFunction<Input, Output>;
 
 /** Provider-agnostic Core dependency. */
-export interface CorePort<Input = unknown, Output = unknown> {
-  evaluate(input: Input): BackendOperationResult<Output>;
+export interface CorePort<
+  Input = unknown,
+  Output = unknown,
+  Context = unknown,
+> {
+  evaluate(input: Input, context?: Context): BackendOperationResult<Output>;
 }
 
 /** Decision dependency kept separate from Core and from provider selection. */
-export interface DecisionPort<Input = unknown, Output = unknown> {
-  decide(input: Input): BackendOperationResult<Output>;
+export interface DecisionPort<
+  Input = unknown,
+  Output = unknown,
+  Context = unknown,
+> {
+  decide(input: Input, context?: Context): BackendOperationResult<Output>;
 }
 
 export type BackendCompositionDependencies<
@@ -51,6 +62,8 @@ export type BackendCompositionDependencies<
     unknown
   >,
   ProviderIntent = unknown,
+  EvaluationContext = unknown,
+  DecisionContext = unknown,
 > = {
   readonly chainRegistry: ChainRegistry<Chain>;
   readonly protocolRegistry: ProtocolRegistry<Protocol>;
@@ -59,20 +72,24 @@ export type BackendCompositionDependencies<
     NormalizationInput,
     NormalizedIntent
   >;
-  readonly core: CorePort<NormalizedIntent, CoreOutput>;
-  readonly decision: DecisionPort<DecisionInput, DecisionOutput>;
+  readonly core: CorePort<NormalizedIntent, CoreOutput, EvaluationContext>;
+  readonly decision: DecisionPort<
+    DecisionInput,
+    DecisionOutput,
+    DecisionContext
+  >;
   readonly runStore: RunStore;
   readonly receiptSigner?: ReceiptSigner;
   readonly receiptAnchorer?: ReceiptAnchorer;
 };
 
 /**
- * Dependency-injected Backend composition.
+ * Dependency-injected Backend composition and runtime.
  *
- * This class is intentionally a runtime container rather than a new pipeline:
- * API routes and business behavior stay unchanged until a later integration
- * work package chooses to consume these ports. Every selected adapter and every
- * domain dependency remains replaceable through the constructor.
+ * This class is the single runtime container consumed by the application
+ * pipeline. Every selected adapter and every domain dependency remains
+ * replaceable through the constructor without importing provider-specific
+ * types into Core.
  */
 export class BackendCompositionRuntime<
   NormalizationInput = unknown,
@@ -87,6 +104,8 @@ export class BackendCompositionRuntime<
     unknown
   >,
   ProviderIntent = unknown,
+  EvaluationContext = unknown,
+  DecisionContext = unknown,
 > {
   public readonly chainRegistry: ChainRegistry<Chain>;
   public readonly protocolRegistry: ProtocolRegistry<Protocol>;
@@ -95,8 +114,16 @@ export class BackendCompositionRuntime<
     NormalizationInput,
     NormalizedIntent
   >;
-  public readonly core: CorePort<NormalizedIntent, CoreOutput>;
-  public readonly decision: DecisionPort<DecisionInput, DecisionOutput>;
+  public readonly core: CorePort<
+    NormalizedIntent,
+    CoreOutput,
+    EvaluationContext
+  >;
+  public readonly decision: DecisionPort<
+    DecisionInput,
+    DecisionOutput,
+    DecisionContext
+  >;
   public readonly runStore: RunStore;
   public readonly receiptSigner: ReceiptSigner | undefined;
   public readonly receiptAnchorer: ReceiptAnchorer | undefined;
@@ -110,7 +137,9 @@ export class BackendCompositionRuntime<
       DecisionOutput,
       Chain,
       Protocol,
-      ProviderIntent
+      ProviderIntent,
+      EvaluationContext,
+      DecisionContext
     >,
   ) {
     assertDependency(dependencies, "composition dependencies");
@@ -187,13 +216,31 @@ export class BackendCompositionRuntime<
   }
 
   /** Delegates normalized input to the injected provider-agnostic Core. */
-  public evaluate(input: NormalizedIntent): BackendOperationResult<CoreOutput> {
-    return this.core.evaluate(input);
+  public evaluate(
+    input: NormalizedIntent,
+    context?: EvaluationContext,
+  ): BackendOperationResult<CoreOutput> {
+    return context === undefined
+      ? this.core.evaluate(input)
+      : this.core.evaluate(input, context);
   }
 
   /** Delegates a decision input to the injected Decision dependency. */
-  public decide(input: DecisionInput): BackendOperationResult<DecisionOutput> {
-    return this.decision.decide(input);
+  public decide(
+    input: DecisionInput,
+    context?: DecisionContext,
+  ): BackendOperationResult<DecisionOutput> {
+    return context === undefined
+      ? this.decision.decide(input)
+      : this.decision.decide(input, context);
+  }
+
+  /** Evaluates a selected Provider through its validated private boundary. */
+  public evaluateProvider<ProviderInput = unknown>(
+    adapter: ProviderAdapter<ProviderIntent, ProviderInput>,
+    input: ProviderEvaluationInput<ProviderIntent, ProviderInput>,
+  ): Promise<ProviderEvaluationResult> {
+    return evaluateProviderAdapter(adapter, input);
   }
 }
 
