@@ -5,6 +5,7 @@ import {
   quoteResultSchema,
 } from "@parallax/contracts";
 import type { BackendCompositionRuntime } from "./backend/composition.js";
+import { isBackendControlError } from "./backend/control-boundary.js";
 import {
   coerceIntentNormalizationResult,
   normalizeQuoteRequest,
@@ -111,10 +112,8 @@ export class QuoteApplicationService {
       });
     } catch (error) {
       return errorResponse(502, {
-        code: isUnsupportedAgentFlowError(error)
-          ? "UNSUPPORTED"
-          : "QUOTE_ERROR",
-        message: isUnsupportedAgentFlowError(error)
+        code: isUnsupportedQuoteError(error) ? "UNSUPPORTED" : "QUOTE_ERROR",
+        message: isUnsupportedQuoteError(error)
           ? "Live Quote is not available in this runtime"
           : "The quote could not be completed",
       });
@@ -137,4 +136,11 @@ function errorResponse(
   error: QuoteApiError,
 ): QuoteApplicationResponse {
   return { status, body: { error } };
+}
+
+function isUnsupportedQuoteError(error: unknown): boolean {
+  return (
+    isUnsupportedAgentFlowError(error) ||
+    (isBackendControlError(error) && error.status === "unsupported")
+  );
 }

@@ -418,6 +418,63 @@ describe("Backend composition application boundary", () => {
     expect(protocol.calls.map((call) => call.operation)).toEqual(["quote"]);
   });
 
+  it("maps an unsupported composition Protocol selection at the public Quote boundary", async () => {
+    const runtime = bootstrapBackendRuntime({ environment, tokenRegistry });
+    const fixture = fakeBackendFixture();
+    const chain = createFakeChainAdapter({ ...fixture.chain, chainId: 143 });
+    const protocol = createFakeProtocolAdapter(fixture.protocol);
+    const store = new InMemoryRunStore();
+    const composition = createBackendComposition({
+      chainRegistry: new ChainRegistry([chain]),
+      protocolRegistry: new ProtocolRegistry(),
+      providerRegistry: new ProviderRegistry(),
+      normalization: {
+        normalize: (request: unknown) => {
+          const result = normalizeQuoteRequest(
+            request as Omit<CheckSwapRequest, "economicBoundary">,
+            runtime.tokenRegistry,
+          );
+          if (!result.success) throw new Error(result.error.message);
+          return result.intent;
+        },
+      },
+      core: { evaluate: async () => "unused" },
+      decision: { decide: async () => "unused" },
+      runStore: store,
+    });
+    const app = createBackendApp({
+      runtime,
+      composition,
+      quoteFlow: createBackendQuoteFlow({
+        runtime: composition,
+        project: () => {
+          throw new Error("must not project an unsupported quote");
+        },
+      }),
+    });
+
+    const response = await app.fetch(
+      new Request("https://api.example.test/api/quote", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          chainId: 143,
+          protocol: "kuru",
+          sender,
+          tokenIn: { kind: "native" },
+          tokenOut: { kind: "erc20", address: usdcAddress },
+          amountIn: "1.5",
+        }),
+      }),
+    );
+
+    expect(response.status).toBe(502);
+    await expect(response.json()).resolves.toMatchObject({
+      error: { code: "UNSUPPORTED" },
+    });
+    expect(protocol.calls).toHaveLength(0);
+  });
+
   it.each([
     "failed",
     "stale",
