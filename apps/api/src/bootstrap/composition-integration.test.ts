@@ -19,7 +19,10 @@ import {
 } from "../backend/pipeline.js";
 import { ProtocolRegistry } from "../backend/protocol-registry.js";
 import { ProviderRegistry } from "../backend/provider-registry.js";
-import { bootstrapBackendApp, createBackendApp } from "../bootstrap/backend.js";
+import {
+  bootstrapBackendApp,
+  createBackendApp,
+} from "../bootstrap/backend.js";
 import {
   normalizeCheckSwapRequest,
   normalizeQuoteRequest,
