@@ -470,7 +470,7 @@ describe("Backend composition application boundary", () => {
           },
         },
         core: { evaluate: core },
-        decision: { decide },
+        decision: { decide: decision },
         runStore: store,
       });
       const pipeline = new BackendPipeline({ runtime: composition });
