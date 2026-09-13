@@ -492,11 +492,12 @@ describe("Backend composition application boundary", () => {
       );
       const body = await response.json();
       const unsupported = status === "unsupported";
-      const expectedRunErrorCode = unsupported
-        ? "UNSUPPORTED"
-        : status === "timeout"
-          ? "TIMEOUT"
-          : "INTERNAL_ERROR";
+      const expectedRunErrorCode =
+        unsupported
+          ? "UNSUPPORTED"
+          : status === "timeout"
+            ? "TIMEOUT"
+            : "INTERNAL_ERROR";
 
       expect(response.status).toBe(502);
       expect(body).toMatchObject({
