@@ -189,8 +189,7 @@ describe("Backend composition application boundary", () => {
     const { adapter: provider, evaluations } = createFakeProviderAdapterHarness(
       {
         ...fixture.provider,
-        supports: (query) =>
-          query.chainId === 143 && query.protocol === "kuru",
+        supports: (query) => query.chainId === 143 && query.protocol === "kuru",
       },
     );
     const store = new InMemoryRunStore();
@@ -494,12 +493,11 @@ describe("Backend composition application boundary", () => {
       );
       const body = await response.json();
       const unsupported = status === "unsupported";
-      const expectedRunErrorCode =
-        unsupported
-          ? "UNSUPPORTED"
-          : status === "timeout"
-            ? "TIMEOUT"
-            : "INTERNAL_ERROR";
+      const expectedRunErrorCode = unsupported
+        ? "UNSUPPORTED"
+        : status === "timeout"
+          ? "TIMEOUT"
+          : "INTERNAL_ERROR";
 
       expect(response.status).toBe(502);
       expect(body).toMatchObject({
@@ -622,27 +620,29 @@ describe("Backend composition application boundary", () => {
     const store = new InMemoryRunStore();
     const core = vi.fn(async (intent: NormalizedSwapIntent) => intent);
     const decision = {
-      decide: vi.fn(async (_intent: NormalizedSwapIntent, context?: unknown) => {
-        const pipelineContext = context as {
-          runId: string;
-          intent: NormalizedSwapIntent;
-        };
-        return economicFailStopResult(
-          {
-            sender: pipelineContext.intent.sender,
-            mon: { kind: "native" },
-            usdc: pipelineContext.intent.tokenOut as {
-              kind: "erc20";
-              address: string;
+      decide: vi.fn(
+        async (_intent: NormalizedSwapIntent, context?: unknown) => {
+          const pipelineContext = context as {
+            runId: string;
+            intent: NormalizedSwapIntent;
+          };
+          return economicFailStopResult(
+            {
+              sender: pipelineContext.intent.sender,
+              mon: { kind: "native" },
+              usdc: pipelineContext.intent.tokenOut as {
+                kind: "erc20";
+                address: string;
+              },
+              simulatorPinnedBlock: "42",
+              runtimeVersion: runtime.config.moss.runtimeVersion,
+              runtimeRevision: runtime.config.moss.runtimeRevision,
             },
-            simulatorPinnedBlock: "42",
-            runtimeVersion: runtime.config.moss.runtimeVersion,
-            runtimeRevision: runtime.config.moss.runtimeRevision,
-          },
-          pipelineContext.runId,
-          pipelineContext.intent,
-        );
-      }),
+            pipelineContext.runId,
+            pipelineContext.intent,
+          );
+        },
+      ),
     };
     const composition = createBackendComposition({
       chainRegistry: new ChainRegistry([chain]),
