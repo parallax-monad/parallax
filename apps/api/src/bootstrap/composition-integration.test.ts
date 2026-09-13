@@ -2,9 +2,7 @@ import type {
   CheckSwapRequest,
   NormalizedSwapIntent,
 } from "@parallax/contracts";
-import {
-  economicFailStopResult,
-} from "@parallax/orchestrator/application/action-gate-fixtures";
+import { economicFailStopResult } from "@parallax/orchestrator/application/action-gate-fixtures";
 import { describe, expect, it, vi } from "vitest";
 import { ChainRegistry } from "../backend/chain-registry.js";
 import { createBackendComposition } from "../backend/composition.js";
@@ -21,10 +19,7 @@ import {
 } from "../backend/pipeline.js";
 import { ProtocolRegistry } from "../backend/protocol-registry.js";
 import { ProviderRegistry } from "../backend/provider-registry.js";
-import {
-  bootstrapBackendApp,
-  createBackendApp,
-} from "../bootstrap/backend.js";
+import { bootstrapBackendApp, createBackendApp } from "../bootstrap/backend.js";
 import {
   normalizeCheckSwapRequest,
   normalizeQuoteRequest,
@@ -194,8 +189,7 @@ describe("Backend composition application boundary", () => {
     const { adapter: provider, evaluations } = createFakeProviderAdapterHarness(
       {
         ...fixture.provider,
-        supports: (query) =>
-          query.chainId === 143 && query.protocol === "kuru",
+        supports: (query) => query.chainId === 143 && query.protocol === "kuru",
       },
     );
     const store = new InMemoryRunStore();
@@ -621,8 +615,7 @@ describe("Backend composition application boundary", () => {
     const { adapter: provider, evaluations } = createFakeProviderAdapterHarness(
       {
         ...fixture.provider,
-        supports: (query) =>
-          query.chainId === 143 && query.protocol === "kuru",
+        supports: (query) => query.chainId === 143 && query.protocol === "kuru",
       },
     );
     const store = new InMemoryRunStore();
