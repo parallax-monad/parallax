@@ -1,5 +1,5 @@
 import { type ServerType, serve as serveNode } from "@hono/node-server";
-import { serializeJson } from "@parallax/contracts";
+import { quoteResultSchema, serializeJson } from "@parallax/contracts";
 import { validateMossRuntimePathSync } from "@parallax/moss-bridge";
 import type {
   KuruLiveQuoteRunner,
@@ -16,6 +16,11 @@ import { cors } from "hono/cors";
 import { z } from "zod";
 import { CheckApplicationService } from "../application.js";
 import type { BackendCompositionRuntime } from "../backend/composition.js";
+import {
+  BackendPipeline,
+  createBackendCheckFlow,
+  createBackendQuoteFlow,
+} from "../backend/pipeline.js";
 import { createCheckApp, createQuoteApp } from "../http.js";
 import {
   type AgentFlowPort,
@@ -134,14 +139,28 @@ export function createBackendApp(
   const disposeStore =
     dependencies.disposeStore ??
     (ownedStore === undefined ? undefined : () => ownedStore.close());
+  const agentFlow =
+    dependencies.agentFlow ??
+    (dependencies.composition === undefined
+      ? createConfiguredAgentFlow(dependencies.runtime, dependencies.liveRunner)
+      : createCompositionBackedCheckFlow(dependencies.composition));
+  const quoteFlow =
+    dependencies.quoteFlow ??
+    (dependencies.composition === undefined
+      ? createConfiguredQuoteAgentFlow(
+          dependencies.runtime,
+          dependencies.quoteRunner,
+        )
+      : createCompositionBackedQuoteFlow(
+          dependencies.composition,
+          dependencies.runtime,
+        ));
   let closePromise: Promise<void> | undefined;
   const checkService = new CheckApplicationService({
     runtime: dependencies.runtime,
     store,
     composition: dependencies.composition,
-    agentFlow:
-      dependencies.agentFlow ??
-      createConfiguredAgentFlow(dependencies.runtime, dependencies.liveRunner),
+    agentFlow,
   });
   const replayService = new ReplayApplicationService({
     repository:
@@ -151,12 +170,7 @@ export function createBackendApp(
   const quoteService = new QuoteApplicationService({
     runtime: dependencies.runtime,
     composition: dependencies.composition,
-    quoteFlow:
-      dependencies.quoteFlow ??
-      createConfiguredQuoteAgentFlow(
-        dependencies.runtime,
-        dependencies.quoteRunner,
-      ),
+    quoteFlow,
   });
 
   const app = new Hono();
@@ -210,6 +224,72 @@ function createConfiguredQuoteAgentFlow(
   }
 
   return new KuruLiveQuoteAgentFlow(quoteRunner);
+}
+
+function createCompositionBackedCheckFlow(
+  composition: BackendCompositionRuntime,
+): AgentFlowPort {
+  const pipeline = new BackendPipeline({ runtime: composition });
+  return createBackendCheckFlow({
+    pipeline,
+    project: (execution) => execution.decisionOutput,
+    capability: "simulate",
+  });
+}
+
+function createCompositionBackedQuoteFlow(
+  composition: BackendCompositionRuntime,
+  runtime: BackendRuntime,
+): QuoteAgentFlowPort {
+  return createBackendQuoteFlow({
+    runtime: composition,
+    project: ({ blockContext, quote }) =>
+      projectCompositionQuote({
+        blockContext,
+        quote,
+        runtime,
+      }),
+  });
+}
+
+function projectCompositionQuote(input: {
+  blockContext: { readonly blockNumber: string };
+  quote: unknown;
+  runtime: BackendRuntime;
+}): unknown {
+  const parsedQuoteResult = quoteResultSchema.safeParse(input.quote);
+  if (parsedQuoteResult.success) return parsedQuoteResult.data;
+
+  if (!isRecord(input.quote)) {
+    return { status: "unavailable", reason: "QUOTE_UNAVAILABLE" };
+  }
+
+  const estimatedAmountOut =
+    input.quote.estimatedAmountOut ?? input.quote.amountOut;
+  if (typeof estimatedAmountOut !== "string") {
+    return { status: "unavailable", reason: "QUOTE_UNAVAILABLE" };
+  }
+
+  const minimumAmountOut = input.quote.minimumAmountOut;
+  if (minimumAmountOut !== undefined && typeof minimumAmountOut !== "string") {
+    return { status: "unavailable", reason: "QUOTE_UNAVAILABLE" };
+  }
+
+  return {
+    status: "available",
+    quote: {
+      estimatedAmountOut,
+      ...(minimumAmountOut === undefined ? {} : { minimumAmountOut }),
+      source: "quote",
+      blockNumber: input.blockContext.blockNumber,
+      runtimeVersion: input.runtime.config.moss.runtimeVersion,
+      runtimeRevision: input.runtime.config.moss.runtimeRevision,
+    },
+  };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
 }
 
 export type BootstrapBackendAppOptions = {

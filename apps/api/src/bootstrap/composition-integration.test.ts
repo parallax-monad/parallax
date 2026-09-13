@@ -237,22 +237,10 @@ describe("Backend composition application boundary", () => {
       },
       runStore: store,
     });
-    const pipeline = new BackendPipeline({
-      runtime: composition,
-      buildProviderInput: (prepared) => ({
-        quote: prepared.quote,
-        unsignedTransaction: prepared.unsignedTransaction,
-        blockContext: prepared.blockContext,
-      }),
-    });
-    const app = createBackendApp({
-      runtime,
+    const app = bootstrapBackendApp({
+      environment,
+      tokenRegistry,
       composition,
-      agentFlow: createBackendCheckFlow({
-        pipeline,
-        project: (execution) => execution.decisionOutput,
-        capability: "simulate",
-      }),
     });
 
     const response = await app.fetch(
@@ -289,24 +277,24 @@ describe("Backend composition application boundary", () => {
     expect(evaluations).toHaveLength(2);
     expect(evaluations).toEqual([
       expect.objectContaining({
-        input: {
+        input: expect.objectContaining({
           quote: fixture.protocol.quote,
           unsignedTransaction: {
             kind: "unsigned",
             payload: fixture.protocol.transaction,
           },
           blockContext: expect.objectContaining({ blockNumber: "42" }),
-        },
+        }),
       }),
       expect.objectContaining({
-        input: {
+        input: expect.objectContaining({
           quote: fixture.protocol.quote,
           unsignedTransaction: {
             kind: "unsigned",
             payload: fixture.protocol.transaction,
           },
           blockContext: expect.objectContaining({ blockNumber: "42" }),
-        },
+        }),
       }),
     ]);
   });
@@ -402,22 +390,10 @@ describe("Backend composition application boundary", () => {
       decision: { decide: async () => "unused" },
       runStore: store,
     });
-    const app = createBackendApp({
-      runtime,
+    const app = bootstrapBackendApp({
+      environment,
+      tokenRegistry,
       composition,
-      quoteFlow: createBackendQuoteFlow({
-        runtime: composition,
-        project: ({ blockContext, quote }) => ({
-          status: "available",
-          quote: {
-            estimatedAmountOut: (quote as { amountOut: string }).amountOut,
-            source: "quote",
-            blockNumber: blockContext.blockNumber,
-            runtimeVersion: runtime.config.moss.runtimeVersion,
-            runtimeRevision: runtime.config.moss.runtimeRevision,
-          },
-        }),
-      }),
     });
 
     const response = await app.fetch(
