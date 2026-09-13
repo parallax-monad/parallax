@@ -9,7 +9,13 @@ import { WalletHome } from "@/components/wallet/WalletHome";
 import { CloseIcon } from "@/components/wallet/WalletIcons";
 import { WalletResult } from "@/components/wallet/WalletResult";
 import { WalletSwap } from "@/components/wallet/WalletSwap";
-import { arbitrumSampleSuccess } from "@/lib/analyze/arbitrum-sample-data";
+import {
+  arbitrumSampleAdjust,
+  arbitrumSampleIntegrationError,
+  arbitrumSampleProceed,
+  arbitrumSampleStop,
+  arbitrumSampleUnknown,
+} from "@/lib/analyze/arbitrum-samples";
 import { flaggedFields } from "@/lib/analyze/fields";
 import {
   applyRemediationOption,
@@ -274,14 +280,25 @@ export function WalletApp({ language }: { language: Language }) {
     });
   };
 
-  const loadArbitrumSample = () => {
+  const loadArbitrumSample = (
+    verdict: "ADJUST" | "PROCEED" | "STOP" | "UNKNOWN" | "ERROR",
+  ) => {
+    const sampleMap = {
+      ADJUST: arbitrumSampleAdjust,
+      PROCEED: arbitrumSampleProceed,
+      STOP: arbitrumSampleStop,
+      UNKNOWN: arbitrumSampleUnknown,
+      ERROR: arbitrumSampleIntegrationError,
+    };
+    const sample = sampleMap[verdict];
+    
     recoveryCancelledRef.current = true;
     schedulerRef.current.cancel();
     const sampleForm: FormState = {
       ...INITIAL_FORM,
-      tokenIn: arbitrumSampleSuccess.intent.tokenIn,
-      tokenOut: arbitrumSampleSuccess.intent.tokenOut,
-      amountIn: arbitrumSampleSuccess.intent.amountIn,
+      tokenIn: sample.intent.tokenIn,
+      tokenOut: sample.intent.tokenOut,
+      amountIn: sample.intent.amountIn,
     };
     setFormErrors({});
     setStoredRunId(undefined);
@@ -289,7 +306,7 @@ export function WalletApp({ language }: { language: Language }) {
     setCheckingMode("live");
     setForm(sampleForm);
     setSubmittedForm(sampleForm);
-    setResult(arbitrumSampleSuccess);
+    setResult(sample);
     setScreen("result");
   };
 

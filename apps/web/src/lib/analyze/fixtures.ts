@@ -22,11 +22,12 @@ export type ProtocolOption = { value: Protocol; label: string };
 
 export const SUPPORTED_PROTOCOLS: readonly ProtocolOption[] = [
   { value: "kuru", label: "Kuru" },
+  { value: "camelot", label: "Camelot V3" },
 ];
 
-export const SUPPORTED_TOKENS_IN: readonly string[] = ["MON"];
+export const SUPPORTED_TOKENS_IN: readonly string[] = ["MON", "USDC"];
 
-export const SUPPORTED_TOKENS_OUT: readonly string[] = ["USDC"];
+export const SUPPORTED_TOKENS_OUT: readonly string[] = ["USDC", "ETH"];
 
 export type ExecutionStatus = "SUCCESS" | "NO_ROUTE" | "REVERTED" | "UNKNOWN";
 

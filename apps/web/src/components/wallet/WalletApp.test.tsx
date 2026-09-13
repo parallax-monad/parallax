@@ -200,7 +200,7 @@ describe("WalletApp persisted Run recovery", () => {
     });
 
     const sampleButton = Array.from(container.querySelectorAll("button")).find(
-      (button) => button.textContent?.includes("Load Arbitrum Sample"),
+      (button) => button.textContent?.includes("Load Sample: ADJUST"),
     );
     expect(sampleButton).toBeDefined();
 
@@ -225,7 +225,7 @@ describe("WalletApp persisted Run recovery", () => {
     });
 
     const sampleButton = Array.from(container.querySelectorAll("button")).find(
-      (button) => button.textContent?.includes("Load Arbitrum Sample"),
+      (button) => button.textContent?.includes("Load Sample: ADJUST"),
     );
     expect(sampleButton).toBeDefined();
 

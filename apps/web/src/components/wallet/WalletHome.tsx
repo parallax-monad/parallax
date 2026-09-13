@@ -16,7 +16,7 @@ export function WalletHome({
 }: {
   language: Language;
   onSwap: () => void;
-  onLoadArbitrumSample?: () => void;
+  onLoadArbitrumSample?: (verdict: "ADJUST" | "PROCEED" | "STOP" | "UNKNOWN" | "ERROR") => void;
 }) {
   return (
     <div className="flex flex-col gap-5 px-5 pb-6 pt-2">
@@ -45,16 +45,58 @@ export function WalletHome({
       </button>
 
       {onLoadArbitrumSample && (
-        <button
-          type="button"
-          className="btn btn-monad-outline flex w-full items-center justify-center gap-2 py-3"
-          onClick={onLoadArbitrumSample}
-        >
-          {say(language, {
-            en: "Load Arbitrum Sample (NEW)",
-            zh: "加载 Arbitrum 示例数据（新）",
-          })}
-        </button>
+        <>
+          <button
+            type="button"
+            className="btn btn-monad-outline w-full"
+            onClick={() => onLoadArbitrumSample("ADJUST")}
+          >
+            {say(language, {
+              en: "Load Sample: ADJUST",
+              zh: "样本：调整",
+            })}
+          </button>
+          <button
+            type="button"
+            className="btn btn-monad-outline w-full"
+            onClick={() => onLoadArbitrumSample("PROCEED")}
+          >
+            {say(language, {
+              en: "Load Sample: PROCEED",
+              zh: "样本：继续",
+            })}
+          </button>
+          <button
+            type="button"
+            className="btn btn-monad-outline w-full"
+            onClick={() => onLoadArbitrumSample("STOP")}
+          >
+            {say(language, {
+              en: "Load Sample: STOP",
+              zh: "样本：停止",
+            })}
+          </button>
+          <button
+            type="button"
+            className="btn btn-monad-outline w-full"
+            onClick={() => onLoadArbitrumSample("UNKNOWN")}
+          >
+            {say(language, {
+              en: "Load Sample: UNKNOWN",
+              zh: "样本：未知",
+            })}
+          </button>
+          <button
+            type="button"
+            className="btn btn-monad-outline w-full"
+            onClick={() => onLoadArbitrumSample("ERROR")}
+          >
+            {say(language, {
+              en: "Load Sample: ERROR",
+              zh: "样本：错误",
+            })}
+          </button>
+        </>
       )}
 
       <section
