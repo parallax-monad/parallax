@@ -69,11 +69,26 @@ export class ChainRegistry<Adapter extends ChainAdapter = ChainAdapter> {
 }
 
 function readChainId(adapter: ChainAdapter): number {
-  if (typeof adapter !== "object" || adapter === null) {
-    throw new TypeError("chain adapter must be an object");
-  }
+  assertChainAdapter(adapter);
   assertChainId(adapter.chainId);
   return adapter.chainId;
+}
+
+function assertChainAdapter(value: unknown): asserts value is ChainAdapter {
+  if (typeof value !== "object" || value === null) {
+    throw new TypeError("chain adapter must be an object");
+  }
+
+  for (const operation of [
+    "connect",
+    "getBlockContext",
+    "estimateGas",
+    "getFinality",
+  ] as const) {
+    if (typeof (value as Record<string, unknown>)[operation] !== "function") {
+      throw new TypeError(`chain adapter ${operation} must be a function`);
+    }
+  }
 }
 
 function assertChainId(value: unknown): asserts value is number {

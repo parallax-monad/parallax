@@ -71,7 +71,7 @@ async function inspectChain(
 describe("ChainAdapter port", () => {
   it("accepts an injected fake for the generic chain lifecycle", async () => {
     const adapter = new FakeChainAdapter();
-    const signal = AbortSignal.abort("caller-cancelled");
+    const signal = new AbortController().signal;
 
     await expect(
       inspectChain(adapter, { signal, timeoutMs: 2_000 }),
