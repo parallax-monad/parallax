@@ -1,0 +1,137 @@
+{
+  "schemaVersion": "be-011-native-rpc-observations-v1",
+  "real": true,
+  "scope": "native-rpc-provider-surface-qualification",
+  "protocol": null,
+  "intent": null,
+  "observations": {
+    "endpointClientIdentity": {
+      "classification": "OBSERVED_RUNTIME_METADATA",
+      "method": "web3_clientVersion",
+      "value": "nitro/v3.11.4-rc.3-7d5ac27/linux-amd64/go1.25.14",
+      "note": "Endpoint metadata only; not a NativeRpcProvider version."
+    },
+    "chainIdentity": {
+      "state": "VERIFIED_RUNTIME",
+      "method": "eth_chainId",
+      "chainId": 421614,
+      "rawHex": "0x66eee",
+      "expectedChainId": 421614,
+      "expectedHex": "0x66eee"
+    },
+    "blockNumber": {
+      "state": "VERIFIED_RUNTIME",
+      "method": "eth_blockNumber",
+      "blockNumber": "306783026",
+      "rawHex": "0x12492332"
+    },
+    "blockContext": {
+      "state": "VERIFIED_RUNTIME",
+      "method": "eth_getBlockByNumber",
+      "blockNumber": "306783026",
+      "blockHash": "0xf186086f93dd6472f084b063dcd9476ebc3905efa0047840ab2a00d1bee86164",
+      "timestamp": "1788885063",
+      "timestampIso": "2026-09-08T16:31:03.000Z",
+      "fullTransactionsRequested": false
+    },
+    "contractCode": {
+      "state": "VERIFIED_RUNTIME",
+      "method": "eth_getCode",
+      "target": "0x980B62Da83eFf3D4576C647993b0c1D7faf17c73",
+      "blockNumber": "306783026",
+      "nonEmpty": true,
+      "byteLength": 2147
+    },
+    "ethCallDecimals": {
+      "state": "VERIFIED_RUNTIME",
+      "method": "eth_call",
+      "selector": "0x313ce567",
+      "target": "0x980B62Da83eFf3D4576C647993b0c1D7faf17c73",
+      "blockNumber": "306783026",
+      "rawResult": "0x0000000000000000000000000000000000000000000000000000000000000012",
+      "normalizedDecimals": 18
+    },
+    "ethCallBalanceOf": {
+      "state": "VERIFIED_RUNTIME",
+      "method": "eth_call",
+      "selector": "0x70a08231",
+      "target": "0x980B62Da83eFf3D4576C647993b0c1D7faf17c73",
+      "probeSender": "0x0000000000000000000000000000000000000001",
+      "blockNumber": "306783026",
+      "rawResult": "0x0000000000000000000000000000000000000000000000000000000000000000",
+      "normalizedBalance": "0",
+      "zeroBalanceConfirmed": true
+    },
+    "ethCallControlledRevert": {
+      "state": "VERIFIED_RUNTIME",
+      "method": "eth_call",
+      "target": "0x980B62Da83eFf3D4576C647993b0c1D7faf17c73",
+      "blockNumber": "306783026",
+      "from": "0x0000000000000000000000000000000000000001",
+      "recipient": "0x0000000000000000000000000000000000000002",
+      "amount": "1",
+      "zeroBalancePreconditionConfirmed": true,
+      "outcome": "JSON_RPC_ERROR_ENVELOPE_OBSERVED",
+      "error": {
+        "code": 3,
+        "message": "execution reverted: ERC20: transfer amount exceeds balance",
+        "data": "0x08c379a00000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000002645524332303a207472616e7366657220616d6f756e7420657863656564732062616c616e63650000000000000000000000000000000000000000000000000000"
+      },
+      "normalizedRevertReason": null,
+      "note": "No revert reason is inferred beyond the observed message/data."
+    },
+    "ethEstimateGas": {
+      "state": "VERIFIED_RUNTIME",
+      "method": "eth_estimateGas",
+      "target": "0x980B62Da83eFf3D4576C647993b0c1D7faf17c73",
+      "selector": "0x313ce567",
+      "provenance": "PINNED_BLOCK",
+      "blockNumber": "306783026",
+      "rawResult": "0x7985",
+      "normalizedGasEstimate": "31109",
+      "note": "Gas estimate only; no transaction was sent."
+    },
+    "unsupported_capability_observation": {
+      "state": "VERIFIED_RUNTIME",
+      "method": "parallax_be011_nonexistentMethod",
+      "outcome": "JSON_RPC_ERROR_ENVELOPE_OBSERVED",
+      "error": {
+        "code": -32601,
+        "message": "the method parallax_be011_nonexistentMethod does not exist/is not available",
+        "data": null
+      },
+      "semanticBoundary": "Observation only; not mapped to final Provider Contract semantics."
+    },
+    "capabilitySummary": {
+      "promotedToVerifiedRuntime": [
+        "arbitrumSepoliaChainIdentity",
+        "blockNumber",
+        "blockContext",
+        "contractCodeRead",
+        "ethCallRead",
+        "ethCallRevertErrorEnvelope",
+        "ethEstimateGas"
+      ],
+      "explicitlyNotPromoted": [
+        "completeTransactionSimulation",
+        "hypotheticalReceipt",
+        "hypotheticalLogs",
+        "stateDiff",
+        "completeAssetChanges",
+        "completeBalanceChanges",
+        "camelotV3Evaluation",
+        "preparedExecutionSupport",
+        "nativeRpcProviderImplementation",
+        "finalFreshnessPolicy",
+        "tenderlyCapability"
+      ]
+    }
+  },
+  "unavailableEvidence": {
+    "providerOutage": "NOT_OBSERVED",
+    "naturalNetworkTimeout": "NOT_OBSERVED",
+    "rateLimit": "UNKNOWN_NOT_INTENTIONALLY_PROVOKED",
+    "staleResponse": "NOT_OBSERVED_NO_POLICY_THRESHOLD_DEFINED"
+  },
+  "nonAuthorityNotice": "Observed facts only; no final Evidence Contract, Provider status mapping, Camelot support, or PreparedExecution semantic is inferred."
+}
