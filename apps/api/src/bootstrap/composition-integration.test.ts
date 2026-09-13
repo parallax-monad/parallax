@@ -192,7 +192,8 @@ describe("Backend composition application boundary", () => {
     const { adapter: provider, evaluations } = createFakeProviderAdapterHarness(
       {
         ...fixture.provider,
-        supports: (query) => query.chainId === 143 && query.protocol === "kuru",
+        supports: (query) =>
+          query.chainId === 143 && query.protocol === "kuru",
       },
     );
     const store = new InMemoryRunStore();
@@ -438,7 +439,8 @@ describe("Backend composition application boundary", () => {
       const { adapter: provider, evaluations } =
         createFakeProviderAdapterHarness({
           ...fixture.provider,
-          supports: (query) => query.chainId === 143 && query.protocol === "kuru",
+          supports: (query) =>
+            query.chainId === 143 && query.protocol === "kuru",
           result: {
             provider: {
               providerId: fixture.provider.providerId,
@@ -617,7 +619,8 @@ describe("Backend composition application boundary", () => {
     const { adapter: provider, evaluations } = createFakeProviderAdapterHarness(
       {
         ...fixture.provider,
-        supports: (query) => query.chainId === 143 && query.protocol === "kuru",
+        supports: (query) =>
+          query.chainId === 143 && query.protocol === "kuru",
       },
     );
     const store = new InMemoryRunStore();
