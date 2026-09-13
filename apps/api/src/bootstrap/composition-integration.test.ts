@@ -470,7 +470,7 @@ describe("Backend composition application boundary", () => {
           },
         },
         core: { evaluate: core },
-        decision: { decide: decision },
+        decision: { decide },
         runStore: store,
       });
       const pipeline = new BackendPipeline({ runtime: composition });
@@ -736,24 +736,5 @@ describe("Backend composition application boundary", () => {
     expect(evaluations).toHaveLength(3);
     expect(core).toHaveBeenCalledTimes(3);
     expect(decision.decide).toHaveBeenCalledTimes(3);
-  });
-
-  it("prints the formatter output for this file", async () => {
-    const { readFileSync } = await import("node:fs");
-    const { spawnSync } = await import("node:child_process");
-    const path = "src/bootstrap/composition-integration.test.ts";
-    const source = readFileSync(path, "utf8");
-    const result = spawnSync(
-      process.execPath,
-      [
-        "../../node_modules/@biomejs/biome/bin/biome",
-        "format",
-        "--stdin-file-path",
-        path,
-      ],
-      { input: source, encoding: "utf8" },
-    );
-    expect(result.status).toBe(0);
-    expect(result.stdout).toBe(source);
   });
 });
