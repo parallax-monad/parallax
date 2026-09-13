@@ -2,7 +2,9 @@ import type {
   CheckSwapRequest,
   NormalizedSwapIntent,
 } from "@parallax/contracts";
-import { economicFailStopResult } from "@parallax/orchestrator/application/action-gate-fixtures";
+import {
+  economicFailStopResult,
+} from "@parallax/orchestrator/application/action-gate-fixtures";
 import { describe, expect, it, vi } from "vitest";
 import { ChainRegistry } from "../backend/chain-registry.js";
 import { createBackendComposition } from "../backend/composition.js";
