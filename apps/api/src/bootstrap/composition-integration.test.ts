@@ -494,7 +494,11 @@ describe("Backend composition application boundary", () => {
       const body = await response.json();
       const unsupported = status === "unsupported";
       const expectedRunErrorCode =
-        unsupported ? "UNSUPPORTED" : status === "timeout" ? "TIMEOUT" : "INTERNAL_ERROR";
+        unsupported
+          ? "UNSUPPORTED"
+          : status === "timeout"
+            ? "TIMEOUT"
+            : "INTERNAL_ERROR";
 
       expect(response.status).toBe(502);
       expect(body).toMatchObject({
@@ -565,13 +569,15 @@ describe("Backend composition application boundary", () => {
       status: "completed",
     });
     expect(
-      (replayBody as {
-        evidence: Array<{
-          fixtureId: string;
-          isReplay: boolean;
-          isMock: boolean;
-        }>;
-      }).evidence.every(
+      (
+        replayBody as {
+          evidence: Array<{
+            fixtureId: string;
+            isReplay: boolean;
+            isMock: boolean;
+          }>;
+        }
+      ).evidence.every(
         (item) =>
           item.fixtureId === "mon-to-usdc" &&
           item.isReplay === true &&
@@ -614,41 +620,39 @@ describe("Backend composition application boundary", () => {
     );
     const store = new InMemoryRunStore();
     const core = vi.fn(async (intent: NormalizedSwapIntent) => intent);
-    const decision = vi.fn(
-      async (_input: unknown, context?: unknown) => {
-        const pipelineContext = context as {
-          runId: string;
-          intent: NormalizedSwapIntent;
-        };
-        return {
-          runId: pipelineContext.runId,
-          replayMode: false,
-          intent: pipelineContext.intent,
-          status: "integration_error" as const,
-          systemStatus: "INTEGRATION_ERROR" as const,
-          verdict: "UNKNOWN" as const,
-          summary: "The composition fixture completed with an integration error",
-          error: {
-            code: "INTERNAL_ERROR" as const,
-            stage: "unknown" as const,
-            message: "The composition fixture failed closed",
-            retryable: false,
+    const decision = vi.fn(async (_input: unknown, context?: unknown) => {
+      const pipelineContext = context as {
+        runId: string;
+        intent: NormalizedSwapIntent;
+      };
+      return {
+        runId: pipelineContext.runId,
+        replayMode: false,
+        intent: pipelineContext.intent,
+        status: "integration_error" as const,
+        systemStatus: "INTEGRATION_ERROR" as const,
+        verdict: "UNKNOWN" as const,
+        summary: "The composition fixture completed with an integration error",
+        error: {
+          code: "INTERNAL_ERROR" as const,
+          stage: "unknown" as const,
+          message: "The composition fixture failed closed",
+          retryable: false,
+        },
+        ruleResults: [],
+        recommendedActions: [],
+        irrelevantActions: [],
+        evidence: [],
+        scope: [
+          {
+            key: "P0-CHECK-SIMULATION-001",
+            label: "Moss simulation",
+            status: "unknown" as const,
+            reason: "REQUIRED_CHECK_INTERRUPTED" as const,
           },
-          ruleResults: [],
-          recommendedActions: [],
-          irrelevantActions: [],
-          evidence: [],
-          scope: [
-            {
-              key: "P0-CHECK-SIMULATION-001",
-              label: "Moss simulation",
-              status: "unknown" as const,
-              reason: "REQUIRED_CHECK_INTERRUPTED" as const,
-            },
-          ],
-        };
-      },
-    );
+        ],
+      };
+    });
     const composition = createBackendComposition({
       chainRegistry: new ChainRegistry([chain]),
       protocolRegistry: new ProtocolRegistry([
@@ -666,7 +670,7 @@ describe("Backend composition application boundary", () => {
         },
       },
       core: { evaluate: core },
-      decision,
+      decision: { decide: decision },
       runStore: store,
     });
     const pipeline = new BackendPipeline({ runtime: composition });
