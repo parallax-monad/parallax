@@ -44,13 +44,33 @@ export type BackendPipelineContext<
   readonly providerResult: ProviderEvaluationResult;
 };
 
-export type BackendPipelineInput<RawInput, ProviderInput> = {
+/**
+ * Exact execution material prepared by Backend for Provider evaluation.
+ *
+ * Provider-specific input builders receive this only after Chain and Protocol
+ * have produced this execution's block context, quote, unsigned transaction,
+ * gas estimate, and finality. They may translate it to a private Provider
+ * shape, but the pipeline does not pass an independently supplied Provider
+ * payload into this boundary.
+ */
+export type BackendPipelinePreparedExecution<NormalizedIntent> = {
+  readonly runId: string;
+  readonly intent: NormalizedIntent;
+  readonly chainId: number;
+  readonly protocol: string;
+  readonly blockContext: BlockContext;
+  readonly quote: unknown;
+  readonly unsignedTransaction: UnsignedTransaction<unknown>;
+  readonly gasEstimate: GasEstimate;
+  readonly finality: FinalityStatus;
+};
+
+export type BackendPipelineInput<RawInput> = {
   readonly rawInput: RawInput;
   readonly runId: string;
   readonly chainId: number;
   readonly protocol: string;
   readonly capability?: string;
-  readonly providerInput: ProviderInput;
 };
 
 export type BackendPipelineExecution<
@@ -85,6 +105,7 @@ export type BackendPipelineDependencies<
   Chain extends ChainAdapter,
   Protocol extends ProtocolAdapter<never, unknown, unknown>,
   ProviderIntent,
+  ProviderInput = BackendPipelinePreparedExecution<NormalizedIntent>,
 > = {
   readonly runtime: BackendCompositionRuntime<
     RawInput,
@@ -100,6 +121,9 @@ export type BackendPipelineDependencies<
     readonly coreOutput: CoreOutput;
     readonly context: BackendPipelineContext<NormalizedIntent, Chain, Protocol>;
   }) => DecisionInput;
+  readonly buildProviderInput?: (
+    input: BackendPipelinePreparedExecution<NormalizedIntent>,
+  ) => BackendOperationResult<ProviderInput>;
 };
 
 /**
@@ -123,6 +147,7 @@ export class BackendPipeline<
     unknown
   >,
   ProviderIntent = NormalizedIntent,
+  ProviderInput = BackendPipelinePreparedExecution<NormalizedIntent>,
 > {
   private readonly buildDecisionInput: NonNullable<
     BackendPipelineDependencies<
@@ -133,8 +158,22 @@ export class BackendPipeline<
       DecisionOutput,
       Chain,
       Protocol,
-      ProviderIntent
+      ProviderIntent,
+      ProviderInput
     >["buildDecisionInput"]
+  >;
+  private readonly buildProviderInput: NonNullable<
+    BackendPipelineDependencies<
+      RawInput,
+      NormalizedIntent,
+      CoreOutput,
+      DecisionInput,
+      DecisionOutput,
+      Chain,
+      Protocol,
+      ProviderIntent,
+      ProviderInput
+    >["buildProviderInput"]
   >;
 
   public constructor(
@@ -146,16 +185,20 @@ export class BackendPipeline<
       DecisionOutput,
       Chain,
       Protocol,
-      ProviderIntent
+      ProviderIntent,
+      ProviderInput
     >,
   ) {
     this.buildDecisionInput =
       dependencies.buildDecisionInput ??
       ((input) => input.coreOutput as unknown as DecisionInput);
+    this.buildProviderInput =
+      dependencies.buildProviderInput ??
+      ((prepared) => prepared as unknown as ProviderInput);
   }
 
   public async execute(
-    input: BackendPipelineInput<RawInput, unknown>,
+    input: BackendPipelineInput<RawInput>,
   ): Promise<
     BackendPipelineExecution<
       NormalizedIntent,
@@ -176,7 +219,7 @@ export class BackendPipeline<
   /** Executes adapter seams after the application has normalized the request. */
   public async executeNormalized(
     normalized: NormalizedIntent,
-    input: BackendPipelineInput<RawInput, unknown>,
+    input: BackendPipelineInput<RawInput>,
   ): Promise<
     BackendPipelineExecution<
       NormalizedIntent,
@@ -211,12 +254,28 @@ export class BackendPipeline<
     );
     const gasEstimate = await chain.estimateGas(unsignedTransaction.payload);
     const finality = await chain.getFinality(blockContext);
-    const providerInput: ProviderEvaluationInput<ProviderIntent, unknown> = {
+    const preparedExecution: BackendPipelinePreparedExecution<NormalizedIntent> =
+      {
+        runId: input.runId,
+        intent: normalized,
+        chainId: input.chainId,
+        protocol: input.protocol,
+        blockContext,
+        quote,
+        unsignedTransaction:
+          unsignedTransaction as UnsignedTransaction<unknown>,
+        gasEstimate,
+        finality,
+      };
+    const providerInput: ProviderEvaluationInput<
+      ProviderIntent,
+      ProviderInput
+    > = {
       runId: input.runId,
       intent: normalized as unknown as ProviderIntent,
       chainId: input.chainId,
       protocol: input.protocol,
-      input: input.providerInput,
+      input: await this.buildProviderInput(preparedExecution),
     };
     const providerResult = await this.dependencies.runtime.evaluateProvider(
       provider,
@@ -273,7 +332,7 @@ export function createBackendCheckFlow<
   Chain extends ChainAdapter,
   Protocol extends ProtocolAdapter<never, unknown, unknown>,
   ProviderIntent,
-  ProviderInput = unknown,
+  ProviderInput = BackendPipelinePreparedExecution<NormalizedIntent>,
 >(options: {
   readonly pipeline: BackendPipeline<
     AgentFlowCheckInput,
@@ -283,7 +342,8 @@ export function createBackendCheckFlow<
     DecisionOutput,
     Chain,
     Protocol,
-    ProviderIntent
+    ProviderIntent,
+    ProviderInput
   >;
   readonly project: (
     execution: BackendPipelineExecution<
@@ -293,11 +353,10 @@ export function createBackendCheckFlow<
       Chain,
       Protocol,
       ProviderIntent,
-      unknown
+      ProviderInput
     >,
   ) => unknown;
   readonly capability?: string;
-  readonly providerInput?: (input: AgentFlowCheckInput) => ProviderInput;
 }): AgentFlowPort {
   return {
     async check(input) {
@@ -309,7 +368,6 @@ export function createBackendCheckFlow<
           chainId: input.intent.chainId,
           protocol: input.intent.protocol,
           capability: options.capability,
-          providerInput: options.providerInput?.(input) ?? input,
         },
       );
       return options.project(execution);

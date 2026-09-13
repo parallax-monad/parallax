@@ -237,7 +237,14 @@ describe("Backend composition application boundary", () => {
       },
       runStore: store,
     });
-    const pipeline = new BackendPipeline({ runtime: composition });
+    const pipeline = new BackendPipeline({
+      runtime: composition,
+      buildProviderInput: (prepared) => ({
+        quote: prepared.quote,
+        unsignedTransaction: prepared.unsignedTransaction,
+        blockContext: prepared.blockContext,
+      }),
+    });
     const app = createBackendApp({
       runtime,
       composition,
@@ -280,6 +287,28 @@ describe("Backend composition application boundary", () => {
       "buildTransaction",
     ]);
     expect(evaluations).toHaveLength(2);
+    expect(evaluations).toEqual([
+      expect.objectContaining({
+        input: {
+          quote: fixture.protocol.quote,
+          unsignedTransaction: {
+            kind: "unsigned",
+            payload: fixture.protocol.transaction,
+          },
+          blockContext: expect.objectContaining({ blockNumber: "42" }),
+        },
+      }),
+      expect.objectContaining({
+        input: {
+          quote: fixture.protocol.quote,
+          unsignedTransaction: {
+            kind: "unsigned",
+            payload: fixture.protocol.transaction,
+          },
+          blockContext: expect.objectContaining({ blockNumber: "42" }),
+        },
+      }),
+    ]);
   });
 
   it("maps an unsupported injected Provider to a fail-closed Run", async () => {

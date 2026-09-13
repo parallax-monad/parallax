@@ -81,7 +81,6 @@ describe("BackendPipeline", () => {
       runId: "pipeline-run",
       chainId: fixture.chain.chainId,
       protocol: fixture.protocol.id,
-      providerInput: { prepared: "fixture" },
     });
 
     expect(result.decisionOutput).toMatchObject({
@@ -116,6 +115,80 @@ describe("BackendPipeline", () => {
     );
   });
 
+  it("binds Provider evaluation input to the exact Protocol preparation", async () => {
+    const fixture = fakeBackendFixture();
+    const chain = createFakeChainAdapter(fixture.chain);
+    const protocol = createFakeProtocolAdapter(fixture.protocol);
+    const { adapter: provider, evaluations } = createFakeProviderAdapterHarness(
+      {
+        ...fixture.provider,
+        supports: (query) =>
+          query.chainId === fixture.chain.chainId &&
+          query.protocol === fixture.protocol.id,
+      },
+    );
+    const runtime = createBackendComposition({
+      chainRegistry: new ChainRegistry([chain]),
+      protocolRegistry: new ProtocolRegistry([
+        {
+          chainId: fixture.chain.chainId,
+          protocol: fixture.protocol.id,
+          adapter: protocol,
+        },
+      ]),
+      providerRegistry: new ProviderRegistry([provider]),
+      normalization: { normalize: () => normalizedIntent },
+      core: { evaluate: async () => "core" },
+      decision: { decide: async () => "decision" },
+      runStore: new InMemoryRunStore(),
+    });
+    const buildProviderInput = vi.fn((prepared) => ({
+      runId: prepared.runId,
+      chainId: prepared.chainId,
+      protocol: prepared.protocol,
+      quote: prepared.quote,
+      unsignedTransaction: prepared.unsignedTransaction,
+      blockContext: prepared.blockContext,
+    }));
+    const pipeline = new BackendPipeline({ runtime, buildProviderInput });
+
+    await pipeline.execute({
+      rawInput: {},
+      runId: "prepared-execution-run",
+      chainId: fixture.chain.chainId,
+      protocol: fixture.protocol.id,
+    });
+
+    expect(buildProviderInput).toHaveBeenCalledWith(
+      expect.objectContaining({
+        runId: "prepared-execution-run",
+        chainId: fixture.chain.chainId,
+        protocol: fixture.protocol.id,
+        quote: fixture.protocol.quote,
+        unsignedTransaction: {
+          kind: "unsigned",
+          payload: fixture.protocol.transaction,
+        },
+        blockContext: expect.objectContaining({
+          blockNumber: fixture.chain.blockNumber,
+        }),
+      }),
+    );
+    expect(evaluations[0]?.input).toEqual({
+      runId: "prepared-execution-run",
+      chainId: fixture.chain.chainId,
+      protocol: fixture.protocol.id,
+      quote: fixture.protocol.quote,
+      unsignedTransaction: {
+        kind: "unsigned",
+        payload: fixture.protocol.transaction,
+      },
+      blockContext: expect.objectContaining({
+        blockNumber: fixture.chain.blockNumber,
+      }),
+    });
+  });
+
   it("does not invoke a Provider when exact selection fails", async () => {
     const fixture = fakeBackendFixture();
     const provider = createFakeProviderAdapterHarness(fixture.provider);
@@ -143,7 +216,6 @@ describe("BackendPipeline", () => {
         chainId: fixture.chain.chainId,
         protocol: fixture.protocol.id,
         capability: "unsupported-capability",
-        providerInput: {},
       }),
     ).rejects.toThrow("no registered provider supports");
     expect(provider.evaluations).toHaveLength(0);
@@ -205,7 +277,6 @@ describe("BackendPipeline", () => {
           runId: `provider-${status}-run`,
           chainId: fixture.chain.chainId,
           protocol: fixture.protocol.id,
-          providerInput: {},
         }),
       ).rejects.toSatisfy((received: unknown) => {
         const expectedCode =
