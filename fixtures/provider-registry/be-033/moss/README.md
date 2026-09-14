@@ -67,15 +67,19 @@ Requirements for deterministic tests:
 - The real captured fixtures are **immutable historical observations**. Do not regenerate them in place, "correct" their values, or retrofit newer provenance.
 - The live smoke writes staging artifacts to the gitignored `.smoke-live/` directory first and promotes the formal fixture only after the 24-gate acceptance passes. The guarded Native RPC probe (BE-011) similarly writes a unique timestamped directory and fails rather than overwrite.
 - If a newer Moss capture is ever needed, create a **new uniquely named directory** and index it as a separate entry with its own capture metadata. Do not replace the canonical path.
-- `fixtures/chain-evidence/kuru/mon-to-usdc/` and `usdc-to-mon/` are retained as historical recordings and are **not** the canonical runtime-qualified capture.
+- `fixtures/chain-evidence/kuru/mon-to-usdc/` and `usdc-to-mon/` are retained as historical recordings and are **not** the canonical runtime-qualified capture. Both recorded `integrationStatus=OK` and `executionStatus=UNKNOWN` with halted/incomplete coverage, and the index must not present them as execution `SUCCESS`.
 
 ## Why unavailable evidence is represented explicitly
 
 An `UNAVAILABLE` entry with `sourcePath: null` is a truthful statement: "this case was not observed, and it must be handled fail-closed by the control-state mapping until real evidence exists." Fabricating a response would corrupt every downstream capability, control-state, and freshness claim, so the index records the gap instead.
 
+## Prepared-execution binding
+
+`preparedExecutionBinding.targetPath` in `fixture-index.json` specifies `MossPreparedExecutionInput` **V1** — the Provider Owner's required Adapter input contract (`runId`, `intent`, `chainId`, `protocol`, `quote`, `unsignedTransaction`, `blockContext`, `gasEstimate`, `finality`). It also records the exact-transaction fail-closed rule, the INPUT-vs-OUTPUT provenance split, and the four distinct block layers. PR #57 is recorded as still open and not merged.
+
 ## Validation
 
-`packages/moss-bridge/test/be-033-fixture-index.test.ts` validates this file deterministically:
+`packages/moss-bridge/test/be-033-fixture-index.test.ts` validates this file deterministically and offline:
 
 - parses it with the platform JSON parser;
 - verifies every non-null `sourcePath` exists;
@@ -83,4 +87,6 @@ An `UNAVAILABLE` entry with `sourcePath: null` is a truthful statement: "this ca
 - verifies `real: true` entries have a `sourcePath` and an evidence class that denotes a real observation;
 - verifies `UNAVAILABLE` entries have `real: false` and `sourcePath: null`;
 - verifies every `evidenceClass` is declared in the index schema;
-- verifies all `providerId` values match the Moss provider identity and that `noNewLiveProbe.run` is `false`.
+- verifies all `providerId` values match the Moss provider identity and that `noNewLiveProbe.run` is `false`;
+- cross-checks every real historical entry that references a `normalized.json` against that referenced evidence: `integrationStatus` matches when both are present, `executionStatus` matches, and incomplete/halted simulation is never indexed as execution `SUCCESS`;
+- machine-validates the `MossPreparedExecutionInput` V1 binding (flow, required fields, fail-closed rule, provenance layers, PR #57 status).

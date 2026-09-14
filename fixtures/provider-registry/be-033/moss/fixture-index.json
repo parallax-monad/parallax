@@ -256,9 +256,10 @@
         "blockHash": null
       },
       "expectedControlState": {
-        "providerStatus": "SUCCESS",
+        "providerStatus": "UNKNOWN",
         "integrationStatus": "OK",
-        "executionStatus": "SUCCESS"
+        "executionStatus": "UNKNOWN",
+        "note": "Cross-checked against fixtures/chain-evidence/kuru/mon-to-usdc/normalized.json: integrationStatus=OK, executionStatus=UNKNOWN, simulationCoverage.halted=true, complete=false (haltReason \"Unexpected Change: Kuru market emitted FlipOrderUpdated\"). Incomplete/halted historical simulation must not be indexed as execution SUCCESS."
       },
       "proves": [
         "A historical real Monad x Kuru recording exists on an older Moss baseline.",
@@ -266,7 +267,8 @@
       ],
       "doesNotProve": [
         "Canonical runtime qualification for the current pinned revision; superseded for that purpose by the live-success fixture.",
-        "Simulator pinned-block provenance."
+        "Simulator pinned-block provenance.",
+        "A complete or successful simulation: coverage is halted and incomplete, so the recorded execution status stays UNKNOWN."
       ],
       "reproducibilityNote": "Immutable historical recording; offline-loadable. Historical only, not the canonical runtime-qualified capture."
     },
@@ -303,16 +305,18 @@
         "blockHash": null
       },
       "expectedControlState": {
-        "providerStatus": "SUCCESS",
+        "providerStatus": "UNKNOWN",
         "integrationStatus": "OK",
-        "executionStatus": "SUCCESS"
+        "executionStatus": "UNKNOWN",
+        "note": "Cross-checked against fixtures/chain-evidence/kuru/usdc-to-mon/normalized.json: integrationStatus=OK, executionStatus=UNKNOWN, simulationCoverage.halted=true, complete=false (haltReason \"execution reverted\"). Incomplete/halted historical simulation must not be indexed as execution SUCCESS."
       },
       "proves": [
         "A historical real ERC-20-input recording exists and derives approval=REQUIRED."
       ],
       "doesNotProve": [
         "That an ERC-20 approval was actually executed.",
-        "Canonical runtime qualification for the current pinned revision."
+        "Canonical runtime qualification for the current pinned revision.",
+        "A complete or successful simulation: coverage is halted and incomplete, so the recorded execution status stays UNKNOWN."
       ],
       "reproducibilityNote": "Immutable historical recording; offline-loadable. Historical only."
     },
@@ -930,14 +934,19 @@
         "blockHash": null
       },
       "expectedControlState": {
-        "providerStatus": null,
+        "providerStatus": "UNKNOWN",
         "integrationStatus": null,
-        "executionStatus": null,
-        "backendControlStatus": "stale",
-        "note": "STALE is a generic status, but the Moss path never produces it and no freshness threshold exists. Freshness policy remains unresolved."
+        "executionStatus": "UNKNOWN",
+        "backendControlStatus": null,
+        "backendControlStatusProposal": "PROPOSED / CONTRACT_OWNER_UNRESOLVED",
+        "note": "Freshness policy remains unresolved: the Moss path has no reviewed freshness policy and does not currently emit STALE, so backendControlStatus=stale must not be presented as an already-decided Moss fact. Until a policy exists, Moss cannot independently classify real evidence as STALE; conservative unresolved behavior is UNKNOWN (provider.status) / fail closed. The generic Backend status vocabulary is unchanged."
       },
       "proves": ["That freshness policy is explicitly unresolved."],
-      "doesNotProve": ["Any real stale response or any freshness policy."],
+      "doesNotProve": [
+        "Any real stale response.",
+        "Any freshness policy.",
+        "That the Moss path can produce a STALE decision."
+      ],
       "reproducibilityNote": "Explicitly unavailable: no real sample exists and no policy is defined."
     },
     {
@@ -994,30 +1003,71 @@
       "evidence": "packages/moss-bridge/src/provider.ts, packages/orchestrator/agent-flow/index.ts"
     },
     "targetPath": {
-      "status": "PENDING_PULL_REQUEST_57",
-      "pendingType": "BackendPipelinePreparedExecution<NormalizedIntent>",
-      "pendingFields": [
-        "runId",
-        "intent",
-        "chainId",
-        "protocol",
-        "blockContext",
-        "quote",
-        "unsignedTransaction",
-        "gasEstimate",
-        "finality"
+      "status": "SPECIFIED_BY_PROVIDER_OWNER_V1",
+      "contractName": "MossPreparedExecutionInput",
+      "contractVersion": "V1",
+      "authority": "Adapter-private Provider Owner integration input contract/proposal. It does not freeze the shared Evidence Contract.",
+      "flow": [
+        "BackendPipelinePreparedExecution",
+        "buildProviderInput(...)",
+        "MossPreparedExecutionInput V1",
+        "Moss evaluation"
       ],
-      "pendingFieldNotes": {
-        "blockContext": "Single block context; not sufficient by itself to express the Moss distinction between stage block, quote/action block, and simulator pinned block.",
-        "gasEstimate": "Chain adapter estimate; distinct from Moss simulator gas units.",
-        "provenance": "Not an explicit field in the pending shape; Moss runtime identity remains adapter configuration."
+      "requiredFields": {
+        "runId": "Run identity; binds the provider evaluation to the prepared run.",
+        "intent": "Normalized intent (already accepted by the pipeline); must match the evaluated intent.",
+        "chainId": "Chain identity; must equal 143 for the supported Moss path.",
+        "protocol": "Protocol identity; must equal kuru for the supported Moss path.",
+        "quote": "Exact ProtocolAdapter quote. Moss consumes it; Moss must not re-quote.",
+        "unsignedTransaction": "Exact ProtocolAdapter unsignedTransaction ({ kind: \"unsigned\", payload }). Moss must evaluate this exact transaction.",
+        "blockContext": "Backend Chain blockContext associated with preparation (INPUT context).",
+        "gasEstimate": "Backend Chain gasEstimate ({ gasUnits }). Distinct from Moss simulator gas.",
+        "finality": "Backend Chain finality status/context associated with preparation."
       },
-      "statement": "PR #57 was OPEN at authoring time. Re-derive this shape from merged main before Backend relies on it."
+      "coreInvariant": "The Moss Adapter MUST evaluate the exact prepared unsigned transaction supplied by Backend/Protocol and MUST NOT silently re-quote or rebuild a different transaction from Intent.",
+      "exactTransactionFailClosed": {
+        "rule": "If the evaluated Moss transaction does not match the prepared unsignedTransaction in identity/material (from/to/data/value, or the applicable exact transaction representation), the Adapter must fail closed as invalid/failed and must not continue to Core/Decision.",
+        "comparisonMaterial": ["from", "to", "data", "value"],
+        "failureClass": "invalid",
+        "failureClassNote": "invalid is the preferred Backend control status; failed is acceptable if the Adapter cannot distinguish a mismatch. Never success and never a silent re-quote."
+      },
+      "provenanceOwnership": {
+        "inputContext": [
+          "Backend blockContext describes the chain context associated with preparation.",
+          "Quote provenance already present on the exact quote must be preserved where available."
+        ],
+        "outputProviderProvenance": [
+          "Moss runtime identity (runtimeVersion / runtimeRevision / checkoutRevision / commit / packageVersions)",
+          "Moss fetchedAt / capture facts",
+          "Moss stage blocks",
+          "quote/action evidence block if observed",
+          "simulatorPinnedBlock / provenance.simulationBlock",
+          "any Provider-specific observed provenance"
+        ],
+        "orderingRule": "The simulator-pinned block is Provider evaluation OUTPUT and therefore does not need to exist before Moss evaluation. It must not be required as an input."
+      },
+      "blockLayerDistinction": [
+        "Backend preparation block (input blockContext)",
+        "Moss stage blocks (per-stage RPC observations)",
+        "Moss quote/action evidence block",
+        "Moss simulator-pinned block (evaluation output)"
+      ],
+      "blockLayerWarning": "These four block notions are distinct and must not be conflated or collapsed into one another.",
+      "pendingPullRequest57": {
+        "status": "OPEN_NOT_MERGED",
+        "shape": "BackendPipelinePreparedExecution<NormalizedIntent>",
+        "compatibility": "Its current field list (runId, intent, chainId, protocol, blockContext, quote, unsignedTransaction, gasEstimate, finality) is compatible with the BE-033 V1 binding; the V1 binding is specified independently of whether #57 has merged.",
+        "caveats": {
+          "blockContext": "A single generic block context cannot by itself express the four Moss block notions; that distinction is owned by the Adapter and the OUTPUT provenance block.",
+          "gasEstimate": "Chain adapter estimate; distinct from Moss simulator gas units.",
+          "provenance": "No explicit provenance field in the pending shape; Moss runtime identity remains Adapter configuration."
+        },
+        "statement": "PR #57 is still open and is NOT described as merged. If it merges with a changed shape, Backend Owner re-derives the exact field list, but the BE-033 required binding material does not change."
+      },
+      "remainingContractOwnerScope": "The final shared generic PreparedExecution / Evidence type remains Contract Owner scope. The Provider Owner's required Moss Adapter input binding is now specified, so Backend does not need to guess the required material."
     },
     "unresolved": [
-      "Final PreparedExecution type (Contract Owner).",
-      "Whether Moss receives the pending generic shape as-is or a Moss-specific input (Backend + Contract Owner).",
-      "How multiple Moss block notions are represented in one binding (Contract Owner)."
+      "Final shared generic PreparedExecution / Evidence type (Contract Owner)."
     ]
   },
   "ownership": {
@@ -1044,11 +1094,11 @@
     "productRiskOwner": ["Any threshold or business/risk decision policy"]
   },
   "unresolvedContractOwnerDecisions": [
-    "Final PreparedExecution type and the Moss-specific input shape.",
+    "Final shared generic PreparedExecution / Evidence type (the Provider Owner's required Moss Adapter input binding is specified as MossPreparedExecutionInput V1).",
+    "Freshness semantics and any stale threshold; whether the Moss path may ever classify real evidence as STALE (currently: no, and conservative behavior is UNKNOWN / fail closed).",
     "Whether Moss UNAVAILABLE maps to Backend failed or unavailable.",
     "Whether revertReason becomes a first-class generic field.",
     "Generic gas semantics (chain estimate vs simulated units vs fee/cost).",
-    "Freshness semantics and any stale threshold.",
     "Canonical ProviderCapability vocabulary.",
     "checkedScope/unknownScope membership rules.",
     "Distinct generic partial-response state.",

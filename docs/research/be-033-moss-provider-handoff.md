@@ -5,6 +5,7 @@
 > **Related issues:** #58 (this package), #50 / BE-011 (factual baseline), #51 (merged baseline PR)
 > **Scope:** Moss (`moss-kuru`) only. This package replaces nothing in BE-011; it is the Moss-specific, Backend-consumable completion of it.
 > **Non-authority notice:** This document does **not** freeze the final Evidence Contract, cross-Provider status semantics, Risk policy, public API fields, `ProviderRegistry` behavior, or a generic `MossProvider` implementation. It proposes; it does not decide.
+> **Review-fix note (V1):** the two historical real recordings were corrected from execution `SUCCESS` to execution `UNKNOWN`, matching their referenced `normalized.json` (halted/incomplete coverage); the required Moss Adapter input is now specified as `MossPreparedExecutionInput` V1 instead of an unresolved future type; and STALE handling is recorded as `PROPOSED / CONTRACT_OWNER_UNRESOLVED`. A deterministic cross-check test enforces the historical-status rule.
 
 ## 1. What this package is, and what it is not
 
@@ -35,16 +36,29 @@ The governing principle is **FACT > inference > proposal**. Every important fiel
 | Current canonical real Moss success fixture | `fixtures/chain-evidence/kuru/live-success-mon-to-usdc/` | fixture `metadata.json` (`real: true`, `fixtureType: LIVE_SIMULATION`) |
 | Merged BE-011 baseline | `docs/research/be-011-provider-input-package.md`, `fixtures/provider-registry/be-011/manifest.json` | merged PR #51 |
 | Current merged Backend composition | `apps/api/src/backend/composition.ts` (dependency container; resolves a `ProviderAdapter` but has no pipeline) | merged PR #56 |
-| Pending generic pipeline | PR #57 `apps/api/src/backend/pipeline.ts` (`BackendPipelinePreparedExecution`) | **OPEN, unmerged** — see §5 |
+| Pending pull request #57 | PR #57 `apps/api/src/backend/pipeline.ts` (`BackendPipelinePreparedExecution`) | **OPEN, unmerged**; its shape is compatible with the specified `MossPreparedExecutionInput` V1 — see §7.2 |
 | Registered Moss adapter in Backend | none exists | `apps/api/src/backend/` contains no `moss` adapter |
 
-**Merged current behavior vs pending #57.** PR #57 (`feat/backend-pipeline-integration-pr-b`, "feat(api): integrate backend pipeline runtime") was still **OPEN** at authoring time. Therefore:
+**Merged current behavior vs pending #57.** PR #57 (`feat/backend-pipeline-integration-pr-b`, "feat(api): integrate backend pipeline runtime") is still **OPEN and unmerged** and is **not** described here as merged. Therefore:
 
-- statements about the *target* generic prepared-execution binding are derived from PR #57 code and are labelled **PENDING_#57**;
+- the **required Moss Adapter input binding is specified** by Provider Owner as `MossPreparedExecutionInput` V1 (§7.2), independently of whether #57 merges;
+- the current PR #57 `BackendPipelinePreparedExecution<NormalizedIntent>` shape is **compatible** with that binding, but is only a compatibility reference, not a merged fact;
 - statements about *current* Backend behavior are limited to merged `main`;
 - nothing in this package claims that the generic Moss Adapter path is merged, implemented, or runtime-qualified.
 
-If #57 merges, the exact `BackendPipelinePreparedExecution` field list in §7 must be re-derived from merged `main` before Backend relies on it. See §7 for the exact pending shape.
+If #57 merges with a changed shape, Backend re-derives the exact field list, but the required V1 binding material does not change. See §7.
+
+### 2.1 Readiness statement
+
+| Claim | Status |
+| --- | --- |
+| Provider Owner BE-033 input/handoff package | **Complete** |
+| Required Moss Adapter V1 prepared-execution binding | **Specified** (`MossPreparedExecutionInput` V1, §7.2) |
+| Backend `MossProvider` Adapter implementation | **Remaining work** — BE-034/035/037/038, Backend Owner |
+| Shared/final Evidence Contract semantics | **Remaining work** — Contract Owner |
+| PR #57 | **Open, not merged** |
+| Production Moss Adapter implemented | **No** |
+| Final shared Evidence Contract frozen | **No** |
 
 ## 3. Evidence classification vocabulary
 
@@ -80,9 +94,9 @@ This is the internal gap audit required before editing tracked files. It is kept
 | 3 | Real vs mock vs rule-derived vs documentation-only separated | `ALREADY_DOCUMENTED_BUT_NEEDS_BE033_PACKAGING` | §5, §9, fixture index `real`/`evidenceClass` |
 | 4 | Unavailable real cases explicit with fail-closed expectations | `UNAVAILABLE_REAL_EVIDENCE` | §8 table; fixture index `evidenceClass: "UNAVAILABLE"`, `path: null` |
 | 5 | Provenance separated from freshness policy | `ALREADY_PROVEN` (facts) + `CONTRACT_OWNER_DECISION_REQUIRED` (policy) | §6 |
-| 6 | Exact prepared-execution binding specified | `BACKEND_OWNER_IMPLEMENTATION_REQUIRED` (legacy path) / `CONTRACT_OWNER_DECISION_REQUIRED` (final type) | §7, `PENDING_#57` |
-| 7 | Provider raw types stay out of generic Core | `ALREADY_PROVEN` | `packages/contracts/src/generic-evidence.ts` `providerData` + `provenance.runtime`; §7.4 |
-| 8 | Contract Owner can review provisional mappings | `CONTRACT_OWNER_DECISION_REQUIRED` | §11 unresolved list in field mapping; §12 |
+| 6 | Exact prepared-execution binding specified | `ALREADY_PROVEN` (specified) + `BACKEND_OWNER_IMPLEMENTATION_REQUIRED` (legacy path) + `CONTRACT_OWNER_DECISION_REQUIRED` (final shared type only) | §7.2 `MossPreparedExecutionInput` V1; PR #57 remains open and is only a compatibility reference |
+| 7 | Provider raw types stay out of generic Core | `ALREADY_PROVEN` | `packages/contracts/src/generic-evidence.ts` `providerData` + `provenance.runtime`; §7.2.4 |
+| 8 | Contract Owner can review provisional mappings | `CONTRACT_OWNER_DECISION_REQUIRED` | §12 unresolved list in field mapping; §13 |
 | 9 | Backend can implement BE-034/035/037/038 without guessing | `CAN_BE_PROVEN_FROM_EXISTING_CODE` + this package | §7, §8, fixture index |
 | A | Moss provider identity / runtime / chain / protocol scope | `CAN_BE_PROVEN_FROM_EXISTING_REAL_FIXTURE` | §5.1 |
 | B | Capability matrix incl. evaluation, execution, quote, unsigned tx, asset/balance changes, gas, revert reason, block context, provenance, freshness, checked/unknown scope | `ALREADY_DOCUMENTED_BUT_NEEDS_BE033_PACKAGING` (Moss column only) + `UNAVAILABLE_REAL_EVIDENCE` (revert/timeout) | §5.2 |
@@ -192,31 +206,71 @@ The target generic `MossProvider` Adapter must consume the **exact execution tha
 
 Failure to honor the binding is a control failure (`invalid`/`failed`), never a silent fallback to a self-built transaction.
 
-### 7.2 TARGET GENERIC MOSS PROVIDER ADAPTER — `PENDING_#57`
+### 7.2 TARGET MOSS ADAPTER INPUT — `MossPreparedExecutionInput` V1
 
-PR #57 is **OPEN and unmerged** at authoring time. Its `apps/api/src/backend/pipeline.ts` defines the pending prepared-execution shape (`BackendPipelinePreparedExecution<NormalizedIntent>`), field-for-field:
+PR #57 is still **OPEN and unmerged** and is **not** described here as merged. BE-033 no longer treats the required Moss Adapter input as unresolved merely because #57 has not merged: the Provider Owner now specifies the concrete integration input contract below. It is an **Adapter-private integration input contract/proposal**, not a freeze of the shared Evidence Contract.
 
-| Pending field | Meaning | BE-033 relevance |
+```text
+BackendPipelinePreparedExecution
+  → buildProviderInput(...)
+  → MossPreparedExecutionInput V1
+  → Moss evaluation
+```
+
+`MossPreparedExecutionInput` V1 binds, without independent reconstruction:
+
+| Required field | Source | Meaning | BE-033 handling |
+| --- | --- | --- | --- |
+| `runId` | Pipeline | Run identity | Binds provider evaluation to the prepared run |
+| `intent` | Pipeline normalized intent | Intent already accepted by the pipeline | Must match the evaluated intent |
+| `chainId` | Pipeline | Chain identity (`143` for Moss) | Gate; mismatch fails closed |
+| `protocol` | Pipeline | Protocol identity (`kuru` for Moss) | Gate; mismatch fails closed |
+| `quote` | Exact ProtocolAdapter quote | The quote produced for this run | Moss must consume it and **must not re-quote** |
+| `unsignedTransaction` | Exact ProtocolAdapter `{ kind: "unsigned", payload }` | The transaction Moss must evaluate | Moss must evaluate **this exact transaction** |
+| `blockContext` | Backend Chain `{ blockNumber, blockHash?, observedAt? }` | Chain context associated with preparation (INPUT context) | Preserved as preparation context, not as the simulator pin |
+| `gasEstimate` | Backend Chain `{ gasUnits }` | Chain-level estimate | Distinct from Moss simulated gas |
+| `finality` | Backend Chain `{ status, blockContext? }` | Finality context associated with preparation | Context only |
+
+`MossPreparedExecutionInput` V1 therefore maps to the current pending `BackendPipelinePreparedExecution<NormalizedIntent>` field-for-field. That pending field list is **compatible** with this binding, and the binding is specified independently of whether #57 merges. If #57 lands with a changed shape, Backend re-derives the exact field list; the **required binding material does not change**. The final shared generic `PreparedExecution`/Evidence type remains Contract Owner scope.
+
+#### 7.2.1 Exact-transaction invariant and fail-closed behavior
+
+The Moss Adapter **MUST evaluate the exact prepared unsigned transaction supplied by Backend/Protocol**. It **MUST NOT** silently re-quote or rebuild a different transaction from Intent.
+
+If the evaluated Moss transaction does not match the prepared `unsignedTransaction` in identity/material — `from` / `to` / `data` / `value`, or the applicable exact transaction representation — the Adapter must **fail closed** as `invalid` (preferred) or `failed`, and must **not** continue to Core/Decision. A mismatch is never `success` and never a silent re-quote.
+
+This is a target-behavior requirement for Backend Owner implementation. It is not implemented on merged `main` (§7.3).
+
+#### 7.2.2 Block and provenance ownership: INPUT vs OUTPUT
+
+INPUT provenance/context (supplied to Moss evaluation):
+
+- the Backend `blockContext` describes the chain context associated with preparation;
+- quote provenance already present on the exact quote must be preserved where available.
+
+OUTPUT Provider provenance (produced by Moss evaluation, and therefore **not** required as input):
+
+- Moss runtime identity (`runtimeVersion` / `runtimeRevision` / `checkoutRevision` / `commit` / `packageVersions`);
+- Moss `fetchedAt` / capture facts;
+- Moss stage blocks;
+- the quote/action evidence block, if observed;
+- `simulatorPinnedBlock` / `provenance.simulationBlock`;
+- any Provider-specific observed provenance.
+
+**The simulator-pinned block is Provider evaluation OUTPUT and therefore does not need to exist before Moss evaluation.** It must not be required as an input field.
+
+Four distinct block notions must not be conflated or collapsed into one another:
+
+| Block layer | Owner | Meaning |
 | --- | --- | --- |
-| `runId` | Run identity | Required to bind Provider evaluation to the run |
-| `intent` | Normalized intent already accepted by the pipeline | Must match the evaluated intent |
-| `chainId` | Chain identity (`143` for Moss) | Gate; mismatch fails closed |
-| `protocol` | Protocol identity (`kuru` for Moss) | Gate; mismatch fails closed |
-| `blockContext` | `{ blockNumber, blockHash?, observedAt? }` from the Chain adapter | Binding candidate for simulation anchoring |
-| `quote` | Exact quote produced by the Protocol adapter | Moss target must consume, not re-quote |
-| `unsignedTransaction` | Exact `{ kind: "unsigned", payload }` from the Protocol adapter | The transaction Moss must evaluate |
-| `gasEstimate` | `{ gasUnits }` from the Chain adapter | Chain-level estimate; **not** Moss simulated gas |
-| `finality` | `{ status, blockContext? }` | Context only in the pending shape |
+| Backend preparation block | Backend Chain `blockContext` | Context associated with preparing quote/transaction (INPUT) |
+| Moss stage block | Moss evaluation | Per-stage RPC block observation (e.g. `94112883`) |
+| Moss quote/action evidence block | Moss evaluation | Block attached to quote/action evidence (e.g. `94112901`) |
+| Moss simulator-pinned block | Moss evaluation | Exact simulator base block (e.g. `94112902`), OUTPUT only |
 
-Moss-specific caveats on the pending shape:
+One generic `blockContext` input field cannot by itself express all four; that distinction is owned by the Adapter and by the OUTPUT provenance block, which is exactly why the simulator pin is not an input requirement.
 
-- The pending shape has **no explicit provenance sub-object**. `runtimeVersion`/`runtimeRevision` remain Moss Adapter configuration, and `mode`/`source` remain Moss Adapter output. Provenance is therefore *not* fully supplied by the pending prepared execution.
-- `blockContext.blockNumber` is the chain adapter's observation. The historical Moss run has three distinct block notions (`94112883` stage, `94112901` quote/action, `94112902` simulator pin). The final binding must state which of these the Provider input corresponds to; today the pending shape has exactly one `blockContext`, which is **not sufficient** to express the Moss simulator pin.
-- `gasEstimate.gasUnits` (chain adapter) and Moss `gas.value` (simulator result) are different values from different sources and must not be conflated.
-
-If #57 merges with this shape, Backend Owner must decide (and Contract Owner record) whether the Moss Adapter receives the pending shape as-is, or a Moss-specific input built from it plus runtime identity. That decision is **not** made here.
-
-### 7.3 LEGACY COMPATIBILITY PATH — current merged reality
+#### 7.2.3 Legacy path (unchanged)
 
 Current merged behavior (this is what exists on `main`, not a proposal):
 
@@ -227,21 +281,21 @@ Current merged behavior (this is what exists on `main`, not a proposal):
 
 **So: on merged `main`, legacy ownership means Moss/Kuru produce quote/action internally.** That is a fact about the legacy path, not the target architecture. Do not describe the target generic ownership as already-merged behavior, and do not describe the legacy behavior as if it satisfied the target prepared-execution invariant.
 
-### 7.4 Ownership of raw and reconstructed material
+#### 7.2.4 Ownership of raw and reconstructed material
 
 - Moss raw request/response types (`RawKuruEvidence`, `NormalizedKuruEvidence`, `LiveKuruResult`, stage records) **must remain inside `packages/moss-bridge`** and, in the target design, inside the Backend Moss Adapter. They must not cross into generic Core.
 - TARGET: the Adapter maps prepared execution + Moss observation into `GenericEvidence`; the exact unsigned transaction comes from the pipeline, and the Moss raw transaction is retained only as controlled response evidence / for equality checks.
 - LEGACY: `toGenericEvidence` maps internally-built quote/action into the generic contract and exposes a non-payload **summary** in `action` plus raw payload metadata in `providerData`. It does not currently assert equality against a prepared execution because none is supplied.
 
-### 7.5 `supports(...)` and `evaluate(...)` expectations
+#### 7.2.5 `supports(...)` and `evaluate(...)` expectations
 
 | Surface | LEGACY (merged) | TARGET (Backend Owner work) |
 | --- | --- | --- |
 | `supports` | `intent.protocol === "kuru" && intent.chainId === 143`; cheap and side-effect free | Same chain/protocol gate plus capability check against the requested `capability`; must not claim capabilities the Adapter cannot honor |
-| `evaluate` input | `EvidenceEvaluationInput` (`runId`, `intent`, decimals) | Prepared execution per §7.2 (+ Moss runtime identity) |
+| `evaluate` input | `EvidenceEvaluationInput` (`runId`, `intent`, decimals) | `MossPreparedExecutionInput` V1 per §7.2 (+ Moss runtime identity), **not** a self-built transaction |
 | `evaluate` output | `GenericEvidence` (`genericEvidenceSchema.parse`) | Same generic contract; no new Core vocabulary |
 | Raw output | Never escapes `evaluate` | Never escapes the Adapter |
-| Failure | threw `EvidenceProviderError` or returned `provider.status !== "SUCCESS"` with `failure` set | Same; additionally fail closed on missing/mismatched prepared execution |
+| Failure | threw `EvidenceProviderError` or returned `provider.status !== "SUCCESS"` with `failure` set | Same; additionally fail closed as `invalid`/`failed` on missing or mismatched prepared execution (§7.2.1) |
 
 ## 8. Error and control-state mapping
 
@@ -278,7 +332,7 @@ Current merged behavior (this is what exists on `main`, not a proposal):
 | Revert / failed evaluation | `MOCK_ONLY` (`fixtures/chain-evidence/kuru/reverted/`, `real=false`) + `RULE_DERIVED` derivation from `simulation.results[].reverted` | **No** | Moss `executionStatus=REVERTED` with `integrationStatus=OK`; generic `provider.status=SUCCESS` + `execution.status=REVERTED`; Risk remains `UNKNOWN` | No | `revertReason` when present | — | A verified revert is *not* a Provider failure; it must not become `PROCEED` |
 | Partial response | `INFERRED_FROM_CODE` (`coverage.complete=false`) | No | `executionStatus=UNKNOWN`, generic `provider.status=UNKNOWN` | Unqualified | `simulationCoverage` (expected/observed/missing/unmatched) | — | Risk `UNKNOWN`; never `PROCEED` |
 | Missing critical evidence | `MOCK_ONLY` (`fixtures/chain-evidence/kuru/missing-evidence/`, `real=false`) | No | `executionStatus=UNKNOWN`; `provider.status=UNKNOWN`; field `value=null` + `limitation` | Unqualified | `limitations`, null field | — | Fail closed |
-| Stale evidence | `UNAVAILABLE_REAL_EVIDENCE`; no policy exists | **No** | `STALE` is a generic status but is **not produced** by the Moss path today | Unqualified | — | — | Until a policy exists, staleness is not silently treated as fresh |
+| Stale evidence | `UNAVAILABLE_REAL_EVIDENCE`; no freshness policy exists | **No** | **PROPOSED / CONTRACT_OWNER_UNRESOLVED.** The Moss path has no reviewed freshness policy and does not currently emit `STALE`, so `backendControlStatus=stale` must **not** be presented as an already-decided Moss fact. Conservative unresolved behavior is `UNKNOWN` / fail closed | Unqualified | — | — | Until a freshness policy exists, Moss cannot independently classify real evidence as `STALE` and staleness is not silently treated as fresh. Generic Backend status vocabulary is unchanged |
 | Unknown outcome | `INFERRED_FROM_CODE` (`executionStatus=UNKNOWN`) | No | generic `provider.status=UNKNOWN` | Unqualified | classified errors | — | Fail closed |
 | No route | `MOCK_ONLY` fixture; `RULE_DERIVED` derivation requires explicit `QUOTE`/`ACTION` stage | No | `executionStatus=NO_ROUTE`, `integrationStatus=OK`; generic `provider.status=SUCCESS`; legal terminal without a simulator pinned block | No | route limitation | — | `NO_ROUTE` must not be reported as an integration failure, and must not require a fabricated block |
 
@@ -302,8 +356,8 @@ The machine-readable index is `fixtures/provider-registry/be-033/moss/fixture-in
 | id | Path | `real` | Evidence class | Proves | Does NOT prove |
 | --- | --- | --- | --- | --- | --- |
 | `moss-live-success-mon-to-usdc` | `fixtures/chain-evidence/kuru/live-success-mon-to-usdc/` | `true` | `REAL_LIVE_SIMULATION` | Full DISCOVER→SIMULATE success on Monad 143 × Kuru, runtime `0.1.0`/`ef15448e…`, pinned simulator block, asset changes, gas | Universal Moss support; ERC-20 affordability; revert/timeout/failure shape; freshness policy; prepared-execution binding; signing/broadcast |
-| `moss-recorded-mon-to-usdc` | `fixtures/chain-evidence/kuru/mon-to-usdc/` | `true` | `REAL_RECORDED_HISTORICAL` | Historical MON→USDC recording on an older baseline (`d09b38cb…`) | Canonical runtime qualification (superseded by the live-success fixture for that purpose) |
-| `moss-recorded-usdc-to-mon` | `fixtures/chain-evidence/kuru/usdc-to-mon/` | `true` | `REAL_RECORDED_HISTORICAL` | Historical USDC→MON recording incl. `approval=REQUIRED` derivation | Executed ERC-20 approval; canonical runtime qualification |
+| `moss-recorded-mon-to-usdc` | `fixtures/chain-evidence/kuru/mon-to-usdc/` | `true` | `REAL_RECORDED_HISTORICAL` | Historical MON→USDC recording on an older baseline (`d09b38cb…`); recorded `integrationStatus=OK`, `executionStatus=UNKNOWN` with halted/incomplete coverage (`haltReason: "Unexpected Change: Kuru market emitted FlipOrderUpdated"`) | Canonical runtime qualification (superseded by the live-success fixture for that purpose); any successful/complete execution |
+| `moss-recorded-usdc-to-mon` | `fixtures/chain-evidence/kuru/usdc-to-mon/` | `true` | `REAL_RECORDED_HISTORICAL` | Historical USDC→MON recording incl. `approval=REQUIRED` derivation; recorded `integrationStatus=OK`, `executionStatus=UNKNOWN` with halted/incomplete coverage (`haltReason: "execution reverted"`) | Executed ERC-20 approval; canonical runtime qualification; any successful/complete execution |
 | `moss-unsupported-guard` | `null` | `false` | `DETERMINISTIC_RULE_GUARD` | `supports` rejects non-Kuru/non-143 without invoking the runner | Anything about real Provider behavior |
 | `moss-reverted-mock` | `fixtures/chain-evidence/kuru/reverted/` | `false` | `RULE_TEST_INPUT` | Revert normalization/rule behavior only (`source: "mock"`) | Any real Moss revert response |
 | `moss-integration-error-mock` | `fixtures/chain-evidence/kuru/integration-error/` | `false` | `RULE_TEST_INPUT` | Integration-failure classification only | Any real Moss failure/outage response |
@@ -391,11 +445,11 @@ It is explicitly a **provisional mapping**, not final Contract semantics.
 
 ## 13. Unresolved Contract Owner decisions
 
-1. **Final `PreparedExecution` type** — including whether Moss receives the pending §7.2 shape or a Moss-specific input, and how multiple block notions (stage / quote-action / simulator pin) are represented in one binding.
+1. **Final shared generic `PreparedExecution`/Evidence type** — only the shared/final type remains open. The required Moss Adapter input binding is already specified as `MossPreparedExecutionInput` V1 (§7.2), including how the four block notions relate and why the simulator pin is Provider evaluation OUTPUT.
 2. **`UNAVAILABLE` → Backend control status** — `controlStatusForCode("UNAVAILABLE")` currently falls through to `failed`. Confirm intended mapping for Moss.
 3. **Revert-reason semantics** — whether `revertReason` becomes a first-class generic field or stays inside `providerData`.
 4. **Gas semantics** — distinguish chain `gasUnits` (estimate), Moss simulator gas (observed units for one result), and any future fee/total-cost field. Risk usage is Risk Owner scope.
-5. **Freshness semantics and stale threshold** — currently `UNKNOWN`; no policy exists.
+5. **Freshness semantics and stale threshold** — currently `UNKNOWN`; no policy exists, so `backendControlStatus=stale` is `PROPOSED / CONTRACT_OWNER_UNRESOLVED` and Moss cannot independently classify real evidence as `STALE` (conservative behavior: `UNKNOWN` / fail closed).
 6. **Capability vocabulary** — `ProviderCapability` is currently `string`; whether Moss capability tokens (`quote`, `action`, `simulate`, plus future `prepared-execution`) become canonical.
 7. **`checkedScope`/`unknownScope` membership** — the current derivation is settled: state `VERIFIED_RUNTIME` with `RULE_DERIVED` qualification (non-null `quote`/`action`/`receipt`-or-`outcome`/`simulationCoverage`, plus `no-route`). Open only: whether additional fields (`revertReason`/`gas`/freshness) should later join the derivation.
 8. **Partial-response semantics** — whether `coverage.complete=false` is `UNKNOWN` or a distinct generic partial state.
@@ -426,8 +480,8 @@ Moss Provider Owner input is ready for Backend integration when:
 - real vs mock/rule/replay/unavailable evidence is unmistakable;
 - non-success control states are mapped with explicit fail-closed behavior, including where no real sample exists;
 - provenance is separated from freshness policy, and freshness policy is recorded as unresolved;
-- the exact prepared-execution binding is specified for the target Adapter and the legacy ownership is distinguished from it;
+- the exact prepared-execution binding is specified for the target Adapter as `MossPreparedExecutionInput` V1 (§7.2), and the legacy ownership is distinguished from it;
 - no Moss raw type is required to leak into generic Core;
 - no final Contract semantics are frozen by this package.
 
-All of the above are satisfied by this package. The only remaining blockers are Contract Owner decisions (§13) and Backend Owner implementation (§12), neither of which is a Provider Owner deliverable.
+All of the above are satisfied by this package, so all nine #58 acceptance criteria are met by Provider Owner work. The remaining items are **not** blockers to BE-033: they are Contract Owner decisions (§13) and Backend Owner implementation (§12), neither of which is a Provider Owner deliverable. PR #57 is still open and is not described as merged; the required V1 binding holds independently of it.

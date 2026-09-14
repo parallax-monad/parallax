@@ -51,7 +51,8 @@ type ExpectedControlState = {
   providerStatus: string | null;
   integrationStatus: string | null;
   executionStatus: string | null;
-  backendControlStatus?: string;
+  backendControlStatus?: string | null;
+  backendControlStatusProposal?: string;
   note?: string;
 };
 
@@ -93,8 +94,25 @@ type FixtureIndex = {
     legacyPath: { status: string; statement: string };
     targetPath: {
       status: string;
-      pendingType: string;
-      pendingFields: string[];
+      contractName: string;
+      contractVersion: string;
+      authority: string;
+      flow: string[];
+      requiredFields: Record<string, string>;
+      coreInvariant: string;
+      exactTransactionFailClosed: {
+        rule: string;
+        comparisonMaterial: string[];
+        failureClass: string;
+      };
+      provenanceOwnership: {
+        inputContext: string[];
+        outputProviderProvenance: string[];
+        orderingRule: string;
+      };
+      blockLayerDistinction: string[];
+      pendingPullRequest57: { status: string; compatibility: string };
+      remainingContractOwnerScope: string;
     };
     unresolved: string[];
   };
@@ -102,8 +120,38 @@ type FixtureIndex = {
   noNewLiveProbe: { run: boolean; statement: string };
 };
 
+type NormalizedEvidenceStatus = {
+  integrationStatus?: string;
+  executionStatus?: string;
+  simulationCoverage?: {
+    value?: { halted?: boolean; complete?: boolean } | null;
+  };
+};
+
+type NormalizedCoverage = {
+  halted?: boolean;
+  complete?: boolean;
+};
+
 function readFixtureIndex(): FixtureIndex {
   return JSON.parse(readFileSync(FIXTURE_INDEX_URL, "utf8")) as FixtureIndex;
+}
+
+/** Offline read of a referenced normalized evidence fixture, if one exists. */
+function readNormalizedEvidence(
+  sourcePath: string,
+): NormalizedEvidenceStatus | undefined {
+  const normalizedPath = `${REPOSITORY_ROOT}${sourcePath}normalized.json`;
+  if (!existsSync(normalizedPath)) return undefined;
+  return JSON.parse(
+    readFileSync(normalizedPath, "utf8"),
+  ) as NormalizedEvidenceStatus;
+}
+
+function coverageOf(
+  evidence: NormalizedEvidenceStatus,
+): NormalizedCoverage | undefined {
+  return evidence.simulationCoverage?.value ?? undefined;
 }
 
 const index = readFixtureIndex();
@@ -294,8 +342,9 @@ describe("BE-033 Moss fixture index", () => {
     );
     expect(stale?.evidenceClass).toBe("UNAVAILABLE");
     expect(stale?.expectedControlState.note).toMatch(
-      /freshness policy remains unresolved/i,
+      /no reviewed freshness policy/i,
     );
+    expect(stale?.expectedControlState.note).toMatch(/fail closed/i);
   });
 
   it("bounds every non-success control state away from success", () => {
@@ -322,14 +371,175 @@ describe("BE-033 Moss fixture index", () => {
     });
   });
 
-  it("documents both the legacy and the pending target binding", () => {
+  it("documents both the legacy and the specified V1 target binding", () => {
     const binding = index.preparedExecutionBinding;
     expect(binding.coreInvariant).toMatch(/must not silently reconstruct/i);
     expect(binding.legacyPath.status).toBe("MERGED_CURRENT_BEHAVIOR");
-    expect(binding.targetPath.status).toBe("PENDING_PULL_REQUEST_57");
-    expect(binding.targetPath.pendingFields).toContain("runId");
-    expect(binding.targetPath.pendingFields).toContain("unsignedTransaction");
-    expect(binding.unresolved.length).toBeGreaterThan(0);
+
+    const target = binding.targetPath;
+    expect(target.status).toBe("SPECIFIED_BY_PROVIDER_OWNER_V1");
+    expect(target.contractName).toBe("MossPreparedExecutionInput");
+    expect(target.contractVersion).toBe("V1");
+    expect(target.flow).toEqual([
+      "BackendPipelinePreparedExecution",
+      "buildProviderInput(...)",
+      "MossPreparedExecutionInput V1",
+      "Moss evaluation",
+    ]);
+    expect(Object.keys(target.requiredFields).sort()).toEqual(
+      [
+        "blockContext",
+        "chainId",
+        "finality",
+        "gasEstimate",
+        "intent",
+        "protocol",
+        "quote",
+        "runId",
+        "unsignedTransaction",
+      ].sort(),
+    );
+
+    // The required Moss Adapter input is specified; only the shared/final
+    // generic type remains Contract Owner scope.
+    expect(target.remainingContractOwnerScope).toMatch(
+      /final shared generic PreparedExecution/i,
+    );
+    expect(binding.unresolved.join(" ")).toMatch(
+      /final shared generic PreparedExecution \/ Evidence type/i,
+    );
+    expect(binding.unresolved.join(" ")).not.toMatch(
+      /Moss-specific input shape/i,
+    );
+  });
+
+  it("specifies exact-transaction fail-closed behavior", () => {
+    const target = index.preparedExecutionBinding.targetPath;
+    expect(target.coreInvariant).toMatch(
+      /MUST evaluate the exact prepared unsigned transaction/i,
+    );
+    expect(target.coreInvariant).toMatch(/MUST NOT silently re-quote/i);
+    expect(target.exactTransactionFailClosed.rule).toMatch(
+      /must fail closed as invalid\/failed/i,
+    );
+    expect(target.exactTransactionFailClosed.comparisonMaterial).toEqual([
+      "from",
+      "to",
+      "data",
+      "value",
+    ]);
+    expect(target.exactTransactionFailClosed.failureClass).toBe("invalid");
+  });
+
+  it("separates INPUT preparation context from OUTPUT provider provenance", () => {
+    const provenance =
+      index.preparedExecutionBinding.targetPath.provenanceOwnership;
+    expect(provenance.inputContext.join(" ")).toMatch(/blockContext/i);
+    expect(provenance.outputProviderProvenance.join(" ")).toMatch(
+      /simulatorPinnedBlock/i,
+    );
+    expect(provenance.outputProviderProvenance.join(" ")).toMatch(
+      /runtime identity/i,
+    );
+    expect(provenance.orderingRule).toMatch(
+      /simulator-pinned block is Provider evaluation OUTPUT/i,
+    );
+
+    const layers =
+      index.preparedExecutionBinding.targetPath.blockLayerDistinction;
+    expect(layers).toHaveLength(4);
+    expect(layers.join(" ")).toMatch(/Backend preparation block/i);
+    expect(layers.join(" ")).toMatch(/Moss stage block/i);
+    expect(layers.join(" ")).toMatch(/Moss quote\/action evidence block/i);
+    expect(layers.join(" ")).toMatch(/Moss simulator-pinned block/i);
+  });
+
+  it("records that PR #57 is still open and not merged", () => {
+    const pr57 = index.preparedExecutionBinding.targetPath.pendingPullRequest57;
+    expect(pr57.status).toBe("OPEN_NOT_MERGED");
+    expect(pr57.compatibility).toMatch(
+      /compatible with the BE-033 V1 binding/i,
+    );
+  });
+
+  it("cross-checks real historical expected control state against normalized evidence", () => {
+    const historical = index.fixtureIndex.filter(
+      (entry) =>
+        entry.real &&
+        entry.sourcePath !== null &&
+        entry.evidenceClass === "REAL_RECORDED_HISTORICAL",
+    );
+    expect(historical.length).toBeGreaterThan(0);
+
+    for (const entry of historical) {
+      if (entry.sourcePath === null) continue;
+      const normalized = readNormalizedEvidence(entry.sourcePath);
+      expect(
+        normalized,
+        `${entry.id} must reference a loadable normalized.json`,
+      ).toBeDefined();
+      if (normalized === undefined) continue;
+
+      const expected = entry.expectedControlState;
+      if (normalized.integrationStatus !== undefined) {
+        expect(
+          expected.integrationStatus,
+          `${entry.id} integrationStatus must match normalized evidence`,
+        ).toBe(normalized.integrationStatus);
+      }
+      expect(
+        expected.executionStatus,
+        `${entry.id} executionStatus must match normalized evidence`,
+      ).toBe(normalized.executionStatus);
+    }
+  });
+
+  it("never indexes incomplete or halted real simulation as execution SUCCESS", () => {
+    let checked = 0;
+    for (const entry of index.fixtureIndex) {
+      if (!entry.real || entry.sourcePath === null) continue;
+      const normalized = readNormalizedEvidence(entry.sourcePath);
+      if (normalized === undefined) continue;
+      const coverage = coverageOf(normalized);
+      if (coverage === undefined) continue;
+      checked += 1;
+      if (coverage.complete === false || coverage.halted === true) {
+        expect(
+          entry.expectedControlState.executionStatus,
+          `${entry.id} has incomplete/halted simulation and must not be indexed as SUCCESS`,
+        ).not.toBe("SUCCESS");
+      }
+    }
+    expect(checked).toBeGreaterThan(0);
+  });
+
+  it("keeps the two historical recordings at execution UNKNOWN", () => {
+    const byId = new Map(index.fixtureIndex.map((entry) => [entry.id, entry]));
+    for (const id of [
+      "moss-recorded-mon-to-usdc",
+      "moss-recorded-usdc-to-mon",
+    ]) {
+      const entry = byId.get(id);
+      expect(entry, `${id} must exist`).toBeDefined();
+      expect(entry?.expectedControlState.executionStatus).toBe("UNKNOWN");
+      expect(entry?.expectedControlState.providerStatus).toBe("UNKNOWN");
+      expect(entry?.expectedControlState.integrationStatus).toBe("OK");
+    }
+  });
+
+  it("records stale handling as proposed and Contract Owner unresolved", () => {
+    const stale = index.fixtureIndex.find(
+      (entry) => entry.id === "moss-stale-evidence",
+    );
+    expect(stale).toBeDefined();
+    expect(stale?.expectedControlState.backendControlStatus).toBeNull();
+    expect(stale?.expectedControlState.backendControlStatusProposal).toBe(
+      "PROPOSED / CONTRACT_OWNER_UNRESOLVED",
+    );
+    expect(stale?.expectedControlState.providerStatus).toBe("UNKNOWN");
+    expect(stale?.expectedControlState.note).toMatch(
+      /does not currently emit `?STALE`?|does not currently emit STALE/i,
+    );
   });
 
   it("records that no new live probe was run", () => {

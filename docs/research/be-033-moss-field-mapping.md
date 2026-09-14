@@ -148,7 +148,39 @@ The typed projection only accepts a plain decimal `estimatedAmountOut`; anything
 | Backend `status` | `provider-result-boundary.ts` | `success`/`unknown`/`unsupported`/`failed`/`timeout`/`stale`/`invalid` | Backend control status | required | derived | boundary contract | `INFERRED_FROM_CODE` | invalid → rejected | Pending pipeline control status | no | Backend Owner / Contract Owner |
 | timeout config | `stageTimeoutMs` (30 000 default), `overallTimeoutMs` (90 000 default) | number ms | Client-enforced deadlines (`Promise.race`; Moss APIs take no `AbortSignal`) | optional | code | code constant | `INFERRED_FROM_CODE` | defaults apply | Not evidence; must not become a Provider-timeout claim | yes | Provider Owner |
 
-## 9. Must remain opaque inside the Moss Adapter
+## 9. Truthfulness flags: `isReplay`, `isMock`, `replayMode`
+
+These three flags are the Moss path's LIVE / MOCK / RECORDED_REPLAY separation signal. They are set by the normalization entry points, not by the Provider raw response.
+
+| Field | Raw/source path | Raw type | Meaning | Req | Source | Validity | Class | Missing/malformed | Provisional mapping | Opaque? | Owner |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `replayMode` | top-level on `NormalizedKuruEvidence`; hardcoded `false` by `normalizeRecordedKuruEvidence` and `normalizeLiveKuruEvidence`, set `true` only by `replayKuruEvidence` | boolean | Whole-evidence replay marker | required | derived | always set by every normalization entry point | `RULE_DERIVED` (real-observed as `false` in every committed fixture) | absent → treated as not replay; `hasMismatchedRuntimeProvenance` fails closed unless it is exactly `false` for live evaluation | `provenance.mode` takes precedence: `true` → `RECORDED_REPLAY` | no | Contract Owner |
+| `isReplay` | per-field on each `Sourced<T>` field; set `true` by `replayKuruEvidence` for every sourced field; live normalization does not set it per field | `boolean` / absent | Field-level replay marker | optional | derived | present only on replayed evidence | `RULE_DERIVED` | absent → field is not individually marked as replayed | Retained on the field's own provenance; feeds the same truthfulness axis as `replayMode` | no | Contract Owner |
+| `isMock` | top-level on `NormalizedKuruEvidence`; `false` by `normalizeLiveKuruEvidence`; absent from `normalizeRecordedKuruEvidence` output; set `true` by mock/rule test inputs | `boolean` / absent | Mock evidence marker | optional | derived | `true` only for mock/rule inputs | `RULE_DERIVED`; `MOCK_ONLY` for the mock fixtures | absent → treated as not mock (`evidence.isMock ?? false`); live evaluation fails closed unless exactly `false` | `provenance.mode = MOCK` and `provenance.source = mock` (the schema requires both together) | no | Contract Owner |
+
+How they affect truthfulness and separation (`evidenceMode()` in `packages/moss-bridge/src/provider.ts`):
+
+```text
+if (replayMode)      → RECORDED_REPLAY
+else if (isMock)     → MOCK
+else                 → LIVE
+```
+
+- Replay dominates mock, so historical Risk replay-gate semantics are preserved for every Moss-produced evidence shape. The generic schema enforces that `provenance.source === "mock"` and `provenance.mode === "MOCK"` appear **together** (`generic-evidence.ts` `validateMockProvenance`).
+- LIVE is only claimed when all three flags are absent-or-false. The live truthfulness gate (`hasMismatchedRuntimeProvenance`) fails closed unless `replayMode === false`, `isReplay === false`, and `isMock === false`, alongside the runtime-identity checks.
+- Recorded historical fixtures (`mon-to-usdc`, `usdc-to-mon`) carry `replayMode: false`, `source: "moss"` and **no** `isReplay`/`isMock`; they are real recordings, not replays and not mocks.
+- The mock/rule fixtures are `source: "mock"` with `isMock` semantics; the `fixtures/replay-data/*.json` envelopes are the separate recorded-replay contract path. Neither may be presented as a live Provider response.
+- No new truthfulness field is introduced by BE-033; these are the existing code semantics.
+
+## 10. STALE handling (PROPOSED / CONTRACT_OWNER_UNRESOLVED)
+
+The Moss path has **no reviewed freshness policy** and **does not currently emit `STALE`**. Therefore:
+
+- `backendControlStatus = stale` is **not** an already-decided Moss fact. It is recorded as **PROPOSED / CONTRACT_OWNER_UNRESOLVED** in `fixtures/provider-registry/be-033/moss/fixture-index.json` (`moss-stale-evidence.expectedControlState`).
+- Until a freshness policy exists, **Moss cannot independently classify real evidence as `STALE`**. The conservative unresolved behavior is `provider.status = UNKNOWN` / fail closed.
+- The generic Backend status vocabulary (`success`, `unsupported`, `failed`, `timeout`, `unknown`, `stale`, `invalid`) is **unchanged**; `STALE` remains a valid generic/Contract-layer status that the Moss path simply cannot yet produce.
+
+## 11. Must remain opaque inside the Moss Adapter
 
 These values must not become generic Core fields without a Contract Owner decision:
 
@@ -159,15 +191,15 @@ These values must not become generic Core fields without a Contract Owner decisi
 5. `approval`, `walletAffordabilityChecked`, `limitations`, `mossVersion`, stage records — currently carried in `providerData`.
 6. Any endpoint URL, RPC userinfo, query secret, operator runtime path, or credential material — never persisted, always redacted.
 
-## 10. Unresolved semantics requiring Contract Owner approval
+## 12. Unresolved semantics requiring Contract Owner approval
 
 1. Whether the generic `action` field must one day carry the exact unsigned payload instead of a summary (and how that interacts with the pipeline's prepared `unsignedTransaction`).
 2. `revertReason` as a first-class generic field vs `providerData`.
 3. Generic gas semantics (chain estimate vs simulated units vs fee/total cost).
-4. Freshness policy and any stale threshold; whether `fetchedAt`/block inputs alone can ever justify `STALE`.
+4. Freshness policy and any stale threshold; whether `fetchedAt`/block inputs alone can ever justify `STALE` (see §10).
 5. `runId` on `GenericEvidence`.
 6. `checkedScope`/`unknownScope` membership only — the current derivation is settled as state `VERIFIED_RUNTIME` / qualification `RULE_DERIVED` (non-null fields); open is whether additional fields join it later.
 7. `UNSUPPORTED` and partial/`UNKNOWN` semantics for partial responses.
 8. Whether `nativeValue` keeps hex encoding or is normalized to a decimal string, and the corresponding unit contract.
 9. Whether `mossVersion`/stage records stay in `providerData` or become a typed provider metadata block.
-10. The final `PreparedExecution` type and whether Moss receives the pending #57 shape or a Moss-specific input.
+10. The final shared generic `PreparedExecution` type. The **required** Moss Adapter input binding is now specified as `MossPreparedExecutionInput` V1 (`docs/research/be-033-moss-provider-handoff.md` §7.2); only the shared/final type remains open.
