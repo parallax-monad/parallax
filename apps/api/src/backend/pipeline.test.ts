@@ -379,7 +379,82 @@ describe("BackendPipeline", () => {
     const body = await response.json();
     expect(body.status).toBe("available");
     expect(body.quote.blockNumber).toBe(fixture.chain.blockNumber);
-    expect(body.quote.runtimeVersion).toBe(environment.MOSS_RUNTIME_VERSION);
-    expect(body.quote.runtimeRevision).toBe(environment.MOSS_RUNTIME_REVISION);
+    expect(body.quote.runtimeVersion).toBe("stale-runtime");
+    expect(body.quote.runtimeRevision).toBe("stale-revision");
+  });
+
+  it("fails closed when a composition Quote omits runtime provenance", async () => {
+    const fixture = fakeBackendFixture();
+    const chain = createFakeChainAdapter({ ...fixture.chain, chainId: 143 });
+    const protocol = createFakeProtocolAdapter({
+      ...fixture.protocol,
+      quote: {
+        status: "available",
+        quote: {
+          estimatedAmountOut: "42",
+          source: "quote",
+          blockNumber: "999",
+        },
+      },
+    });
+    const tokenRegistry = {
+      chains: [{ chainId: 143, symbol: "MON", decimals: 18 }],
+      tokens: [
+        {
+          chainId: 143,
+          address: "0xabcdefabcdefabcdefabcdefabcdefabcdefabcd",
+          symbol: "USDC",
+          decimals: 6,
+          decimalsSource: "onchain_verified" as const,
+          verifiedAtBlock: "90000000",
+        },
+      ],
+    };
+    const environment = {
+      MONAD_RPC_URL: "https://rpc.example.test",
+      MOSS_RUNTIME_VERSION: "current-runtime",
+      MOSS_RUNTIME_REVISION: "current-revision",
+    };
+    const runtime = createBackendComposition({
+      chainRegistry: new ChainRegistry([chain]),
+      protocolRegistry: new ProtocolRegistry([
+        { chainId: 143, protocol: "kuru", adapter: protocol },
+      ]),
+      providerRegistry: new ProviderRegistry(),
+      normalization: {
+        normalize: () => ({ ...normalizedIntent, chainId: 143 }),
+      },
+      core: { evaluate: async () => "unused" },
+      decision: { decide: async () => "unused" },
+      runStore: new InMemoryRunStore(),
+    });
+    const app = bootstrapBackendApp({
+      environment,
+      tokenRegistry,
+      composition: runtime,
+    });
+
+    const response = await app.fetch(
+      new Request("https://api.example.test/api/quote", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          chainId: 143,
+          protocol: "kuru",
+          sender: "0x1111111111111111111111111111111111111111",
+          tokenIn: { kind: "native" },
+          tokenOut: {
+            kind: "erc20",
+            address: "0xabcdefabcdefabcdefabcdefabcdefabcdefabcd",
+          },
+          amountIn: "1.5",
+        }),
+      }),
+    );
+
+    await expect(response.json()).resolves.toEqual({
+      status: "unavailable",
+      reason: "QUOTE_UNAVAILABLE",
+    });
   });
 });

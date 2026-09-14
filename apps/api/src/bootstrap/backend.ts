@@ -252,7 +252,19 @@ function projectCompositionQuote(input: {
   quote: unknown;
 }): unknown {
   const parsedQuoteResult = quoteResultSchema.safeParse(input.quote);
-  if (parsedQuoteResult.success) return parsedQuoteResult.data;
+  if (parsedQuoteResult.success) {
+    if (parsedQuoteResult.data.status === "unavailable") {
+      return parsedQuoteResult.data;
+    }
+
+    return {
+      status: "available",
+      quote: {
+        ...parsedQuoteResult.data.quote,
+        blockNumber: input.blockContext.blockNumber,
+      },
+    };
+  }
 
   if (!isRecord(input.quote)) {
     return { status: "unavailable", reason: "QUOTE_UNAVAILABLE" };
