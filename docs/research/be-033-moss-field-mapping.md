@@ -166,7 +166,7 @@ These values must not become generic Core fields without a Contract Owner decisi
 3. Generic gas semantics (chain estimate vs simulated units vs fee/total cost).
 4. Freshness policy and any stale threshold; whether `fetchedAt`/block inputs alone can ever justify `STALE`.
 5. `runId` on `GenericEvidence`.
-6. `checkedScope`/`unknownScope` membership rules (currently rule-derived from non-null fields).
+6. `checkedScope`/`unknownScope` membership only — the current derivation is settled as state `VERIFIED_RUNTIME` / qualification `RULE_DERIVED` (non-null fields); open is whether additional fields join it later.
 7. `UNSUPPORTED` and partial/`UNKNOWN` semantics for partial responses.
 8. Whether `nativeValue` keeps hex encoding or is normalized to a decimal string, and the corresponding unit contract.
 9. Whether `mossVersion`/stage records stay in `providerData` or become a typed provider metadata block.

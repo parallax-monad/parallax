@@ -134,11 +134,11 @@ States are from §3.1. "Historical compatibility path" means the current `moss-k
 | Provenance | `VERIFIED_RUNTIME` | Runtime version/revision, chain ID, block provenance, per-field `source`/`reproducibility`/`fetchedAt` preserved. See §6. |
 | Freshness inputs | `VERIFIED_RUNTIME` (inputs only) | `fetchedAt`, block numbers, and runtime revision exist and are recorded. |
 | Freshness / stale policy | `UNKNOWN` | No reviewed stale threshold or freshness policy exists. Moss path never emits `STALE`. **Do not** treat the existence of a timestamp as `freshness = VERIFIED_RUNTIME`. |
-| Checked scope | `RULE_DERIVED` (per-run) | `toGenericEvidence` derives `checkedScope = ["quote","action","simulation","simulation-coverage"]` (plus `no-route`) from non-null fields; `unknownScope` is the complement. |
-| Unknown scope | `RULE_DERIVED` (per-run) | See above. `revertReason` and `gas` are **not** part of the current checked/unknown derivation; they live in `providerData`. |
+| Checked scope | `VERIFIED_RUNTIME` (qualification: `RULE_DERIVED`, per-run) | `toGenericEvidence` derives `checkedScope = ["quote","action","simulation","simulation-coverage"]` (plus `no-route`) from non-null fields; `unknownScope` is the complement. |
+| Unknown scope | `VERIFIED_RUNTIME` (qualification: `RULE_DERIVED`, per-run) | See above. `revertReason` and `gas` are **not** part of the current checked/unknown derivation; they live in `providerData`. |
 | Auth | `UNKNOWN` as a universal Moss value | Configured local runtime + environment-supplied RPC; RPC auth is endpoint-specific. |
 | Rate limits | `UNKNOWN` | Not normalized as a universal Moss limit; not exercised. |
-| Timeout | `TIMEOUT` classification is `VERIFIED_RUNTIME` in code; the *real response* is `UNAVAILABLE` | `StageTimeoutError` / `Promise.race` with 30s stage and 90s overall defaults. No real Provider timeout response captured. |
+| Timeout | `UNKNOWN` (runtime qualification / timeout capability evidence); `UNAVAILABLE` (real timeout evidence); classification behavior is `INFERRED_FROM_CODE` | `StageTimeoutError` / `Promise.race` with 30s stage and 90s overall client-enforced deadlines, and the resulting `TIMEOUT` classification, exist in code (`INFERRED_FROM_CODE`) but are not a runtime-verified Provider capability. No real Provider timeout response was captured, so real timeout evidence is `UNAVAILABLE` and runtime qualification stays `UNKNOWN`. |
 | Batch / multi-transaction execution | `SUPPORTED_DOC_ONLY` | Code supports multiple action transactions (`coverage.expectedTransactions`) but only 1 was observed. |
 | ERC-20 approval | `SUPPORTED_DOC_ONLY` | `approvalStatus` is derived; the real fixture is native-in (`NOT_APPLICABLE`), the recorded `USDC -> MON` fixture is `REQUIRED`. Not real-observed as an executed approval. |
 
@@ -397,7 +397,7 @@ It is explicitly a **provisional mapping**, not final Contract semantics.
 4. **Gas semantics** — distinguish chain `gasUnits` (estimate), Moss simulator gas (observed units for one result), and any future fee/total-cost field. Risk usage is Risk Owner scope.
 5. **Freshness semantics and stale threshold** — currently `UNKNOWN`; no policy exists.
 6. **Capability vocabulary** — `ProviderCapability` is currently `string`; whether Moss capability tokens (`quote`, `action`, `simulate`, plus future `prepared-execution`) become canonical.
-7. **`checkedScope`/`unknownScope` derivation** — currently rule-derived from non-null fields; whether `revertReason`/`gas`/freshness belong in it.
+7. **`checkedScope`/`unknownScope` membership** — the current derivation is settled: state `VERIFIED_RUNTIME` with `RULE_DERIVED` qualification (non-null `quote`/`action`/`receipt`-or-`outcome`/`simulationCoverage`, plus `no-route`). Open only: whether additional fields (`revertReason`/`gas`/freshness) should later join the derivation.
 8. **Partial-response semantics** — whether `coverage.complete=false` is `UNKNOWN` or a distinct generic partial state.
 9. **Cross-Provider Evidence impact** — whether any of the above changes `packages/contracts` for all providers, not just Moss.
 
