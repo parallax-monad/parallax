@@ -1,6 +1,7 @@
 import type { NormalizedSwapIntent } from "@parallax/contracts";
 import { describe, expect, it, vi } from "vitest";
 import { InMemoryRunStore } from "../store.js";
+import { bootstrapBackendApp } from "../bootstrap/backend.js";
 import { ChainRegistry } from "./chain-registry.js";
 import { createBackendComposition } from "./composition.js";
 import {
@@ -322,8 +323,7 @@ describe("BackendPipeline", () => {
       tokens: [
         {
           chainId: 143,
-          address:
-            "0xabcdefabcdefabcdefabcdefabcdefabcdefabcd",
+          address: "0xabcdefabcdefabcdefabcdefabcdefabcdefabcd",
           symbol: "USDC",
           decimals: 6,
           decimalsSource: "onchain_verified" as const,
@@ -342,15 +342,16 @@ describe("BackendPipeline", () => {
         { chainId: 143, protocol: "kuru", adapter: protocol },
       ]),
       providerRegistry: new ProviderRegistry(),
-      normalization: { normalize: () => ({
-        ...normalizedIntent,
-        chainId: 143,
-      }) },
+      normalization: {
+        normalize: () => ({
+          ...normalizedIntent,
+          chainId: 143,
+        }),
+      },
       core: { evaluate: async () => "unused" },
       decision: { decide: async () => "unused" },
       runStore: new InMemoryRunStore(),
     });
-    const { bootstrapBackendApp } = await import("../bootstrap/backend.js");
     const app = bootstrapBackendApp({ environment, tokenRegistry, composition: runtime });
 
     const response = await app.fetch(
