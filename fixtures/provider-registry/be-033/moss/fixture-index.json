@@ -1,0 +1,1061 @@
+{
+  "schemaVersion": "be-033-moss-handoff-v1",
+  "status": "DRAFT_PROVIDER_OWNER_HANDOFF",
+  "nonAuthorityNotice": "Provider Owner input only. This file does not freeze ProviderRegistry, the final Evidence Contract, Risk semantics, prepared-execution types, freshness policy, or public API fields.",
+  "fixtureIndexNotice": "fixtureIndex entries describe evidence cases and observations only; they do not freeze final Provider status mappings, and every non-null sourcePath must resolve to an existing repository path.",
+  "evidenceClasses": [
+    "REAL_LIVE_SIMULATION",
+    "REAL_RECORDED_HISTORICAL",
+    "RECORDED_REPLAY",
+    "RULE_TEST_INPUT",
+    "DETERMINISTIC_RULE_GUARD",
+    "DOCUMENTATION_ONLY",
+    "UNAVAILABLE"
+  ],
+  "qualificationClasses": [
+    "REAL_OBSERVED",
+    "INFERRED_FROM_CODE",
+    "MOCK_ONLY",
+    "RULE_DERIVED",
+    "UNQUALIFIED"
+  ],
+  "supportStates": [
+    "VERIFIED_RUNTIME",
+    "SUPPORTED_DOC_ONLY",
+    "UNSUPPORTED",
+    "UNKNOWN"
+  ],
+  "provider": {
+    "providerId": "moss-kuru",
+    "scope": "CURRENT_COMPATIBILITY",
+    "scopeStatement": "The only Moss scope with real evidence is the historical Monad chainId=143 x protocol=kuru compatibility path. Do not generalize to universal Moss support.",
+    "implementationStatus": {
+      "value": "LEGACY_COMPATIBILITY_PATH_MERGED_TARGET_GENERIC_ADAPTER_NOT_IMPLEMENTED",
+      "class": "INFERRED_FROM_CODE",
+      "note": "packages/moss-bridge/src/provider.ts implements the legacy MossProvider over EvidenceEvaluationInput. No Moss implementation of the Backend ProviderAdapter exists in apps/api/src/backend.",
+      "pendingPullRequest": {
+        "number": 57,
+        "title": "feat(api): integrate backend pipeline runtime",
+        "stateAtAuthoring": "OPEN",
+        "mayMergeLater": true,
+        "statement": "PR #57 defines BackendPipelinePreparedExecution. It was unmerged at authoring time; do not treat its generic prepared-execution path as merged behavior."
+      }
+    },
+    "versionEvidence": {
+      "state": "VERIFIED_RUNTIME",
+      "observedRuntimeVersion": "0.1.0",
+      "observedRuntimeRevision": "ef15448e166f31c891e80dba5073dae04a052a2b",
+      "observedProtocolPackage": "@themoss/protocol-kuru@0.1.0",
+      "evidence": "fixtures/chain-evidence/kuru/live-success-mon-to-usdc/metadata.json"
+    },
+    "intentTypes": [
+      {
+        "value": "swap/check (GenericSwapIntent compatibility path)",
+        "state": "VERIFIED_RUNTIME",
+        "note": "Only the Monad x Kuru swap/check compatibility path is real-qualified."
+      }
+    ],
+    "chainIds": [
+      {
+        "value": 143,
+        "valueLabel": "monad-mainnet",
+        "state": "VERIFIED_RUNTIME",
+        "evidence": "fixtures/chain-evidence/kuru/live-success-mon-to-usdc/metadata.json"
+      }
+    ],
+    "protocols": [
+      {
+        "value": "kuru",
+        "state": "VERIFIED_RUNTIME",
+        "evidence": "fixtures/chain-evidence/kuru/live-success-mon-to-usdc/metadata.json"
+      }
+    ],
+    "inputPrerequisites": {
+      "class": "INFERRED_FROM_CODE",
+      "items": [
+        "Generic swap/check intent with chainId, sender, tokenIn, tokenOut, amountIn, and minimumReceivedSource.",
+        "Configured MOSS_RUNTIME_PATH pointing at the pinned Moss checkout.",
+        "Environment-supplied read-only RPC URL (endpoint-specific authentication).",
+        "Configured runtimeVersion and runtimeRevision that match the checkout and every loaded @themoss/* package."
+      ]
+    },
+    "unsupportedShapes": {
+      "class": "INFERRED_FROM_CODE",
+      "items": [
+        "Any protocol other than kuru.",
+        "Any chainId other than 143.",
+        "Any runtime checkout/package identity that does not match the configured revision.",
+        "Any invocation without a simulator pinned block for a simulated (non-NO_ROUTE) outcome."
+      ]
+    },
+    "capabilities": {
+      "evaluationOrSimulation": {
+        "state": "VERIFIED_RUNTIME",
+        "note": "Real fixture: five stages OK, simulationCoverage.complete=true, expectedTransactions=1, observedResults=1. Verified only for the historical Monad x Kuru path."
+      },
+      "executionResult": {
+        "state": "VERIFIED_RUNTIME",
+        "note": "Real fixture executionStatus=SUCCESS. NO_ROUTE and REVERTED are defined code outcomes without a real Moss response sample."
+      },
+      "quote": {
+        "state": "VERIFIED_RUNTIME",
+        "note": "Historical compatibility path only; estimatedAmountOut=0.000223, minimumAmountOut=0.000221 in the real fixture."
+      },
+      "unsignedTransactionConstruction": {
+        "state": "VERIFIED_RUNTIME",
+        "note": "Legacy ACTION stage produced from/to/data/value. No signing, broadcast, custody, or wallet mutation."
+      },
+      "assetChanges": {
+        "state": "VERIFIED_RUNTIME",
+        "note": "Real fixture assetChanges contains native transfers and events; assetChangeAssessment=EXPLAINED."
+      },
+      "balanceChanges": {
+        "state": "UNKNOWN",
+        "note": "No distinct generic balance-change capability is proven. walletAffordabilityChecked=false; synthetic pre-funding covers native MON only."
+      },
+      "gas": {
+        "state": "VERIFIED_RUNTIME",
+        "note": "Real fixture gas.value=[\"528696\"]. Simulator-reported units for one result, not a fee or price estimate."
+      },
+      "revertReason": {
+        "state": "UNKNOWN",
+        "note": "No real Moss revert response exists. Revert classification exists in code and fixtures/chain-evidence/kuru/reverted is RULE_TEST_INPUT with real=false."
+      },
+      "blockContext": {
+        "state": "VERIFIED_RUNTIME",
+        "note": "Per-stage blocks 94112883, quote/action block 94112901, simulator pinned block 94112902. A stage block is never a substitute for the simulator pin."
+      },
+      "provenance": {
+        "state": "VERIFIED_RUNTIME",
+        "note": "Runtime version/revision, chain identity, block provenance, and per-field source/reproducibility/fetchedAt are preserved."
+      },
+      "freshnessInputs": {
+        "state": "VERIFIED_RUNTIME",
+        "note": "fetchedAt and block numbers exist as acquisition inputs."
+      },
+      "freshnessOrStalePolicy": {
+        "state": "UNKNOWN",
+        "note": "No reviewed stale threshold or freshness policy exists. The Moss path never emits STALE. Do not equate a timestamp with freshness=VERIFIED_RUNTIME."
+      },
+      "checkedScope": {
+        "state": "VERIFIED_RUNTIME",
+        "qualificationClass": "RULE_DERIVED",
+        "note": "Derived per run from non-null quote/action/receipt-or-outcome/simulation-coverage fields, plus no-route."
+      },
+      "unknownScope": {
+        "state": "VERIFIED_RUNTIME",
+        "qualificationClass": "RULE_DERIVED",
+        "note": "Complement of checkedScope for the same run."
+      }
+    },
+    "auth": {
+      "state": "UNKNOWN",
+      "note": "Configured local runtime plus environment-supplied RPC; RPC authentication is endpoint-specific. No Moss-level auth failure code exists."
+    },
+    "rateLimits": {
+      "state": "UNKNOWN",
+      "note": "Not normalized as a universal Moss limit and not exercised. No Moss-specific rate-limit code may be invented."
+    },
+    "timeoutLimits": {
+      "state": "UNKNOWN",
+      "note": "Stage timeout 30000ms and overall timeout 90000ms are client-enforced Promise.race deadlines, not Provider timeout evidence."
+    },
+    "knownLimitations": [
+      "Synthetic pre-funding covers native MON only and does not prove ERC-20 affordability or allowance.",
+      "The compatibility Provider is Monad/Kuru-specific.",
+      "No signing, broadcast, custody, or wallet mutation.",
+      "No real Moss revert, failure, timeout, outage, auth, rate-limit, malformed, partial, or stale response exists.",
+      "The legacy path constructs quote/action internally; the target generic adapter must consume an exact prepared execution."
+    ]
+  },
+  "fixtureIndex": [
+    {
+      "id": "moss-live-success-mon-to-usdc",
+      "providerId": "moss-kuru",
+      "chainId": 143,
+      "protocol": "kuru",
+      "evidenceClass": "REAL_LIVE_SIMULATION",
+      "real": true,
+      "supportState": "VERIFIED_RUNTIME",
+      "qualificationClass": "REAL_OBSERVED",
+      "sourcePath": "fixtures/chain-evidence/kuru/live-success-mon-to-usdc/",
+      "capture": {
+        "runId": "kuru-live-1786163979273",
+        "startedAt": "2026-08-08T04:39:39.273Z",
+        "finishedAt": "2026-08-08T04:39:49.599Z",
+        "parallaxCommitAtCapture": "938f62fe5c872626f5cfa2f0a58c975d53e4a8de"
+      },
+      "runtimeIdentity": {
+        "runtimeVersion": "0.1.0",
+        "runtimeRevision": "ef15448e166f31c891e80dba5073dae04a052a2b"
+      },
+      "requestScope": {
+        "direction": "MON_TO_USDC",
+        "sender": "0xcccccccccccccccccccccccccccccccccccccccc",
+        "tokenIn": "native",
+        "tokenOut": "0x754704Bc059F8C67012fEd69BC8A327a5aafb603",
+        "amountIn": "0.01"
+      },
+      "blockContext": {
+        "stageBlock": "94112883",
+        "quoteAndActionBlock": "94112901",
+        "simulatorPinnedBlock": "94112902",
+        "blockHash": null
+      },
+      "expectedControlState": {
+        "providerStatus": "SUCCESS",
+        "integrationStatus": "OK",
+        "executionStatus": "SUCCESS"
+      },
+      "proves": [
+        "Real Monad x Kuru Moss evaluation through DISCOVER/LOAD/QUOTE/ACTION/SIMULATE with complete simulation coverage.",
+        "Runtime identity 0.1.0 / ef15448e166f31c891e80dba5073dae04a052a2b.",
+        "Observed chain 143, quote and unsigned action at block 94112901, simulator pinned block 94112902.",
+        "assetChanges and gas evidence captured without signing or broadcast."
+      ],
+      "doesNotProve": [
+        "Universal Moss support beyond Monad x Kuru.",
+        "ERC-20 affordability or allowance.",
+        "Real revert, failure, timeout, outage, auth, rate-limit, malformed, partial, or stale behavior.",
+        "Any freshness or stale policy.",
+        "Any prepared-execution binding.",
+        "Block hash provenance."
+      ],
+      "reproducibilityNote": "Sanitized immutable repository fixture. Loadable offline with no runtime, network, RPC URL, or secret. Not reproducible as a live re-run because head/state advance."
+    },
+    {
+      "id": "moss-recorded-mon-to-usdc",
+      "providerId": "moss-kuru",
+      "chainId": 143,
+      "protocol": "kuru",
+      "evidenceClass": "REAL_RECORDED_HISTORICAL",
+      "real": true,
+      "supportState": "VERIFIED_RUNTIME",
+      "qualificationClass": "REAL_OBSERVED",
+      "sourcePath": "fixtures/chain-evidence/kuru/mon-to-usdc/",
+      "capture": {
+        "recordedAt": "2026-07-29T15:48:24.685Z",
+        "parallaxCommitAtCapture": null
+      },
+      "runtimeIdentity": {
+        "runtimeVersion": null,
+        "runtimeRevision": "d09b38cbc44ee7f5722c5d09e7224f7750187762",
+        "runtimeVersionNote": "Recorded as workspace baseline @themoss/protocol-kuru@0.1.0, not the canonical ef15448e pin."
+      },
+      "requestScope": {
+        "direction": "MON_TO_USDC",
+        "sender": "0xcccccccccccccccccccccccccccccccccccccccc",
+        "tokenIn": "native",
+        "tokenOut": "0x754704Bc059F8C67012fEd69BC8A327a5aafb603",
+        "amountIn": "0.01"
+      },
+      "blockContext": {
+        "stageBlock": null,
+        "quoteAndActionBlock": "91383505",
+        "simulatorPinnedBlock": null,
+        "blockHash": null
+      },
+      "expectedControlState": {
+        "providerStatus": "SUCCESS",
+        "integrationStatus": "OK",
+        "executionStatus": "SUCCESS"
+      },
+      "proves": [
+        "A historical real Monad x Kuru recording exists on an older Moss baseline.",
+        "The offline recorded-normalization path is exercised deterministically."
+      ],
+      "doesNotProve": [
+        "Canonical runtime qualification for the current pinned revision; superseded for that purpose by the live-success fixture.",
+        "Simulator pinned-block provenance."
+      ],
+      "reproducibilityNote": "Immutable historical recording; offline-loadable. Historical only, not the canonical runtime-qualified capture."
+    },
+    {
+      "id": "moss-recorded-usdc-to-mon",
+      "providerId": "moss-kuru",
+      "chainId": 143,
+      "protocol": "kuru",
+      "evidenceClass": "REAL_RECORDED_HISTORICAL",
+      "real": true,
+      "supportState": "VERIFIED_RUNTIME",
+      "qualificationClass": "REAL_OBSERVED",
+      "sourcePath": "fixtures/chain-evidence/kuru/usdc-to-mon/",
+      "capture": {
+        "recordedAt": "2026-07-29T15:48:31.474Z",
+        "parallaxCommitAtCapture": null
+      },
+      "runtimeIdentity": {
+        "runtimeVersion": null,
+        "runtimeRevision": "d09b38cbc44ee7f5722c5d09e7224f7750187762",
+        "runtimeVersionNote": "Recorded as workspace baseline @themoss/protocol-kuru@0.1.0, not the canonical ef15448e pin."
+      },
+      "requestScope": {
+        "direction": "USDC_TO_MON",
+        "sender": "0xcccccccccccccccccccccccccccccccccccccccc",
+        "tokenIn": "0x754704Bc059F8C67012fEd69BC8A327a5aafb603",
+        "tokenOut": "native",
+        "amountIn": "1"
+      },
+      "blockContext": {
+        "stageBlock": null,
+        "quoteAndActionBlock": "91383528",
+        "simulatorPinnedBlock": null,
+        "blockHash": null
+      },
+      "expectedControlState": {
+        "providerStatus": "SUCCESS",
+        "integrationStatus": "OK",
+        "executionStatus": "SUCCESS"
+      },
+      "proves": [
+        "A historical real ERC-20-input recording exists and derives approval=REQUIRED."
+      ],
+      "doesNotProve": [
+        "That an ERC-20 approval was actually executed.",
+        "Canonical runtime qualification for the current pinned revision."
+      ],
+      "reproducibilityNote": "Immutable historical recording; offline-loadable. Historical only."
+    },
+    {
+      "id": "moss-replay-mon-to-usdc",
+      "providerId": "moss-kuru",
+      "chainId": 143,
+      "protocol": "kuru",
+      "evidenceClass": "RECORDED_REPLAY",
+      "real": false,
+      "supportState": "SUPPORTED_DOC_ONLY",
+      "qualificationClass": "MOCK_ONLY",
+      "sourcePath": "fixtures/replay-data/mon-to-usdc.json",
+      "capture": {
+        "runId": "recorded-kuru-mon-to-usdc-91383505",
+        "startedAt": null,
+        "finishedAt": null,
+        "parallaxCommitAtCapture": null
+      },
+      "runtimeIdentity": {
+        "runtimeVersion": null,
+        "runtimeRevision": null
+      },
+      "requestScope": {
+        "direction": "MON_TO_USDC",
+        "sender": "0xcccccccccccccccccccccccccccccccccccccccc",
+        "tokenIn": "native",
+        "tokenOut": "0x754704Bc059F8C67012fEd69BC8A327a5aafb603",
+        "amountIn": null
+      },
+      "blockContext": {
+        "stageBlock": null,
+        "quoteAndActionBlock": null,
+        "simulatorPinnedBlock": null,
+        "blockHash": null
+      },
+      "expectedControlState": {
+        "providerStatus": null,
+        "integrationStatus": null,
+        "executionStatus": null,
+        "note": "Demo/replay contract input. Not a live Provider response and must never be presented as one."
+      },
+      "proves": [
+        "The Recorded Replay contract path is deterministic and offline."
+      ],
+      "doesNotProve": [
+        "Live Provider behavior, current runtime qualification, or freshness."
+      ],
+      "reproducibilityNote": "Deterministic recorded-replay envelope; offline-loadable. Not live Provider evidence."
+    },
+    {
+      "id": "moss-replay-usdc-to-mon",
+      "providerId": "moss-kuru",
+      "chainId": 143,
+      "protocol": "kuru",
+      "evidenceClass": "RECORDED_REPLAY",
+      "real": false,
+      "supportState": "SUPPORTED_DOC_ONLY",
+      "qualificationClass": "MOCK_ONLY",
+      "sourcePath": "fixtures/replay-data/usdc-to-mon.json",
+      "capture": {
+        "runId": null,
+        "startedAt": null,
+        "finishedAt": null,
+        "parallaxCommitAtCapture": null
+      },
+      "runtimeIdentity": {
+        "runtimeVersion": null,
+        "runtimeRevision": null
+      },
+      "requestScope": {
+        "direction": "USDC_TO_MON",
+        "sender": null,
+        "tokenIn": "0x754704Bc059F8C67012fEd69BC8A327a5aafb603",
+        "tokenOut": "native",
+        "amountIn": null
+      },
+      "blockContext": {
+        "stageBlock": null,
+        "quoteAndActionBlock": null,
+        "simulatorPinnedBlock": null,
+        "blockHash": null
+      },
+      "expectedControlState": {
+        "providerStatus": null,
+        "integrationStatus": null,
+        "executionStatus": null,
+        "note": "Demo/replay contract input. Not a live Provider response."
+      },
+      "proves": [
+        "The Recorded Replay contract path is deterministic and offline."
+      ],
+      "doesNotProve": ["Live Provider behavior."],
+      "reproducibilityNote": "Deterministic recorded-replay envelope; offline-loadable."
+    },
+    {
+      "id": "moss-unsupported-guard",
+      "providerId": "moss-kuru",
+      "chainId": null,
+      "protocol": null,
+      "evidenceClass": "DETERMINISTIC_RULE_GUARD",
+      "real": false,
+      "supportState": "UNSUPPORTED",
+      "qualificationClass": "INFERRED_FROM_CODE",
+      "sourcePath": null,
+      "capture": {
+        "runId": null,
+        "startedAt": null,
+        "finishedAt": null,
+        "parallaxCommitAtCapture": null
+      },
+      "runtimeIdentity": {
+        "runtimeVersion": null,
+        "runtimeRevision": null
+      },
+      "requestScope": {
+        "direction": null,
+        "sender": null,
+        "tokenIn": null,
+        "tokenOut": null,
+        "amountIn": null
+      },
+      "blockContext": {
+        "stageBlock": null,
+        "quoteAndActionBlock": null,
+        "simulatorPinnedBlock": null,
+        "blockHash": null
+      },
+      "expectedControlState": {
+        "providerStatus": null,
+        "integrationStatus": null,
+        "executionStatus": null,
+        "backendControlStatus": "unsupported",
+        "note": "MossProvider.supports and the evaluation guard reject non-Kuru/non-143 without invoking the runner."
+      },
+      "proves": [
+        "Unsupported chain/protocol is rejected before any live call and cannot silently proceed."
+      ],
+      "doesNotProve": ["Anything about real Provider behavior."],
+      "reproducibilityNote": "Deterministic code guard exercised offline. No fixture file is required."
+    },
+    {
+      "id": "moss-reverted-mock",
+      "providerId": "moss-kuru",
+      "chainId": null,
+      "protocol": "kuru",
+      "evidenceClass": "RULE_TEST_INPUT",
+      "real": false,
+      "supportState": "UNKNOWN",
+      "qualificationClass": "MOCK_ONLY",
+      "sourcePath": "fixtures/chain-evidence/kuru/reverted/",
+      "capture": {
+        "runId": null,
+        "startedAt": null,
+        "finishedAt": null,
+        "parallaxCommitAtCapture": null
+      },
+      "runtimeIdentity": {
+        "runtimeVersion": null,
+        "runtimeRevision": null
+      },
+      "requestScope": {
+        "direction": null,
+        "sender": null,
+        "tokenIn": null,
+        "tokenOut": null,
+        "amountIn": null
+      },
+      "blockContext": {
+        "stageBlock": null,
+        "quoteAndActionBlock": null,
+        "simulatorPinnedBlock": null,
+        "blockHash": null
+      },
+      "expectedControlState": {
+        "providerStatus": "SUCCESS",
+        "integrationStatus": "OK",
+        "executionStatus": "REVERTED",
+        "note": "Revert normalization only. A verified revert is not a Provider failure and must never become PROCEED."
+      },
+      "proves": ["Revert normalization/rule behavior with source=mock."],
+      "doesNotProve": ["Any real Moss revert response or revert reason."],
+      "reproducibilityNote": "Deterministic mock/rule input (metadata fixtureType=RULE_TEST_INPUT, real=false, source=mock)."
+    },
+    {
+      "id": "moss-integration-error-mock",
+      "providerId": "moss-kuru",
+      "chainId": null,
+      "protocol": "kuru",
+      "evidenceClass": "RULE_TEST_INPUT",
+      "real": false,
+      "supportState": "UNKNOWN",
+      "qualificationClass": "MOCK_ONLY",
+      "sourcePath": "fixtures/chain-evidence/kuru/integration-error/",
+      "capture": {
+        "runId": null,
+        "startedAt": null,
+        "finishedAt": null,
+        "parallaxCommitAtCapture": null
+      },
+      "runtimeIdentity": {
+        "runtimeVersion": null,
+        "runtimeRevision": null
+      },
+      "requestScope": {
+        "direction": null,
+        "sender": null,
+        "tokenIn": null,
+        "tokenOut": null,
+        "amountIn": null
+      },
+      "blockContext": {
+        "stageBlock": null,
+        "quoteAndActionBlock": null,
+        "simulatorPinnedBlock": null,
+        "blockHash": null
+      },
+      "expectedControlState": {
+        "providerStatus": "FAILED",
+        "integrationStatus": "UNAVAILABLE",
+        "executionStatus": "UNKNOWN",
+        "backendControlStatus": "failed",
+        "note": "Integration-failure classification only; no chain call was made. Non-success must never become PROCEED."
+      },
+      "proves": ["Integration-status separation logic."],
+      "doesNotProve": [
+        "Any real Moss failure, outage, or authentication response."
+      ],
+      "reproducibilityNote": "Deterministic mock/rule input (metadata fixtureType=RULE_TEST_INPUT, real=false, source=mock)."
+    },
+    {
+      "id": "moss-missing-evidence-mock",
+      "providerId": "moss-kuru",
+      "chainId": null,
+      "protocol": "kuru",
+      "evidenceClass": "RULE_TEST_INPUT",
+      "real": false,
+      "supportState": "UNKNOWN",
+      "qualificationClass": "MOCK_ONLY",
+      "sourcePath": "fixtures/chain-evidence/kuru/missing-evidence/",
+      "capture": {
+        "runId": null,
+        "startedAt": null,
+        "finishedAt": null,
+        "parallaxCommitAtCapture": null
+      },
+      "runtimeIdentity": {
+        "runtimeVersion": null,
+        "runtimeRevision": null
+      },
+      "requestScope": {
+        "direction": null,
+        "sender": null,
+        "tokenIn": null,
+        "tokenOut": null,
+        "amountIn": null
+      },
+      "blockContext": {
+        "stageBlock": null,
+        "quoteAndActionBlock": null,
+        "simulatorPinnedBlock": null,
+        "blockHash": null
+      },
+      "expectedControlState": {
+        "providerStatus": "UNKNOWN",
+        "integrationStatus": "OK",
+        "executionStatus": "UNKNOWN",
+        "backendControlStatus": "unknown",
+        "note": "Missing evidence fails closed to UNKNOWN and cannot become PROCEED."
+      },
+      "proves": ["Missing-evidence UNKNOWN behavior."],
+      "doesNotProve": ["Any real partial or malformed Provider response."],
+      "reproducibilityNote": "Deterministic mock/rule input (metadata fixtureType=RULE_TEST_INPUT, real=false, source=mock)."
+    },
+    {
+      "id": "moss-no-route-mock",
+      "providerId": "moss-kuru",
+      "chainId": null,
+      "protocol": "kuru",
+      "evidenceClass": "RULE_TEST_INPUT",
+      "real": false,
+      "supportState": "UNKNOWN",
+      "qualificationClass": "MOCK_ONLY",
+      "sourcePath": "fixtures/chain-evidence/kuru/no-route/",
+      "capture": {
+        "runId": null,
+        "startedAt": null,
+        "finishedAt": null,
+        "parallaxCommitAtCapture": null
+      },
+      "runtimeIdentity": {
+        "runtimeVersion": null,
+        "runtimeRevision": null
+      },
+      "requestScope": {
+        "direction": null,
+        "sender": null,
+        "tokenIn": null,
+        "tokenOut": null,
+        "amountIn": null
+      },
+      "blockContext": {
+        "stageBlock": null,
+        "quoteAndActionBlock": null,
+        "simulatorPinnedBlock": null,
+        "blockHash": null
+      },
+      "expectedControlState": {
+        "providerStatus": "SUCCESS",
+        "integrationStatus": "OK",
+        "executionStatus": "NO_ROUTE",
+        "note": "NO_ROUTE is a legal terminal outcome; it is not an integration failure and must not require a fabricated simulator block."
+      },
+      "proves": ["NO_ROUTE rule mapping and legal terminal handling."],
+      "doesNotProve": ["Any real no-route Provider response."],
+      "reproducibilityNote": "Deterministic mock/rule input (metadata fixtureType=RULE_TEST_INPUT, real=false, source=mock)."
+    },
+    {
+      "id": "moss-timeout",
+      "providerId": "moss-kuru",
+      "chainId": null,
+      "protocol": "kuru",
+      "evidenceClass": "UNAVAILABLE",
+      "real": false,
+      "supportState": "UNKNOWN",
+      "qualificationClass": "UNQUALIFIED",
+      "sourcePath": null,
+      "capture": {
+        "runId": null,
+        "startedAt": null,
+        "finishedAt": null,
+        "parallaxCommitAtCapture": null
+      },
+      "runtimeIdentity": {
+        "runtimeVersion": null,
+        "runtimeRevision": null
+      },
+      "requestScope": {
+        "direction": null,
+        "sender": null,
+        "tokenIn": null,
+        "tokenOut": null,
+        "amountIn": null
+      },
+      "blockContext": {
+        "stageBlock": null,
+        "quoteAndActionBlock": null,
+        "simulatorPinnedBlock": null,
+        "blockHash": null
+      },
+      "expectedControlState": {
+        "providerStatus": "UNKNOWN",
+        "integrationStatus": "TIMEOUT",
+        "executionStatus": "UNKNOWN",
+        "backendControlStatus": "timeout",
+        "note": "Code classifies timeouts and marks them retryable; no real Moss timeout response was captured. The client-enforced deadlines are not Provider timeout evidence."
+      },
+      "proves": [
+        "Documented fail-closed expectation and code classification only."
+      ],
+      "doesNotProve": ["Any real Provider timeout response."],
+      "reproducibilityNote": "Explicitly unavailable: no real sample exists; no fabricated fixture may be committed."
+    },
+    {
+      "id": "moss-outage",
+      "providerId": "moss-kuru",
+      "chainId": null,
+      "protocol": "kuru",
+      "evidenceClass": "UNAVAILABLE",
+      "real": false,
+      "supportState": "UNKNOWN",
+      "qualificationClass": "UNQUALIFIED",
+      "sourcePath": null,
+      "capture": {
+        "runId": null,
+        "startedAt": null,
+        "finishedAt": null,
+        "parallaxCommitAtCapture": null
+      },
+      "runtimeIdentity": {
+        "runtimeVersion": null,
+        "runtimeRevision": null
+      },
+      "requestScope": {
+        "direction": null,
+        "sender": null,
+        "tokenIn": null,
+        "tokenOut": null,
+        "amountIn": null
+      },
+      "blockContext": {
+        "stageBlock": null,
+        "quoteAndActionBlock": null,
+        "simulatorPinnedBlock": null,
+        "blockHash": null
+      },
+      "expectedControlState": {
+        "providerStatus": "FAILED",
+        "integrationStatus": "UNAVAILABLE",
+        "executionStatus": "UNKNOWN",
+        "backendControlStatus": "failed",
+        "note": "Expected fail-closed handling from existing code/contracts."
+      },
+      "proves": ["Documented fail-closed expectation only."],
+      "doesNotProve": ["Any real Provider outage response."],
+      "reproducibilityNote": "Explicitly unavailable: no real sample exists."
+    },
+    {
+      "id": "moss-auth-failure",
+      "providerId": "moss-kuru",
+      "chainId": null,
+      "protocol": "kuru",
+      "evidenceClass": "UNAVAILABLE",
+      "real": false,
+      "supportState": "UNKNOWN",
+      "qualificationClass": "UNQUALIFIED",
+      "sourcePath": null,
+      "capture": {
+        "runId": null,
+        "startedAt": null,
+        "finishedAt": null,
+        "parallaxCommitAtCapture": null
+      },
+      "runtimeIdentity": {
+        "runtimeVersion": null,
+        "runtimeRevision": null
+      },
+      "requestScope": {
+        "direction": null,
+        "sender": null,
+        "tokenIn": null,
+        "tokenOut": null,
+        "amountIn": null
+      },
+      "blockContext": {
+        "stageBlock": null,
+        "quoteAndActionBlock": null,
+        "simulatorPinnedBlock": null,
+        "blockHash": null
+      },
+      "expectedControlState": {
+        "providerStatus": "FAILED",
+        "integrationStatus": "UNAVAILABLE",
+        "executionStatus": "UNKNOWN",
+        "backendControlStatus": "failed",
+        "note": "No Moss-specific authentication failure code exists and none may be invented. Credential material must never be captured."
+      },
+      "proves": ["Documented fail-closed expectation only."],
+      "doesNotProve": ["Any real authentication failure response."],
+      "reproducibilityNote": "Explicitly unavailable: no real sample exists."
+    },
+    {
+      "id": "moss-rate-limit",
+      "providerId": "moss-kuru",
+      "chainId": null,
+      "protocol": "kuru",
+      "evidenceClass": "UNAVAILABLE",
+      "real": false,
+      "supportState": "UNKNOWN",
+      "qualificationClass": "UNQUALIFIED",
+      "sourcePath": null,
+      "capture": {
+        "runId": null,
+        "startedAt": null,
+        "finishedAt": null,
+        "parallaxCommitAtCapture": null
+      },
+      "runtimeIdentity": {
+        "runtimeVersion": null,
+        "runtimeRevision": null
+      },
+      "requestScope": {
+        "direction": null,
+        "sender": null,
+        "tokenIn": null,
+        "tokenOut": null,
+        "amountIn": null
+      },
+      "blockContext": {
+        "stageBlock": null,
+        "quoteAndActionBlock": null,
+        "simulatorPinnedBlock": null,
+        "blockHash": null
+      },
+      "expectedControlState": {
+        "providerStatus": "FAILED",
+        "integrationStatus": "UNAVAILABLE",
+        "executionStatus": "UNKNOWN",
+        "backendControlStatus": "failed",
+        "note": "No Moss-specific rate-limit response or code exists and none may be invented."
+      },
+      "proves": ["Documented fail-closed expectation only."],
+      "doesNotProve": ["Any real rate-limit response."],
+      "reproducibilityNote": "Explicitly unavailable: no real sample exists."
+    },
+    {
+      "id": "moss-malformed-response",
+      "providerId": "moss-kuru",
+      "chainId": null,
+      "protocol": "kuru",
+      "evidenceClass": "UNAVAILABLE",
+      "real": false,
+      "supportState": "UNKNOWN",
+      "qualificationClass": "UNQUALIFIED",
+      "sourcePath": null,
+      "capture": {
+        "runId": null,
+        "startedAt": null,
+        "finishedAt": null,
+        "parallaxCommitAtCapture": null
+      },
+      "runtimeIdentity": {
+        "runtimeVersion": null,
+        "runtimeRevision": null
+      },
+      "requestScope": {
+        "direction": null,
+        "sender": null,
+        "tokenIn": null,
+        "tokenOut": null,
+        "amountIn": null
+      },
+      "blockContext": {
+        "stageBlock": null,
+        "quoteAndActionBlock": null,
+        "simulatorPinnedBlock": null,
+        "blockHash": null
+      },
+      "expectedControlState": {
+        "providerStatus": "FAILED",
+        "integrationStatus": "INTEGRATION_ERROR",
+        "executionStatus": "UNKNOWN",
+        "backendControlStatus": "invalid",
+        "note": "Malformed responses classify as INTEGRATION_ERROR/invalid and fail closed."
+      },
+      "proves": ["Documented fail-closed expectation only."],
+      "doesNotProve": ["Any real malformed Provider response."],
+      "reproducibilityNote": "Explicitly unavailable: no real sample exists; malformed shapes must not be fabricated as real."
+    },
+    {
+      "id": "moss-partial-response",
+      "providerId": "moss-kuru",
+      "chainId": null,
+      "protocol": "kuru",
+      "evidenceClass": "UNAVAILABLE",
+      "real": false,
+      "supportState": "UNKNOWN",
+      "qualificationClass": "UNQUALIFIED",
+      "sourcePath": null,
+      "capture": {
+        "runId": null,
+        "startedAt": null,
+        "finishedAt": null,
+        "parallaxCommitAtCapture": null
+      },
+      "runtimeIdentity": {
+        "runtimeVersion": null,
+        "runtimeRevision": null
+      },
+      "requestScope": {
+        "direction": null,
+        "sender": null,
+        "tokenIn": null,
+        "tokenOut": null,
+        "amountIn": null
+      },
+      "blockContext": {
+        "stageBlock": null,
+        "quoteAndActionBlock": null,
+        "simulatorPinnedBlock": null,
+        "blockHash": null
+      },
+      "expectedControlState": {
+        "providerStatus": "UNKNOWN",
+        "integrationStatus": "OK",
+        "executionStatus": "UNKNOWN",
+        "backendControlStatus": "unknown",
+        "note": "coverage.complete=false maps to UNKNOWN; partial evidence must never be treated as complete."
+      },
+      "proves": ["Documented fail-closed expectation only."],
+      "doesNotProve": ["Any real partial Provider response."],
+      "reproducibilityNote": "Explicitly unavailable: no real sample exists."
+    },
+    {
+      "id": "moss-stale-evidence",
+      "providerId": "moss-kuru",
+      "chainId": null,
+      "protocol": "kuru",
+      "evidenceClass": "UNAVAILABLE",
+      "real": false,
+      "supportState": "UNKNOWN",
+      "qualificationClass": "UNQUALIFIED",
+      "sourcePath": null,
+      "capture": {
+        "runId": null,
+        "startedAt": null,
+        "finishedAt": null,
+        "parallaxCommitAtCapture": null
+      },
+      "runtimeIdentity": {
+        "runtimeVersion": null,
+        "runtimeRevision": null
+      },
+      "requestScope": {
+        "direction": null,
+        "sender": null,
+        "tokenIn": null,
+        "tokenOut": null,
+        "amountIn": null
+      },
+      "blockContext": {
+        "stageBlock": null,
+        "quoteAndActionBlock": null,
+        "simulatorPinnedBlock": null,
+        "blockHash": null
+      },
+      "expectedControlState": {
+        "providerStatus": null,
+        "integrationStatus": null,
+        "executionStatus": null,
+        "backendControlStatus": "stale",
+        "note": "STALE is a generic status, but the Moss path never produces it and no freshness threshold exists. Freshness policy remains unresolved."
+      },
+      "proves": ["That freshness policy is explicitly unresolved."],
+      "doesNotProve": ["Any real stale response or any freshness policy."],
+      "reproducibilityNote": "Explicitly unavailable: no real sample exists and no policy is defined."
+    },
+    {
+      "id": "moss-unknown-outcome",
+      "providerId": "moss-kuru",
+      "chainId": null,
+      "protocol": "kuru",
+      "evidenceClass": "UNAVAILABLE",
+      "real": false,
+      "supportState": "UNKNOWN",
+      "qualificationClass": "UNQUALIFIED",
+      "sourcePath": null,
+      "capture": {
+        "runId": null,
+        "startedAt": null,
+        "finishedAt": null,
+        "parallaxCommitAtCapture": null
+      },
+      "runtimeIdentity": {
+        "runtimeVersion": null,
+        "runtimeRevision": null
+      },
+      "requestScope": {
+        "direction": null,
+        "sender": null,
+        "tokenIn": null,
+        "tokenOut": null,
+        "amountIn": null
+      },
+      "blockContext": {
+        "stageBlock": null,
+        "quoteAndActionBlock": null,
+        "simulatorPinnedBlock": null,
+        "blockHash": null
+      },
+      "expectedControlState": {
+        "providerStatus": "UNKNOWN",
+        "integrationStatus": "OK",
+        "executionStatus": "UNKNOWN",
+        "backendControlStatus": "unknown",
+        "note": "An undetermined execution outcome maps to UNKNOWN and fails closed."
+      },
+      "proves": ["Documented fail-closed expectation only."],
+      "doesNotProve": ["Any real unknown-outcome Provider response."],
+      "reproducibilityNote": "Explicitly unavailable: no real sample exists."
+    }
+  ],
+  "preparedExecutionBinding": {
+    "status": "TARGET_BINDING_SPECIFIED_IMPLEMENTATION_PENDING",
+    "coreInvariant": "The target generic MossProvider Adapter must consume the exact execution prepared by Backend/Protocol for the run and must not silently reconstruct a different transaction from Intent when the pipeline supplies one.",
+    "legacyPath": {
+      "status": "MERGED_CURRENT_BEHAVIOR",
+      "statement": "On merged main, MossProvider.evaluate receives only runId/intent/decimals and the Moss/Kuru runner builds quote and unsigned action internally. This legacy ownership does not satisfy the target prepared-execution invariant.",
+      "evidence": "packages/moss-bridge/src/provider.ts, packages/orchestrator/agent-flow/index.ts"
+    },
+    "targetPath": {
+      "status": "PENDING_PULL_REQUEST_57",
+      "pendingType": "BackendPipelinePreparedExecution<NormalizedIntent>",
+      "pendingFields": [
+        "runId",
+        "intent",
+        "chainId",
+        "protocol",
+        "blockContext",
+        "quote",
+        "unsignedTransaction",
+        "gasEstimate",
+        "finality"
+      ],
+      "pendingFieldNotes": {
+        "blockContext": "Single block context; not sufficient by itself to express the Moss distinction between stage block, quote/action block, and simulator pinned block.",
+        "gasEstimate": "Chain adapter estimate; distinct from Moss simulator gas units.",
+        "provenance": "Not an explicit field in the pending shape; Moss runtime identity remains adapter configuration."
+      },
+      "statement": "PR #57 was OPEN at authoring time. Re-derive this shape from merged main before Backend relies on it."
+    },
+    "unresolved": [
+      "Final PreparedExecution type (Contract Owner).",
+      "Whether Moss receives the pending generic shape as-is or a Moss-specific input (Backend + Contract Owner).",
+      "How multiple Moss block notions are represented in one binding (Contract Owner)."
+    ]
+  },
+  "ownership": {
+    "providerOwner": [
+      "Moss factual research and evidence qualification",
+      "Field meaning and units/encoding",
+      "Capability qualification and fixture classification",
+      "Adapter-specific mapping proposal"
+    ],
+    "backendOwner": [
+      "Concrete Moss ProviderAdapter implementation and composition",
+      "ProviderRegistry integration",
+      "PreparedExecution runtime plumbing",
+      "Fail-closed pipeline implementation",
+      "Public application integration"
+    ],
+    "contractOwner": [
+      "Final shared Evidence fields",
+      "Cross-Provider status semantics",
+      "Public metadata semantics",
+      "Freshness semantics",
+      "Compatibility decisions"
+    ],
+    "productRiskOwner": ["Any threshold or business/risk decision policy"]
+  },
+  "unresolvedContractOwnerDecisions": [
+    "Final PreparedExecution type and the Moss-specific input shape.",
+    "Whether Moss UNAVAILABLE maps to Backend failed or unavailable.",
+    "Whether revertReason becomes a first-class generic field.",
+    "Generic gas semantics (chain estimate vs simulated units vs fee/cost).",
+    "Freshness semantics and any stale threshold.",
+    "Canonical ProviderCapability vocabulary.",
+    "checkedScope/unknownScope membership rules.",
+    "Distinct generic partial-response state.",
+    "Whether any of the above changes shared cross-Provider Evidence."
+  ],
+  "noNewLiveProbe": {
+    "run": false,
+    "statement": "No new live Moss probe was run for BE-033. Existing real success evidence is sufficient for every positive factual claim; #58 explicitly permits unavailable real evidence."
+  }
+}
