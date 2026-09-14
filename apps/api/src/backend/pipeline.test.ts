@@ -376,13 +376,10 @@ describe("BackendPipeline", () => {
       }),
     );
 
-    await expect(response.json()).resolves.toMatchObject({
-      status: "available",
-      quote: {
-        blockNumber: fixture.chain.blockNumber,
-        runtimeVersion: environment.MOSS_RUNTIME_VERSION,
-        runtimeRevision: environment.MOSS_RUNTIME_REVISION,
-      },
-    });
+    const body = await response.json();
+    expect(body.status).toBe("available");
+    expect(body.quote.blockNumber).toBe(fixture.chain.blockNumber);
+    expect(body.quote.runtimeVersion).toBe(environment.MOSS_RUNTIME_VERSION);
+    expect(body.quote.runtimeRevision).toBe(environment.MOSS_RUNTIME_REVISION);
   });
 });
