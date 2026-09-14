@@ -1,7 +1,7 @@
 import type { NormalizedSwapIntent } from "@parallax/contracts";
 import { describe, expect, it, vi } from "vitest";
-import { InMemoryRunStore } from "../store.js";
 import { bootstrapBackendApp } from "../bootstrap/backend.js";
+import { InMemoryRunStore } from "../store.js";
 import { ChainRegistry } from "./chain-registry.js";
 import { createBackendComposition } from "./composition.js";
 import {
@@ -352,7 +352,11 @@ describe("BackendPipeline", () => {
       decision: { decide: async () => "unused" },
       runStore: new InMemoryRunStore(),
     });
-    const app = bootstrapBackendApp({ environment, tokenRegistry, composition: runtime });
+    const app = bootstrapBackendApp({
+      environment,
+      tokenRegistry,
+      composition: runtime,
+    });
 
     const response = await app.fetch(
       new Request("https://api.example.test/api/quote", {
