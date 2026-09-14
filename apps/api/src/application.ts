@@ -6,6 +6,7 @@ import {
   type EvidenceRef,
   type FailedRunResult,
   failedRunResultSchema,
+  type IntentNormalizationResult,
   type RerunRejectionReason,
   type RunResult,
   runResultSchema,
@@ -21,7 +22,12 @@ import {
   type RerunContext,
   resolveRerun,
 } from "@parallax/orchestrator/application";
-import { normalizeCheckSwapRequest } from "./normalization.js";
+import type { BackendCompositionRuntime } from "./backend/composition.js";
+import { isBackendControlError } from "./backend/control-boundary.js";
+import {
+  coerceIntentNormalizationResult,
+  normalizeCheckSwapRequest,
+} from "./normalization.js";
 import { type AgentFlowPort, isUnsupportedAgentFlowError } from "./ports.js";
 import type { BackendRuntime } from "./runtime-config.js";
 import type { CheckRunFailureCode, CheckRunRecord, RunStore } from "./store.js";
@@ -62,6 +68,7 @@ export type CheckApplicationServiceDependencies = {
   runtime: BackendRuntime;
   store: RunStore;
   agentFlow: AgentFlowPort;
+  composition?: BackendCompositionRuntime;
   createRunId?: () => string;
   createTimestamp?: () => string;
 };
@@ -89,10 +96,31 @@ export class CheckApplicationService {
       });
     }
 
-    const normalized = normalizeCheckSwapRequest(
-      parsedRequest.data,
-      this.dependencies.runtime.tokenRegistry,
-    );
+    let normalized: IntentNormalizationResult;
+    try {
+      const candidate =
+        this.dependencies.composition === undefined
+          ? normalizeCheckSwapRequest(
+              parsedRequest.data,
+              this.dependencies.runtime.tokenRegistry,
+            )
+          : await this.dependencies.composition.normalize(parsedRequest.data);
+      const normalizationResult = coerceIntentNormalizationResult(candidate);
+      if (normalizationResult === undefined) {
+        return errorResponse(400, {
+          code: "NORMALIZATION_FAILED",
+          message: "The check request could not be normalized",
+          issues: { code: "INVALID_NORMALIZATION_RESULT" },
+        });
+      }
+      normalized = normalizationResult;
+    } catch {
+      return errorResponse(400, {
+        code: "NORMALIZATION_FAILED",
+        message: "The check request could not be normalized",
+        issues: { code: "NORMALIZATION_BOUNDARY_ERROR" },
+      });
+    }
     if (!normalized.success) {
       return errorResponse(400, {
         code: "NORMALIZATION_FAILED",
@@ -141,7 +169,7 @@ export class CheckApplicationService {
 
     const invoked = await this.invokeAgentFlowCheck(runId, normalized.intent);
     if (!invoked.ok) {
-      const unsupported = isUnsupportedAgentFlowError(invoked.error);
+      const unsupported = isUnsupportedCheckError(invoked.error);
       return this.recordFailure(
         runId,
         unsupported ? "UNSUPPORTED" : "AGENT_FLOW_ERROR",
@@ -269,7 +297,9 @@ export class CheckApplicationService {
         adjustment.nextIntent,
         childFields,
         childCreatedAt,
-        "AGENT_FLOW_ERROR",
+        isUnsupportedCheckError(invoked.error)
+          ? "UNSUPPORTED"
+          : "AGENT_FLOW_ERROR",
         invoked.error,
       );
       return persisted === "non_terminal"
@@ -500,6 +530,13 @@ function childRunFields(context: RerunContext): ChildRunFields | undefined {
   return context.kind === "child"
     ? { parentRunId: context.parentRunId, diff: context.diff }
     : undefined;
+}
+
+function isUnsupportedCheckError(error: unknown): boolean {
+  return (
+    isUnsupportedAgentFlowError(error) ||
+    (isBackendControlError(error) && error.status === "unsupported")
+  );
 }
 
 function partialRunResultFrom(error: unknown): FailedRunResult | undefined {
