@@ -151,10 +151,7 @@ export function createBackendApp(
           dependencies.runtime,
           dependencies.quoteRunner,
         )
-      : createCompositionBackedQuoteFlow(
-          dependencies.composition,
-          dependencies.runtime,
-        ));
+      : createCompositionBackedQuoteFlow(dependencies.composition));
   let closePromise: Promise<void> | undefined;
   const checkService = new CheckApplicationService({
     runtime: dependencies.runtime,
@@ -239,7 +236,6 @@ function createCompositionBackedCheckFlow(
 
 function createCompositionBackedQuoteFlow(
   composition: BackendCompositionRuntime,
-  runtime: BackendRuntime,
 ): QuoteAgentFlowPort {
   return createBackendQuoteFlow({
     runtime: composition,
@@ -247,7 +243,6 @@ function createCompositionBackedQuoteFlow(
       projectCompositionQuote({
         blockContext,
         quote,
-        runtime,
       }),
   });
 }
@@ -255,7 +250,6 @@ function createCompositionBackedQuoteFlow(
 function projectCompositionQuote(input: {
   blockContext: { readonly blockNumber: string };
   quote: unknown;
-  runtime: BackendRuntime;
 }): unknown {
   const parsedQuoteResult = quoteResultSchema.safeParse(input.quote);
   if (parsedQuoteResult.success) return parsedQuoteResult.data;
@@ -275,6 +269,17 @@ function projectCompositionQuote(input: {
     return { status: "unavailable", reason: "QUOTE_UNAVAILABLE" };
   }
 
+  const runtimeVersion = input.quote.runtimeVersion;
+  const runtimeRevision = input.quote.runtimeRevision;
+  if (
+    typeof runtimeVersion !== "string" ||
+    runtimeVersion.trim() === "" ||
+    typeof runtimeRevision !== "string" ||
+    runtimeRevision.trim() === ""
+  ) {
+    return { status: "unavailable", reason: "QUOTE_UNAVAILABLE" };
+  }
+
   return {
     status: "available",
     quote: {
@@ -282,8 +287,8 @@ function projectCompositionQuote(input: {
       ...(minimumAmountOut === undefined ? {} : { minimumAmountOut }),
       source: "quote",
       blockNumber: input.blockContext.blockNumber,
-      runtimeVersion: input.runtime.config.moss.runtimeVersion,
-      runtimeRevision: input.runtime.config.moss.runtimeRevision,
+      runtimeVersion,
+      runtimeRevision,
     },
   };
 }

@@ -368,7 +368,14 @@ describe("Backend composition application boundary", () => {
     const runtime = bootstrapBackendRuntime({ environment, tokenRegistry });
     const fixture = fakeBackendFixture();
     const chain = createFakeChainAdapter({ ...fixture.chain, chainId: 143 });
-    const protocol = createFakeProtocolAdapter(fixture.protocol);
+    const protocol = createFakeProtocolAdapter({
+      ...fixture.protocol,
+      quote: {
+        amountOut: "42",
+        runtimeVersion: "protocol-runtime-v1",
+        runtimeRevision: "protocol-revision-1",
+      },
+    });
     const store = new InMemoryRunStore();
     const composition = createBackendComposition({
       chainRegistry: new ChainRegistry([chain]),
@@ -414,7 +421,71 @@ describe("Backend composition application boundary", () => {
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toMatchObject({
       status: "available",
-      quote: { estimatedAmountOut: "42", blockNumber: "42" },
+      quote: {
+        estimatedAmountOut: "42",
+        blockNumber: "42",
+        runtimeVersion: "protocol-runtime-v1",
+        runtimeRevision: "protocol-revision-1",
+      },
+    });
+    expect(chain.calls.map((call) => call.operation)).toEqual([
+      "connect",
+      "getBlockContext",
+    ]);
+    expect(protocol.calls.map((call) => call.operation)).toEqual(["quote"]);
+  });
+
+  it("fails closed when a composition Quote has no truthful runtime provenance", async () => {
+    const runtime = bootstrapBackendRuntime({ environment, tokenRegistry });
+    const fixture = fakeBackendFixture();
+    const chain = createFakeChainAdapter({ ...fixture.chain, chainId: 143 });
+    const protocol = createFakeProtocolAdapter(fixture.protocol);
+    const store = new InMemoryRunStore();
+    const composition = createBackendComposition({
+      chainRegistry: new ChainRegistry([chain]),
+      protocolRegistry: new ProtocolRegistry([
+        { chainId: 143, protocol: "kuru", adapter: protocol },
+      ]),
+      providerRegistry: new ProviderRegistry(),
+      normalization: {
+        normalize: (request: unknown) => {
+          const result = normalizeQuoteRequest(
+            request as Omit<CheckSwapRequest, "economicBoundary">,
+            runtime.tokenRegistry,
+          );
+          if (!result.success) throw new Error(result.error.message);
+          return result.intent;
+        },
+      },
+      core: { evaluate: async () => "unused" },
+      decision: { decide: async () => "unused" },
+      runStore: store,
+    });
+    const app = bootstrapBackendApp({
+      environment,
+      tokenRegistry,
+      composition,
+    });
+
+    const response = await app.fetch(
+      new Request("https://api.example.test/api/quote", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          chainId: 143,
+          protocol: "kuru",
+          sender,
+          tokenIn: { kind: "native" },
+          tokenOut: { kind: "erc20", address: usdcAddress },
+          amountIn: "1.5",
+        }),
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      status: "unavailable",
+      reason: "QUOTE_UNAVAILABLE",
     });
     expect(chain.calls.map((call) => call.operation)).toEqual([
       "connect",
