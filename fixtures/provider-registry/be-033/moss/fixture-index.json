@@ -85,8 +85,10 @@
       "items": [
         "Any protocol other than kuru.",
         "Any chainId other than 143.",
-        "Any runtime checkout/package identity that does not match the configured revision.",
-        "Any invocation without a simulator pinned block for a simulated (non-NO_ROUTE) outcome."
+        "Any runtime checkout/package identity that does not match the configured revision."
+      ],
+      "notUnsupported": [
+        "A missing simulator pinned block is NOT an unsupported input shape. The runner executes Provider evaluation first and returns simulatorPinnedBlock as Provider evaluation OUTPUT provenance; assertLiveProvenance(...) then validates it for simulated non-NO_ROUTE results and fails closed after evaluation when it is missing or invalid. It must not be added to MossPreparedExecutionInput V1, which carries only the Backend preparation blockContext."
       ]
     },
     "capabilities": {
@@ -147,6 +149,16 @@
         "state": "VERIFIED_RUNTIME",
         "qualificationClass": "RULE_DERIVED",
         "note": "Complement of checkedScope for the same run."
+      }
+    },
+    "provenanceOutputs": {
+      "class": "INFERRED_FROM_CODE",
+      "statement": "simulatorPinnedBlock is Provider evaluation OUTPUT provenance, not an invocation input. The runner executes Provider evaluation and returns it; assertLiveProvenance(...) then validates it for simulated non-NO_ROUTE results and fails closed after evaluation when it is absent or invalid. It is not part of MossPreparedExecutionInput V1.",
+      "blockLayers": {
+        "backendPreparationBlock": "INPUT — Backend Chain blockContext associated with preparation.",
+        "mossStageBlock": "OUTPUT — per-stage RPC block observation during Moss evaluation.",
+        "mossQuoteActionEvidenceBlock": "OUTPUT — block attached to Moss quote/action evidence when observed.",
+        "simulatorPinnedBlock": "OUTPUT — exact simulator base block returned by Provider evaluation; validated fail-closed for simulated non-NO_ROUTE outcomes."
       }
     },
     "auth": {
@@ -1109,6 +1121,19 @@
       "Compatibility decisions"
     ],
     "productRiskOwner": ["Any threshold or business/risk decision policy"]
+  },
+  "fieldMappingNotes": {
+    "intent.minimumReceived": {
+      "class": "INFERRED_FROM_CODE",
+      "statement": "Optional Generic/Kuru intent input supported by current code and contracts, populatable from the economic boundary. There is no non-null canonical real observation of a supplied value in the qualified success fixture, so a real runtime observation for a supplied value is UNQUALIFIED / not independently runtime-qualified. Absence from one real fixture is NOT MOCK_ONLY."
+    },
+    "isReplay": {
+      "class": "RULE_DERIVED",
+      "statement": "Moss normalization/internal field-level truthfulness signal. It is NOT retained as a generic per-field EvidenceField property: toEvidenceField(...) does not copy isReplay across the generic boundary. Generic replay truthfulness is carried by top-level provenance.mode = RECORDED_REPLAY via evidenceMode(...). No new generic field is introduced."
+    },
+    "emptyActionVsNoRoute": {
+      "statement": "An explicit QUOTE/ACTION NO_ROUTE classification is a valid terminal outcome and is recognized before the incomplete-simulation/action fallback (executionStatus() tests the NO_ROUTE error before simulation coverage). An empty/missing action must not overwrite an already classified NO_ROUTE; only without NO_ROUTE does missing action material resolve conservatively to executionStatus=UNKNOWN."
+    }
   },
   "unresolvedContractOwnerDecisions": [
     "Final shared generic PreparedExecution / Evidence type (the Provider Owner's required Moss Adapter input binding is specified as MossPreparedExecutionInput V1).",

@@ -86,6 +86,12 @@ type FixtureIndex = {
     providerId: string;
     scope: string;
     capabilities: Record<string, { state: string; note?: string }>;
+    inputPrerequisites: { items: string[] };
+    unsupportedShapes: { items: string[]; notUnsupported?: string[] };
+    provenanceOutputs: {
+      statement: string;
+      blockLayers: Record<string, string>;
+    };
     knownLimitations: string[];
   };
   fixtureIndex: FixtureEntry[];
@@ -121,6 +127,11 @@ type FixtureIndex = {
       remainingContractOwnerScope: string;
     };
     unresolved: string[];
+  };
+  fieldMappingNotes: {
+    "intent.minimumReceived": { class: string; statement: string };
+    isReplay: { class: string; statement: string };
+    emptyActionVsNoRoute: { statement: string };
   };
   unresolvedContractOwnerDecisions: string[];
   noNewLiveProbe: { run: boolean; statement: string };
@@ -469,6 +480,111 @@ describe("BE-033 Moss fixture index", () => {
       backendControlStatus: "unknown",
       providerStatus: "UNKNOWN",
     });
+  });
+
+  it("does not classify a missing simulator pinned block as an invocation prerequisite", () => {
+    const unsupported = index.provider.unsupportedShapes.items.join(" ");
+    expect(unsupported).not.toMatch(/simulator pinned block/i);
+    expect(unsupported).not.toMatch(/simulatorPinnedBlock/);
+    expect(unsupported).not.toMatch(/without a simulator/i);
+
+    // It is also absent from the input prerequisite list.
+    const prerequisites = index.provider.inputPrerequisites.items.join(" ");
+    expect(prerequisites).not.toMatch(/simulatorPinnedBlock/i);
+    expect(prerequisites).not.toMatch(/pinned block/i);
+
+    // ...and must not be part of the V1 prepared-execution input.
+    expect(
+      Object.keys(index.preparedExecutionBinding.targetPath.requiredFields),
+    ).not.toContain("simulatorPinnedBlock");
+  });
+
+  it("documents simulatorPinnedBlock as output provenance validated fail-closed after evaluation", () => {
+    const outputs = index.provider.provenanceOutputs;
+    expect(outputs.statement).toMatch(
+      /simulatorPinnedBlock is Provider evaluation OUTPUT provenance/i,
+    );
+    expect(outputs.statement).toMatch(/fails closed after evaluation/i);
+    expect(outputs.statement).toMatch(
+      /not part of MossPreparedExecutionInput/i,
+    );
+
+    const layers = outputs.blockLayers;
+    expect(layers.backendPreparationBlock).toMatch(/^INPUT/);
+    expect(layers.mossStageBlock).toMatch(/^OUTPUT/);
+    expect(layers.mossQuoteActionEvidenceBlock).toMatch(/^OUTPUT/);
+    expect(layers.simulatorPinnedBlock).toMatch(/^OUTPUT/);
+
+    // The unsupported-shapes entry explicitly records the non-input fact.
+    expect(index.provider.unsupportedShapes.notUnsupported?.join(" ")).toMatch(
+      /NOT an unsupported input shape/i,
+    );
+  });
+
+  it("keeps RECORDED_REPLAY distinct from MOCK and LIVE without claiming generic per-field isReplay retention", () => {
+    const classes = new Set(
+      index.fixtureIndex.map((entry) => entry.qualificationClass),
+    );
+    expect(classes.has("RECORDED_REPLAY")).toBe(true);
+    expect(classes.has("MOCK_ONLY")).toBe(true);
+    expect(classes.has("REAL_OBSERVED")).toBe(true);
+    expect(index.qualificationClasses).toContain("RECORDED_REPLAY");
+
+    const replay = index.fixtureIndex.filter(
+      (entry) => entry.evidenceClass === "RECORDED_REPLAY",
+    );
+    for (const entry of replay) {
+      expect(entry.qualificationClass).toBe("RECORDED_REPLAY");
+      expect(entry.qualificationClass).not.toBe("MOCK_ONLY");
+      expect(entry.real).toBe(false);
+    }
+  });
+
+  it("keeps NO_ROUTE a legal terminal outcome that missing action does not overwrite", () => {
+    const noRoute = index.fixtureIndex.find(
+      (entry) => entry.id === "moss-no-route-mock",
+    );
+    expect(noRoute?.expectedControlState.executionStatus).toBe("NO_ROUTE");
+    expect(noRoute?.expectedControlState.integrationStatus).toBe("OK");
+    expect(noRoute?.expectedControlState.providerStatus).toBe("SUCCESS");
+    expect(noRoute?.proves.join(" ")).toMatch(/NO_ROUTE/i);
+    expect(noRoute?.expectedControlState.note).toMatch(
+      /legal terminal|not an integration failure/i,
+    );
+  });
+
+  it("does not label minimumReceived MOCK_ONLY merely because one real fixture omits it", () => {
+    const note = index.fieldMappingNotes["intent.minimumReceived"];
+    expect(note.class).toBe("INFERRED_FROM_CODE");
+    expect(note.class).not.toBe("MOCK_ONLY");
+    expect(note.statement).toMatch(/supported by current code and contracts/i);
+    expect(note.statement).toMatch(/no non-null canonical real observation/i);
+    expect(note.statement).toMatch(/UNQUALIFIED/);
+    expect(note.statement).toMatch(/NOT MOCK_ONLY/);
+  });
+
+  it("states the isReplay generic boundary without claiming per-field retention", () => {
+    const note = index.fieldMappingNotes.isReplay;
+    expect(note.statement).toMatch(
+      /NOT retained as a generic per-field EvidenceField property/i,
+    );
+    expect(note.statement).toMatch(/toEvidenceField/);
+    expect(note.statement).toMatch(/provenance\.mode = RECORDED_REPLAY/);
+    expect(note.statement).toMatch(/No new generic field is introduced/i);
+  });
+
+  it("documents the NO_ROUTE precedence over the missing-action fallback", () => {
+    const note = index.fieldMappingNotes.emptyActionVsNoRoute;
+    expect(note.statement).toMatch(
+      /NO_ROUTE classification is a valid terminal outcome/i,
+    );
+    expect(note.statement).toMatch(
+      /recognized before the incomplete-simulation\/action fallback/i,
+    );
+    expect(note.statement).toMatch(
+      /must not overwrite an already classified NO_ROUTE/i,
+    );
+    expect(note.statement).toMatch(/executionStatus=UNKNOWN/);
   });
 
   it("documents both the legacy and the specified V1 target binding", () => {
