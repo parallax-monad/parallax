@@ -25,6 +25,11 @@ import {
   type ProviderEvaluationResult,
   type ProviderSupportQuery,
 } from "./provider-adapter.js";
+import {
+  createReceiptLifecycle,
+  type ReceiptLifecycleHandle,
+  type ReceiptOperationResult,
+} from "./receipt-ports.js";
 
 /** The normalized adapter evidence context passed to Core and Decision. */
 export type BackendPipelineContext<
@@ -65,6 +70,19 @@ export type BackendPipelinePreparedExecution<NormalizedIntent> = {
   readonly finality: FinalityStatus;
 };
 
+export type BackendReceiptBuilderInput<
+  NormalizedIntent,
+  CoreOutput,
+  Chain extends ChainAdapter,
+  Protocol extends ProtocolAdapter<never, unknown, unknown>,
+> = {
+  readonly runId: string;
+  readonly intent: NormalizedIntent;
+  readonly coreOutput: CoreOutput;
+  readonly decisionOutput: unknown;
+  readonly context: BackendPipelineContext<NormalizedIntent, Chain, Protocol>;
+};
+
 export type BackendPipelineInput<RawInput> = {
   readonly rawInput: RawInput;
   readonly runId: string;
@@ -94,6 +112,7 @@ export type BackendPipelineExecution<
   readonly providerResult: ProviderEvaluationResult;
   readonly coreOutput: CoreOutput;
   readonly decisionOutput: DecisionOutput;
+  readonly receiptLifecycle: ReceiptLifecycleHandle;
 };
 
 export type BackendPipelineDependencies<
@@ -124,6 +143,15 @@ export type BackendPipelineDependencies<
   readonly buildProviderInput?: (
     input: BackendPipelinePreparedExecution<NormalizedIntent>,
   ) => BackendOperationResult<ProviderInput>;
+  readonly buildReceipt?: (
+    input: BackendReceiptBuilderInput<
+      NormalizedIntent,
+      CoreOutput,
+      Chain,
+      Protocol
+    >,
+  ) => ReceiptOperationResult<unknown>;
+  readonly receiptTimeoutMs?: number;
 };
 
 /**
@@ -305,6 +333,23 @@ export class BackendPipeline<
       this.buildDecisionInput({ coreOutput, context }),
       context,
     );
+    const buildReceipt = this.dependencies.buildReceipt;
+    const receiptLifecycle = createReceiptLifecycle({
+      buildReceipt:
+        buildReceipt === undefined
+          ? () => decisionOutput
+          : () =>
+              buildReceipt({
+                runId: input.runId,
+                intent: normalized,
+                coreOutput,
+                decisionOutput,
+                context,
+              }),
+      signer: this.dependencies.runtime.receiptSigner,
+      anchorer: this.dependencies.runtime.receiptAnchorer,
+      timeoutMs: this.dependencies.receiptTimeoutMs,
+    });
 
     return {
       runId: input.runId,
@@ -319,6 +364,7 @@ export class BackendPipeline<
       providerResult,
       coreOutput,
       decisionOutput,
+      receiptLifecycle,
     };
   }
 }

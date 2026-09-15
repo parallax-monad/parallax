@@ -22,6 +22,11 @@ import type {
   ProvisionalCandidateFieldInput,
   ProvisionalProviderResultInput,
 } from "./provider-result-boundary.js";
+import type {
+  ReceiptAnchorer,
+  ReceiptOperationResult,
+  ReceiptSigner,
+} from "./receipt-ports.js";
 
 export type FakeChainFixture = {
   readonly chainId: number;
@@ -239,6 +244,66 @@ export function createFakeProviderAdapterHarness<
   fixture: FakeProviderFixture<Intent> = defaultProviderFixture as unknown as FakeProviderFixture<Intent>,
 ): FakeProviderAdapterHarness<Intent, Input> {
   return buildFakeProviderAdapter(fixture);
+}
+
+export type FakeReceiptCall<Receipt> = {
+  readonly receipt: Receipt;
+};
+
+/** Creates a deterministic offline signer fake with captured calls. */
+export function createFakeReceiptSigner<Receipt, Signature>(
+  result: Signature | ((receipt: Receipt) => ReceiptOperationResult<Signature>),
+): ReceiptSigner<Receipt, Signature> & {
+  readonly calls: FakeReceiptCall<Receipt>[];
+} {
+  const calls: FakeReceiptCall<Receipt>[] = [];
+  return {
+    calls,
+    sign(receipt: Receipt): ReceiptOperationResult<Signature> {
+      calls.push({ receipt });
+      return typeof result === "function"
+        ? (result as (receipt: Receipt) => ReceiptOperationResult<Signature>)(
+            receipt,
+          )
+        : result;
+    },
+  };
+}
+
+/** Creates a deterministic offline anchorer fake with captured calls. */
+export function createFakeReceiptAnchorer<Receipt, Anchor>(
+  result: Anchor | ((receipt: Receipt) => ReceiptOperationResult<Anchor>),
+): ReceiptAnchorer<Receipt, Anchor> & {
+  readonly calls: FakeReceiptCall<Receipt>[];
+} {
+  const calls: FakeReceiptCall<Receipt>[] = [];
+  return {
+    calls,
+    anchor(receipt: Receipt): ReceiptOperationResult<Anchor> {
+      calls.push({ receipt });
+      return typeof result === "function"
+        ? (result as (receipt: Receipt) => ReceiptOperationResult<Anchor>)(
+            receipt,
+          )
+        : result;
+    },
+  };
+}
+
+/** Creates a no-op signer for callers that need an explicit optional adapter. */
+export function createNoopReceiptSigner<Receipt>(): ReceiptSigner<
+  Receipt,
+  undefined
+> {
+  return { sign: () => undefined };
+}
+
+/** Creates a no-op anchorer for callers that need an explicit optional adapter. */
+export function createNoopReceiptAnchorer<Receipt>(): ReceiptAnchorer<
+  Receipt,
+  undefined
+> {
+  return { anchor: () => undefined };
 }
 
 export type FakeBackendFixture = {
