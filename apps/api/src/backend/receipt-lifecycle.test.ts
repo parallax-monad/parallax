@@ -53,6 +53,21 @@ describe("Receipt lifecycle", () => {
     });
   });
 
+  it("supports anchoring when the optional signer is not configured", async () => {
+    const anchorer = createFakeReceiptAnchorer<string, string>("anchor");
+    const lifecycle = createReceiptLifecycle({
+      receipt: "opaque-receipt",
+      anchorer,
+    });
+
+    await expect(lifecycle.completion).resolves.toMatchObject({
+      status: "anchored",
+      signing: { status: "not_configured" },
+      anchoring: { status: "succeeded", value: "anchor" },
+    });
+    expect(anchorer.calls).toEqual([{ receipt: "opaque-receipt" }]);
+  });
+
   it("signs before anchoring and exposes successful outputs", async () => {
     const calls: string[] = [];
     const signer = createFakeReceiptSigner<{ decision: string }, string>(
@@ -124,6 +139,26 @@ describe("Receipt lifecycle", () => {
     });
   });
 
+  it("retains a receipt-builder rejection without invoking adapters", async () => {
+    const failure = new Error("receipt build failed");
+    const signer = createFakeReceiptSigner(() => "must-not-run");
+    const anchorer = createFakeReceiptAnchorer(() => "must-not-run");
+    const lifecycle = createReceiptLifecycle({
+      buildReceipt: async () => {
+        throw failure;
+      },
+      signer,
+      anchorer,
+    });
+
+    await expect(lifecycle.completion).resolves.toMatchObject({
+      status: "failed",
+      error: failure,
+    });
+    expect(signer.calls).toHaveLength(0);
+    expect(anchorer.calls).toHaveLength(0);
+  });
+
   it("times out a stalled adapter without blocking decision completion", async () => {
     const lifecycle = createReceiptLifecycle({
       receipt: "opaque-receipt",
@@ -164,7 +199,7 @@ describe("Receipt lifecycle", () => {
     );
   });
 
-  it("exposes the lifecycle handle on BackendPipeline after Decision returns", async () => {
+  it("returns the Decision before a stalled signer and then completes the lifecycle", async () => {
     const fixture = fakeBackendFixture();
     const chain = createFakeChainAdapter(fixture.chain);
     const protocol = createFakeProtocolAdapter(fixture.protocol);
@@ -175,6 +210,7 @@ describe("Receipt lifecycle", () => {
         query.protocol === fixture.protocol.id,
     });
     const decisionEvents: string[] = [];
+    const signerReady = createDeferred<string>();
     const runtime = createBackendComposition({
       chainRegistry: new ChainRegistry([chain]),
       protocolRegistry: new ProtocolRegistry([
@@ -196,7 +232,7 @@ describe("Receipt lifecycle", () => {
       runStore: new InMemoryRunStore(),
       receiptSigner: createFakeReceiptSigner(() => {
         decisionEvents.push("sign");
-        return "signature";
+        return signerReady.promise;
       }),
       receiptAnchorer: createFakeReceiptAnchorer(() => {
         decisionEvents.push("anchor");
@@ -206,7 +242,10 @@ describe("Receipt lifecycle", () => {
     const pipeline = new BackendPipeline({
       runtime,
       receiptTimeoutMs: 50,
-      buildReceipt: ({ decisionOutput }) => decisionOutput,
+      buildReceipt: ({ decisionOutput }) => {
+        decisionEvents.push("build");
+        return decisionOutput;
+      },
     });
 
     const execution = await pipeline.execute({
@@ -219,9 +258,30 @@ describe("Receipt lifecycle", () => {
     expect(execution.decisionOutput).toBe("decision");
     expect(execution.receiptLifecycle.status).toBe("pending");
     expect(decisionEvents[0]).toBe("decision");
+    expect(decisionEvents).not.toContain("anchor");
+
+    signerReady.resolve("signature");
     await expect(execution.receiptLifecycle.completion).resolves.toMatchObject({
       status: "anchored",
+      signing: { status: "succeeded", value: "signature" },
+      anchoring: { status: "succeeded", value: "anchor" },
     });
-    expect(decisionEvents).toEqual(["decision", "sign", "anchor"]);
+    expect(decisionEvents).toEqual(["decision", "build", "sign", "anchor"]);
   });
 });
+
+function createDeferred<Value>(): {
+  readonly promise: Promise<Value>;
+  resolve(value: Value): void;
+} {
+  let resolvePromise!: (value: Value | PromiseLike<Value>) => void;
+  const promise = new Promise<Value>((resolve) => {
+    resolvePromise = resolve;
+  });
+  return {
+    promise,
+    resolve(value) {
+      resolvePromise(value);
+    },
+  };
+}
