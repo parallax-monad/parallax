@@ -96,7 +96,7 @@
       },
       "executionResult": {
         "state": "VERIFIED_RUNTIME",
-        "note": "Real fixture executionStatus=SUCCESS. NO_ROUTE and REVERTED are defined code outcomes without a real Moss response sample."
+        "note": "Real fixture executionStatus=SUCCESS for the canonical live run. A historical real revert signal exists in fixtures/chain-evidence/kuru/usdc-to-mon (revertReason.value=\"execution reverted\"), but that run halted with incomplete coverage, so normalized execution there remains UNKNOWN rather than a complete execution-qualified REVERTED outcome; NO_ROUTE has no real Moss sample."
       },
       "quote": {
         "state": "VERIFIED_RUNTIME",
@@ -120,7 +120,7 @@
       },
       "revertReason": {
         "state": "UNKNOWN",
-        "note": "No real Moss revert response exists. Revert classification exists in code and fixtures/chain-evidence/kuru/reverted is RULE_TEST_INPUT with real=false."
+        "note": "A historical REAL_OBSERVED revert signal exists: fixtures/chain-evidence/kuru/usdc-to-mon/normalized.json records revertReason.value=\"execution reverted\" (source=moss, reproducibility=REPRODUCIBLE) on the older d09b38cb baseline. That run halted with simulationCoverage.complete=false (haltReason \"execution reverted\"), so it does not qualify complete/current pinned-runtime revert behavior and the capability state stays UNKNOWN. The synthetic fixtures/chain-evidence/kuru/reverted is RULE_TEST_INPUT with real=false."
       },
       "blockContext": {
         "state": "VERIFIED_RUNTIME",
@@ -165,7 +165,8 @@
       "Synthetic pre-funding covers native MON only and does not prove ERC-20 affordability or allowance.",
       "The compatibility Provider is Monad/Kuru-specific.",
       "No signing, broadcast, custody, or wallet mutation.",
-      "No real Moss revert, failure, timeout, outage, auth, rate-limit, malformed, partial, or stale response exists.",
+      "No current-runtime qualified Moss failure, timeout, outage, auth, rate-limit, malformed, partial, or stale response exists.",
+      "A historical real revert signal exists (usdc-to-mon revertReason=\"execution reverted\") but its run halted with incomplete coverage, so it does not qualify current pinned-runtime complete revert behavior.",
       "The legacy path constructs quote/action internally; the target generic adapter must consume an exact prepared execution."
     ]
   },
@@ -217,7 +218,7 @@
       "doesNotProve": [
         "Universal Moss support beyond Monad x Kuru.",
         "ERC-20 affordability or allowance.",
-        "Real revert, failure, timeout, outage, auth, rate-limit, malformed, partial, or stale behavior.",
+        "Current-runtime qualified revert, failure, timeout, outage, auth, rate-limit, malformed, partial, or stale behavior.",
         "Any freshness or stale policy.",
         "Any prepared-execution binding.",
         "Block hash provenance."
@@ -499,7 +500,9 @@
         "note": "Revert normalization only. A verified revert is not a Provider failure and must never become PROCEED."
       },
       "proves": ["Revert normalization/rule behavior with source=mock."],
-      "doesNotProve": ["Any real Moss revert response or revert reason."],
+      "doesNotProve": [
+        "Any real Provider revert response of its own: this entry is synthetic mock/rule input. (The separate historical usdc-to-mon recording is the real revert signal and halts incomplete.)"
+      ],
       "reproducibilityNote": "Deterministic mock/rule input (metadata fixtureType=RULE_TEST_INPUT, real=false, source=mock)."
     },
     {
@@ -669,14 +672,14 @@
         "blockHash": null
       },
       "expectedControlState": {
-        "providerStatus": "UNKNOWN",
+        "providerStatus": null,
         "integrationStatus": "TIMEOUT",
         "executionStatus": "UNKNOWN",
         "backendControlStatus": "timeout",
-        "note": "Code classifies timeouts and marks them retryable; no real Moss timeout response was captured. The client-enforced deadlines are not Provider timeout evidence."
+        "note": "Timeout is code-classified (INFERRED_FROM_CODE), not a real observation. On the current MossProvider.evaluate path a live runner timeout reaches toProviderError(...), which throws EvidenceProviderError with TIMEOUT classification, so no GenericEvidence object is produced at this boundary and there is no Generic provider.status value to report: providerStatus is null. Backend control status is timeout. No real Moss timeout sample exists, and the 30s stage / 90s overall Promise.race deadlines are client-enforced, not Provider timeout evidence. Execution stays conservatively UNKNOWN; nothing is invented as a successful outcome."
       },
       "proves": [
-        "Documented fail-closed expectation and code classification only."
+        "Documented fail-closed expectation, code classification, and the thrown-before-GenericEvidence Adapter boundary only."
       ],
       "doesNotProve": ["Any real Provider timeout response."],
       "reproducibilityNote": "Explicitly unavailable: no real sample exists; no fabricated fixture may be committed."

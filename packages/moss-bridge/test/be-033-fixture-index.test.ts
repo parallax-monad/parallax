@@ -85,7 +85,7 @@ type FixtureIndex = {
   provider: {
     providerId: string;
     scope: string;
-    capabilities: Record<string, { state: string }>;
+    capabilities: Record<string, { state: string; note?: string }>;
     knownLimitations: string[];
   };
   fixtureIndex: FixtureEntry[];
@@ -334,7 +334,7 @@ describe("BE-033 Moss fixture index", () => {
     }
   });
 
-  it("does not claim real revert, failure, or timeout coverage", () => {
+  it("does not claim complete/current real revert, failure, or timeout coverage", () => {
     const realClasses = index.fixtureIndex
       .filter((entry) => entry.real)
       .map((entry) => entry.evidenceClass);
@@ -348,6 +348,7 @@ describe("BE-033 Moss fixture index", () => {
     expect(byId.get("moss-reverted-mock")).toMatchObject({
       real: false,
       evidenceClass: "RULE_TEST_INPUT",
+      qualificationClass: "MOCK_ONLY",
     });
     expect(byId.get("moss-timeout")).toMatchObject({
       real: false,
@@ -358,6 +359,60 @@ describe("BE-033 Moss fixture index", () => {
       real: false,
       evidenceClass: "RULE_TEST_INPUT",
     });
+  });
+
+  it("fixes the timeout boundary: providerStatus is null because timeout throws", () => {
+    const timeout = index.fixtureIndex.find(
+      (entry) => entry.id === "moss-timeout",
+    );
+    expect(timeout).toBeDefined();
+    expect(timeout?.evidenceClass).toBe("UNAVAILABLE");
+    expect(timeout?.real).toBe(false);
+    expect(timeout?.expectedControlState.providerStatus).toBeNull();
+    expect(timeout?.expectedControlState.integrationStatus).toBe("TIMEOUT");
+    expect(timeout?.expectedControlState.backendControlStatus).toBe("timeout");
+    expect(timeout?.expectedControlState.executionStatus).toBe("UNKNOWN");
+
+    const note = timeout?.expectedControlState.note ?? "";
+    expect(note).toMatch(/throws EvidenceProviderError/i);
+    expect(note).toMatch(/no GenericEvidence/i);
+    expect(note).toMatch(/providerStatus is null/i);
+    expect(note).toMatch(/INFERRED_FROM_CODE/i);
+    expect(note).toMatch(/no real Moss timeout sample exists/i);
+    expect(note).toMatch(/30s|Promise\.race/i);
+    expect(note).toMatch(/client-enforced, not Provider timeout evidence/i);
+  });
+
+  it("acknowledges the historical real revert signal without promoting the capability", () => {
+    const revertCapability = index.provider.capabilities.revertReason;
+    expect(revertCapability?.state).toBe("UNKNOWN");
+    expect(revertCapability?.note).toMatch(/historical/i);
+    expect(revertCapability?.note).toMatch(/execution reverted/i);
+    expect(revertCapability?.note).toMatch(/usdc-to-mon/);
+    expect(revertCapability?.note).toMatch(/incomplete|complete=false|halted/i);
+    expect(revertCapability?.note).toMatch(/RULE_TEST_INPUT/);
+
+    // The historical real entry stays real and stays UNKNOWN; it is never
+    // promoted to a complete REVERTED/SUCCESS outcome.
+    const historical = index.fixtureIndex.find(
+      (entry) => entry.id === "moss-recorded-usdc-to-mon",
+    );
+    expect(historical?.real).toBe(true);
+    expect(historical?.expectedControlState.executionStatus).toBe("UNKNOWN");
+    expect(historical?.expectedControlState.providerStatus).toBe("UNKNOWN");
+    expect(historical?.expectedControlState.executionStatus).not.toBe(
+      "REVERTED",
+    );
+    expect(historical?.expectedControlState.executionStatus).not.toBe(
+      "SUCCESS",
+    );
+
+    // The synthetic revert rule input remains mock/rule-qualified.
+    const mock = index.fixtureIndex.find(
+      (entry) => entry.id === "moss-reverted-mock",
+    );
+    expect(mock?.qualificationClass).toBe("MOCK_ONLY");
+    expect(mock?.real).toBe(false);
   });
 
   it("keeps the real success evidence scoped to Monad x Kuru", () => {
@@ -396,7 +451,7 @@ describe("BE-033 Moss fixture index", () => {
     const byId = new Map(index.fixtureIndex.map((entry) => [entry.id, entry]));
     expect(byId.get("moss-timeout")?.expectedControlState).toMatchObject({
       backendControlStatus: "timeout",
-      providerStatus: "UNKNOWN",
+      providerStatus: null,
     });
     expect(
       byId.get("moss-integration-error-mock")?.expectedControlState,
