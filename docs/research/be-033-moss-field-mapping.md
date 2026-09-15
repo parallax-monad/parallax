@@ -15,7 +15,7 @@ Every Moss value Backend may consume is listed once with:
 - **req** — `required`, `optional`, or `nullable` behavior;
 - **source** — `moss`, `rpc`, `quote`, `derived`, `mock`, `unknown` as recorded by the adapter;
 - **validity** — the condition under which the value may be used;
-- **class** — `REAL_OBSERVED`, `INFERRED_FROM_CODE`, `MOCK_ONLY`, `RULE_DERIVED`, `UNQUALIFIED`;
+- **class** — `REAL_OBSERVED`, `INFERRED_FROM_CODE`, `RECORDED_REPLAY`, `MOCK_ONLY`, `RULE_DERIVED`, `UNQUALIFIED`;
 - **missing/malformed behavior** — what the current code does when the value is absent or invalid;
 - **provisional mapping** — the proposed provider-neutral destination;
 - **opaque?** — whether the value must remain inside the Moss Adapter (`yes` / `no`);
@@ -171,6 +171,18 @@ else                 → LIVE
 - Recorded historical fixtures (`mon-to-usdc`, `usdc-to-mon`) carry `replayMode: false`, `source: "moss"` and **no** `isReplay`/`isMock`; they are real recordings, not replays and not mocks.
 - The mock/rule fixtures are `source: "mock"` with `isMock` semantics; the `fixtures/replay-data/*.json` envelopes are the separate recorded-replay contract path. Neither may be presented as a live Provider response.
 - No new truthfulness field is introduced by BE-033; these are the existing code semantics.
+
+### 9.1 Qualification is a separate axis from evidence mode
+
+The BE-033 fixture index qualifies Recorded Replay with its own class, `RECORDED_REPLAY`, which is **distinct** from `MOCK_ONLY` and from `REAL_OBSERVED`:
+
+```text
+REAL_OBSERVED (live or real recorded)  !=  RECORDED_REPLAY  !=  MOCK_ONLY (synthetic mock / rule input)
+```
+
+- `RECORDED_REPLAY` entries are deterministic and offline-loadable, but determinism does **not** make them mock/rule-only data; they are a recorded replay, not a fresh live Provider observation.
+- `MOCK_ONLY` stays reserved for synthetic mock / `RULE_TEST_INPUT` fixtures (for example `reverted`, `integration-error`, `missing-evidence`, `no-route`).
+- This does not introduce a second evidence-mode model: `evidenceMode()` above remains the single LIVE / MOCK / RECORDED_REPLAY mode function; the qualification class only records how the evidence case was produced.
 
 ## 10. STALE handling (PROPOSED / CONTRACT_OWNER_UNRESOLVED)
 

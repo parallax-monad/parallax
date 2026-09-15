@@ -111,7 +111,13 @@ type FixtureIndex = {
         orderingRule: string;
       };
       blockLayerDistinction: string[];
-      pendingPullRequest57: { status: string; compatibility: string };
+      mergedBackendPipeline57: {
+        status: string;
+        mergeCommit: string;
+        shape: string;
+        mergedFields: string[];
+        alignment: string;
+      };
       remainingContractOwnerScope: string;
     };
     unresolved: string[];
@@ -256,6 +262,45 @@ describe("BE-033 Moss fixture index", () => {
         ).toBe("MOCK_ONLY");
       }
     }
+  });
+
+  it("keeps RECORDED_REPLAY distinct from MOCK_ONLY and REAL_OBSERVED", () => {
+    const replay = index.fixtureIndex.filter(
+      (entry) => entry.evidenceClass === "RECORDED_REPLAY",
+    );
+    expect(replay.length).toBeGreaterThan(0);
+
+    for (const entry of replay) {
+      expect(
+        entry.qualificationClass,
+        `${entry.id} recorded replay must not be qualified MOCK_ONLY`,
+      ).not.toBe("MOCK_ONLY");
+      expect(
+        entry.qualificationClass,
+        `${entry.id} recorded replay must use its own qualification class`,
+      ).toBe("RECORDED_REPLAY");
+      // Recorded replay is deterministic but is not a fresh live observation.
+      expect(
+        entry.real,
+        `${entry.id} recorded replay must not claim real`,
+      ).toBe(false);
+    }
+
+    // Mock/rule fixtures stay mock/rule-qualified.
+    for (const entry of index.fixtureIndex) {
+      if (entry.evidenceClass === "RULE_TEST_INPUT") {
+        expect(entry.qualificationClass).toBe("MOCK_ONLY");
+      }
+    }
+
+    // The three classes remain mutually distinct across the whole index.
+    const classes = new Set(
+      index.fixtureIndex.map((entry) => entry.qualificationClass),
+    );
+    expect(classes.has("REAL_OBSERVED")).toBe(true);
+    expect(classes.has("RECORDED_REPLAY")).toBe(true);
+    expect(classes.has("MOCK_ONLY")).toBe(true);
+    expect(index.qualificationClasses).toContain("RECORDED_REPLAY");
   });
 
   it("records unavailable real cases with no path and no real claim", () => {
@@ -454,12 +499,23 @@ describe("BE-033 Moss fixture index", () => {
     expect(layers.join(" ")).toMatch(/Moss simulator-pinned block/i);
   });
 
-  it("records that PR #57 is still open and not merged", () => {
-    const pr57 = index.preparedExecutionBinding.targetPath.pendingPullRequest57;
-    expect(pr57.status).toBe("OPEN_NOT_MERGED");
-    expect(pr57.compatibility).toMatch(
-      /compatible with the BE-033 V1 binding/i,
+  it("records PR #57 as merged and the V1 binding as aligned", () => {
+    const pr57 =
+      index.preparedExecutionBinding.targetPath.mergedBackendPipeline57;
+    expect(pr57.status).toBe("MERGED_ON_MAIN");
+    expect(pr57.mergeCommit).toBe("0e718667a4f76958228f4a46837bb57d670b1de3");
+    expect(pr57.shape).toBe(
+      "BackendPipelinePreparedExecution<NormalizedIntent>",
     );
+    expect(pr57.alignment).toMatch(
+      /matches the BE-033 MossPreparedExecutionInput V1 binding/i,
+    );
+
+    // The merged field list is the same nine fields the V1 binding requires.
+    const v1Fields = Object.keys(
+      index.preparedExecutionBinding.targetPath.requiredFields,
+    ).sort();
+    expect([...pr57.mergedFields].sort()).toEqual(v1Fields);
   });
 
   it("cross-checks real historical expected control state against normalized evidence", () => {

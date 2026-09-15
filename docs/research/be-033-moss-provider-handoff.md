@@ -2,10 +2,10 @@
 
 > **Status:** Provider Owner input/handoff package — provisional, not a Contract freeze
 > **Owner:** Provider Owner (`jzhao0`)
-> **Related issues:** #58 (this package), #50 / BE-011 (factual baseline), #51 (merged baseline PR)
+> **Related issues:** #58 (this package), #50 / BE-011 (factual baseline), #51 (merged baseline PR), #57 (merged generic pipeline)
 > **Scope:** Moss (`moss-kuru`) only. This package replaces nothing in BE-011; it is the Moss-specific, Backend-consumable completion of it.
 > **Non-authority notice:** This document does **not** freeze the final Evidence Contract, cross-Provider status semantics, Risk policy, public API fields, `ProviderRegistry` behavior, or a generic `MossProvider` implementation. It proposes; it does not decide.
-> **Review-fix note (V1):** the two historical real recordings were corrected from execution `SUCCESS` to execution `UNKNOWN`, matching their referenced `normalized.json` (halted/incomplete coverage); the required Moss Adapter input is now specified as `MossPreparedExecutionInput` V1 instead of an unresolved future type; and STALE handling is recorded as `PROPOSED / CONTRACT_OWNER_UNRESOLVED`. A deterministic cross-check test enforces the historical-status rule.
+> **Review-fix note (final):** the two historical real recordings were corrected from execution `SUCCESS` to execution `UNKNOWN`, matching their referenced `normalized.json` (halted/incomplete coverage); the required Moss Adapter input is specified as `MossPreparedExecutionInput` V1 and revalidated field-for-field against the **merged** PR #57 `BackendPipelinePreparedExecution`; Recorded Replay has a distinct `RECORDED_REPLAY` qualification class (never `MOCK_ONLY`); and STALE handling is recorded as `PROPOSED / CONTRACT_OWNER_UNRESOLVED`. Deterministic tests enforce all three rules.
 
 ## 1. What this package is, and what it is not
 
@@ -23,7 +23,7 @@ This package explicitly is **not**:
 - a new Risk policy;
 - a `ProviderRegistry` rewrite;
 - Tenderly, NativeRpcProvider, Enso, Camelot, or chain signing/broadcasting work;
-- new production Moss generic integration;
+- a production Moss `ProviderAdapter` implementation (the merged PR #57 pipeline seam exists; a concrete Moss Adapter does not);
 - a reason to fabricate missing real Provider evidence.
 
 The governing principle is **FACT > inference > proposal**. Every important field or capability below carries its class: `REAL_OBSERVED`, `INFERRED_FROM_CODE`, `MOCK_ONLY`, `RULE_DERIVED`, `UNQUALIFIED`, or an evidence-state label (`VERIFIED_RUNTIME`, `SUPPORTED_DOC_ONLY`, `UNSUPPORTED`, `UNKNOWN`).
@@ -35,28 +35,27 @@ The governing principle is **FACT > inference > proposal**. Every important fiel
 | Provider identity in current code | `moss-kuru` | `packages/moss-bridge/src/provider.ts` (`PROVIDER_ID`) |
 | Current canonical real Moss success fixture | `fixtures/chain-evidence/kuru/live-success-mon-to-usdc/` | fixture `metadata.json` (`real: true`, `fixtureType: LIVE_SIMULATION`) |
 | Merged BE-011 baseline | `docs/research/be-011-provider-input-package.md`, `fixtures/provider-registry/be-011/manifest.json` | merged PR #51 |
-| Current merged Backend composition | `apps/api/src/backend/composition.ts` (dependency container; resolves a `ProviderAdapter` but has no pipeline) | merged PR #56 |
-| Pending pull request #57 | PR #57 `apps/api/src/backend/pipeline.ts` (`BackendPipelinePreparedExecution`) | **OPEN, unmerged**; its shape is compatible with the specified `MossPreparedExecutionInput` V1 — see §7.2 |
+| Current merged Backend composition | `apps/api/src/backend/composition.ts` (dependency container that resolves a `ProviderAdapter`) | merged PR #56 |
+| Merged generic Backend pipeline | `apps/api/src/backend/pipeline.ts` (`BackendPipelinePreparedExecution`) | **MERGED** in PR #57 at `0e718667a4f76958228f4a46837bb57d670b1de3`; its field list matches the specified `MossPreparedExecutionInput` V1 — see §7.2 |
 | Registered Moss adapter in Backend | none exists | `apps/api/src/backend/` contains no `moss` adapter |
 
-**Merged current behavior vs pending #57.** PR #57 (`feat/backend-pipeline-integration-pr-b`, "feat(api): integrate backend pipeline runtime") is still **OPEN and unmerged** and is **not** described here as merged. Therefore:
+**Merged current behavior.** PR #57 ("feat(api): integrate backend pipeline runtime") **is merged on `main`** at `0e718667a4f76958228f4a46837bb57d670b1de3`. Therefore:
 
-- the **required Moss Adapter input binding is specified** by Provider Owner as `MossPreparedExecutionInput` V1 (§7.2), independently of whether #57 merges;
-- the current PR #57 `BackendPipelinePreparedExecution<NormalizedIntent>` shape is **compatible** with that binding, but is only a compatibility reference, not a merged fact;
-- statements about *current* Backend behavior are limited to merged `main`;
-- nothing in this package claims that the generic Moss Adapter path is merged, implemented, or runtime-qualified.
+- the **merged generic pipeline** now provides `BackendPipelinePreparedExecution<NormalizedIntent>`, and BE-033's `MossPreparedExecutionInput` V1 (§7.2) has been **revalidated field-for-field** against that merged shape;
+- the **required Moss Adapter input binding is specified** by Provider Owner as `MossPreparedExecutionInput` V1 and is aligned with merged `main`;
+- the generic pipeline seam is merged reality, but **no concrete Moss `ProviderAdapter` implementation exists**, so nothing in this package claims the Adapter path is implemented or runtime-qualified.
 
-If #57 merges with a changed shape, Backend re-derives the exact field list, but the required V1 binding material does not change. See §7.
+The required V1 binding material does not depend on any future pipeline change. See §7.
 
 ### 2.1 Readiness statement
 
 | Claim | Status |
 | --- | --- |
 | Provider Owner BE-033 input/handoff package | **Complete** |
-| Required Moss Adapter V1 prepared-execution binding | **Specified** (`MossPreparedExecutionInput` V1, §7.2) |
+| Required Moss Adapter V1 prepared-execution binding | **Specified and revalidated** against merged `BackendPipelinePreparedExecution` (`MossPreparedExecutionInput` V1, §7.2) |
 | Backend `MossProvider` Adapter implementation | **Remaining work** — BE-034/035/037/038, Backend Owner |
 | Shared/final Evidence Contract semantics | **Remaining work** — Contract Owner |
-| PR #57 | **Open, not merged** |
+| PR #57 | **Merged** (`0e718667a4f76958228f4a46837bb57d670b1de3`) |
 | Production Moss Adapter implemented | **No** |
 | Final shared Evidence Contract frozen | **No** |
 
@@ -77,9 +76,18 @@ If #57 merges with a changed shape, Backend re-derives the exact field list, but
 | --- | --- |
 | `REAL_OBSERVED` | Directly present in a real, sanitized, repository-catalogued observation. |
 | `INFERRED_FROM_CODE` | Not directly observed; derived from reading current implementation code. |
+| `RECORDED_REPLAY` | Deterministic recorded-replay contract input. It is **not** a fresh live Provider observation and it is **not** synthetic mock/rule data; it is a distinct qualification class. |
 | `MOCK_ONLY` | Exists only in a mock/rule test input. Never promoted. |
 | `RULE_DERIVED` | Produced by normalization/rule logic from other inputs; not a raw Provider field. |
 | `UNQUALIFIED` | Meaning or existence is not established. |
+
+The three truthfulness outcomes are distinct and must not be collapsed:
+
+```text
+REAL_OBSERVED (live / real recorded)  !=  RECORDED_REPLAY  !=  MOCK_ONLY (synthetic mock / rule input)
+```
+
+`RECORDED_REPLAY` entries may be deterministic and offline-loadable, but determinism alone does not make them mock/rule-only data, and replay is not a fresh live Provider observation.
 
 `RULE_DERIVED` describes fields the code *computes* (for example simulation coverage, the asset-change assessment, approval status). A `RULE_DERIVED` output can still be `VERIFIED_RUNTIME` as a *capability*, but the field itself is not a Provider-returned value and must not be documented as one.
 
@@ -94,7 +102,7 @@ This is the internal gap audit required before editing tracked files. It is kept
 | 3 | Real vs mock vs rule-derived vs documentation-only separated | `ALREADY_DOCUMENTED_BUT_NEEDS_BE033_PACKAGING` | §5, §9, fixture index `real`/`evidenceClass` |
 | 4 | Unavailable real cases explicit with fail-closed expectations | `UNAVAILABLE_REAL_EVIDENCE` | §8 table; fixture index `evidenceClass: "UNAVAILABLE"`, `path: null` |
 | 5 | Provenance separated from freshness policy | `ALREADY_PROVEN` (facts) + `CONTRACT_OWNER_DECISION_REQUIRED` (policy) | §6 |
-| 6 | Exact prepared-execution binding specified | `ALREADY_PROVEN` (specified) + `BACKEND_OWNER_IMPLEMENTATION_REQUIRED` (legacy path) + `CONTRACT_OWNER_DECISION_REQUIRED` (final shared type only) | §7.2 `MossPreparedExecutionInput` V1; PR #57 remains open and is only a compatibility reference |
+| 6 | Exact prepared-execution binding specified | `ALREADY_PROVEN` (specified and revalidated) + `BACKEND_OWNER_IMPLEMENTATION_REQUIRED` (legacy path) + `CONTRACT_OWNER_DECISION_REQUIRED` (final shared type only) | §7.2 `MossPreparedExecutionInput` V1; revalidated against the merged PR #57 `BackendPipelinePreparedExecution` on `main` |
 | 7 | Provider raw types stay out of generic Core | `ALREADY_PROVEN` | `packages/contracts/src/generic-evidence.ts` `providerData` + `provenance.runtime`; §7.2.4 |
 | 8 | Contract Owner can review provisional mappings | `CONTRACT_OWNER_DECISION_REQUIRED` | §12 unresolved list in field mapping; §13 |
 | 9 | Backend can implement BE-034/035/037/038 without guessing | `CAN_BE_PROVEN_FROM_EXISTING_CODE` + this package | §7, §8, fixture index |
@@ -105,7 +113,7 @@ This is the internal gap audit required before editing tracked files. It is kept
 | E | Real revert/failure/timeout samples | `UNAVAILABLE_REAL_EVIDENCE` | §8; **no new live probe run** |
 | F | Machine-readable Moss fixture index | `ALREADY_DOCUMENTED_BUT_NEEDS_BE033_PACKAGING` | `fixtures/provider-registry/be-033/moss/fixture-index.json` |
 | G | Deterministic offline loading for Backend tests | `CAN_BE_PROVEN_FROM_EXISTING_CODE` | §10 |
-| H | `supports(...)` / `evaluate(...)` expectations | `CAN_BE_PROVEN_FROM_EXISTING_CODE` (§7.3 legacy) + `BACKEND_OWNER_IMPLEMENTATION_REQUIRED` (target) | §7 |
+| H | `supports(...)` / `evaluate(...)` expectations | `CAN_BE_PROVEN_FROM_EXISTING_CODE` (§7.2.3 legacy) + `BACKEND_OWNER_IMPLEMENTATION_REQUIRED` (target) | §7 |
 
 **No item is classified `MOCK_OR_RULE_ONLY` as a satisfying proof.** Where only mock/rule evidence exists (revert normalization, integration failure classification), the item is resolved as `UNAVAILABLE_REAL_EVIDENCE` plus a documented fail-closed expectation, exactly as #58 permits.
 
@@ -208,7 +216,7 @@ Failure to honor the binding is a control failure (`invalid`/`failed`), never a 
 
 ### 7.2 TARGET MOSS ADAPTER INPUT — `MossPreparedExecutionInput` V1
 
-PR #57 is still **OPEN and unmerged** and is **not** described here as merged. BE-033 no longer treats the required Moss Adapter input as unresolved merely because #57 has not merged: the Provider Owner now specifies the concrete integration input contract below. It is an **Adapter-private integration input contract/proposal**, not a freeze of the shared Evidence Contract.
+PR #57 is **merged on `main`** at `0e718667a4f76958228f4a46837bb57d670b1de3`, so the generic pipeline seam is merged reality. BE-033 specifies the concrete Moss integration input contract below, revalidated against the merged `BackendPipelinePreparedExecution<NormalizedIntent>` in `apps/api/src/backend/pipeline.ts`. It is an **Adapter-private integration input contract/proposal**, not a freeze of the shared Evidence Contract.
 
 ```text
 BackendPipelinePreparedExecution
@@ -231,7 +239,7 @@ BackendPipelinePreparedExecution
 | `gasEstimate` | Backend Chain `{ gasUnits }` | Chain-level estimate | Distinct from Moss simulated gas |
 | `finality` | Backend Chain `{ status, blockContext? }` | Finality context associated with preparation | Context only |
 
-`MossPreparedExecutionInput` V1 therefore maps to the current pending `BackendPipelinePreparedExecution<NormalizedIntent>` field-for-field. That pending field list is **compatible** with this binding, and the binding is specified independently of whether #57 merges. If #57 lands with a changed shape, Backend re-derives the exact field list; the **required binding material does not change**. The final shared generic `PreparedExecution`/Evidence type remains Contract Owner scope.
+`MossPreparedExecutionInput` V1 maps to the **merged** `BackendPipelinePreparedExecution<NormalizedIntent>` field-for-field (revalidated against merged `main`): all nine fields — `runId`, `intent`, `chainId`, `protocol`, `blockContext`, `quote`, `unsignedTransaction`, `gasEstimate`, `finality` — are present and unchanged. BE-033 V1 is therefore aligned with the merged generic pipeline. The final shared generic `PreparedExecution`/Evidence type remains Contract Owner scope.
 
 #### 7.2.1 Exact-transaction invariant and fail-closed behavior
 
@@ -239,7 +247,7 @@ The Moss Adapter **MUST evaluate the exact prepared unsigned transaction supplie
 
 If the evaluated Moss transaction does not match the prepared `unsignedTransaction` in identity/material — `from` / `to` / `data` / `value`, or the applicable exact transaction representation — the Adapter must **fail closed** as `invalid` (preferred) or `failed`, and must **not** continue to Core/Decision. A mismatch is never `success` and never a silent re-quote.
 
-This is a target-behavior requirement for Backend Owner implementation. It is not implemented on merged `main` (§7.3).
+This is a target-behavior requirement for Backend Owner implementation. It is not implemented by the merged legacy path (§7.2.3).
 
 #### 7.2.2 Block and provenance ownership: INPUT vs OUTPUT
 
@@ -344,7 +352,7 @@ Enforcement evidence:
 
 - `toGenericEvidence` sets `provider.status=FAILED` whenever `integrationStatus !== "OK"`, and a classified `failure` requires `provider.status=FAILED` (schema-level `superRefine` in `generic-evidence.ts`).
 - `KuruLiveAgentFlow.check` throws `LiveAgentFlowError` when `evidence.provider.integrationStatus !== "OK"` and never evaluates Risk on that evidence.
-- Pending PR #57 `BackendPipeline.executeNormalized` throws `providerResultError(providerResult)` when `providerResult.status !== "success"` before Core/Decision run.
+- Merged `BackendPipeline.executeNormalized` (PR #57, `apps/api/src/backend/pipeline.ts`) throws `providerResultError(providerResult)` when `providerResult.status !== "success"` before Core/Decision run.
 - `provider-result-boundary.ts` keeps every candidate field `pending_review` and `getContractOwnerApprovedCandidates` returns `[]` unless the whole change set is Contract-Owner approved.
 
 ## 9. Evidence inventory
@@ -463,11 +471,11 @@ Rationale, per the task constraints: the real success evidence already in the re
 
 ## 15. Sources inspected
 
-- Issues: #58, merged PR #51, pending PR #57.
+- Issues: #58, merged PR #51, merged PR #57.
 - Docs: `docs/research/be-011-provider-input-package.md`, `docs/integration/moss-kuru-live-runtime.md`, `docs/integration/backend-p0-acceptance.md`, `docs/planning/arbitrum-open-house/02-B-provider-implementation.md`, `docs/README.md`.
 - Moss implementation: `packages/moss-bridge/src/{provider,normalize,errors,live-kuru,live-acceptance,kuru,types,serialize,index}.ts`, `packages/moss-bridge/test/*.test.ts`.
 - Contracts: `packages/contracts/src/{generic-evidence,evidence-provider}.ts`.
-- Backend: `apps/api/src/backend/{provider-adapter,provider-result-boundary,provider-registry,control-boundary,composition}.ts`; pending `apps/api/src/backend/pipeline.ts` (PR #57).
+- Backend: `apps/api/src/backend/{provider-adapter,provider-result-boundary,provider-registry,control-boundary,composition,pipeline}.ts` (pipeline merged via PR #57).
 - Orchestrator legacy flow: `packages/orchestrator/agent-flow/index.ts`.
 - Fixtures: `fixtures/chain-evidence/kuru/`, `fixtures/replay-data/`, `fixtures/provider-registry/be-011/`.
 
@@ -484,4 +492,4 @@ Moss Provider Owner input is ready for Backend integration when:
 - no Moss raw type is required to leak into generic Core;
 - no final Contract semantics are frozen by this package.
 
-All of the above are satisfied by this package, so all nine #58 acceptance criteria are met by Provider Owner work. The remaining items are **not** blockers to BE-033: they are Contract Owner decisions (§13) and Backend Owner implementation (§12), neither of which is a Provider Owner deliverable. PR #57 is still open and is not described as merged; the required V1 binding holds independently of it.
+All of the above are satisfied by this package, so all nine #58 acceptance criteria are met by Provider Owner work. The remaining items are **not** blockers to BE-033: they are Contract Owner decisions (§13) and Backend Owner implementation (§12), neither of which is a Provider Owner deliverable. PR #57 is merged; the generic pipeline seam is merged reality, while the concrete Moss Adapter remains Backend Owner work.

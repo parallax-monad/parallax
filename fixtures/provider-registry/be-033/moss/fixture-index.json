@@ -15,6 +15,7 @@
   "qualificationClasses": [
     "REAL_OBSERVED",
     "INFERRED_FROM_CODE",
+    "RECORDED_REPLAY",
     "MOCK_ONLY",
     "RULE_DERIVED",
     "UNQUALIFIED"
@@ -33,12 +34,12 @@
       "value": "LEGACY_COMPATIBILITY_PATH_MERGED_TARGET_GENERIC_ADAPTER_NOT_IMPLEMENTED",
       "class": "INFERRED_FROM_CODE",
       "note": "packages/moss-bridge/src/provider.ts implements the legacy MossProvider over EvidenceEvaluationInput. No Moss implementation of the Backend ProviderAdapter exists in apps/api/src/backend.",
-      "pendingPullRequest": {
+      "mergedBackendPipeline": {
         "number": 57,
         "title": "feat(api): integrate backend pipeline runtime",
-        "stateAtAuthoring": "OPEN",
-        "mayMergeLater": true,
-        "statement": "PR #57 defines BackendPipelinePreparedExecution. It was unmerged at authoring time; do not treat its generic prepared-execution path as merged behavior."
+        "state": "MERGED",
+        "mergeCommit": "0e718667a4f76958228f4a46837bb57d670b1de3",
+        "statement": "PR #57 is merged on main and defines BackendPipelinePreparedExecution. Its merged field list matches the BE-033 MossPreparedExecutionInput V1 binding; the generic pipeline seam is merged, while a concrete Moss ProviderAdapter implementation does not exist yet."
       }
     },
     "versionEvidence": {
@@ -328,7 +329,7 @@
       "evidenceClass": "RECORDED_REPLAY",
       "real": false,
       "supportState": "SUPPORTED_DOC_ONLY",
-      "qualificationClass": "MOCK_ONLY",
+      "qualificationClass": "RECORDED_REPLAY",
       "sourcePath": "fixtures/replay-data/mon-to-usdc.json",
       "capture": {
         "runId": "recorded-kuru-mon-to-usdc-91383505",
@@ -375,7 +376,7 @@
       "evidenceClass": "RECORDED_REPLAY",
       "real": false,
       "supportState": "SUPPORTED_DOC_ONLY",
-      "qualificationClass": "MOCK_ONLY",
+      "qualificationClass": "RECORDED_REPLAY",
       "sourcePath": "fixtures/replay-data/usdc-to-mon.json",
       "capture": {
         "runId": null,
@@ -1053,16 +1054,29 @@
         "Moss simulator-pinned block (evaluation output)"
       ],
       "blockLayerWarning": "These four block notions are distinct and must not be conflated or collapsed into one another.",
-      "pendingPullRequest57": {
-        "status": "OPEN_NOT_MERGED",
+      "mergedBackendPipeline57": {
+        "status": "MERGED_ON_MAIN",
+        "mergeCommit": "0e718667a4f76958228f4a46837bb57d670b1de3",
+        "source": "apps/api/src/backend/pipeline.ts",
         "shape": "BackendPipelinePreparedExecution<NormalizedIntent>",
-        "compatibility": "Its current field list (runId, intent, chainId, protocol, blockContext, quote, unsignedTransaction, gasEstimate, finality) is compatible with the BE-033 V1 binding; the V1 binding is specified independently of whether #57 has merged.",
+        "mergedFields": [
+          "runId",
+          "intent",
+          "chainId",
+          "protocol",
+          "blockContext",
+          "quote",
+          "unsignedTransaction",
+          "gasEstimate",
+          "finality"
+        ],
+        "alignment": "The merged PR #57 field list matches the BE-033 MossPreparedExecutionInput V1 binding field-for-field (revalidated against merged main at 0e718667a4f76958228f4a46837bb57d670b1de3). BE-033 V1 is therefore aligned with the merged generic pipeline.",
         "caveats": {
           "blockContext": "A single generic block context cannot by itself express the four Moss block notions; that distinction is owned by the Adapter and the OUTPUT provenance block.",
           "gasEstimate": "Chain adapter estimate; distinct from Moss simulator gas units.",
-          "provenance": "No explicit provenance field in the pending shape; Moss runtime identity remains Adapter configuration."
+          "provenance": "No explicit provenance field in the merged shape; Moss runtime identity remains Adapter configuration."
         },
-        "statement": "PR #57 is still open and is NOT described as merged. If it merges with a changed shape, Backend Owner re-derives the exact field list, but the BE-033 required binding material does not change."
+        "statement": "PR #57 is merged, so the generic pipeline seam is merged reality. No concrete Moss ProviderAdapter implementation exists yet; that remains Backend Owner work."
       },
       "remainingContractOwnerScope": "The final shared generic PreparedExecution / Evidence type remains Contract Owner scope. The Provider Owner's required Moss Adapter input binding is now specified, so Backend does not need to guess the required material."
     },

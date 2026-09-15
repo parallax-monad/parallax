@@ -16,6 +16,11 @@ The BE-033 schema deliberately reuses the BE-011 fixture-index convention (`id`/
 - `real: true` means the referenced source was captured from a real runtime/provider interaction and sanitized. Only three entries are `real: true`, all real Moss/Kuru recordings: `moss-live-success-mon-to-usdc`, `moss-recorded-mon-to-usdc`, `moss-recorded-usdc-to-mon`.
 - `real: false` means deterministic mock/rule/replay/unavailable evidence only. It is never promoted.
 - `evidenceClass: "UNAVAILABLE"` always has `real: false` and `sourcePath: null`. No fabricated Provider JSON is committed to "complete" the index.
+- **Qualification classes are a distinct axis.** `REAL_OBSERVED` (live or real recorded), `RECORDED_REPLAY`, and `MOCK_ONLY` (synthetic mock / `RULE_TEST_INPUT`) are three different things:
+  - `REAL_OBSERVED` — a real sanitized observation (`real: true`);
+  - `RECORDED_REPLAY` — a deterministic recorded-replay contract input; **never** `MOCK_ONLY`, and not a fresh live Provider observation;
+  - `MOCK_ONLY` — synthetic mock/rule test input.
+  Recorded Replay is deterministic and offline-loadable, but determinism alone does not make it mock/rule-only data.
 - The `fixtures/chain-evidence/kuru/reverted/` entry is a revert **rule input** (`fixtureType: RULE_TEST_INPUT`, `source: "mock"`). It does not prove any real Moss revert response.
 - The absence of real failure/timeout/outage/auth/rate-limit/malformed/partial/stale/config samples is a factual result, not an omission to be fixed by invention.
 - No API keys, RPC secret URLs, private keys, cookies, access tokens, endpoint values, or operator runtime paths may be committed.
@@ -31,7 +36,7 @@ The BE-033 schema deliberately reuses the BE-011 fixture-index convention (`id`/
 | Moss integration-error rule input | `fixtures/chain-evidence/kuru/integration-error/` | mock/rule input |
 | Moss missing-evidence rule input | `fixtures/chain-evidence/kuru/missing-evidence/` | mock/rule input |
 | Moss no-route rule input | `fixtures/chain-evidence/kuru/no-route/` | mock/rule input |
-| Replay envelopes | `fixtures/replay-data/mon-to-usdc.json`, `fixtures/replay-data/usdc-to-mon.json` | recorded-replay contract input, not live Provider evidence |
+| Replay envelopes | `fixtures/replay-data/mon-to-usdc.json`, `fixtures/replay-data/usdc-to-mon.json` | `RECORDED_REPLAY` contract input (`real: false`), distinct from mock/rule and not live Provider evidence |
 
 The live success capture metadata is authoritative for the real values: run `kuru-live-1786163979273`, window `2026-08-08T04:39:39.273Z`–`2026-08-08T04:39:49.599Z`, Parallax commit `938f62fe5c872626f5cfa2f0a58c975d53e4a8de`, Moss runtime `0.1.0` / `ef15448e166f31c891e80dba5073dae04a052a2b`, chain `143`, stage block `94112883`, quote/action block `94112901`, simulator pinned block `94112902`. No block hash is recorded.
 
@@ -75,7 +80,7 @@ An `UNAVAILABLE` entry with `sourcePath: null` is a truthful statement: "this ca
 
 ## Prepared-execution binding
 
-`preparedExecutionBinding.targetPath` in `fixture-index.json` specifies `MossPreparedExecutionInput` **V1** — the Provider Owner's required Adapter input contract (`runId`, `intent`, `chainId`, `protocol`, `quote`, `unsignedTransaction`, `blockContext`, `gasEstimate`, `finality`). It also records the exact-transaction fail-closed rule, the INPUT-vs-OUTPUT provenance split, and the four distinct block layers. PR #57 is recorded as still open and not merged.
+`preparedExecutionBinding.targetPath` in `fixture-index.json` specifies `MossPreparedExecutionInput` **V1** — the Provider Owner's required Adapter input contract (`runId`, `intent`, `chainId`, `protocol`, `quote`, `unsignedTransaction`, `blockContext`, `gasEstimate`, `finality`). It also records the exact-transaction fail-closed rule, the INPUT-vs-OUTPUT provenance split, and the four distinct block layers. PR #57 is **merged** on `main` (`0e718667a4f76958228f4a46837bb57d670b1de3`), and `mergedBackendPipeline57` records that the merged `BackendPipelinePreparedExecution` field list matches this V1 binding field-for-field; the concrete Moss Adapter remains unimplemented.
 
 ## Validation
 
@@ -86,7 +91,8 @@ An `UNAVAILABLE` entry with `sourcePath: null` is a truthful statement: "this ca
 - verifies ids are unique;
 - verifies `real: true` entries have a `sourcePath` and an evidence class that denotes a real observation;
 - verifies `UNAVAILABLE` entries have `real: false` and `sourcePath: null`;
-- verifies every `evidenceClass` is declared in the index schema;
+- verifies every `evidenceClass` and `qualificationClass` is declared in the index schema;
+- verifies `RECORDED_REPLAY` entries never use `MOCK_ONLY`, and that mock/rule entries stay mock/rule-qualified;
 - verifies all `providerId` values match the Moss provider identity and that `noNewLiveProbe.run` is `false`;
 - cross-checks every real historical entry that references a `normalized.json` against that referenced evidence: `integrationStatus` matches when both are present, `executionStatus` matches, and incomplete/halted simulation is never indexed as execution `SUCCESS`;
-- machine-validates the `MossPreparedExecutionInput` V1 binding (flow, required fields, fail-closed rule, provenance layers, PR #57 status).
+- machine-validates the `MossPreparedExecutionInput` V1 binding (flow, required fields, fail-closed rule, provenance layers, merged PR #57 alignment).
