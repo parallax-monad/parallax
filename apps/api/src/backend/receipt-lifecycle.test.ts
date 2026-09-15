@@ -39,6 +39,21 @@ describe("Receipt lifecycle", () => {
     expect(buildCount).toBe(0);
   });
 
+  it("fails closed when adapters are configured without a receipt source", async () => {
+    const signer = createFakeReceiptSigner(() => "must-not-run");
+    const anchorer = createFakeReceiptAnchorer(() => "must-not-run");
+    const lifecycle = createReceiptLifecycle({ signer, anchorer });
+
+    expect(lifecycle.status).toBe("not_configured");
+    await expect(lifecycle.completion).resolves.toMatchObject({
+      status: "not_configured",
+      signing: { status: "not_configured" },
+      anchoring: { status: "not_configured" },
+    });
+    expect(signer.calls).toHaveLength(0);
+    expect(anchorer.calls).toHaveLength(0);
+  });
+
   it("supports deterministic no-op adapters without requiring receipt outputs", async () => {
     const lifecycle = createReceiptLifecycle({
       receipt: { decision: "UNKNOWN" },
@@ -267,6 +282,53 @@ describe("Receipt lifecycle", () => {
       anchoring: { status: "succeeded", value: "anchor" },
     });
     expect(decisionEvents).toEqual(["decision", "build", "sign", "anchor"]);
+  });
+
+  it("does not use the Decision as a Receipt when adapters lack a builder", async () => {
+    const fixture = fakeBackendFixture();
+    const chain = createFakeChainAdapter(fixture.chain);
+    const protocol = createFakeProtocolAdapter(fixture.protocol);
+    const provider = createFakeProviderAdapterHarness({
+      ...fixture.provider,
+      supports: (query) =>
+        query.chainId === fixture.chain.chainId &&
+        query.protocol === fixture.protocol.id,
+    });
+    const signer = createFakeReceiptSigner(() => "must-not-run");
+    const anchorer = createFakeReceiptAnchorer(() => "must-not-run");
+    const runtime = createBackendComposition({
+      chainRegistry: new ChainRegistry([chain]),
+      protocolRegistry: new ProtocolRegistry([
+        {
+          chainId: fixture.chain.chainId,
+          protocol: fixture.protocol.id,
+          adapter: protocol,
+        },
+      ]),
+      providerRegistry: new ProviderRegistry([provider.adapter]),
+      normalization: { normalize: () => fixture.provider.intent },
+      core: { evaluate: async () => "core" },
+      decision: { decide: async () => "decision" },
+      runStore: new InMemoryRunStore(),
+      receiptSigner: signer,
+      receiptAnchorer: anchorer,
+    });
+    const pipeline = new BackendPipeline({ runtime });
+
+    const execution = await pipeline.execute({
+      rawInput: {},
+      runId: "receipt-builder-omitted-run",
+      chainId: fixture.chain.chainId,
+      protocol: fixture.protocol.id,
+    });
+
+    await expect(execution.receiptLifecycle.completion).resolves.toMatchObject({
+      status: "not_configured",
+      signing: { status: "not_configured" },
+      anchoring: { status: "not_configured" },
+    });
+    expect(signer.calls).toHaveLength(0);
+    expect(anchorer.calls).toHaveLength(0);
   });
 });
 

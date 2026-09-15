@@ -87,9 +87,12 @@ export function createReceiptLifecycle<
 >(
   options: ReceiptLifecycleOptions<Receipt, Signature, Anchor>,
 ): ReceiptLifecycleHandle<Signature, Anchor> {
-  const hasAdapter =
-    options.signer !== undefined || options.anchorer !== undefined;
-  const initial = hasAdapter
+  const hasReceiptSource =
+    options.receipt !== undefined || options.buildReceipt !== undefined;
+  const hasConfiguredLifecycle =
+    hasReceiptSource &&
+    (options.signer !== undefined || options.anchorer !== undefined);
+  const initial = hasConfiguredLifecycle
     ? pendingSnapshot<Signature, Anchor>(options)
     : notConfiguredSnapshot<Signature, Anchor>();
   const lifecycle = new ReceiptLifecycle<Receipt, Signature, Anchor>(

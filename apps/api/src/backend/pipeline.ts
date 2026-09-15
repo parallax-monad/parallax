@@ -337,7 +337,7 @@ export class BackendPipeline<
     const receiptLifecycle = createReceiptLifecycle({
       buildReceipt:
         buildReceipt === undefined
-          ? () => decisionOutput
+          ? undefined
           : () =>
               buildReceipt({
                 runId: input.runId,
