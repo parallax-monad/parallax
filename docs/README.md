@@ -45,6 +45,8 @@ If you are implementing a feature, start from its owning specification and accep
 - [Market positioning and evidence](./research/market-positioning-and-evidence.md) — market evidence, positioning hypotheses, and claim boundaries.
 - [Arbitrum ecosystem and stack](./research/arbitrum-ecosystem-and-stack.md) — ecosystem rationale and Provider/stack selection research.
 - [BE-011 Provider Owner input package](./research/be-011-provider-input-package.md) — Provider capability evidence inventory and machine-readable fixture index for BE-011. The pre-guard Native RPC capture (`arbitrum-sepolia-public-2026-09-08`) is retained as `HISTORICAL_PRE_GUARD_CAPTURE` and is superseded for canonical qualification.
+- [BE-033 MossProvider handoff](./research/be-033-moss-provider-handoff.md) — Moss-specific capability matrix, provenance/freshness separation, prepared-execution binding, control-state mapping, and fixture index for BE-033/#58. Real evidence is limited to the Monad × Kuru compatibility path; revert/timeout/failure coverage remains explicitly unavailable.
+- [BE-033 Moss field mapping](./research/be-033-moss-field-mapping.md) — Provisional, field-by-field Moss mapping with source path, qualification class, missing-value behavior, opaque-boundary, and unresolved Contract Owner decisions. Not final Evidence Contract semantics.
 
 ## Architecture decisions
 
