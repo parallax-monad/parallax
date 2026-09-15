@@ -1,0 +1,349 @@
+import { describe, expect, it } from "vitest";
+import { InMemoryRunStore } from "../store.js";
+import { ChainRegistry } from "./chain-registry.js";
+import { createBackendComposition } from "./composition.js";
+import {
+  createFakeChainAdapter,
+  createFakeProtocolAdapter,
+  createFakeProviderAdapterHarness,
+  createFakeReceiptAnchorer,
+  createFakeReceiptSigner,
+  createNoopReceiptAnchorer,
+  createNoopReceiptSigner,
+  fakeBackendFixture,
+} from "./fake-harness.js";
+import { BackendPipeline } from "./pipeline.js";
+import { ProtocolRegistry } from "./protocol-registry.js";
+import { ProviderRegistry } from "./provider-registry.js";
+import {
+  createReceiptLifecycle,
+  type ReceiptLifecycleSnapshot,
+} from "./receipt-ports.js";
+
+describe("Receipt lifecycle", () => {
+  it("returns an observable not-configured state without invoking a builder", async () => {
+    let buildCount = 0;
+    const lifecycle = createReceiptLifecycle({
+      buildReceipt: () => {
+        buildCount += 1;
+        return "must-not-build";
+      },
+    });
+
+    expect(lifecycle.status).toBe("not_configured");
+    await expect(lifecycle.completion).resolves.toMatchObject({
+      status: "not_configured",
+      signing: { status: "not_configured" },
+      anchoring: { status: "not_configured" },
+    });
+    expect(buildCount).toBe(0);
+  });
+
+  it("fails closed when adapters are configured without a receipt source", async () => {
+    const signer = createFakeReceiptSigner(() => "must-not-run");
+    const anchorer = createFakeReceiptAnchorer(() => "must-not-run");
+    const lifecycle = createReceiptLifecycle({ signer, anchorer });
+
+    expect(lifecycle.status).toBe("not_configured");
+    await expect(lifecycle.completion).resolves.toMatchObject({
+      status: "not_configured",
+      signing: { status: "not_configured" },
+      anchoring: { status: "not_configured" },
+    });
+    expect(signer.calls).toHaveLength(0);
+    expect(anchorer.calls).toHaveLength(0);
+  });
+
+  it("supports deterministic no-op adapters without requiring receipt outputs", async () => {
+    const lifecycle = createReceiptLifecycle({
+      receipt: { decision: "UNKNOWN" },
+      signer: createNoopReceiptSigner<Record<string, string>>(),
+      anchorer: createNoopReceiptAnchorer<Record<string, string>>(),
+    });
+
+    await expect(lifecycle.completion).resolves.toMatchObject({
+      status: "anchored",
+      signing: { status: "succeeded" },
+      anchoring: { status: "succeeded" },
+    });
+  });
+
+  it("supports anchoring when the optional signer is not configured", async () => {
+    const anchorer = createFakeReceiptAnchorer<string, string>("anchor");
+    const lifecycle = createReceiptLifecycle({
+      receipt: "opaque-receipt",
+      anchorer,
+    });
+
+    await expect(lifecycle.completion).resolves.toMatchObject({
+      status: "anchored",
+      signing: { status: "not_configured" },
+      anchoring: { status: "succeeded", value: "anchor" },
+    });
+    expect(anchorer.calls).toEqual([{ receipt: "opaque-receipt" }]);
+  });
+
+  it("signs before anchoring and exposes successful outputs", async () => {
+    const calls: string[] = [];
+    const signer = createFakeReceiptSigner<{ decision: string }, string>(
+      (receipt) => {
+        calls.push(`sign:${receipt.decision}`);
+        return "signature";
+      },
+    );
+    const anchorer = createFakeReceiptAnchorer<{ decision: string }, string>(
+      (receipt) => {
+        calls.push(`anchor:${receipt.decision}`);
+        return "anchor";
+      },
+    );
+
+    const lifecycle = createReceiptLifecycle({
+      receipt: { decision: "PROCEED" },
+      signer,
+      anchorer,
+    });
+
+    const result = await lifecycle.completion;
+
+    expect(calls).toEqual(["sign:PROCEED", "anchor:PROCEED"]);
+    expect(result).toMatchObject({
+      status: "anchored",
+      signing: { status: "succeeded", value: "signature" },
+      anchoring: { status: "succeeded", value: "anchor" },
+    });
+    expect(signer.calls).toHaveLength(1);
+    expect(anchorer.calls).toHaveLength(1);
+  });
+
+  it("observes signer failures and does not anchor an unattested receipt", async () => {
+    const failure = new Error("sign failed");
+    const anchorer = createFakeReceiptAnchorer(() => "must-not-run");
+    const lifecycle = createReceiptLifecycle({
+      receipt: "opaque-receipt",
+      signer: createFakeReceiptSigner(() => {
+        throw failure;
+      }),
+      anchorer,
+    });
+
+    await expect(lifecycle.completion).resolves.toMatchObject({
+      status: "failed",
+      error: failure,
+      signing: { status: "failed", error: failure },
+      anchoring: { status: "skipped" },
+    });
+    expect(anchorer.calls).toHaveLength(0);
+  });
+
+  it("observes anchorer failures after a successful signature", async () => {
+    const failure = new Error("anchor failed");
+    const lifecycle = createReceiptLifecycle({
+      receipt: "opaque-receipt",
+      signer: createFakeReceiptSigner("signature"),
+      anchorer: createFakeReceiptAnchorer(() => {
+        throw failure;
+      }),
+    });
+
+    await expect(lifecycle.completion).resolves.toMatchObject({
+      status: "failed",
+      error: failure,
+      signing: { status: "succeeded", value: "signature" },
+      anchoring: { status: "failed", error: failure },
+    });
+  });
+
+  it("retains a receipt-builder rejection without invoking adapters", async () => {
+    const failure = new Error("receipt build failed");
+    const signer = createFakeReceiptSigner(() => "must-not-run");
+    const anchorer = createFakeReceiptAnchorer(() => "must-not-run");
+    const lifecycle = createReceiptLifecycle({
+      buildReceipt: async () => {
+        throw failure;
+      },
+      signer,
+      anchorer,
+    });
+
+    await expect(lifecycle.completion).resolves.toMatchObject({
+      status: "failed",
+      error: failure,
+    });
+    expect(signer.calls).toHaveLength(0);
+    expect(anchorer.calls).toHaveLength(0);
+  });
+
+  it("times out a stalled adapter without blocking decision completion", async () => {
+    const lifecycle = createReceiptLifecycle({
+      receipt: "opaque-receipt",
+      signer: createFakeReceiptSigner(
+        () => new Promise<string>(() => undefined),
+      ),
+      timeoutMs: 5,
+    });
+
+    expect(lifecycle.status).toBe("pending");
+    await expect(lifecycle.completion).resolves.toSatisfy(
+      (result: ReceiptLifecycleSnapshot) =>
+        result.status === "timed_out" &&
+        result.signing.status === "timed_out" &&
+        result.anchoring.status === "skipped" &&
+        result.error instanceof Error &&
+        result.error.name === "ReceiptTimeoutError",
+    );
+  });
+
+  it("times out anchoring after signing succeeds", async () => {
+    const lifecycle = createReceiptLifecycle({
+      receipt: "opaque-receipt",
+      signer: createFakeReceiptSigner("signature"),
+      anchorer: createFakeReceiptAnchorer(
+        () => new Promise<string>(() => undefined),
+      ),
+      timeoutMs: 5,
+    });
+
+    await expect(lifecycle.completion).resolves.toSatisfy(
+      (result: ReceiptLifecycleSnapshot) =>
+        result.status === "timed_out" &&
+        result.signing.status === "succeeded" &&
+        result.anchoring.status === "timed_out" &&
+        result.error instanceof Error &&
+        result.error.name === "ReceiptTimeoutError",
+    );
+  });
+
+  it("returns the Decision before a stalled signer and then completes the lifecycle", async () => {
+    const fixture = fakeBackendFixture();
+    const chain = createFakeChainAdapter(fixture.chain);
+    const protocol = createFakeProtocolAdapter(fixture.protocol);
+    const provider = createFakeProviderAdapterHarness({
+      ...fixture.provider,
+      supports: (query) =>
+        query.chainId === fixture.chain.chainId &&
+        query.protocol === fixture.protocol.id,
+    });
+    const decisionEvents: string[] = [];
+    const signerReady = createDeferred<string>();
+    const runtime = createBackendComposition({
+      chainRegistry: new ChainRegistry([chain]),
+      protocolRegistry: new ProtocolRegistry([
+        {
+          chainId: fixture.chain.chainId,
+          protocol: fixture.protocol.id,
+          adapter: protocol,
+        },
+      ]),
+      providerRegistry: new ProviderRegistry([provider.adapter]),
+      normalization: { normalize: () => fixture.provider.intent },
+      core: { evaluate: async () => "core" },
+      decision: {
+        decide: async () => {
+          decisionEvents.push("decision");
+          return "decision";
+        },
+      },
+      runStore: new InMemoryRunStore(),
+      receiptSigner: createFakeReceiptSigner(() => {
+        decisionEvents.push("sign");
+        return signerReady.promise;
+      }),
+      receiptAnchorer: createFakeReceiptAnchorer(() => {
+        decisionEvents.push("anchor");
+        return "anchor";
+      }),
+    });
+    const pipeline = new BackendPipeline({
+      runtime,
+      receiptTimeoutMs: 50,
+      buildReceipt: ({ decisionOutput }) => {
+        decisionEvents.push("build");
+        return decisionOutput;
+      },
+    });
+
+    const execution = await pipeline.execute({
+      rawInput: {},
+      runId: "receipt-pipeline-run",
+      chainId: fixture.chain.chainId,
+      protocol: fixture.protocol.id,
+    });
+
+    expect(execution.decisionOutput).toBe("decision");
+    expect(execution.receiptLifecycle.status).toBe("pending");
+    expect(decisionEvents[0]).toBe("decision");
+    expect(decisionEvents).not.toContain("anchor");
+
+    signerReady.resolve("signature");
+    await expect(execution.receiptLifecycle.completion).resolves.toMatchObject({
+      status: "anchored",
+      signing: { status: "succeeded", value: "signature" },
+      anchoring: { status: "succeeded", value: "anchor" },
+    });
+    expect(decisionEvents).toEqual(["decision", "build", "sign", "anchor"]);
+  });
+
+  it("does not use the Decision as a Receipt when adapters lack a builder", async () => {
+    const fixture = fakeBackendFixture();
+    const chain = createFakeChainAdapter(fixture.chain);
+    const protocol = createFakeProtocolAdapter(fixture.protocol);
+    const provider = createFakeProviderAdapterHarness({
+      ...fixture.provider,
+      supports: (query) =>
+        query.chainId === fixture.chain.chainId &&
+        query.protocol === fixture.protocol.id,
+    });
+    const signer = createFakeReceiptSigner(() => "must-not-run");
+    const anchorer = createFakeReceiptAnchorer(() => "must-not-run");
+    const runtime = createBackendComposition({
+      chainRegistry: new ChainRegistry([chain]),
+      protocolRegistry: new ProtocolRegistry([
+        {
+          chainId: fixture.chain.chainId,
+          protocol: fixture.protocol.id,
+          adapter: protocol,
+        },
+      ]),
+      providerRegistry: new ProviderRegistry([provider.adapter]),
+      normalization: { normalize: () => fixture.provider.intent },
+      core: { evaluate: async () => "core" },
+      decision: { decide: async () => "decision" },
+      runStore: new InMemoryRunStore(),
+      receiptSigner: signer,
+      receiptAnchorer: anchorer,
+    });
+    const pipeline = new BackendPipeline({ runtime });
+
+    const execution = await pipeline.execute({
+      rawInput: {},
+      runId: "receipt-builder-omitted-run",
+      chainId: fixture.chain.chainId,
+      protocol: fixture.protocol.id,
+    });
+
+    await expect(execution.receiptLifecycle.completion).resolves.toMatchObject({
+      status: "not_configured",
+      signing: { status: "not_configured" },
+      anchoring: { status: "not_configured" },
+    });
+    expect(signer.calls).toHaveLength(0);
+    expect(anchorer.calls).toHaveLength(0);
+  });
+});
+
+function createDeferred<Value>(): {
+  readonly promise: Promise<Value>;
+  resolve(value: Value): void;
+} {
+  let resolvePromise!: (value: Value | PromiseLike<Value>) => void;
+  const promise = new Promise<Value>((resolve) => {
+    resolvePromise = resolve;
+  });
+  return {
+    promise,
+    resolve(value) {
+      resolvePromise(value);
+    },
+  };
+}
