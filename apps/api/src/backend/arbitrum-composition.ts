@@ -3,8 +3,12 @@ import {
   CAMELOT_V3_PROTOCOL_ID,
   type CheckSwapRequest,
   type NormalizedSwapIntent,
+  type QuoteRequest,
 } from "@parallax/contracts";
-import { normalizeArbitrumCheckSwapRequest } from "../normalization.js";
+import {
+  normalizeArbitrumCheckSwapRequest,
+  normalizeArbitrumQuoteRequest,
+} from "../normalization.js";
 import {
   type BackendBootstrapInput,
   type BackendRuntime,
@@ -33,6 +37,8 @@ import {
 } from "./provider-registry.js";
 import type { ReceiptAnchorer, ReceiptSigner } from "./receipt-ports.js";
 
+export type ArbitrumNormalizationInput = CheckSwapRequest | QuoteRequest;
+
 export type ArbitrumProductionCompositionOptions = {
   readonly runtime: BackendRuntime;
   readonly runStore: RunStore;
@@ -44,7 +50,7 @@ export type ArbitrumProductionCompositionOptions = {
   >[];
   readonly providerEnvironment?: ProviderEnvironment;
   readonly normalization?: NormalizationBoundary<
-    CheckSwapRequest,
+    ArbitrumNormalizationInput,
     NormalizedSwapIntent
   >;
   readonly core: CorePort<NormalizedSwapIntent, unknown, unknown>;
@@ -54,7 +60,7 @@ export type ArbitrumProductionCompositionOptions = {
 };
 
 export type ArbitrumProductionComposition = BackendCompositionRuntime<
-  CheckSwapRequest,
+  ArbitrumNormalizationInput,
   NormalizedSwapIntent,
   unknown,
   unknown,
@@ -108,11 +114,14 @@ export function createArbitrumProductionComposition(
   const protocolAdapter =
     options.protocolAdapter ?? new CamelotV3ProtocolAdapter();
   const normalization = options.normalization ?? {
-    normalize: (input: CheckSwapRequest): NormalizedSwapIntent => {
-      const result = normalizeArbitrumCheckSwapRequest(
-        input,
-        options.runtime.tokenRegistry,
-      );
+    normalize: (input: ArbitrumNormalizationInput): NormalizedSwapIntent => {
+      const result =
+        "economicBoundary" in input
+          ? normalizeArbitrumCheckSwapRequest(
+              input,
+              options.runtime.tokenRegistry,
+            )
+          : normalizeArbitrumQuoteRequest(input, options.runtime.tokenRegistry);
       if (!result.success) throw new Error(result.error.message);
       return result.intent;
     },

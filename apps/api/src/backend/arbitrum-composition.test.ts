@@ -1,5 +1,7 @@
 import type { NormalizedSwapIntent } from "@parallax/contracts";
 import { describe, expect, it } from "vitest";
+import { createBackendApp } from "../bootstrap/backend.js";
+import { UnsupportedAgentFlowError } from "../ports.js";
 import { bootstrapBackendRuntime } from "../runtime-config.js";
 import { InMemoryRunStore } from "../store.js";
 
@@ -8,6 +10,8 @@ import {
   bootstrapArbitrumBackend,
   createArbitrumProductionComposition,
 } from "./arbitrum-composition.js";
+import { createCamelotV3ProtocolAdapter } from "./camelot-v3-protocol-adapter.js";
+import type { BackendCompositionRuntime } from "./composition.js";
 import {
   createFakeChainAdapter,
   createFakeProviderAdapter,
@@ -59,6 +63,53 @@ function options(): ArbitrumProductionCompositionOptions {
         capabilities: ["simulate"],
       }),
     ],
+    core: { evaluate: async (input) => input },
+    decision: { decide: async (input) => input },
+  };
+}
+
+const arbitrumTokenAddress = "0xabcdefabcdefabcdefabcdefabcdefabcdefabcd";
+const arbitrumTokenRegistry = {
+  chains: [{ chainId: 421614, symbol: "ETH", decimals: 18 }],
+  tokens: [
+    {
+      chainId: 421614,
+      address: arbitrumTokenAddress,
+      symbol: "USDC",
+      decimals: 6,
+      decimalsSource: "onchain_verified" as const,
+      verifiedAtBlock: "42",
+    },
+  ],
+};
+const arbitrumEnvironment = {
+  MONAD_RPC_URL: "https://monad.example.test",
+  ARBITRUM_RPC_URL: "https://arbitrum.example.test",
+  MOSS_RUNTIME_VERSION: "fixture-runtime",
+  MOSS_RUNTIME_REVISION: "fixture-revision",
+};
+
+function arbitrumRuntime() {
+  return bootstrapBackendRuntime({
+    environment: arbitrumEnvironment,
+    tokenRegistry: arbitrumTokenRegistry,
+  });
+}
+
+function arbitrumCompositionOptions(
+  runtime: ReturnType<typeof arbitrumRuntime>,
+  protocolAdapter?: ArbitrumProductionCompositionOptions["protocolAdapter"],
+): ArbitrumProductionCompositionOptions {
+  return {
+    runtime,
+    runStore: new InMemoryRunStore(),
+    chainAdapter: createFakeChainAdapter({
+      chainId: 421614,
+      blockNumber: "42",
+      gasUnits: "21000",
+      finality: { status: "finalized" },
+    }),
+    ...(protocolAdapter === undefined ? {} : { protocolAdapter }),
     core: { evaluate: async (input) => input },
     decision: { decide: async (input) => input },
   };
@@ -123,5 +174,114 @@ describe("Arbitrum production composition skeleton", () => {
         runtime: runtimeWithoutRpc,
       }),
     ).toThrow("Arbitrum RPC URL is required");
+  });
+
+  it("normalizes Arbitrum quotes through the public app and reaches Camelot", async () => {
+    const runtime = arbitrumRuntime();
+    let receivedIntent: NormalizedSwapIntent | undefined;
+    const protocolAdapter = createCamelotV3ProtocolAdapter({
+      quote: async (intent) => {
+        receivedIntent = intent;
+        return {
+          status: "available",
+          quote: {
+            estimatedAmountOut: "0.5",
+            source: "quote",
+            blockNumber: "42",
+            runtimeVersion: "camelot-fixture-runtime",
+            runtimeRevision: "camelot-fixture-revision",
+          },
+        };
+      },
+    });
+    const composition = createArbitrumProductionComposition(
+      arbitrumCompositionOptions(runtime, protocolAdapter),
+    );
+    const app = createBackendApp({
+      runtime,
+      // createBackendApp predates specialized composition input unions.
+      composition: composition as unknown as BackendCompositionRuntime,
+    });
+
+    const response = await app.fetch(
+      new Request("https://api.example.test/api/quote", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          chainId: 421614,
+          protocol: "camelot-v3",
+          sender: "0x1111111111111111111111111111111111111111",
+          tokenIn: { kind: "native" },
+          tokenOut: { kind: "erc20", address: arbitrumTokenAddress },
+          amountIn: "1",
+        }),
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      status: "available",
+      quote: {
+        estimatedAmountOut: "0.5",
+        blockNumber: "42",
+        runtimeVersion: "camelot-fixture-runtime",
+        runtimeRevision: "camelot-fixture-revision",
+      },
+    });
+    expect(receivedIntent).toMatchObject({
+      chainId: 421614,
+      protocol: "camelot-v3",
+      amountInAtomic: "1000000000000000000",
+      economicBoundary: { availability: "unavailable" },
+    });
+  });
+
+  it("continues to normalize Arbitrum checks at the public app boundary", async () => {
+    const runtime = arbitrumRuntime();
+    let receivedIntent: NormalizedSwapIntent | undefined;
+    const composition = createArbitrumProductionComposition(
+      arbitrumCompositionOptions(runtime),
+    );
+    const app = createBackendApp({
+      runtime,
+      // createBackendApp predates specialized composition input unions.
+      composition: composition as unknown as BackendCompositionRuntime,
+      agentFlow: {
+        async check(input) {
+          receivedIntent = input.intent;
+          throw new UnsupportedAgentFlowError();
+        },
+      },
+    });
+
+    const response = await app.fetch(
+      new Request("https://api.example.test/api/check", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          chainId: 421614,
+          protocol: "camelot-v3",
+          sender: "0x1111111111111111111111111111111111111111",
+          tokenIn: { kind: "native" },
+          tokenOut: { kind: "erc20", address: arbitrumTokenAddress },
+          amountIn: "1",
+          economicBoundary: {
+            availability: "unavailable",
+            source: "unavailable",
+          },
+        }),
+      }),
+    );
+
+    expect(response.status).toBe(502);
+    await expect(response.json()).resolves.toMatchObject({
+      error: { code: "UNSUPPORTED" },
+    });
+    expect(receivedIntent).toMatchObject({
+      chainId: 421614,
+      protocol: "camelot-v3",
+      amountInAtomic: "1000000000000000000",
+      economicBoundary: { availability: "unavailable" },
+    });
   });
 });
