@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from "node:util";
 import {
   convertAtomicAmountToHuman,
   type GenericEvidence,
@@ -539,7 +540,12 @@ export function toNativeRpcGenericEvidence(
   const freshness = freshnessFromCandidate(freshnessField);
   const genericStatus = genericProviderStatus(input.providerResult.status);
   const integrationStatus =
-    input.providerResult.status === "timeout" ? "TIMEOUT" : "OK";
+    input.providerResult.status === "timeout"
+      ? "TIMEOUT"
+      : input.providerResult.status === "failed" ||
+          input.providerResult.status === "invalid"
+        ? "INTEGRATION_ERROR"
+        : "OK";
   const failure =
     genericStatus === "FAILED"
       ? {
@@ -865,18 +871,29 @@ function validatePreparedExecution<Intent extends NativeRpcIntent>(
     return "Native RPC requires a prepared execution object";
   }
   const prepared = input.input;
+  if (!isRecord(prepared.intent)) {
+    return "Native RPC requires a prepared intent";
+  }
+  if (
+    typeof input.runId !== "string" ||
+    input.runId.trim() === "" ||
+    typeof prepared.runId !== "string" ||
+    prepared.runId !== input.runId
+  ) {
+    return "Native RPC requires a prepared execution for the requested run";
+  }
   if (
     input.chainId !== ARBITRUM_SEPOLIA_CHAIN_ID ||
     input.protocol !== "camelot-v3" ||
     prepared.chainId !== ARBITRUM_SEPOLIA_CHAIN_ID ||
     prepared.protocol !== "camelot-v3" ||
     prepared.intent.chainId !== ARBITRUM_SEPOLIA_CHAIN_ID ||
-    prepared.intent.protocol !== "camelot-v3"
+    prepared.intent.protocol !== "camelot-v3" ||
+    !isDeepStrictEqual(prepared.intent, input.intent)
   ) {
-    return "Native RPC requires an Arbitrum Sepolia Camelot V3 execution";
+    return "Native RPC requires a matching Arbitrum Sepolia Camelot V3 execution";
   }
   if (
-    !isRecord(prepared.intent) ||
     typeof prepared.intent.sender !== "string" ||
     prepared.intent.sender.trim() === ""
   ) {
@@ -887,6 +904,9 @@ function validatePreparedExecution<Intent extends NativeRpcIntent>(
   }
   if (!isDecimalQuantity(prepared.blockContext.blockNumber)) {
     return "Native RPC requires a decimal pinned block number";
+  }
+  if (prepared.quote === undefined || prepared.quote === null) {
+    return "Native RPC requires a prepared quote";
   }
   const unsignedTransaction = prepared.unsignedTransaction;
   if (

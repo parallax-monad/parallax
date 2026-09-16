@@ -180,9 +180,10 @@ The matrix currently supports these safe design conclusions:
 
 1. `moss-kuru` may be selected only for the Monad/Kuru compatibility path it actually supports.
 2. Tenderly is **not yet** a runtime-selectable verified Provider for Arbitrum Sepolia.
-3. Native RPC now has a runtime-verified controlled partial RPC surface, but no
-   `NativeRpcProvider` implementation exists and it is not a verified complete
-   simulation Provider. Any future adapter must advertise a narrower
+3. Native RPC now has a fixture-first, replaceable `NativeRpcProvider` seam for
+   a controlled partial RPC surface, but it is not a verified complete
+   simulation Provider. The concrete Provider Owner runtime handoff and live
+   qualification remain deferred, and the adapter must advertise a narrower
    capability set than Tenderly.
 4. `quote` and unsigned transaction construction must not become requirements that force future Tenderly/Native Providers to own Protocol responsibilities.
 5. Required capability mismatch must fail closed; registry selection must never silently downgrade a required full-simulation request to partial Native RPC evidence.

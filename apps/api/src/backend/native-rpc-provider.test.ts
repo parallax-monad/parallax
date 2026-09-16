@@ -337,6 +337,87 @@ describe("NativeRpcProvider", () => {
     );
   });
 
+  it.each([
+    [
+      "missing prepared intent",
+      {
+        ...prepared,
+        intent: undefined,
+      },
+    ],
+    [
+      "mismatched prepared run ID",
+      {
+        ...prepared,
+        runId: "different-run",
+      },
+    ],
+    [
+      "missing prepared quote",
+      {
+        ...prepared,
+        quote: undefined,
+      },
+    ],
+  ] as const)("returns UNKNOWN before RPC for %s", async (_label, input) => {
+    const client = clientFor({
+      eth_call: "0xabcdef",
+      eth_estimateGas: "0x5208",
+    });
+    const provider = createNativeRpcProvider({ client, mode: "MOCK" });
+
+    const result = await evaluateProviderAdapter(provider, {
+      runId: prepared.runId,
+      intent,
+      chainId: prepared.chainId,
+      protocol: prepared.protocol,
+      input:
+        input as unknown as NativeRpcPreparedExecution<NormalizedSwapIntent>,
+    });
+
+    expect(result.status).toBe("unknown");
+    expect(client.calls).toHaveLength(0);
+    expect(result.candidateFields).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          candidatePath: "nativeRpc.preparedExecution",
+          status: "invalid",
+        }),
+      ]),
+    );
+  });
+
+  it("returns UNKNOWN before RPC when the request intent differs from prepared execution", async () => {
+    const client = clientFor({
+      eth_call: "0xabcdef",
+      eth_estimateGas: "0x5208",
+    });
+    const provider = createNativeRpcProvider({ client, mode: "MOCK" });
+    const mismatchedIntent = {
+      ...intent,
+      amountInAtomic: "2000000000000000000",
+    };
+
+    const result = await evaluateProviderAdapter(provider, {
+      runId: prepared.runId,
+      intent: mismatchedIntent,
+      chainId: prepared.chainId,
+      protocol: prepared.protocol,
+      input: prepared,
+    });
+
+    expect(result.status).toBe("unknown");
+    expect(client.calls).toHaveLength(0);
+    expect(result.candidateFields).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          candidatePath: "nativeRpc.preparedExecution",
+          status: "invalid",
+        }),
+      ]),
+    );
+  });
+
   it("classifies a pinned block as stale only when the explicit freshness probe exceeds policy", async () => {
     const client = clientFor({
       eth_call: "0xabcdef",
@@ -477,6 +558,37 @@ describe("NativeRpcProvider", () => {
     expect(evidence.quote.value).toEqual({
       estimatedAmountOut: "0.5",
       minimumAmountOut: "0.4",
+    });
+  });
+
+  it("maps transport failures to FAILED integration evidence without treating them as OK", async () => {
+    const provider = createNativeRpcProvider({
+      client: clientFor({ eth_call: new Error("network connection failed") }),
+      mode: "MOCK",
+    });
+    const providerResult = await evaluateProviderAdapter(provider, {
+      runId: prepared.runId,
+      intent,
+      chainId: prepared.chainId,
+      protocol: prepared.protocol,
+      input: prepared,
+    });
+
+    const evidence = toNativeRpcGenericEvidence({
+      intent,
+      tokenInDecimals: 18,
+      tokenOutDecimals: 6,
+      preparedExecution: prepared,
+      providerResult,
+    });
+
+    expect(evidence.provider).toMatchObject({
+      status: "FAILED",
+      integrationStatus: "INTEGRATION_ERROR",
+      failure: {
+        code: "INTEGRATION_ERROR",
+        integrationStatus: "INTEGRATION_ERROR",
+      },
     });
   });
 
