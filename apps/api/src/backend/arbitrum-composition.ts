@@ -15,6 +15,7 @@ import {
   bootstrapBackendRuntime,
 } from "../runtime-config.js";
 import type { RunStore } from "../store.js";
+import { tokenDecimals } from "../token-decimals.js";
 import {
   ArbitrumChainAdapter,
   type ArbitrumTransaction,
@@ -24,11 +25,19 @@ import type { ChainAdapter } from "./chain-adapter.js";
 import { ChainRegistry } from "./chain-registry.js";
 import {
   type BackendCompositionRuntime,
+  type BackendProviderEvidenceMapper,
   type CorePort,
   createBackendComposition,
   type DecisionPort,
   type NormalizationBoundary,
 } from "./composition.js";
+import {
+  createNativeRpcProvider,
+  mapNativeRpcProviderResult,
+  NATIVE_RPC_ARBITRUM_PROVIDER_ID,
+  type NativeRpcPreparedExecution,
+  type NativeRpcProviderOptions,
+} from "./native-rpc-provider.js";
 import { ProtocolRegistry } from "./protocol-registry.js";
 import type { ProviderAdapter } from "./provider-adapter.js";
 import {
@@ -48,6 +57,9 @@ export type ArbitrumProductionCompositionOptions = {
     NormalizedSwapIntent,
     unknown
   >[];
+  /** Controlled Native RPC fixture/runtime seam; no endpoint is guessed. */
+  readonly nativeRpc?: NativeRpcProviderOptions;
+  readonly providerEvidenceMapper?: BackendProviderEvidenceMapper;
   readonly providerEnvironment?: ProviderEnvironment;
   readonly normalization?: NormalizationBoundary<
     ArbitrumNormalizationInput,
@@ -127,6 +139,40 @@ export function createArbitrumProductionComposition(
     },
   };
 
+  const providers = [
+    ...(options.providers ?? []),
+    ...(options.nativeRpc === undefined
+      ? []
+      : [createNativeRpcProvider<NormalizedSwapIntent>(options.nativeRpc)]),
+  ];
+  const providerEvidenceMapper =
+    options.providerEvidenceMapper ??
+    ((input) => {
+      if (
+        input.providerResult.provider.providerId !==
+        NATIVE_RPC_ARBITRUM_PROVIDER_ID
+      ) {
+        return undefined;
+      }
+      const intent = input.normalizedIntent as NormalizedSwapIntent;
+      return mapNativeRpcProviderResult({
+        intent,
+        tokenInDecimals: tokenDecimals(
+          options.runtime,
+          intent.tokenIn,
+          intent.chainId,
+        ),
+        tokenOutDecimals: tokenDecimals(
+          options.runtime,
+          intent.tokenOut,
+          intent.chainId,
+        ),
+        preparedExecution:
+          input.preparedExecution as NativeRpcPreparedExecution<NormalizedSwapIntent>,
+        providerResult: input.providerResult,
+      });
+    });
+
   return createBackendComposition({
     chainRegistry: new ChainRegistry([chainAdapter]),
     protocolRegistry: new ProtocolRegistry([
@@ -136,7 +182,7 @@ export function createArbitrumProductionComposition(
         adapter: protocolAdapter,
       },
     ]),
-    providerRegistry: new ProviderRegistry(options.providers ?? [], {
+    providerRegistry: new ProviderRegistry(providers, {
       environment: options.providerEnvironment ?? "production",
     }),
     normalization,
@@ -145,6 +191,7 @@ export function createArbitrumProductionComposition(
     runStore: options.runStore,
     receiptSigner: options.receiptSigner,
     receiptAnchorer: options.receiptAnchorer,
+    providerEvidenceMapper,
   }) as ArbitrumProductionComposition;
 }
 

@@ -47,6 +47,8 @@ export type BackendPipelineContext<
   readonly gasEstimate: GasEstimate;
   readonly finality: FinalityStatus;
   readonly providerResult: ProviderEvaluationResult;
+  /** Optional provisional evidence projection for Core/Decision consumers. */
+  readonly providerEvidence?: unknown;
 };
 
 /**
@@ -110,6 +112,8 @@ export type BackendPipelineExecution<
   readonly gasEstimate: GasEstimate;
   readonly finality: FinalityStatus;
   readonly providerResult: ProviderEvaluationResult;
+  /** Optional provisional evidence projection for Backend/API composition. */
+  readonly providerEvidence?: unknown;
   readonly coreOutput: CoreOutput;
   readonly decisionOutput: DecisionOutput;
   readonly receiptLifecycle: ReceiptLifecycleHandle;
@@ -313,6 +317,15 @@ export class BackendPipeline<
       throw providerResultError(providerResult);
     }
 
+    const providerEvidence =
+      this.dependencies.runtime.providerEvidenceMapper === undefined
+        ? undefined
+        : await this.dependencies.runtime.providerEvidenceMapper({
+            normalizedIntent: normalized,
+            preparedExecution,
+            providerResult,
+          });
+
     const context: BackendPipelineContext<NormalizedIntent, Chain, Protocol> = {
       runId: input.runId,
       intent: normalized,
@@ -324,6 +337,7 @@ export class BackendPipeline<
       gasEstimate,
       finality,
       providerResult,
+      ...(providerEvidence === undefined ? {} : { providerEvidence }),
     };
     const coreOutput = await this.dependencies.runtime.evaluate(
       normalized,
@@ -362,6 +376,7 @@ export class BackendPipeline<
       gasEstimate,
       finality,
       providerResult,
+      ...(providerEvidence === undefined ? {} : { providerEvidence }),
       coreOutput,
       decisionOutput,
       receiptLifecycle,

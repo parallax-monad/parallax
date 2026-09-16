@@ -1,0 +1,44 @@
+{
+  "schemaVersion": "be-050-native-rpc-controlled-fixtures-v1",
+  "real": false,
+  "providerId": "native-rpc-arbitrum",
+  "chainId": 421614,
+  "protocol": "camelot-v3",
+  "truthfulness": "CONTROLLED_FIXTURE_ONLY",
+  "note": "Deterministic adapter inputs only. These values do not claim live Arbitrum RPC availability or completed Camelot evidence.",
+  "cases": {
+    "success_partial": {
+      "eth_call": "0xabcdef",
+      "eth_estimateGas": "0x5208",
+      "pinnedBlock": "0x2a"
+    },
+    "unknown_rpc_error": {
+      "method": "eth_call",
+      "rpcCode": -32602,
+      "message": "invalid params"
+    },
+    "unsupported_method": {
+      "method": "eth_call",
+      "rpcCode": -32601,
+      "message": "method not found"
+    },
+    "failed_transport": {
+      "method": "eth_call",
+      "error": "network connection failed"
+    },
+    "timeout": {
+      "method": "eth_call",
+      "error": "request timed out"
+    },
+    "incomplete_prepared_execution": {
+      "preparedExecution": "missing calldata"
+    },
+    "stale_pinned_block": {
+      "eth_call": "0xabcdef",
+      "eth_estimateGas": "0x5208",
+      "eth_blockNumber": "0x2c",
+      "pinnedBlock": "0x2a",
+      "maxBlockLag": 1
+    }
+  }
+}
