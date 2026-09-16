@@ -93,6 +93,9 @@ export interface ProtocolAdapter<
   Quote = unknown,
   Transaction = unknown,
 > {
+  /** Optional stable identifier exposed by concrete adapters. */
+  readonly protocolId?: string;
+
   quote(intent: Intent): Promise<Quote>;
 
   buildTransaction(intent: Intent): Promise<UnsignedTransaction<Transaction>>;

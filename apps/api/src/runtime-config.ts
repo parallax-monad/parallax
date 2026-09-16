@@ -1,10 +1,17 @@
 import {
+  ARBITRUM_SEPOLIA_CHAIN_ID,
+  CAMELOT_V3_PROTOCOL_ID,
   type TokenRegistryConfig,
   type TrustedTokenRegistry,
   tokenRegistryConfigSchema,
 } from "@parallax/contracts";
 import { z } from "zod";
 import { createTrustedTokenRegistry } from "./trusted-token-registry.js";
+
+export {
+  ARBITRUM_SEPOLIA_CHAIN_ID,
+  CAMELOT_V3_PROTOCOL_ID,
+} from "@parallax/contracts";
 
 const rpcUrlSchema = z
   .string()
@@ -16,6 +23,11 @@ const rpcUrlSchema = z
 
 export const backendEnvironmentSchema = z.object({
   MONAD_RPC_URL: rpcUrlSchema,
+  ARBITRUM_RPC_URL: z.preprocess(
+    (value) =>
+      typeof value === "string" && value.trim() === "" ? undefined : value,
+    rpcUrlSchema.optional(),
+  ),
   MOSS_RUNTIME_PATH: z.preprocess(
     (value) =>
       typeof value === "string" && value.trim() === "" ? undefined : value,
@@ -106,14 +118,28 @@ export const mossIntegrationConfigSchema = z
   })
   .strict();
 
+export const arbitrumIntegrationConfigSchema = z
+  .object({
+    chainId: z.literal(ARBITRUM_SEPOLIA_CHAIN_ID),
+    protocolId: z.literal(CAMELOT_V3_PROTOCOL_ID),
+    rpcUrl: rpcUrlSchema.optional(),
+  })
+  .strict();
+
 export const backendRuntimeConfigSchema = z
   .object({
     tokenRegistry: tokenRegistryConfigSchema,
     moss: mossIntegrationConfigSchema,
+    // Optional for backward-compatible Monad-only schema consumers. The
+    // bootstrap function always includes the explicit Arbitrum descriptor.
+    arbitrum: arbitrumIntegrationConfigSchema.optional(),
   })
   .strict();
 
 export type MossIntegrationConfig = z.infer<typeof mossIntegrationConfigSchema>;
+export type ArbitrumIntegrationConfig = z.infer<
+  typeof arbitrumIntegrationConfigSchema
+>;
 export type BackendRuntimeConfig = z.infer<typeof backendRuntimeConfigSchema>;
 
 export type BackendBootstrapInput = {
@@ -166,7 +192,14 @@ export function bootstrapBackendRuntime(
       runtimeVersion: environment.MOSS_RUNTIME_VERSION,
       runtimeRevision: environment.MOSS_RUNTIME_REVISION,
     },
-  });
+    arbitrum: {
+      chainId: ARBITRUM_SEPOLIA_CHAIN_ID,
+      protocolId: CAMELOT_V3_PROTOCOL_ID,
+      ...(environment.ARBITRUM_RPC_URL === undefined
+        ? {}
+        : { rpcUrl: environment.ARBITRUM_RPC_URL }),
+    },
+  }) as BackendRuntimeConfig;
 
   return {
     config,
