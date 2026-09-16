@@ -170,64 +170,85 @@ export class ArbitrumChainAdapter implements ChainAdapter<ArbitrumTransaction> {
       });
     }
 
+    const controller = new AbortController();
+    const requestOptions: ChainOperationOptions = {
+      ...options,
+      signal: controller.signal,
+    };
     const request = Promise.resolve().then(() =>
-      this.client.request(method, params, options),
+      this.client.request(method, params, requestOptions),
     );
     let timer: ReturnType<typeof setTimeout> | undefined;
     let removeAbortListener: (() => void) | undefined;
-    const races: Promise<unknown>[] = [request];
-
-    if (options?.timeoutMs !== undefined && options.timeoutMs > 0) {
-      races.push(
-        new Promise<never>((_, reject) => {
-          timer = setTimeout(() => {
-            reject(
-              new ChainAdapterError({
-                chainId: this.chainId,
-                operation,
-                code: "TIMEOUT",
-                message: `chain operation ${operation} timed out`,
-                retryable: true,
-              }),
-            );
-          }, options.timeoutMs);
-        }),
-      );
-    }
-
-    if (options?.signal !== undefined) {
-      races.push(
-        new Promise<never>((_, reject) => {
-          const onAbort = () => {
-            reject(
-              new ChainAdapterError({
-                chainId: this.chainId,
-                operation,
-                code: "CANCELLED",
-                message: `chain operation ${operation} cancelled`,
-                retryable: false,
-                cause: options.signal?.reason,
-              }),
-            );
-          };
-          options.signal?.addEventListener("abort", onAbort, { once: true });
-          removeAbortListener = () =>
-            options.signal?.removeEventListener("abort", onAbort);
-        }),
-      );
-    }
 
     try {
-      return await Promise.race(races);
-    } catch (error) {
-      if (error instanceof ChainAdapterError) throw error;
-      throw new ChainAdapterError({
-        chainId: this.chainId,
-        operation,
-        code: classifyRpcFailure(error),
-        message: rpcFailureMessage(operation, error),
-        retryable: classifyRpcFailure(error) === "UNAVAILABLE",
-        cause: error,
+      return await new Promise<unknown>((resolve, reject) => {
+        let settled = false;
+        const settle = (callback: () => void) => {
+          if (settled) return;
+          settled = true;
+          callback();
+        };
+
+        const onAbort = () => {
+          const cancellationError = new ChainAdapterError({
+            chainId: this.chainId,
+            operation,
+            code: "CANCELLED",
+            message: `chain operation ${operation} cancelled`,
+            retryable: false,
+            cause: options?.signal?.reason,
+          });
+          settle(() => reject(cancellationError));
+          controller.abort(options?.signal?.reason);
+        };
+
+        if (options?.signal !== undefined) {
+          options.signal.addEventListener("abort", onAbort, { once: true });
+          removeAbortListener = () =>
+            options.signal?.removeEventListener("abort", onAbort);
+          if (options.signal.aborted) onAbort();
+        }
+
+        if (
+          !settled &&
+          options?.timeoutMs !== undefined &&
+          options.timeoutMs > 0
+        ) {
+          timer = setTimeout(() => {
+            const timeoutError = new ChainAdapterError({
+              chainId: this.chainId,
+              operation,
+              code: "TIMEOUT",
+              message: `chain operation ${operation} timed out`,
+              retryable: true,
+            });
+            settle(() => reject(timeoutError));
+            controller.abort(timeoutError);
+          }, options.timeoutMs);
+        }
+
+        request
+          .then((value) => settle(() => resolve(value)))
+          .catch((error: unknown) => {
+            settle(() => {
+              if (error instanceof ChainAdapterError) {
+                reject(error);
+                return;
+              }
+              const code = classifyRpcFailure(error);
+              reject(
+                new ChainAdapterError({
+                  chainId: this.chainId,
+                  operation,
+                  code,
+                  message: rpcFailureMessage(operation, error),
+                  retryable: code === "UNAVAILABLE",
+                  cause: error,
+                }),
+              );
+            });
+          });
       });
     } finally {
       if (timer !== undefined) clearTimeout(timer);

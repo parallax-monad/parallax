@@ -6,7 +6,10 @@ import {
   createArbitrumChainAdapter,
   createArbitrumRpcClient,
 } from "./arbitrum-chain-adapter.js";
-import { isChainAdapterError } from "./chain-adapter.js";
+import {
+  type ChainOperationOptions,
+  isChainAdapterError,
+} from "./chain-adapter.js";
 
 type RpcCall = { method: string; params: readonly unknown[] };
 
@@ -170,25 +173,91 @@ describe("ArbitrumChainAdapter", () => {
     expect(client.calls).toEqual([]);
   });
 
-  it("maps timeout and cancellation without leaking the pending RPC", async () => {
+  it("aborts the underlying RPC before returning a typed timeout", async () => {
+    let underlyingSignal: AbortSignal | undefined;
+    let resolveRequestStarted!: () => void;
+    let resolveAbortObserved!: () => void;
+    const requestStarted = new Promise<void>((resolve) => {
+      resolveRequestStarted = resolve;
+    });
+    const abortObserved = new Promise<void>((resolve) => {
+      resolveAbortObserved = resolve;
+    });
     const pendingClient: ArbitrumRpcClient = {
-      request: vi.fn(() => new Promise<never>(() => undefined)),
+      request: vi.fn(
+        (
+          _method: string,
+          _params: readonly unknown[] = [],
+          options?: ChainOperationOptions,
+        ) => {
+          underlyingSignal = options?.signal;
+          resolveRequestStarted();
+          return new Promise<never>((_, reject) => {
+            options?.signal?.addEventListener(
+              "abort",
+              () => {
+                resolveAbortObserved();
+                reject(new DOMException("aborted", "AbortError"));
+              },
+              { once: true },
+            );
+          });
+        },
+      ),
     };
     const adapter = createArbitrumChainAdapter({ client: pendingClient });
 
-    await expect(adapter.getBlockContext({ timeoutMs: 5 })).rejects.toSatisfy(
-      (error: unknown) => {
-        return (
-          isChainAdapterError(error) &&
-          error.operation === "getBlockContext" &&
-          error.code === "TIMEOUT" &&
-          error.retryable
-        );
-      },
-    );
+    const timedOut = adapter.getBlockContext({ timeoutMs: 5 });
+    await requestStarted;
+    await expect(timedOut).rejects.toSatisfy((error: unknown) => {
+      return (
+        isChainAdapterError(error) &&
+        error.operation === "getBlockContext" &&
+        error.code === "TIMEOUT" &&
+        error.retryable
+      );
+    });
+    await expect(abortObserved).resolves.toBeUndefined();
+    expect(underlyingSignal).toBeDefined();
+    expect(underlyingSignal?.aborted).toBe(true);
+  });
 
+  it("aborts the underlying RPC on caller cancellation and preserves CANCELLED", async () => {
+    let underlyingSignal: AbortSignal | undefined;
+    let resolveRequestStarted!: () => void;
+    let resolveAbortObserved!: () => void;
+    const requestStarted = new Promise<void>((resolve) => {
+      resolveRequestStarted = resolve;
+    });
+    const abortObserved = new Promise<void>((resolve) => {
+      resolveAbortObserved = resolve;
+    });
+    const pendingClient: ArbitrumRpcClient = {
+      request: vi.fn(
+        (
+          _method: string,
+          _params: readonly unknown[] = [],
+          options?: ChainOperationOptions,
+        ) => {
+          underlyingSignal = options?.signal;
+          resolveRequestStarted();
+          return new Promise<never>((_, reject) => {
+            options?.signal?.addEventListener(
+              "abort",
+              () => {
+                resolveAbortObserved();
+                reject(new DOMException("aborted", "AbortError"));
+              },
+              { once: true },
+            );
+          });
+        },
+      ),
+    };
+    const adapter = createArbitrumChainAdapter({ client: pendingClient });
     const controller = new AbortController();
     const cancelled = adapter.getBlockContext({ signal: controller.signal });
+    await requestStarted;
     controller.abort("test cancellation");
     await expect(cancelled).rejects.toSatisfy((error: unknown) => {
       return (
@@ -198,6 +267,10 @@ describe("ArbitrumChainAdapter", () => {
         !error.retryable
       );
     });
+    await expect(abortObserved).resolves.toBeUndefined();
+    expect(underlyingSignal).toBeDefined();
+    expect(underlyingSignal).not.toBe(controller.signal);
+    expect(underlyingSignal?.aborted).toBe(true);
   });
 
   it("maps injected RPC failures to typed unavailable errors", async () => {
