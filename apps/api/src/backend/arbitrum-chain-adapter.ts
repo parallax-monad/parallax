@@ -108,6 +108,17 @@ export class ArbitrumChainAdapter implements ChainAdapter<ArbitrumTransaction> {
     blockContext: BlockContext,
     options?: ChainOperationOptions,
   ): Promise<FinalityStatus> {
+    const callerContext: unknown = blockContext;
+    if (callerContext === null || callerContext === undefined) {
+      throw new ChainAdapterError({
+        chainId: this.chainId,
+        operation: "getFinality",
+        code: "INVALID_REQUEST",
+        message: "Arbitrum finality requires a block context object",
+        retryable: false,
+      });
+    }
+
     let target: bigint;
     try {
       target = parseDecimalQuantity(blockContext.blockNumber);

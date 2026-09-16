@@ -150,6 +150,26 @@ describe("ArbitrumChainAdapter", () => {
     });
   });
 
+  it("rejects null or undefined caller block context before making an RPC request", async () => {
+    const client = clientFor({
+      eth_getBlockByNumber: { number: "0x2b" },
+    });
+    const adapter = createArbitrumChainAdapter({ client });
+
+    for (const missingContext of [null, undefined]) {
+      await expect(
+        adapter.getFinality(missingContext as never),
+      ).rejects.toSatisfy(
+        (error: unknown) =>
+          isChainAdapterError(error) &&
+          error.operation === "getFinality" &&
+          error.code === "INVALID_REQUEST" &&
+          error.message === "Arbitrum finality requires a block context object",
+      );
+    }
+    expect(client.calls).toEqual([]);
+  });
+
   it("maps timeout and cancellation without leaking the pending RPC", async () => {
     const pendingClient: ArbitrumRpcClient = {
       request: vi.fn(() => new Promise<never>(() => undefined)),
