@@ -418,6 +418,43 @@ describe("NativeRpcProvider", () => {
     );
   });
 
+  it("returns UNKNOWN before RPC when the prepared transaction sender differs from the intent", async () => {
+    const client = clientFor({
+      eth_call: "0xabcdef",
+      eth_estimateGas: "0x5208",
+    });
+    const provider = createNativeRpcProvider({ client, mode: "MOCK" });
+    const mismatchedSender = "0x3333333333333333333333333333333333333333";
+
+    const result = await evaluateProviderAdapter(provider, {
+      runId: prepared.runId,
+      intent,
+      chainId: prepared.chainId,
+      protocol: prepared.protocol,
+      input: {
+        ...prepared,
+        unsignedTransaction: {
+          ...prepared.unsignedTransaction,
+          payload: {
+            ...prepared.unsignedTransaction.payload,
+            from: mismatchedSender,
+          },
+        },
+      },
+    });
+
+    expect(result.status).toBe("unknown");
+    expect(client.calls).toHaveLength(0);
+    expect(result.candidateFields).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          candidatePath: "nativeRpc.preparedExecution",
+          status: "invalid",
+        }),
+      ]),
+    );
+  });
+
   it("classifies a pinned block as stale only when the explicit freshness probe exceeds policy", async () => {
     const client = clientFor({
       eth_call: "0xabcdef",

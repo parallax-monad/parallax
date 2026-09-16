@@ -933,6 +933,12 @@ function validatePreparedExecution<Intent extends NativeRpcIntent>(
     return "Native RPC requires transaction to and calldata";
   }
   if (
+    typeof payload.from === "string" &&
+    payload.from.toLowerCase() !== prepared.intent.sender.toLowerCase()
+  ) {
+    return "Native RPC requires the prepared transaction sender to match the intent";
+  }
+  if (
     !isRecord(prepared.gasEstimate) ||
     !isDecimalQuantity(prepared.gasEstimate.gasUnits)
   ) {
