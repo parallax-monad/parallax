@@ -1,4 +1,5 @@
 import type { NormalizedSwapIntent } from "@parallax/contracts";
+import { describe, expect, it } from "vitest";
 import * as api from "../index.js";
 import { InMemoryRunStore } from "../store.js";
 

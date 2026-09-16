@@ -79,16 +79,16 @@ describe("CamelotV3ProtocolAdapter", () => {
         !error.retryable
       );
     });
-    await expect(
-      adapter.buildTransaction(intent),
-    ).rejects.toSatisfy((error: unknown) => {
-      return (
-        isProtocolAdapterError(error) &&
-        error.code === "BUILD_TRANSACTION_FAILED" &&
-        error.protocol === CAMELOT_V3_PROTOCOL_ID &&
-        !error.retryable
-      );
-    });
+    await expect(adapter.buildTransaction(intent)).rejects.toSatisfy(
+      (error: unknown) => {
+        return (
+          isProtocolAdapterError(error) &&
+          error.code === "BUILD_TRANSACTION_FAILED" &&
+          error.protocol === CAMELOT_V3_PROTOCOL_ID &&
+          !error.retryable
+        );
+      },
+    );
   });
 
   it("does not pretend to support real quote or pool acceptance without a seam", async () => {

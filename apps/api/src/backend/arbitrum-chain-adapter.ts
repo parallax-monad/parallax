@@ -108,6 +108,20 @@ export class ArbitrumChainAdapter implements ChainAdapter<ArbitrumTransaction> {
     blockContext: BlockContext,
     options?: ChainOperationOptions,
   ): Promise<FinalityStatus> {
+    let target: bigint;
+    try {
+      target = parseDecimalQuantity(blockContext.blockNumber);
+    } catch (cause) {
+      throw new ChainAdapterError({
+        chainId: this.chainId,
+        operation: "getFinality",
+        code: "INVALID_REQUEST",
+        message: "Arbitrum finality requires a decimal block number",
+        retryable: false,
+        cause,
+      });
+    }
+
     const finalized = await this.request(
       "getFinality",
       "eth_getBlockByNumber",
@@ -122,7 +136,6 @@ export class ArbitrumChainAdapter implements ChainAdapter<ArbitrumTransaction> {
       this.chainId,
       false,
     );
-    const target = parseDecimalQuantity(blockContext.blockNumber);
     const observed = parseDecimalQuantity(finalizedContext.blockNumber);
     return observed >= target
       ? { status: "finalized", blockContext: finalizedContext }

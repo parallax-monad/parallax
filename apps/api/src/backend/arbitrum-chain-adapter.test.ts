@@ -119,11 +119,11 @@ describe("ArbitrumChainAdapter", () => {
       }),
     });
 
-    await expect(
-      adapter.estimateGas(null as never),
-    ).rejects.toSatisfy((error: unknown) => {
-      return isChainAdapterError(error) && error.code === "INVALID_REQUEST";
-    });
+    await expect(adapter.estimateGas(null as never)).rejects.toSatisfy(
+      (error: unknown) => {
+        return isChainAdapterError(error) && error.code === "INVALID_REQUEST";
+      },
+    );
     await expect(adapter.getBlockContext()).rejects.toSatisfy(
       (error: unknown) =>
         isChainAdapterError(error) &&
@@ -156,16 +156,16 @@ describe("ArbitrumChainAdapter", () => {
     };
     const adapter = createArbitrumChainAdapter({ client: pendingClient });
 
-    await expect(
-      adapter.getBlockContext({ timeoutMs: 5 }),
-    ).rejects.toSatisfy((error: unknown) => {
-      return (
-        isChainAdapterError(error) &&
-        error.operation === "getBlockContext" &&
-        error.code === "TIMEOUT" &&
-        error.retryable
-      );
-    });
+    await expect(adapter.getBlockContext({ timeoutMs: 5 })).rejects.toSatisfy(
+      (error: unknown) => {
+        return (
+          isChainAdapterError(error) &&
+          error.operation === "getBlockContext" &&
+          error.code === "TIMEOUT" &&
+          error.retryable
+        );
+      },
+    );
 
     const controller = new AbortController();
     const cancelled = adapter.getBlockContext({ signal: controller.signal });
@@ -201,10 +201,13 @@ describe("ArbitrumChainAdapter", () => {
     const fetchImplementation = vi
       .fn<typeof fetch>()
       .mockResolvedValueOnce(
-        new Response(JSON.stringify({ jsonrpc: "2.0", id: 1, result: "0x66eee" }), {
-          status: 200,
-          headers: { "content-type": "application/json" },
-        }),
+        new Response(
+          JSON.stringify({ jsonrpc: "2.0", id: 1, result: "0x66eee" }),
+          {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          },
+        ),
       )
       .mockResolvedValueOnce(
         new Response(
@@ -233,7 +236,9 @@ describe("ArbitrumChainAdapter", () => {
     expect(fetchImplementation.mock.calls[0]?.[0]).toBe(
       "https://arbitrum.example.test",
     );
-    expect(JSON.parse(String(fetchImplementation.mock.calls[0]?.[1]?.body))).toEqual({
+    expect(
+      JSON.parse(String(fetchImplementation.mock.calls[0]?.[1]?.body)),
+    ).toEqual({
       jsonrpc: "2.0",
       id: 1,
       method: "eth_chainId",
