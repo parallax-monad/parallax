@@ -1,5 +1,6 @@
 import {
   type AmountConversionErrorCode,
+  ARBITRUM_SEPOLIA_CHAIN_ID,
   type CheckSwapRequest,
   convertHumanAmountToAtomic,
   type IntentNormalizationError,
@@ -15,6 +16,13 @@ import {
 /** Backend live Check is intentionally scoped to Monad Chain 143. */
 export const BACKEND_CHAIN_ID = 143;
 
+export function normalizeArbitrumCheckSwapRequest(
+  request: CheckSwapRequest,
+  registry: TrustedTokenRegistry,
+): IntentNormalizationResult {
+  return normalizeSwapRequest(request, registry, ARBITRUM_SEPOLIA_CHAIN_ID);
+}
+
 /**
  * Establishes the authoritative API-to-domain boundary by resolving trusted
  * token metadata and converting every business amount to atomic units.
@@ -23,11 +31,19 @@ export function normalizeCheckSwapRequest(
   request: CheckSwapRequest,
   registry: TrustedTokenRegistry,
 ): IntentNormalizationResult {
-  if (request.chainId !== BACKEND_CHAIN_ID) {
+  return normalizeSwapRequest(request, registry, BACKEND_CHAIN_ID);
+}
+
+function normalizeSwapRequest(
+  request: CheckSwapRequest,
+  registry: TrustedTokenRegistry,
+  expectedChainId: number,
+): IntentNormalizationResult {
+  if (request.chainId !== expectedChainId) {
     return failure(
       "UNSUPPORTED_CHAIN",
       "chainId",
-      `Chain ${request.chainId} is not supported; live checks require Chain ${BACKEND_CHAIN_ID}`,
+      `Chain ${request.chainId} is not supported; checks require Chain ${expectedChainId}`,
     );
   }
 
@@ -111,6 +127,22 @@ export function normalizeQuoteRequest(
   registry: TrustedTokenRegistry,
 ): IntentNormalizationResult {
   return normalizeCheckSwapRequest(
+    {
+      ...request,
+      economicBoundary: {
+        availability: "unavailable",
+        source: "unavailable",
+      },
+    },
+    registry,
+  );
+}
+
+export function normalizeArbitrumQuoteRequest(
+  request: QuoteRequest,
+  registry: TrustedTokenRegistry,
+): IntentNormalizationResult {
+  return normalizeArbitrumCheckSwapRequest(
     {
       ...request,
       economicBoundary: {
