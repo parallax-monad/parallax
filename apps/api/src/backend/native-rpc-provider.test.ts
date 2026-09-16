@@ -35,7 +35,7 @@ const prepared: NativeRpcPreparedExecution<NormalizedSwapIntent> = {
   protocol: "camelot-v3",
   blockContext: {
     blockNumber: "42",
-    blockHash: "0xblock",
+    blockHash: `0x${"a".repeat(64)}`,
     observedAt: "2026-09-10T00:00:00.000Z",
   },
   quote: {
@@ -45,6 +45,7 @@ const prepared: NativeRpcPreparedExecution<NormalizedSwapIntent> = {
   unsignedTransaction: {
     kind: "unsigned",
     payload: {
+      from: intent.sender,
       to: "0x2222222222222222222222222222222222222222",
       data: "0x1234",
       value: "0x0",
@@ -62,6 +63,12 @@ function clientFor(responses: Record<string, unknown>): NativeRpcClient & {
     calls,
     async request(method, params = []) {
       calls.push({ method, params });
+      if (
+        method === "eth_getBlockByNumber" &&
+        !Object.hasOwn(responses, method)
+      ) {
+        return { number: "0x2a", hash: prepared.blockContext.blockHash };
+      }
       const response = responses[method];
       if (response instanceof Error) throw response;
       return response;
@@ -161,6 +168,10 @@ describe("NativeRpcProvider", () => {
     );
     expect(client.calls).toEqual([
       {
+        method: "eth_getBlockByNumber",
+        params: ["0x2a", false],
+      },
+      {
         method: "eth_call",
         params: [
           {
@@ -187,6 +198,50 @@ describe("NativeRpcProvider", () => {
     ]);
   });
 
+  it("uses the concrete JSON-RPC client when an explicit endpoint is supplied", async () => {
+    const requests: Array<{ id: number; method: string; params: unknown[] }> =
+      [];
+    const provider = createNativeRpcProvider({
+      rpcUrl: "https://rpc.example.test",
+      mode: "MOCK",
+      fetchImplementation: (async (_url, init) => {
+        const request = JSON.parse(String(init?.body));
+        requests.push(request);
+        const result =
+          request.method === "eth_getBlockByNumber"
+            ? { number: "0x2a", hash: prepared.blockContext.blockHash }
+            : request.method === "eth_call"
+              ? "0xabcdef"
+              : "0x5208";
+        return new Response(
+          JSON.stringify({ jsonrpc: "2.0", id: request.id, result }),
+        );
+      }) as typeof fetch,
+    });
+    const result = await evaluateProviderAdapter(provider, {
+      runId: prepared.runId,
+      intent,
+      chainId: prepared.chainId,
+      protocol: prepared.protocol,
+      input: prepared,
+    });
+    expect(result.status).toBe("success");
+    expect(requests.map((request) => request.method)).toEqual([
+      "eth_getBlockByNumber",
+      "eth_call",
+      "eth_estimateGas",
+    ]);
+    expect(requests.map((request) => request.id)).toEqual([1, 2, 3]);
+    expect(requests[1]?.params).toEqual([
+      prepared.unsignedTransaction.payload,
+      "0x2a",
+    ]);
+    expect(requests[2]?.params).toEqual([
+      prepared.unsignedTransaction.payload,
+      "0x2a",
+    ]);
+  });
+
   it.each([
     [
       "unsupported",
@@ -196,6 +251,7 @@ describe("NativeRpcProvider", () => {
       "unknown",
       Object.assign(new Error("invalid params"), { rpcCode: -32602 }),
     ],
+    ["unknown", Object.assign(new Error("execution reverted"), { rpcCode: 3 })],
     ["failed", new Error("network connection failed")],
     [
       "timeout",
@@ -453,6 +509,162 @@ describe("NativeRpcProvider", () => {
         }),
       ]),
     );
+  });
+
+  it.each([
+    ["missing sender", { from: undefined }],
+    ["missing value", { value: undefined }],
+    ["wrong chain", { chainId: "0x1" }],
+    ["malformed calldata", { data: "0x123" }],
+  ])("rejects %s before any RPC call", async (_label, changes) => {
+    const client = clientFor({ eth_call: "0x", eth_estimateGas: "0x5208" });
+    const provider = createNativeRpcProvider({ client });
+    const result = await evaluateProviderAdapter(provider, {
+      runId: prepared.runId,
+      intent,
+      chainId: prepared.chainId,
+      protocol: prepared.protocol,
+      input: {
+        ...prepared,
+        unsignedTransaction: {
+          kind: "unsigned",
+          payload: { ...prepared.unsignedTransaction.payload, ...changes },
+        },
+      },
+    });
+    expect(result.status).toBe("unknown");
+    expect(client.calls).toEqual([]);
+  });
+
+  it("keeps the exact prepared transaction including value and extra RPC fields", async () => {
+    const client = clientFor({ eth_call: "0x", eth_estimateGas: "0x5208" });
+    const provider = createNativeRpcProvider({ client });
+    const payload = {
+      ...prepared.unsignedTransaction.payload,
+      value: "0x1",
+      gas: "0x5208",
+    };
+    const result = await evaluateProviderAdapter(provider, {
+      runId: prepared.runId,
+      intent,
+      chainId: prepared.chainId,
+      protocol: prepared.protocol,
+      input: {
+        ...prepared,
+        unsignedTransaction: { kind: "unsigned", payload },
+      },
+    });
+    expect(result.status).toBe("success");
+    expect(client.calls[1]?.params).toEqual([payload, "0x2a"]);
+    expect(client.calls[2]?.params).toEqual([payload, "0x2a"]);
+    expect(payload).toEqual({
+      ...prepared.unsignedTransaction.payload,
+      value: "0x1",
+      gas: "0x5208",
+    });
+  });
+
+  it("does not fall back to latest when estimateGas rejects the block parameter", async () => {
+    const client = clientFor({
+      eth_call: "0x",
+      eth_estimateGas: Object.assign(new Error("invalid params"), {
+        rpcCode: -32602,
+      }),
+    });
+    const provider = createNativeRpcProvider({ client });
+    const result = await evaluateProviderAdapter(provider, {
+      runId: prepared.runId,
+      intent,
+      chainId: prepared.chainId,
+      protocol: prepared.protocol,
+      input: prepared,
+    });
+    expect(result.status).toBe("unknown");
+    expect(
+      client.calls.filter((call) => call.method === "eth_estimateGas"),
+    ).toEqual([
+      {
+        method: "eth_estimateGas",
+        params: [prepared.unsignedTransaction.payload, "0x2a"],
+      },
+    ]);
+  });
+
+  it("rejects a pinned block hash mismatch before transaction evaluation", async () => {
+    const client = clientFor({
+      eth_getBlockByNumber: {
+        number: "0x2a",
+        hash: `0x${"b".repeat(64)}`,
+      },
+      eth_call: "0x",
+      eth_estimateGas: "0x5208",
+    });
+    const provider = createNativeRpcProvider({ client });
+    const result = await evaluateProviderAdapter(provider, {
+      runId: prepared.runId,
+      intent,
+      chainId: prepared.chainId,
+      protocol: prepared.protocol,
+      input: prepared,
+    });
+    expect(result.status).toBe("unknown");
+    expect(client.calls.map((call) => call.method)).toEqual([
+      "eth_getBlockByNumber",
+    ]);
+  });
+
+  it("rejects malformed gas quantity as incomplete evidence", async () => {
+    const client = clientFor({ eth_call: "0x", eth_estimateGas: "21000" });
+    const provider = createNativeRpcProvider({ client });
+    const result = await evaluateProviderAdapter(provider, {
+      runId: prepared.runId,
+      intent,
+      chainId: prepared.chainId,
+      protocol: prepared.protocol,
+      input: prepared,
+    });
+    expect(result.status).toBe("unknown");
+  });
+
+  it("cancels a hanging injected client when the Provider deadline expires", async () => {
+    let signal: AbortSignal | undefined;
+    const provider = createNativeRpcProvider({
+      client: {
+        request: async (_method, _params, options) => {
+          signal = options?.signal;
+          return new Promise<never>(() => undefined);
+        },
+      },
+      timeoutMs: 1,
+    });
+    const result = await evaluateProviderAdapter(provider, {
+      runId: prepared.runId,
+      intent,
+      chainId: prepared.chainId,
+      protocol: prepared.protocol,
+      input: prepared,
+    });
+    expect(result.status).toBe("timeout");
+    expect(signal?.aborted).toBe(true);
+  });
+
+  it("honors configured cancellation without issuing transaction calls", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const client = clientFor({ eth_call: "0x", eth_estimateGas: "0x5208" });
+    const provider = createNativeRpcProvider({
+      client,
+      signal: controller.signal,
+    });
+    const result = await evaluateProviderAdapter(provider, {
+      runId: prepared.runId,
+      intent,
+      chainId: prepared.chainId,
+      protocol: prepared.protocol,
+      input: prepared,
+    });
+    expect(result.status).toBe("unknown");
+    expect(client.calls).toEqual([]);
   });
 
   it("classifies a pinned block as stale only when the explicit freshness probe exceeds policy", async () => {

@@ -190,8 +190,10 @@ describe("Arbitrum production composition skeleton", () => {
             quote: { estimatedAmountOut: "0.5", minimumAmountOut: "0.4" },
           }),
           buildTransaction: async () => ({
+            from: normalizedIntent.sender,
             to: "0x2222222222222222222222222222222222222222",
             data: "0x1234",
+            value: "0x0",
           }),
         }),
       ),
@@ -200,6 +202,9 @@ describe("Arbitrum production composition skeleton", () => {
         client: {
           request: async (method) => {
             calls.push(method);
+            if (method === "eth_getBlockByNumber") {
+              return { number: "0x2a", hash: `0x${"a".repeat(64)}` };
+            }
             return method === "eth_call" ? "0xabcdef" : "0x5208";
           },
         },
@@ -259,7 +264,11 @@ describe("Arbitrum production composition skeleton", () => {
         provenance: { source: "mock" },
       },
     });
-    expect(calls).toEqual(["eth_call", "eth_estimateGas"]);
+    expect(calls).toEqual([
+      "eth_getBlockByNumber",
+      "eth_call",
+      "eth_estimateGas",
+    ]);
   });
 
   it("requires an explicit Arbitrum endpoint when no controlled chain seam is supplied", () => {

@@ -17,6 +17,10 @@ import type {
   ChainOperationOptions,
   GasEstimate,
 } from "./chain-adapter.js";
+import {
+  createNativeRpcClient,
+  NativeRpcClientError,
+} from "./native-rpc-client.js";
 
 export { ARBITRUM_SEPOLIA_CHAIN_ID };
 
@@ -58,7 +62,7 @@ export type NativeRpcIntent = {
 };
 
 /**
- * Exact execution material accepted by the fixture-first Native RPC seam.
+ * Exact execution material accepted by the Native RPC seam.
  * Protocol-specific transaction details stay behind the unsigned transaction
  * payload; this provider never builds, signs, or broadcasts a transaction.
  */
@@ -85,7 +89,10 @@ export type NativeRpcPreparedExecution<
 export type NativeRpcProviderMode = GenericEvidenceMode;
 
 export type NativeRpcProviderOptions = {
-  readonly client: NativeRpcClient;
+  readonly client?: NativeRpcClient;
+  /** Explicit runtime endpoint. Never serialized into a Provider result. */
+  readonly rpcUrl?: string;
+  readonly fetchImplementation?: typeof fetch;
   /** Explicit truthfulness mode used by the Generic Evidence mapper. */
   readonly mode?: NativeRpcProviderMode;
   readonly providerVersion?: string;
@@ -95,6 +102,7 @@ export type NativeRpcProviderOptions = {
   /** Maximum allowed head minus pinned block lag when freshness is checked. */
   readonly maxBlockLag?: number;
   readonly timeoutMs?: number;
+  readonly signal?: AbortSignal;
 };
 
 type NativeRpcStatus = ProvisionalProviderResultInput["status"];
@@ -130,11 +138,11 @@ type EvaluationState = {
 };
 
 /**
- * Backend-owned, replaceable Native RPC implementation.
+ * Provider-owned, replaceable Native RPC implementation.
  *
  * This class intentionally exposes only a factory-created ProviderAdapter to
  * the registry. The injected client is a controlled fixture/runtime seam and
- * no default endpoint or fabricated chain response is supplied.
+ * an explicit rpcUrl creates a real JSON-RPC client. No endpoint is guessed.
  */
 export class NativeRpcProvider<Intent extends NativeRpcIntent = NativeRpcIntent>
   implements
@@ -152,15 +160,24 @@ export class NativeRpcProvider<Intent extends NativeRpcIntent = NativeRpcIntent>
   private readonly checkFreshness: boolean;
   private readonly maxBlockLag: number;
   private readonly timeoutMs: number;
+  private readonly client: NativeRpcClient;
 
   public constructor(private readonly options: NativeRpcProviderOptions) {
+    if (options.client !== undefined && options.rpcUrl !== undefined) {
+      throw new TypeError("Native RPC accepts either client or rpcUrl");
+    }
     if (
-      options.client === null ||
-      typeof options.client !== "object" ||
-      typeof options.client.request !== "function"
+      options.client !== undefined &&
+      (options.client === null || typeof options.client.request !== "function")
     ) {
       throw new TypeError("Native RPC client.request is required");
     }
+    this.client =
+      options.client ??
+      createNativeRpcClient({
+        rpcUrl: options.rpcUrl ?? "",
+        fetchImplementation: options.fetchImplementation,
+      });
     if (
       options.maxBlockLag !== undefined &&
       (!Number.isSafeInteger(options.maxBlockLag) || options.maxBlockLag < 0)
@@ -176,8 +193,7 @@ export class NativeRpcProvider<Intent extends NativeRpcIntent = NativeRpcIntent>
       throw new TypeError("Native RPC timeoutMs must be a positive integer");
     }
     this.mode = options.mode ?? "MOCK";
-    this.providerVersion =
-      options.providerVersion ?? "native-rpc-fixture-seam-v1";
+    this.providerVersion = options.providerVersion ?? "native-rpc-provider-v1";
     this.now = options.now ?? (() => new Date().toISOString());
     this.checkFreshness = options.checkFreshness ?? false;
     this.maxBlockLag = options.maxBlockLag ?? 0;
@@ -202,10 +218,9 @@ export class NativeRpcProvider<Intent extends NativeRpcIntent = NativeRpcIntent>
   public async evaluateRaw(
     input: NativeRpcProviderInput<Intent>,
   ): Promise<ProviderEvaluationResult> {
-    const observedAt = this.observedAt();
     const invalid = validatePreparedExecution(input);
     if (invalid !== undefined) {
-      return this.result(input.runId, observedAt, "unknown", {
+      return this.result(input.runId, "unknown", {
         fields: [
           candidate(
             "nativeRpc.preparedExecution",
@@ -218,18 +233,87 @@ export class NativeRpcProvider<Intent extends NativeRpcIntent = NativeRpcIntent>
       });
     }
 
-    const transaction = transactionForRpc(input.input.intent, input.input);
+    const transaction = input.input.unsignedTransaction
+      .payload as ArbitrumTransaction;
     const blockTag = decimalToHex(input.input.blockContext.blockNumber);
     const state: EvaluationState = {
       fields: [],
       freshness: { status: "not_checked" },
     };
 
+    try {
+      const observed = await this.request("eth_getBlockByNumber", [
+        blockTag,
+        false,
+      ]);
+      if (
+        !isRecord(observed) ||
+        observed.number !== blockTag ||
+        !isBlockHash(observed.hash) ||
+        (input.input.blockContext.blockHash !== undefined &&
+          observed.hash.toLowerCase() !==
+            input.input.blockContext.blockHash.toLowerCase())
+      ) {
+        return this.result(input.runId, "unknown", {
+          ...state,
+          fields: [
+            candidate(
+              "nativeRpc.pinnedBlock",
+              "block",
+              "invalid",
+              "Pinned block could not be verified",
+            ),
+          ],
+          freshness: {
+            status: "unknown",
+            reason: "Pinned block could not be verified",
+          },
+        });
+      }
+      state.fields.push(
+        candidate(
+          "nativeRpc.blockContext.blockNumber",
+          "decimal_string",
+          "observed",
+          input.input.blockContext.blockNumber,
+          "$.result.number",
+        ),
+        candidate(
+          "nativeRpc.blockContext.blockHash",
+          "hex_string",
+          "observed",
+          observed.hash,
+          "$.result.hash",
+        ),
+      );
+    } catch (error) {
+      const classified = classifyRpcFailure(error);
+      return this.result(
+        input.runId,
+        classified.status,
+        {
+          ...state,
+          fields: [
+            candidate(
+              "nativeRpc.pinnedBlock",
+              "block",
+              "missing",
+              undefined,
+              "$.result",
+              classified.message,
+            ),
+          ],
+          freshness: { status: "unknown", reason: "Pinned block unavailable" },
+        },
+        { failure: classified },
+      );
+    }
+
     let callReturnData: string;
     try {
       const response = await this.request("eth_call", [transaction, blockTag]);
       if (!isHexData(response)) {
-        return this.result(input.runId, observedAt, "unknown", {
+        return this.result(input.runId, "unknown", {
           ...state,
           fields: [
             candidate(
@@ -264,7 +348,7 @@ export class NativeRpcProvider<Intent extends NativeRpcIntent = NativeRpcIntent>
           classified.message,
         ),
       );
-      return this.result(input.runId, observedAt, classified.status, state, {
+      return this.result(input.runId, classified.status, state, {
         failure: classified,
       });
     }
@@ -297,30 +381,9 @@ export class NativeRpcProvider<Intent extends NativeRpcIntent = NativeRpcIntent>
           classified.message,
         ),
       );
-      return this.result(input.runId, observedAt, classified.status, state, {
+      return this.result(input.runId, classified.status, state, {
         failure: classified,
       });
-    }
-
-    state.fields.push(
-      candidate(
-        "nativeRpc.blockContext.blockNumber",
-        "decimal_string",
-        "observed",
-        input.input.blockContext.blockNumber,
-        "$.blockContext.blockNumber",
-      ),
-    );
-    if (input.input.blockContext.blockHash !== undefined) {
-      state.fields.push(
-        candidate(
-          "nativeRpc.blockContext.blockHash",
-          "string",
-          "observed",
-          input.input.blockContext.blockHash,
-          "$.blockContext.blockHash",
-        ),
-      );
     }
 
     if (this.checkFreshness) {
@@ -342,7 +405,7 @@ export class NativeRpcProvider<Intent extends NativeRpcIntent = NativeRpcIntent>
               "RPC head is behind the pinned block",
             ),
           );
-          return this.result(input.runId, observedAt, "unknown", state);
+          return this.result(input.runId, "unknown", state);
         }
         const lag = head - pinned;
         const status = lag > BigInt(this.maxBlockLag) ? "stale" : "fresh";
@@ -362,7 +425,7 @@ export class NativeRpcProvider<Intent extends NativeRpcIntent = NativeRpcIntent>
           ),
         );
         if (status === "stale") {
-          return this.result(input.runId, observedAt, "stale", state);
+          return this.result(input.runId, "stale", state);
         }
       } catch (error) {
         const classified = classifyRpcFailure(error);
@@ -375,7 +438,7 @@ export class NativeRpcProvider<Intent extends NativeRpcIntent = NativeRpcIntent>
             classified.message,
           ),
         );
-        return this.result(input.runId, observedAt, "unknown", state, {
+        return this.result(input.runId, "unknown", state, {
           failure: classified,
         });
       }
@@ -395,7 +458,7 @@ export class NativeRpcProvider<Intent extends NativeRpcIntent = NativeRpcIntent>
         },
       ),
     );
-    return this.result(input.runId, observedAt, "success", {
+    return this.result(input.runId, "success", {
       ...state,
       callReturnData,
       gasUnits,
@@ -407,28 +470,48 @@ export class NativeRpcProvider<Intent extends NativeRpcIntent = NativeRpcIntent>
     params: readonly unknown[],
   ): Promise<unknown> {
     return new Promise((resolve, reject) => {
+      const controller = new AbortController();
+      const externalSignal = this.options.signal;
+      const onAbort = () => {
+        controller.abort();
+        settle(() =>
+          reject(
+            new NativeRpcClientError(
+              "ABORTED",
+              "Native RPC request was cancelled",
+            ),
+          ),
+        );
+      };
+      let settled = false;
+      const settle = (callback: () => void) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        externalSignal?.removeEventListener("abort", onAbort);
+        callback();
+      };
       const timer = setTimeout(() => {
-        reject(
-          Object.assign(new Error("Native RPC request timed out"), {
-            name: "AbortError",
-          }),
+        controller.abort();
+        settle(() =>
+          reject(
+            new NativeRpcClientError("TIMEOUT", "Native RPC request timed out"),
+          ),
         );
       }, this.timeoutMs);
+      externalSignal?.addEventListener("abort", onAbort, { once: true });
+      if (externalSignal?.aborted) onAbort();
+      if (settled) return;
       void Promise.resolve()
         .then(() =>
-          this.options.client.request(method, params, {
+          this.client.request(method, params, {
             timeoutMs: this.timeoutMs,
+            signal: controller.signal,
           }),
         )
         .then(
-          (value) => {
-            clearTimeout(timer);
-            resolve(value);
-          },
-          (error: unknown) => {
-            clearTimeout(timer);
-            reject(error);
-          },
+          (value) => settle(() => resolve(value)),
+          (error: unknown) => settle(() => reject(error)),
         );
     });
   }
@@ -446,11 +529,11 @@ export class NativeRpcProvider<Intent extends NativeRpcIntent = NativeRpcIntent>
 
   private result(
     runId: string,
-    observedAt: string,
     status: NativeRpcStatus,
     state: EvaluationState,
     options: { readonly failure?: ClassifiedRpcFailure } = {},
   ): ProviderEvaluationResult {
+    const observedAt = this.observedAt();
     const result = createProvisionalProviderResult({
       provider: {
         providerId: this.providerId,
@@ -477,6 +560,11 @@ export class NativeRpcProvider<Intent extends NativeRpcIntent = NativeRpcIntent>
                 failure: {
                   status: options.failure.status,
                   message: options.failure.message,
+                  ...(options.failure.rpcCode === undefined
+                    ? {}
+                    : {
+                        rpcCode: options.failure.rpcCode,
+                      }),
                 },
               }),
         },
@@ -895,7 +983,7 @@ function validatePreparedExecution<Intent extends NativeRpcIntent>(
   }
   if (
     typeof prepared.intent.sender !== "string" ||
-    prepared.intent.sender.trim() === ""
+    !isAddress(prepared.intent.sender)
   ) {
     return "Native RPC requires a prepared sender intent";
   }
@@ -904,6 +992,12 @@ function validatePreparedExecution<Intent extends NativeRpcIntent>(
   }
   if (!isDecimalQuantity(prepared.blockContext.blockNumber)) {
     return "Native RPC requires a decimal pinned block number";
+  }
+  if (
+    prepared.blockContext.blockHash !== undefined &&
+    !isBlockHash(prepared.blockContext.blockHash)
+  ) {
+    return "Native RPC requires a valid pinned block hash";
   }
   if (prepared.quote === undefined || prepared.quote === null) {
     return "Native RPC requires a prepared quote";
@@ -925,18 +1019,21 @@ function validatePreparedExecution<Intent extends NativeRpcIntent>(
     return "Native RPC requires string-valued transaction fields";
   }
   if (
-    typeof payload.to !== "string" ||
-    payload.to.trim() === "" ||
-    typeof payload.data !== "string" ||
-    !isHexData(payload.data)
+    !isAddress(payload.from) ||
+    !isAddress(payload.to) ||
+    !isHexData(payload.data) ||
+    !isHexQuantity(payload.value)
   ) {
-    return "Native RPC requires transaction to and calldata";
+    return "Native RPC requires exact from, to, calldata, and value";
+  }
+  if (payload.from.toLowerCase() !== prepared.intent.sender.toLowerCase()) {
+    return "Native RPC requires the prepared transaction sender to match the intent";
   }
   if (
-    typeof payload.from === "string" &&
-    payload.from.toLowerCase() !== prepared.intent.sender.toLowerCase()
+    payload.chainId !== undefined &&
+    payload.chainId !== decimalToHex(String(prepared.chainId))
   ) {
-    return "Native RPC requires the prepared transaction sender to match the intent";
+    return "Native RPC transaction chainId differs from prepared execution";
   }
   if (
     !isRecord(prepared.gasEstimate) ||
@@ -951,22 +1048,6 @@ function validatePreparedExecution<Intent extends NativeRpcIntent>(
     return "Native RPC requires a prepared finality status";
   }
   return undefined;
-}
-
-function transactionForRpc<Intent extends NativeRpcIntent>(
-  intent: Intent,
-  prepared: NativeRpcPreparedExecution<Intent>,
-): ArbitrumTransaction {
-  const payload = prepared.unsignedTransaction.payload;
-  const transaction: Record<string, string | undefined> = {
-    from: intent.sender,
-  };
-  for (const [key, value] of Object.entries(payload)) {
-    if (value === undefined) continue;
-    if (typeof value === "string") transaction[key] = value;
-  }
-  if (transaction.value === undefined) transaction.value = "0x0";
-  return transaction;
 }
 
 function candidate(
@@ -991,37 +1072,70 @@ function candidate(
 
 function classifyRpcFailure(error: unknown): ClassifiedRpcFailure {
   const candidate = error as RpcError | undefined;
-  const message = error instanceof Error ? error.message : String(error);
+  const message =
+    error instanceof NativeRpcClientError
+      ? error.message
+      : "Native RPC request failed";
+  if (error instanceof NativeRpcClientError) {
+    if (error.kind === "TIMEOUT")
+      return { status: "timeout", message, retryable: true };
+    if (error.kind === "ABORTED")
+      return { status: "unknown", message, retryable: false };
+    if (
+      error.kind === "ID_MISMATCH" ||
+      error.kind === "INVALID_ENVELOPE" ||
+      error.kind === "MISSING_RESULT" ||
+      error.kind === "JSON_PARSE_FAILURE"
+    ) {
+      return { status: "unknown", message, retryable: false };
+    }
+  }
   if (candidate?.rpcCode === -32601) {
-    return { status: "unsupported", message, retryable: false };
+    return {
+      status: "unsupported",
+      message,
+      retryable: false,
+      rpcCode: -32601,
+    };
   }
   if (candidate?.rpcCode === -32602) {
-    return { status: "unknown", message, retryable: false };
+    return { status: "unknown", message, retryable: false, rpcCode: -32602 };
   }
-  if (/invalid (?:hex|quantity)|execution reverted|revert/i.test(message)) {
-    return { status: "unknown", message, retryable: false };
+  if (
+    /invalid (?:hex|quantity)|execution reverted|revert/i.test(
+      error instanceof Error ? error.message : "",
+    )
+  ) {
+    return {
+      status: "unknown",
+      message,
+      retryable: false,
+      rpcCode: candidate?.rpcCode,
+    };
   }
-  if (candidate?.name === "AbortError" || /timeout|timed out/i.test(message)) {
+  if (
+    candidate?.name === "AbortError" ||
+    /timeout|timed out/i.test(error instanceof Error ? error.message : "")
+  ) {
     return { status: "timeout", message, retryable: true };
   }
-  return { status: "failed", message, retryable: false };
+  return {
+    status: "failed",
+    message,
+    retryable: false,
+    rpcCode: candidate?.rpcCode,
+  };
 }
 
 type ClassifiedRpcFailure = {
   readonly status: FailureStatus;
   readonly message: string;
   readonly retryable: boolean;
+  readonly rpcCode?: number;
 };
 
 function normalizeQuantity(value: unknown): string {
-  if (typeof value === "bigint" && value >= 0n) return value.toString();
-  if (typeof value === "number" && Number.isSafeInteger(value) && value >= 0) {
-    return String(value);
-  }
-  if (typeof value !== "string")
-    throw new Error("RPC returned an invalid quantity");
-  if (/^\d+$/.test(value)) return BigInt(value).toString();
-  if (/^0x[0-9a-f]+$/i.test(value)) return BigInt(value).toString();
+  if (isHexQuantity(value)) return BigInt(value).toString();
   throw new Error("RPC returned an invalid quantity");
 }
 
@@ -1045,7 +1159,21 @@ function isFinalityStatus(
 }
 
 function isHexData(value: unknown): value is string {
-  return typeof value === "string" && /^0x[0-9a-f]*$/i.test(value);
+  return typeof value === "string" && /^0x(?:[0-9a-f]{2})*$/i.test(value);
+}
+
+function isHexQuantity(value: unknown): value is string {
+  return (
+    typeof value === "string" && /^0x(?:0|[1-9a-f][0-9a-f]*)$/i.test(value)
+  );
+}
+
+function isAddress(value: unknown): value is string {
+  return typeof value === "string" && /^0x[0-9a-f]{40}$/i.test(value);
+}
+
+function isBlockHash(value: unknown): value is string {
+  return typeof value === "string" && /^0x[0-9a-f]{64}$/i.test(value);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
