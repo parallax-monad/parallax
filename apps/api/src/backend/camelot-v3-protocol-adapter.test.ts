@@ -49,6 +49,48 @@ describe("CamelotV3ProtocolAdapter", () => {
     expect(calls).toEqual(["quote:1000", "transaction:camelot-v3"]);
   });
 
+  it("passes through an explicitly unsigned transaction without signing it", async () => {
+    const unsigned = {
+      kind: "unsigned" as const,
+      payload: { to: "0xrouter", data: "0xcalldata", value: "0x0" },
+    };
+    const adapter = createCamelotV3ProtocolAdapter({
+      buildTransaction: async () => unsigned,
+    });
+
+    await expect(adapter.buildTransaction(intent)).resolves.toBe(unsigned);
+  });
+
+  it("wraps arbitrary seam failures with the operation-specific protocol error", async () => {
+    const adapter = new CamelotV3ProtocolAdapter({
+      quote: async () => {
+        throw new Error("quote service unavailable");
+      },
+      buildTransaction: async () => {
+        throw new Error("transaction builder failed");
+      },
+    });
+
+    await expect(adapter.quote(intent)).rejects.toSatisfy((error: unknown) => {
+      return (
+        isProtocolAdapterError(error) &&
+        error.code === "QUOTE_FAILED" &&
+        error.protocol === CAMELOT_V3_PROTOCOL_ID &&
+        !error.retryable
+      );
+    });
+    await expect(
+      adapter.buildTransaction(intent),
+    ).rejects.toSatisfy((error: unknown) => {
+      return (
+        isProtocolAdapterError(error) &&
+        error.code === "BUILD_TRANSACTION_FAILED" &&
+        error.protocol === CAMELOT_V3_PROTOCOL_ID &&
+        !error.retryable
+      );
+    });
+  });
+
   it("does not pretend to support real quote or pool acceptance without a seam", async () => {
     const adapter = createCamelotV3ProtocolAdapter();
 
@@ -59,6 +101,12 @@ describe("CamelotV3ProtocolAdapter", () => {
         error.protocol === CAMELOT_V3_PROTOCOL_ID
       );
     });
+    await expect(adapter.buildTransaction(intent)).rejects.toSatisfy(
+      (error: unknown) =>
+        isProtocolAdapterError(error) &&
+        error.code === "UNAVAILABLE" &&
+        error.protocol === CAMELOT_V3_PROTOCOL_ID,
+    );
   });
 
   it("rejects an intent for a different chain or protocol before invoking a seam", async () => {

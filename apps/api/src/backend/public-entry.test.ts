@@ -1,8 +1,20 @@
-import { describe, expect, it } from "vitest";
+import type { NormalizedSwapIntent } from "@parallax/contracts";
 import * as api from "../index.js";
 import { InMemoryRunStore } from "../store.js";
 
 describe("Backend foundation public entry", () => {
+  it("exports the Arbitrum × Camelot foundation from the package entry", () => {
+    expect(api.ARBITRUM_SEPOLIA_CHAIN_ID).toBe(421614);
+    expect(api.CAMELOT_V3_PROTOCOL_ID).toBe("camelot-v3");
+    expect(api.ArbitrumChainAdapter).toBeTypeOf("function");
+    expect(api.createArbitrumChainAdapter).toBeTypeOf("function");
+    expect(api.CamelotV3ProtocolAdapter).toBeTypeOf("function");
+    expect(api.createCamelotV3ProtocolAdapter).toBeTypeOf("function");
+    expect(api.createCamelotV3FeasibilityEntryPoint).toBeTypeOf("function");
+    expect(api.createArbitrumProductionComposition).toBeTypeOf("function");
+    expect(api.bootstrapArbitrumBackend).toBeTypeOf("function");
+  });
+
   it("exports and composes the replaceable backend foundation from the package entry", () => {
     expect(api.createBackendComposition).toBeTypeOf("function");
     expect(api.createBackendRuntime).toBeTypeOf("function");
@@ -43,5 +55,23 @@ describe("Backend foundation public entry", () => {
         capability: "simulate",
       }),
     ).toBe(provider);
+  });
+
+  it("keeps a Camelot feasibility entry point replaceable at the public boundary", () => {
+    const protocolAdapter = api.createCamelotV3ProtocolAdapter({
+      quote: async (intent: NormalizedSwapIntent) => ({
+        scenarioId: "public-entry",
+        amountInAtomic: intent.amountInAtomic,
+      }),
+    });
+    const entryPoint = api.createCamelotV3FeasibilityEntryPoint({
+      quote: protocolAdapter.quote.bind(protocolAdapter),
+    });
+
+    expect(entryPoint.protocolAdapter).toBeInstanceOf(
+      api.CamelotV3ProtocolAdapter,
+    );
+    expect(entryPoint.protocolAdapter.protocolId).toBe("camelot-v3");
+    expect(entryPoint.scenarios[0]?.classification).toBe("CONTROLLED_FIXTURE");
   });
 });
