@@ -131,6 +131,7 @@ type Freshness =
   | { readonly status: "not_checked" };
 
 type EvaluationState = {
+  observedChainId?: string;
   readonly callReturnData?: string;
   readonly gasUnits?: string;
   freshness: Freshness;
@@ -240,6 +241,70 @@ export class NativeRpcProvider<Intent extends NativeRpcIntent = NativeRpcIntent>
       fields: [],
       freshness: { status: "not_checked" },
     };
+
+    try {
+      const response = await this.request("eth_chainId", []);
+      if (!isHexQuantity(response)) {
+        return this.result(input.runId, "unknown", {
+          ...state,
+          fields: [
+            candidate(
+              "nativeRpc.chainId",
+              "hex_quantity",
+              "invalid",
+              "eth_chainId returned an invalid quantity",
+            ),
+          ],
+          freshness: {
+            status: "unknown",
+            reason: "RPC chain identity is invalid",
+          },
+        });
+      }
+      state.observedChainId = response;
+      state.fields.push(
+        candidate(
+          "nativeRpc.chainId",
+          "hex_quantity",
+          "observed",
+          response,
+          "$.result",
+        ),
+      );
+      if (BigInt(response) !== BigInt(ARBITRUM_SEPOLIA_CHAIN_ID)) {
+        return this.result(input.runId, "unknown", {
+          ...state,
+          freshness: {
+            status: "unknown",
+            reason: "RPC chain identity does not match Arbitrum Sepolia",
+          },
+        });
+      }
+    } catch (error) {
+      const classified = classifyRpcFailure(error);
+      return this.result(
+        input.runId,
+        classified.status,
+        {
+          ...state,
+          fields: [
+            candidate(
+              "nativeRpc.chainId",
+              "hex_quantity",
+              "missing",
+              undefined,
+              "$.result",
+              classified.message,
+            ),
+          ],
+          freshness: {
+            status: "unknown",
+            reason: "RPC chain identity unavailable",
+          },
+        },
+        { failure: classified },
+      );
+    }
 
     try {
       const observed = await this.request("eth_getBlockByNumber", [
@@ -550,6 +615,7 @@ export class NativeRpcProvider<Intent extends NativeRpcIntent = NativeRpcIntent>
           mode: this.mode,
           status,
           methods: {
+            eth_chainId: state.observedChainId ?? null,
             eth_call: state.callReturnData ?? null,
             eth_estimateGas: state.gasUnits ?? null,
           },
@@ -618,6 +684,17 @@ export function toNativeRpcGenericEvidence(
   );
   const blockNumber = input.preparedExecution.blockContext.blockNumber;
   const fetchedAt = input.providerResult.provider.observedAt;
+  const chainField = candidate.get("nativeRpc.chainId");
+  const observedChainId =
+    chainField?.status === "observed" && isHexQuantity(chainField.value)
+      ? BigInt(chainField.value)
+      : undefined;
+  const chainChecked = observedChainId === BigInt(ARBITRUM_SEPOLIA_CHAIN_ID);
+  if (input.providerResult.status === "success" && !chainChecked) {
+    throw new TypeError(
+      "Successful Native RPC evidence requires an observed Arbitrum Sepolia chain ID",
+    );
+  }
   const callField = candidate.get("nativeRpc.ethCall.returnData");
   const gasField = candidate.get("nativeRpc.estimateGas.gasUnits");
   const freshnessField = candidate.get("nativeRpc.freshness");
@@ -663,12 +740,14 @@ export function toNativeRpcGenericEvidence(
     input.preparedExecution.unsignedTransaction.payload,
   );
   const checkedScope = [
+    ...(chainChecked ? ["native-rpc.chain-id"] : []),
     ...(callChecked ? ["native-rpc.eth_call"] : []),
     ...(gasChecked ? ["native-rpc.estimateGas"] : []),
     ...(blockChecked ? ["native-rpc.pinned-block"] : []),
     ...(freshness.status === "fresh" ? ["native-rpc.freshness"] : []),
   ];
   const unknownScope = [
+    ...(!chainChecked ? ["native-rpc.chain-id"] : []),
     ...(quote.value === null ? ["quote"] : []),
     ...(actionValue === null ? ["action"] : []),
     ...(callField !== undefined && !callChecked ? ["native-rpc.eth_call"] : []),
@@ -682,6 +761,7 @@ export function toNativeRpcGenericEvidence(
     ...(freshness.status !== "fresh" ? ["freshness"] : []),
   ];
   const notChecked = [
+    ...(chainField === undefined ? ["native-rpc.chain-id"] : []),
     ...(callField === undefined ? ["native-rpc.eth_call"] : []),
     ...(gasField === undefined ? ["native-rpc.estimateGas"] : []),
     "receipt",
@@ -760,7 +840,10 @@ export function toNativeRpcGenericEvidence(
       ...(input.providerResult.capabilities ?? NATIVE_RPC_CAPABILITIES),
     ],
     provenance: {
-      observedChainId: input.preparedExecution.chainId,
+      ...(observedChainId !== undefined &&
+      observedChainId <= BigInt(Number.MAX_SAFE_INTEGER)
+        ? { observedChainId: Number(observedChainId) }
+        : {}),
       fetchedAt,
       mode,
       source,

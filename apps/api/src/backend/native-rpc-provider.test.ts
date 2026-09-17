@@ -63,6 +63,9 @@ function clientFor(responses: Record<string, unknown>): NativeRpcClient & {
     calls,
     async request(method, params = []) {
       calls.push({ method, params });
+      if (method === "eth_chainId" && !Object.hasOwn(responses, method)) {
+        return "0x66eee";
+      }
       if (
         method === "eth_getBlockByNumber" &&
         !Object.hasOwn(responses, method)
@@ -117,6 +120,92 @@ describe("NativeRpcProvider", () => {
     ).toBe(false);
   });
 
+  it("fails closed on a wrong observed chain before block or transaction RPC", async () => {
+    const client = clientFor({ eth_chainId: "0x1" });
+    const provider = createNativeRpcProvider({ client, mode: "MOCK" });
+    const result = await evaluateProviderAdapter(provider, {
+      runId: prepared.runId,
+      intent,
+      chainId: prepared.chainId,
+      protocol: prepared.protocol,
+      input: prepared,
+    });
+    expect(result.status).toBe("unknown");
+    expect(client.calls).toEqual([{ method: "eth_chainId", params: [] }]);
+    expect(result.candidateFields).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          candidatePath: "nativeRpc.chainId",
+          status: "observed",
+          value: "0x1",
+        }),
+      ]),
+    );
+    expect(result.responseEvidence).toMatchObject({
+      kind: "redacted_snapshot",
+      snapshot: {
+        methods: { eth_chainId: "0x1", eth_call: null, eth_estimateGas: null },
+      },
+    });
+  });
+
+  it.each(["421614", "0x", undefined])(
+    "rejects malformed chain identity %s before block or transaction RPC",
+    async (chainId) => {
+      const client = clientFor({ eth_chainId: chainId });
+      const provider = createNativeRpcProvider({ client });
+      const result = await evaluateProviderAdapter(provider, {
+        runId: prepared.runId,
+        intent,
+        chainId: prepared.chainId,
+        protocol: prepared.protocol,
+        input: prepared,
+      });
+      expect(result.status).toBe("unknown");
+      expect(client.calls).toEqual([{ method: "eth_chainId", params: [] }]);
+      expect(result.candidateFields).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            candidatePath: "nativeRpc.chainId",
+            status: "invalid",
+          }),
+        ]),
+      );
+    },
+  );
+
+  it.each([
+    ["failed", new Error("network unavailable")],
+    ["timeout", Object.assign(new Error("timed out"), { name: "AbortError" })],
+    [
+      "unsupported",
+      Object.assign(new Error("method missing"), { rpcCode: -32601 }),
+    ],
+  ] as const)(
+    "preserves %s chain RPC failure without later calls",
+    async (status, error) => {
+      const client = clientFor({ eth_chainId: error });
+      const provider = createNativeRpcProvider({ client });
+      const result = await evaluateProviderAdapter(provider, {
+        runId: prepared.runId,
+        intent,
+        chainId: prepared.chainId,
+        protocol: prepared.protocol,
+        input: prepared,
+      });
+      expect(result.status).toBe(status);
+      expect(client.calls).toEqual([{ method: "eth_chainId", params: [] }]);
+      expect(result.candidateFields).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            candidatePath: "nativeRpc.chainId",
+            status: "missing",
+          }),
+        ]),
+      );
+    },
+  );
+
   it("evaluates a prepared transaction with eth_call and estimateGas at the pinned block", async () => {
     const client = clientFor({
       eth_call: "0xabcdef",
@@ -151,6 +240,11 @@ describe("NativeRpcProvider", () => {
     expect(result.candidateFields).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
+          candidatePath: "nativeRpc.chainId",
+          status: "observed",
+          value: "0x66eee",
+        }),
+        expect.objectContaining({
           candidatePath: "nativeRpc.ethCall.returnData",
           status: "observed",
           value: "0xabcdef",
@@ -167,6 +261,7 @@ describe("NativeRpcProvider", () => {
       ]),
     );
     expect(client.calls).toEqual([
+      { method: "eth_chainId", params: [] },
       {
         method: "eth_getBlockByNumber",
         params: ["0x2a", false],
@@ -208,11 +303,13 @@ describe("NativeRpcProvider", () => {
         const request = JSON.parse(String(init?.body));
         requests.push(request);
         const result =
-          request.method === "eth_getBlockByNumber"
-            ? { number: "0x2a", hash: prepared.blockContext.blockHash }
-            : request.method === "eth_call"
-              ? "0xabcdef"
-              : "0x5208";
+          request.method === "eth_chainId"
+            ? "0x66eee"
+            : request.method === "eth_getBlockByNumber"
+              ? { number: "0x2a", hash: prepared.blockContext.blockHash }
+              : request.method === "eth_call"
+                ? "0xabcdef"
+                : "0x5208";
         return new Response(
           JSON.stringify({ jsonrpc: "2.0", id: request.id, result }),
         );
@@ -227,16 +324,17 @@ describe("NativeRpcProvider", () => {
     });
     expect(result.status).toBe("success");
     expect(requests.map((request) => request.method)).toEqual([
+      "eth_chainId",
       "eth_getBlockByNumber",
       "eth_call",
       "eth_estimateGas",
     ]);
-    expect(requests.map((request) => request.id)).toEqual([1, 2, 3]);
-    expect(requests[1]?.params).toEqual([
+    expect(requests.map((request) => request.id)).toEqual([1, 2, 3, 4]);
+    expect(requests[2]?.params).toEqual([
       prepared.unsignedTransaction.payload,
       "0x2a",
     ]);
-    expect(requests[2]?.params).toEqual([
+    expect(requests[3]?.params).toEqual([
       prepared.unsignedTransaction.payload,
       "0x2a",
     ]);
@@ -555,8 +653,8 @@ describe("NativeRpcProvider", () => {
       },
     });
     expect(result.status).toBe("success");
-    expect(client.calls[1]?.params).toEqual([payload, "0x2a"]);
     expect(client.calls[2]?.params).toEqual([payload, "0x2a"]);
+    expect(client.calls[3]?.params).toEqual([payload, "0x2a"]);
     expect(payload).toEqual({
       ...prepared.unsignedTransaction.payload,
       value: "0x1",
@@ -609,6 +707,7 @@ describe("NativeRpcProvider", () => {
     });
     expect(result.status).toBe("unknown");
     expect(client.calls.map((call) => call.method)).toEqual([
+      "eth_chainId",
       "eth_getBlockByNumber",
     ]);
   });
@@ -772,6 +871,7 @@ describe("NativeRpcProvider", () => {
     expect(evidence.execution.status).toBe("SUCCESS");
     expect(evidence.checkedScope).toEqual(
       expect.arrayContaining([
+        "native-rpc.chain-id",
         "native-rpc.eth_call",
         "native-rpc.estimateGas",
         "native-rpc.pinned-block",
@@ -789,6 +889,7 @@ describe("NativeRpcProvider", () => {
       expect.arrayContaining(["eth_call", "estimateGas", "pinned-block"]),
     );
     expect(evidence.provenance).toMatchObject({
+      observedChainId: ARBITRUM_SEPOLIA_CHAIN_ID,
       mode: "MOCK",
       source: "mock",
       simulationBlock: "42",
@@ -808,6 +909,58 @@ describe("NativeRpcProvider", () => {
       estimatedAmountOut: "0.5",
       minimumAmountOut: "0.4",
     });
+  });
+
+  it("derives GenericEvidence observedChainId only from observed Provider evidence", async () => {
+    const provider = createNativeRpcProvider({
+      client: clientFor({
+        eth_call: "0xabcdef",
+        eth_estimateGas: "0x5208",
+      }),
+    });
+    const providerResult = await evaluateProviderAdapter(provider, {
+      runId: prepared.runId,
+      intent,
+      chainId: prepared.chainId,
+      protocol: prepared.protocol,
+      input: prepared,
+    });
+    expect(providerResult.status).toBe("success");
+    const map = (result: typeof providerResult) =>
+      toNativeRpcGenericEvidence({
+        intent,
+        tokenInDecimals: 18,
+        tokenOutDecimals: 6,
+        preparedExecution: prepared,
+        providerResult: result,
+      });
+    expect(map(providerResult).provenance.observedChainId).toBe(421614);
+
+    const withoutChain = {
+      ...providerResult,
+      candidateFields: providerResult.candidateFields.filter(
+        (field) => field.candidatePath !== "nativeRpc.chainId",
+      ),
+    };
+    expect(() => map(withoutChain)).toThrow(
+      /observed Arbitrum Sepolia chain ID/,
+    );
+
+    const wrongChain = {
+      ...providerResult,
+      candidateFields: providerResult.candidateFields.map((field) =>
+        field.candidatePath === "nativeRpc.chainId"
+          ? { ...field, value: "0x1" }
+          : field,
+      ),
+    };
+    expect(() => map(wrongChain)).toThrow(/observed Arbitrum Sepolia chain ID/);
+
+    const failedWithoutChain = { ...withoutChain, status: "unknown" as const };
+    const evidence = map(failedWithoutChain);
+    expect(evidence.provenance.observedChainId).toBeUndefined();
+    expect(evidence.checkedScope).not.toContain("native-rpc.chain-id");
+    expect(evidence.unknownScope).toContain("native-rpc.chain-id");
   });
 
   it("maps transport failures to FAILED integration evidence without treating them as OK", async () => {

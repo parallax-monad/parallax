@@ -202,6 +202,7 @@ describe("Arbitrum production composition skeleton", () => {
         client: {
           request: async (method) => {
             calls.push(method);
+            if (method === "eth_chainId") return "0x66eee";
             if (method === "eth_getBlockByNumber") {
               return { number: "0x2a", hash: `0x${"a".repeat(64)}` };
             }
@@ -240,6 +241,7 @@ describe("Arbitrum production composition skeleton", () => {
       provider: { providerId: "native-rpc-arbitrum", status: "UNKNOWN" },
       provenance: { mode: "MOCK", source: "mock", simulationBlock: "42" },
       checkedScope: expect.arrayContaining([
+        "native-rpc.chain-id",
         "native-rpc.eth_call",
         "native-rpc.estimateGas",
       ]),
@@ -265,6 +267,7 @@ describe("Arbitrum production composition skeleton", () => {
       },
     });
     expect(calls).toEqual([
+      "eth_chainId",
       "eth_getBlockByNumber",
       "eth_call",
       "eth_estimateGas",
