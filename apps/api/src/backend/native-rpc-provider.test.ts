@@ -305,7 +305,9 @@ describe("Backend Native RPC evidence seam", () => {
         integrationStatus: expectedIntegrationStatus,
       });
       expect(evidence.execution.status).toBe(expectedExecutionStatus);
-      expect(evidence.simulation.value.halted).toBe(status !== "success");
+      expect(evidence.simulation.value).toMatchObject({
+        halted: status !== "success",
+      });
       expect(evidence.provenance).toMatchObject({
         fetchedAt: "2026-09-10T00:01:00.000Z",
         mode: "MOCK",
@@ -356,12 +358,14 @@ describe("Backend Native RPC evidence seam", () => {
         expect(evidence.unknownScope).toEqual(
           expect.arrayContaining(["quote", "action"]),
         );
-        expect(evidence.providerData.nativeRpc.notChecked).toEqual(
-          expect.arrayContaining([
-            "native-rpc.eth_call",
-            "native-rpc.estimateGas",
-          ]),
-        );
+        expect(evidence.providerData).toMatchObject({
+          nativeRpc: {
+            notChecked: expect.arrayContaining([
+              "native-rpc.eth_call",
+              "native-rpc.estimateGas",
+            ]),
+          },
+        });
       }
       if (name === "stale_pinned_block") {
         expect(evidence.checkedScope).toEqual(
