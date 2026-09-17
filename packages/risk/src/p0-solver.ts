@@ -36,6 +36,13 @@ export type VerifiedCandidate = {
   amountInAtomic: string;
   amountOutAtomic: string;
   quoteId: string;
+  /**
+   * Candidate quote state context. Preserved so a consumer of this record can
+   * revalidate the same state binding the solver applied, instead of trusting a
+   * structurally supplied candidate.
+   */
+  quoteBlockNumber: string;
+  quoteObservedAt: string;
   verification: CandidateVerification;
 };
 
@@ -163,6 +170,8 @@ export async function solveSelectedTargetOutput(
           amountInAtomic: candidate.toString(),
           amountOutAtomic: result.quote.amountOutAtomic,
           quoteId: result.quote.quoteId,
+          quoteBlockNumber: result.quote.blockNumber,
+          quoteObservedAt: result.quote.observedAt,
           verification: proof,
         },
         evaluations,
@@ -222,6 +231,7 @@ function validVerification(
     atomic(proof.verificationBlock) &&
     proof.verificationBlock === quote.blockNumber &&
     !Number.isNaN(Date.parse(proof.verificationTime)) &&
+    Date.parse(proof.verificationTime) >= Date.parse(quote.observedAt) &&
     proof.provenance.trim() !== "" &&
     proof.checkedScope.length > 0 &&
     proof.checkedScope.every((item) => item.trim() !== "") &&

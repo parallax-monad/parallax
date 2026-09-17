@@ -168,19 +168,36 @@ const violation: Record<
   maxGas: "MAX_GAS_EXCEEDED",
 };
 
+/**
+ * The measured metric belongs to the constraint name, not to a caller
+ * declaration: several declarations of the same name may each be evaluated
+ * against the same unique measured record. When more than one record claims the
+ * same name the measured value is ambiguous, so the name resolves to
+ * `undefined` and every affected declaration fails closed. Records are never
+ * resolved by arbitrary first- or last-match order.
+ */
+function uniqueEvidenceByName(
+  evidence: readonly ConstraintEvidence[],
+): Map<ConstraintName, ConstraintEvidence | undefined> {
+  const byName = new Map<ConstraintName, ConstraintEvidence | undefined>();
+  for (const item of evidence) {
+    byName.set(item.name, byName.has(item.name) ? undefined : item);
+  }
+  return byName;
+}
+
 /** Only explicit caller declarations are evaluated; absent declarations produce no result. */
 export function evaluateConstraints(
   constraints: readonly CallerConstraint[],
   evidence: readonly ConstraintEvidence[],
 ): ConstraintEvaluation[] {
+  const byName = uniqueEvidenceByName(evidence);
   return constraints.map((constraint) => {
     const base = {
       name: constraint.name,
       declarationId: constraint.declarationId,
     };
-    const item = evidence.find(
-      (candidate) => candidate.name === constraint.name,
-    );
+    const item = byName.get(constraint.name);
     if (
       constraint.source !== "caller" ||
       constraint.declarationId.trim() === "" ||
@@ -336,6 +353,9 @@ export function evaluateP0Risk(
       candidate.selectedQuoteId === input.selectedQuote.quoteId &&
       atomic(candidate.amountInAtomic) &&
       atomic(candidate.amountOutAtomic) &&
+      atomic(candidate.quoteBlockNumber) &&
+      BigInt(candidate.quoteBlockNumber) >=
+        BigInt(input.selectedQuote.blockNumber) &&
       candidate.amountInAtomic !== input.selectedQuote.amountInAtomic &&
       BigInt(candidate.amountOutAtomic) >=
         BigInt(input.selectedQuote.amountOutAtomic) &&
@@ -366,8 +386,9 @@ export function evaluateP0Risk(
  * Re-applies the solver's verification boundary to a caller-supplied candidate
  * before it may back a user-visible `ADJUST`. A mock, replayed, indistinct, or
  * differently-bound child Run is not a verified improvement: it may not turn a
- * speculative candidate into a remediation. Only checks that need no candidate
- * quote context live here; the solver owns the block/time binding.
+ * speculative candidate into a remediation. The preserved candidate quote
+ * context is revalidated here so a structurally supplied record cannot claim a
+ * block or time that its own verification does not actually match.
  */
 function verificationBound(candidate: VerifiedCandidate): boolean {
   const proof = candidate.verification;
@@ -377,8 +398,12 @@ function verificationBound(candidate: VerifiedCandidate): boolean {
   ) {
     return false;
   }
+  const quoteTime = Date.parse(candidate.quoteObservedAt);
+  const verificationTime = Date.parse(proof.verificationTime);
   return (
     candidate.quoteId.trim() !== "" &&
+    atomic(candidate.quoteBlockNumber) &&
+    !Number.isNaN(quoteTime) &&
     proof.preparedUnsignedTxFingerprint.trim() !== "" &&
     proof.preparedAmountInAtomic === candidate.amountInAtomic &&
     proof.providerStatus === "SUCCESS" &&
@@ -391,7 +416,9 @@ function verificationBound(candidate: VerifiedCandidate): boolean {
     BigInt(proof.childAmountOutAtomic) >= BigInt(candidate.amountOutAtomic) &&
     proof.childQuoteId === candidate.quoteId &&
     atomic(proof.verificationBlock) &&
-    !Number.isNaN(Date.parse(proof.verificationTime)) &&
+    proof.verificationBlock === candidate.quoteBlockNumber &&
+    !Number.isNaN(verificationTime) &&
+    verificationTime >= quoteTime &&
     proof.provenance.trim() !== "" &&
     proof.checkedScope.length > 0 &&
     proof.checkedScope.every((item) => item.trim() !== "") &&

@@ -231,6 +231,137 @@ describe("P0 constraints and cause gates", () => {
     ]);
   });
 
+  it("evaluates several declarations of one name against the single measured metric", () => {
+    const declarations: CallerConstraint[] = [
+      { ...constraints[0], declarationId: "loose", numerator: "50" },
+      { ...constraints[0], declarationId: "strict", numerator: "10" },
+    ];
+    const result = evaluateConstraints(declarations, [
+      {
+        name: "maxPriceImpact",
+        state: "VERIFIED",
+        numerator: "20",
+        denominator: "1",
+        unit: "bps",
+        evidenceKey: "impact",
+      },
+    ]);
+    expect(result).toEqual([
+      {
+        name: "maxPriceImpact",
+        declarationId: "loose",
+        status: "PASS",
+        evidenceKey: "impact",
+      },
+      {
+        name: "maxPriceImpact",
+        declarationId: "strict",
+        status: "FAIL",
+        evidenceKey: "impact",
+        violation: "MAX_PRICE_IMPACT_EXCEEDED",
+      },
+    ]);
+  });
+
+  it("fails closed on ambiguous same-name evidence and never PASS or FAIL", () => {
+    const declarations: CallerConstraint[] = [
+      { ...constraints[0], declarationId: "loose", numerator: "50" },
+      { ...constraints[0], declarationId: "strict", numerator: "10" },
+    ];
+    const result = evaluateConstraints(declarations, [
+      {
+        name: "maxPriceImpact",
+        state: "VERIFIED",
+        numerator: "5",
+        denominator: "1",
+        unit: "bps",
+        evidenceKey: "metric-a",
+      },
+      {
+        name: "maxPriceImpact",
+        state: "VERIFIED",
+        numerator: "20",
+        denominator: "1",
+        unit: "bps",
+        evidenceKey: "metric-b",
+      },
+    ]);
+    expect(result).toEqual([
+      { name: "maxPriceImpact", declarationId: "loose", status: "UNKNOWN" },
+      { name: "maxPriceImpact", declarationId: "strict", status: "UNKNOWN" },
+    ]);
+    expect(
+      result.some((item) => item.status === "PASS" || item.status === "FAIL"),
+    ).toBe(false);
+  });
+
+  it("never lets a first same-name record produce a false PASS", () => {
+    const strict: CallerConstraint[] = [
+      { ...constraints[0], declarationId: "strict", numerator: "10" },
+    ];
+    const result = evaluateConstraints(strict, [
+      {
+        name: "maxPriceImpact",
+        state: "VERIFIED",
+        numerator: "5",
+        denominator: "1",
+        unit: "bps",
+        evidenceKey: "permissive",
+      },
+      {
+        name: "maxPriceImpact",
+        state: "VERIFIED",
+        numerator: "999",
+        denominator: "1",
+        unit: "bps",
+        evidenceKey: "actual",
+      },
+    ]);
+    expect(result).toEqual([
+      { name: "maxPriceImpact", declarationId: "strict", status: "UNKNOWN" },
+    ]);
+    expect(result.some((item) => item.status === "PASS")).toBe(false);
+  });
+
+  it("keeps distinct names isolated from another name's ambiguity", () => {
+    const declarations: CallerConstraint[] = [constraints[0], constraints[3]];
+    const result = evaluateConstraints(declarations, [
+      {
+        name: "maxPriceImpact",
+        state: "VERIFIED",
+        numerator: "5",
+        denominator: "1",
+        unit: "bps",
+        evidenceKey: "impact-a",
+      },
+      {
+        name: "maxPriceImpact",
+        state: "VERIFIED",
+        numerator: "20",
+        denominator: "1",
+        unit: "bps",
+        evidenceKey: "impact-b",
+      },
+      {
+        name: "maxGas",
+        state: "VERIFIED",
+        numerator: "100000",
+        denominator: "1",
+        unit: "gas_units",
+        evidenceKey: "gas",
+      },
+    ]);
+    expect(result).toEqual([
+      { name: "maxPriceImpact", declarationId: "p", status: "UNKNOWN" },
+      {
+        name: "maxGas",
+        declarationId: "g",
+        status: "PASS",
+        evidenceKey: "gas",
+      },
+    ]);
+  });
+
   it("requires independent evidence and explicit causal support", () => {
     expect(evaluateCause("STATE_MOVEMENT", [])).toEqual({
       cause: "STATE_MOVEMENT",
@@ -331,6 +462,8 @@ describe("P0 verdict gate", () => {
     amountInAtomic: "10300",
     amountOutAtomic: "4820",
     quoteId: "candidate-quote",
+    quoteBlockNumber: "102",
+    quoteObservedAt: "2026-09-17T00:00:01Z",
     verification: {
       preparedUnsignedTxFingerprint: "sha256:candidate",
       preparedAmountInAtomic: "10300",
@@ -554,6 +687,132 @@ describe("P0 verdict gate", () => {
           },
         ],
         verifiedRemediation: modify(verified),
+      }).verdict,
+    ).toBe("STOP");
+  });
+
+  const gateInput = {
+    selectedQuote: selected,
+    currentQuote: current,
+    evidenceState: "VERIFIED" as const,
+    constraints: [{ ...constraints[0] }],
+    constraintEvidence: [
+      {
+        name: "maxPriceImpact" as const,
+        state: "VERIFIED" as const,
+        numerator: "51",
+        denominator: "1",
+        unit: "bps" as const,
+        evidenceKey: "impact",
+      },
+    ],
+  };
+
+  const blocked = (
+    mutate: (value: VerifiedCandidate) => VerifiedCandidate,
+  ): VerifiedCandidate => mutate(structuredClone(verified));
+
+  it.each([
+    [
+      "verification block below the candidate quote block",
+      (value: VerifiedCandidate) => ({
+        ...value,
+        verification: { ...value.verification, verificationBlock: "101" },
+      }),
+    ],
+    [
+      "verification block above the candidate quote block",
+      (value: VerifiedCandidate) => ({
+        ...value,
+        verification: { ...value.verification, verificationBlock: "103" },
+      }),
+    ],
+    [
+      "candidate quote block below the selected baseline block",
+      (value: VerifiedCandidate) => ({
+        ...value,
+        quoteBlockNumber: "99",
+        verification: { ...value.verification, verificationBlock: "99" },
+      }),
+    ],
+    [
+      "a non-atomic candidate quote block",
+      (value: VerifiedCandidate) => ({
+        ...value,
+        quoteBlockNumber: "latest",
+      }),
+    ],
+    [
+      "an unparseable candidate quote time",
+      (value: VerifiedCandidate) => ({
+        ...value,
+        quoteObservedAt: "soon",
+      }),
+    ],
+    [
+      "verification time earlier than the candidate quote time",
+      (value: VerifiedCandidate) => ({
+        ...value,
+        verification: {
+          ...value.verification,
+          verificationTime: "2026-09-17T00:00:00Z",
+        },
+      }),
+    ],
+  ])("never emits ADJUST when bound to %s", (_label, mutate) => {
+    expect(
+      evaluateP0Risk(genericEvidence(), {
+        ...gateInput,
+        verifiedRemediation: blocked(mutate),
+      }).verdict,
+    ).toBe("STOP");
+  });
+
+  it("emits ADJUST only for a candidate exactly bound to its candidate quote block", () => {
+    expect(
+      evaluateP0Risk(genericEvidence(), {
+        ...gateInput,
+        verifiedRemediation: blocked((value) => value),
+      }).verdict,
+    ).toBe("ADJUST");
+    expect(
+      evaluateP0Risk(genericEvidence(), {
+        ...gateInput,
+        verifiedRemediation: blocked((value) => ({
+          ...value,
+          verification: {
+            ...value.verification,
+            verificationTime: "2026-09-17T00:00:01Z",
+          },
+        })),
+      }).verdict,
+    ).toBe("ADJUST");
+  });
+
+  it("blocks a structurally supplied candidate that omits the preserved quote context", () => {
+    const structural = {
+      ...verified,
+      quoteBlockNumber: undefined,
+      quoteObservedAt: undefined,
+    } as unknown as VerifiedCandidate;
+    expect(
+      evaluateP0Risk(genericEvidence(), {
+        ...gateInput,
+        verifiedRemediation: structural,
+      }).verdict,
+    ).toBe("STOP");
+  });
+
+  it("blocks a forged candidate whose verification block is far below the selected baseline", () => {
+    const forged = blocked((value) => ({
+      ...value,
+      quoteBlockNumber: "1",
+      verification: { ...value.verification, verificationBlock: "1" },
+    }));
+    expect(
+      evaluateP0Risk(genericEvidence(), {
+        ...gateInput,
+        verifiedRemediation: forged,
       }).verdict,
     ).toBe("STOP");
   });
