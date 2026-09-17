@@ -1,6 +1,3 @@
-import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
 import type { NormalizedSwapIntent } from "@parallax/contracts";
 import { describe, expect, it } from "vitest";
 import controlledNativeRpcFixtures from "../../../../fixtures/provider-registry/be-011/native-rpc/controlled-p0-b/fixtures.json";
@@ -234,15 +231,10 @@ const controlledCases: readonly ControlledCase[] = [
       ),
       candidateField("nativeRpc.freshness", {
         status: "stale",
-        pinnedBlock:
-          controlledNativeRpcFixtures.cases.stale_pinned_block
-            .pinnedBlock,
-        headBlock:
-          controlledNativeRpcFixtures.cases.stale_pinned_block
-            .eth_blockNumber,
+        pinnedBlock: controlledNativeRpcFixtures.cases.stale_pinned_block.pinnedBlock,
+        headBlock: controlledNativeRpcFixtures.cases.stale_pinned_block.eth_blockNumber,
         lag: "2",
-        maxBlockLag:
-          controlledNativeRpcFixtures.cases.stale_pinned_block.maxBlockLag,
+        maxBlockLag: controlledNativeRpcFixtures.cases.stale_pinned_block.maxBlockLag,
       }),
     ],
     expectedProviderStatus: "STALE",
@@ -531,47 +523,4 @@ describe("Backend Native RPC evidence seam", () => {
     );
   });
 
-  it("temporary formatter probe", () => {
-    const file = resolve(
-      process.cwd(),
-      "src/backend/native-rpc-provider.test.ts",
-    );
-    const formatter = resolve(
-      process.cwd(),
-      "../../node_modules/@biomejs/biome/bin/biome",
-    );
-    const formatted = spawnSync(
-      process.execPath,
-      [formatter, "format", file],
-      { encoding: "utf8" },
-    );
-    if (formatted.status !== 0) {
-      throw new Error(formatted.stderr);
-    }
-    const actual = readFileSync(file, "utf8").split("\n");
-    const expected = formatted.stdout.split("\n");
-    const differences: Array<{
-      line: number;
-      actual: string | undefined;
-      expected: string | undefined;
-    }> = [];
-    for (
-      let index = 0;
-      index < Math.max(actual.length, expected.length);
-      index += 1
-    ) {
-      if (index < 369) continue;
-      if (actual[index] !== expected[index]) {
-        differences.push({
-          line: index + 1,
-          actual: actual[index],
-          expected: expected[index],
-        });
-      }
-      if (differences.length === 12) break;
-    }
-    if (differences.length > 0) {
-      throw new Error(JSON.stringify(differences));
-    }
-  });
 });
