@@ -17,11 +17,13 @@ import type {
   ProtocolAdapter,
   UnsignedTransaction,
 } from "./protocol-adapter.js";
-import type {
-  ProviderAdapter,
-  ProviderEvaluationInput,
-  ProviderEvaluationResult,
-  ProviderSupportQuery,
+import {
+  type ProviderAdapter,
+  ProviderAdapterError,
+  type ProviderAdapterErrorCode,
+  type ProviderEvaluationInput,
+  type ProviderEvaluationResult,
+  type ProviderSupportQuery,
 } from "./provider-adapter.js";
 import {
   createReceiptLifecycle,
@@ -319,6 +321,9 @@ export class BackendPipeline<
             preparedExecution,
             providerResult,
           });
+    if (providerResult.status !== "success" && providerEvidence === undefined) {
+      throw providerResultError(providerResult);
+    }
 
     const context: BackendPipelineContext<NormalizedIntent, Chain, Protocol> = {
       runId: input.runId,
@@ -483,6 +488,27 @@ export function createBackendQuoteFlow<
 }
 
 export type BackendPipelineOperationResult<T> = BackendOperationResult<T>;
+
+function providerResultError(
+  result: Exclude<ProviderEvaluationResult, { status: "success" }>,
+): ProviderAdapterError {
+  const code: ProviderAdapterErrorCode =
+    result.status === "unsupported"
+      ? "UNSUPPORTED"
+      : result.status === "timeout"
+        ? "TIMEOUT"
+        : result.status === "unknown"
+          ? "UNKNOWN"
+          : result.status === "stale"
+            ? "STALE"
+            : "FAILED";
+  return new ProviderAdapterError({
+    providerId: result.provider.providerId,
+    code,
+    message: `Provider ${result.provider.providerId} returned ${result.status}; Core evaluation is unavailable`,
+    retryable: code === "TIMEOUT",
+  });
+}
 
 function withProviderEvidence(
   projected: unknown,

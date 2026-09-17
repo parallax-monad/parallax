@@ -551,6 +551,108 @@ describe("Backend composition application boundary", () => {
     expect(protocol.calls).toHaveLength(0);
   });
 
+  it.each([
+    "failed",
+    "stale",
+    "unknown",
+    "invalid",
+    "timeout",
+    "unsupported",
+  ] as const)(
+    "fails closed at the public Check boundary without an evidence mapper for %s",
+    async (status) => {
+      const runtime = bootstrapBackendRuntime({ environment, tokenRegistry });
+      const fixture = fakeBackendFixture();
+      const chain = createFakeChainAdapter({ ...fixture.chain, chainId: 143 });
+      const protocol = createFakeProtocolAdapter(fixture.protocol);
+      const { adapter: provider, evaluations } =
+        createFakeProviderAdapterHarness({
+          ...fixture.provider,
+          supports: (query) =>
+            query.chainId === 143 && query.protocol === "kuru",
+          result: {
+            provider: {
+              providerId: fixture.provider.providerId,
+              observedAt: "2026-09-01T00:00:00.000Z",
+            },
+            status,
+            responseEvidence: {
+              kind: "reference",
+              reference: `fixture://${fixture.provider.providerId}/${status}`,
+            },
+            candidateFields: [],
+          },
+        });
+      const core = vi.fn(async () => "must-not-run");
+      const decision = vi.fn(async () => "must-not-run");
+      const store = new InMemoryRunStore();
+      const composition = createBackendComposition({
+        chainRegistry: new ChainRegistry([chain]),
+        protocolRegistry: new ProtocolRegistry([
+          { chainId: 143, protocol: "kuru", adapter: protocol },
+        ]),
+        providerRegistry: new ProviderRegistry([provider]),
+        normalization: {
+          normalize: (request: unknown) => {
+            const result = normalizeCheckSwapRequest(
+              request as CheckSwapRequest,
+              runtime.tokenRegistry,
+            );
+            if (!result.success) throw new Error(result.error.message);
+            return result.intent;
+          },
+        },
+        core: { evaluate: core },
+        decision: { decide: decision },
+        runStore: store,
+      });
+      const pipeline = new BackendPipeline({ runtime: composition });
+      const app = createBackendApp({
+        runtime,
+        composition,
+        agentFlow: createBackendCheckFlow({
+          pipeline,
+          project: (execution) => execution.decisionOutput,
+          capability: "simulate",
+        }),
+      });
+
+      const response = await app.fetch(
+        new Request("https://api.example.test/api/check", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(checkRequest()),
+        }),
+      );
+      const body = await response.json();
+
+      expect(response.status).toBe(502);
+      expect(body).toMatchObject({
+        error: {
+          code: status === "unsupported" ? "UNSUPPORTED" : "AGENT_FLOW_ERROR",
+        },
+        run: {
+          status: "integration_error",
+          systemStatus: "INTEGRATION_ERROR",
+          verdict: "UNKNOWN",
+          error: {
+            code:
+              status === "unsupported"
+                ? "UNSUPPORTED"
+                : status === "timeout"
+                  ? "TIMEOUT"
+                  : "INTERNAL_ERROR",
+            stage: "unknown",
+            retryable: status === "timeout",
+          },
+        },
+      });
+      expect(evaluations).toHaveLength(1);
+      expect(core).not.toHaveBeenCalled();
+      expect(decision).not.toHaveBeenCalled();
+    },
+  );
+
   it("keeps recorded Replay separate from composition-backed live Check Runs", async () => {
     const runtime = bootstrapBackendRuntime({ environment, tokenRegistry });
     const fixture = fakeBackendFixture();

@@ -311,6 +311,77 @@ describe("BackendPipeline", () => {
     },
   );
 
+  it.each([
+    ["failed", "FAILED", "failed", false],
+    ["stale", "STALE", "stale", false],
+    ["unknown", "UNKNOWN", "unknown", false],
+    ["invalid", "FAILED", "failed", false],
+    ["timeout", "TIMEOUT", "timeout", true],
+    ["unsupported", "UNSUPPORTED", "unsupported", false],
+  ] as const)(
+    "fails closed before Core and Decision without an evidence mapper for %s",
+    async (status, code, errorStatus, retryable) => {
+      const fixture = fakeBackendFixture();
+      const { adapter: provider, evaluations } =
+        createFakeProviderAdapterHarness({
+          ...fixture.provider,
+          supports: (query) =>
+            query.chainId === fixture.chain.chainId &&
+            query.protocol === fixture.protocol.id,
+          result: {
+            provider: {
+              providerId: fixture.provider.providerId,
+              observedAt: "2026-09-01T00:00:00.000Z",
+            },
+            status,
+            responseEvidence: {
+              kind: "reference",
+              reference: `fixture://${fixture.provider.providerId}/${status}`,
+            },
+            candidateFields: [],
+          },
+        });
+      const core = vi.fn(async () => "must-not-run");
+      const decision = vi.fn(async () => "must-not-run");
+      const runtime = createBackendComposition({
+        chainRegistry: new ChainRegistry([
+          createFakeChainAdapter(fixture.chain),
+        ]),
+        protocolRegistry: new ProtocolRegistry([
+          {
+            chainId: fixture.chain.chainId,
+            protocol: fixture.protocol.id,
+            adapter: createFakeProtocolAdapter(fixture.protocol),
+          },
+        ]),
+        providerRegistry: new ProviderRegistry([provider]),
+        normalization: { normalize: () => normalizedIntent },
+        core: { evaluate: core },
+        decision: { decide: decision },
+        runStore: new InMemoryRunStore(),
+      });
+      const pipeline = new BackendPipeline({ runtime });
+
+      await expect(
+        pipeline.execute({
+          rawInput: {},
+          runId: `provider-${status}-without-mapper-run`,
+          chainId: fixture.chain.chainId,
+          protocol: fixture.protocol.id,
+        }),
+      ).rejects.toMatchObject({
+        name: "ProviderAdapterError",
+        providerId: fixture.provider.providerId,
+        code,
+        status: errorStatus,
+        retryable,
+      });
+      expect(evaluations).toHaveLength(1);
+      expect(core).not.toHaveBeenCalled();
+      expect(decision).not.toHaveBeenCalled();
+    },
+  );
+
   it("keeps composition Quote provenance anchored to the current Chain context", async () => {
     const fixture = fakeBackendFixture();
     const chain = createFakeChainAdapter({ ...fixture.chain, chainId: 143 });
