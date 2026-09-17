@@ -235,9 +235,11 @@ const controlledCases: readonly ControlledCase[] = [
       candidateField("nativeRpc.freshness", {
         status: "stale",
         pinnedBlock:
-          controlledNativeRpcFixtures.cases.stale_pinned_block.pinnedBlock,
+          controlledNativeRpcFixtures.cases.stale_pinned_block
+            .pinnedBlock,
         headBlock:
-          controlledNativeRpcFixtures.cases.stale_pinned_block.eth_blockNumber,
+          controlledNativeRpcFixtures.cases.stale_pinned_block
+            .eth_blockNumber,
         lag: "2",
         maxBlockLag:
           controlledNativeRpcFixtures.cases.stale_pinned_block.maxBlockLag,
@@ -379,11 +381,14 @@ describe("Backend Native RPC evidence seam", () => {
             freshness: {
               status: "stale",
               pinnedBlock:
-                controlledNativeRpcFixtures.cases.stale_pinned_block.pinnedBlock,
+                controlledNativeRpcFixtures.cases.stale_pinned_block
+                  .pinnedBlock,
               headBlock:
-                controlledNativeRpcFixtures.cases.stale_pinned_block.eth_blockNumber,
+                controlledNativeRpcFixtures.cases.stale_pinned_block
+                  .eth_blockNumber,
               maxBlockLag:
-                controlledNativeRpcFixtures.cases.stale_pinned_block.maxBlockLag,
+                controlledNativeRpcFixtures.cases.stale_pinned_block
+                  .maxBlockLag,
             },
           },
         });
