@@ -162,7 +162,7 @@
       "scope": "P0_TARGET",
       "versionEvidence": {
         "state": "UNKNOWN",
-        "note": "No credentialed runtime response captured yet."
+        "note": "ProviderAdapter handoff is implemented in apps/api/src/backend/tenderly-provider.ts; no credentialed Tenderly runtime response has been captured."
       },
       "intentTypes": [
         {
@@ -233,8 +233,9 @@
         "note": "Must be measured/controlled by probe; no universal provider timeout assumed."
       },
       "knownLimitations": [
-        "No credentialed Arbitrum Sepolia response has been captured.",
-        "Must reject missing/mismatched PreparedExecution fail-closed once that input exists.",
+        "No credentialed Arbitrum Sepolia response has been captured; local credential presence check was negative on 2026-09-17.",
+        "The Tenderly adapter rejects missing/mismatched BackendPipelinePreparedExecution; canonical #63 exact Camelot transaction remains unavailable.",
+        "The API example has an empty block hash; current adapter requires an equal nonempty response hash for success, pending real qualification.",
         "Provider-only trace/state-diff/USD enrichment must not become hidden Risk dependencies."
       ],
       "fixtureIndex": [
