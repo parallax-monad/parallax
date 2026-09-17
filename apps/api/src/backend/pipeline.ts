@@ -17,13 +17,11 @@ import type {
   ProtocolAdapter,
   UnsignedTransaction,
 } from "./protocol-adapter.js";
-import {
-  type ProviderAdapter,
-  ProviderAdapterError,
-  type ProviderAdapterErrorCode,
-  type ProviderEvaluationInput,
-  type ProviderEvaluationResult,
-  type ProviderSupportQuery,
+import type {
+  ProviderAdapter,
+  ProviderEvaluationInput,
+  ProviderEvaluationResult,
+  ProviderSupportQuery,
 } from "./provider-adapter.js";
 import {
   createReceiptLifecycle,
@@ -313,10 +311,6 @@ export class BackendPipeline<
       provider,
       providerInput,
     );
-    if (providerResult.status !== "success") {
-      throw providerResultError(providerResult);
-    }
-
     const providerEvidence =
       this.dependencies.runtime.providerEvidenceMapper === undefined
         ? undefined
@@ -431,7 +425,10 @@ export function createBackendCheckFlow<
           capability: options.capability,
         },
       );
-      return options.project(execution);
+      return withProviderEvidence(
+        await options.project(execution),
+        execution.providerEvidence,
+      );
     },
   };
 }
@@ -487,23 +484,17 @@ export function createBackendQuoteFlow<
 
 export type BackendPipelineOperationResult<T> = BackendOperationResult<T>;
 
-function providerResultError(
-  result: Exclude<ProviderEvaluationResult, { status: "success" }>,
-): ProviderAdapterError {
-  const code: ProviderAdapterErrorCode =
-    result.status === "unsupported"
-      ? "UNSUPPORTED"
-      : result.status === "timeout"
-        ? "TIMEOUT"
-        : result.status === "unknown"
-          ? "UNKNOWN"
-          : result.status === "stale"
-            ? "STALE"
-            : "FAILED";
-  return new ProviderAdapterError({
-    providerId: result.provider.providerId,
-    code,
-    message: `Provider ${result.provider.providerId} returned ${result.status}; Core evaluation is unavailable`,
-    retryable: code === "TIMEOUT",
-  });
+function withProviderEvidence(
+  projected: unknown,
+  providerEvidence: unknown,
+): unknown {
+  if (
+    providerEvidence === undefined ||
+    typeof projected !== "object" ||
+    projected === null ||
+    Array.isArray(projected)
+  ) {
+    return projected;
+  }
+  return { ...(projected as Record<string, unknown>), providerEvidence };
 }

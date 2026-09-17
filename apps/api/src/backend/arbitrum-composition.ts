@@ -32,12 +32,10 @@ import {
   type NormalizationBoundary,
 } from "./composition.js";
 import {
-  createNativeRpcProvider,
   mapNativeRpcProviderResult,
   NATIVE_RPC_ARBITRUM_PROVIDER_ID,
   type NativeRpcPreparedExecution,
-  type NativeRpcProviderOptions,
-} from "./native-rpc-provider.js";
+} from "./native-rpc-evidence.js";
 import { ProtocolRegistry } from "./protocol-registry.js";
 import type { ProviderAdapter } from "./provider-adapter.js";
 import {
@@ -57,8 +55,6 @@ export type ArbitrumProductionCompositionOptions = {
     NormalizedSwapIntent,
     unknown
   >[];
-  /** Controlled Native RPC fixture/runtime seam; no endpoint is guessed. */
-  readonly nativeRpc?: NativeRpcProviderOptions;
   readonly providerEvidenceMapper?: BackendProviderEvidenceMapper;
   readonly providerEnvironment?: ProviderEnvironment;
   readonly normalization?: NormalizationBoundary<
@@ -139,12 +135,7 @@ export function createArbitrumProductionComposition(
     },
   };
 
-  const providers = [
-    ...(options.providers ?? []),
-    ...(options.nativeRpc === undefined
-      ? []
-      : [createNativeRpcProvider<NormalizedSwapIntent>(options.nativeRpc)]),
-  ];
+  const providers = [...(options.providers ?? [])];
   const providerEvidenceMapper =
     options.providerEvidenceMapper ??
     ((input) => {

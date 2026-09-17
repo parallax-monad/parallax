@@ -12,8 +12,6 @@ describe("Backend foundation public entry", () => {
     expect(api.CamelotV3ProtocolAdapter).toBeTypeOf("function");
     expect(api.createCamelotV3ProtocolAdapter).toBeTypeOf("function");
     expect(api.createCamelotV3FeasibilityEntryPoint).toBeTypeOf("function");
-    expect(api.createNativeRpcProvider).toBeTypeOf("function");
-    expect(api.NATIVE_RPC_ARBITRUM_PROVIDER_ID).toBe("native-rpc-arbitrum");
     expect(api.createArbitrumProductionComposition).toBeTypeOf("function");
     expect(api.bootstrapArbitrumBackend).toBeTypeOf("function");
   });

@@ -6,7 +6,6 @@ import { bootstrapBackendRuntime } from "../runtime-config.js";
 import { InMemoryRunStore } from "../store.js";
 
 import {
-  type ArbitrumNormalizationInput,
   type ArbitrumProductionCompositionOptions,
   bootstrapArbitrumBackend,
   createArbitrumProductionComposition,
@@ -17,7 +16,6 @@ import {
   createFakeChainAdapter,
   createFakeProviderAdapter,
 } from "./fake-harness.js";
-import { BackendPipeline } from "./pipeline.js";
 
 const normalizedIntent: NormalizedSwapIntent = {
   chainId: 421614,
@@ -154,112 +152,6 @@ describe("Arbitrum production composition skeleton", () => {
         capability: "simulate",
       }).providerId,
     ).toBe("controlled-arbitrum-provider");
-  });
-
-  it("registers the controlled native-rpc-arbitrum provider through composition", () => {
-    const runtime = arbitrumRuntime();
-    const composition = createArbitrumProductionComposition({
-      ...arbitrumCompositionOptions(runtime),
-      nativeRpc: {
-        client: {
-          request: async () => undefined,
-        },
-      },
-    });
-
-    expect(
-      composition.resolveProvider({
-        intent: normalizedIntent,
-        chainId: 421614,
-        protocol: "camelot-v3",
-        capability: "simulate",
-      }).providerId,
-    ).toBe("native-rpc-arbitrum");
-  });
-
-  it("routes quote and prepared transaction through the Native RPC provider and pipeline", async () => {
-    const calls: string[] = [];
-    let coreContext: unknown;
-    let decisionContext: unknown;
-    const composition = createArbitrumProductionComposition({
-      ...arbitrumCompositionOptions(
-        arbitrumRuntime(),
-        createCamelotV3ProtocolAdapter({
-          quote: async () => ({
-            status: "available",
-            quote: { estimatedAmountOut: "0.5", minimumAmountOut: "0.4" },
-          }),
-          buildTransaction: async () => ({
-            to: "0x2222222222222222222222222222222222222222",
-            data: "0x1234",
-          }),
-        }),
-      ),
-      nativeRpc: {
-        mode: "MOCK",
-        client: {
-          request: async (method) => {
-            calls.push(method);
-            return method === "eth_call" ? "0xabcdef" : "0x5208";
-          },
-        },
-      },
-      core: {
-        evaluate: async (input, context) => {
-          coreContext = context;
-          return input;
-        },
-      },
-      decision: {
-        decide: async (input, context) => {
-          decisionContext = context;
-          return input;
-        },
-      },
-    });
-    const pipeline = new BackendPipeline({ runtime: composition });
-
-    const execution = await pipeline.executeNormalized(normalizedIntent, {
-      rawInput: {} as ArbitrumNormalizationInput,
-      runId: "run-native-rpc-composition",
-      chainId: 421614,
-      protocol: "camelot-v3",
-      capability: "simulate",
-    });
-
-    expect(execution.providerResult).toMatchObject({
-      provider: { providerId: "native-rpc-arbitrum" },
-      status: "success",
-    });
-    expect(execution.providerEvidence).toMatchObject({
-      provider: { providerId: "native-rpc-arbitrum", status: "UNKNOWN" },
-      provenance: { mode: "MOCK", source: "mock", simulationBlock: "42" },
-      checkedScope: expect.arrayContaining([
-        "native-rpc.eth_call",
-        "native-rpc.estimateGas",
-      ]),
-      unknownScope: expect.arrayContaining([
-        "receipt",
-        "outcome",
-        "assetChanges",
-      ]),
-      providerData: {
-        nativeRpc: expect.objectContaining({
-          freshness: { status: "not_checked" },
-        }),
-      },
-    });
-    expect(coreContext).toMatchObject({
-      providerEvidence: {
-        provider: { status: "UNKNOWN" },
-      },
-    });
-    expect(decisionContext).toMatchObject({
-      providerEvidence: {
-        provenance: { source: "mock" },
-      },
-    });
-    expect(calls).toEqual(["eth_call", "eth_estimateGas"]);
   });
 
   it("requires an explicit Arbitrum endpoint when no controlled chain seam is supplied", () => {

@@ -12,7 +12,6 @@ import {
 } from "./fake-harness.js";
 import { BackendPipeline } from "./pipeline.js";
 import { ProtocolRegistry } from "./protocol-registry.js";
-import { isProviderAdapterError } from "./provider-adapter.js";
 import { ProviderRegistry } from "./provider-registry.js";
 
 const normalizedIntent = {
@@ -230,7 +229,7 @@ describe("BackendPipeline", () => {
     "timeout",
     "unsupported",
   ] as const)(
-    "fails closed before Core when Provider evidence is %s",
+    "preserves Provider evidence status through Core and Decision for %s",
     async (status) => {
       const fixture = fakeBackendFixture();
       const { adapter: provider, evaluations } =
@@ -252,7 +251,15 @@ describe("BackendPipeline", () => {
             candidateFields: [],
           },
         });
-      const core = vi.fn(async () => "must-not-run");
+      const providerEvidenceMapper = vi.fn((input) => ({
+        providerStatus: input.providerResult.status,
+      }));
+      const core = vi.fn(
+        async (_intent: unknown, context?: unknown) => context,
+      );
+      const decision = vi.fn(
+        async (_input: unknown, context?: unknown) => context,
+      );
       const runtime = createBackendComposition({
         chainRegistry: new ChainRegistry([
           createFakeChainAdapter(fixture.chain),
@@ -267,38 +274,40 @@ describe("BackendPipeline", () => {
         providerRegistry: new ProviderRegistry([provider]),
         normalization: { normalize: () => normalizedIntent },
         core: { evaluate: core },
-        decision: { decide: async () => "decision" },
+        decision: { decide: decision },
         runStore: new InMemoryRunStore(),
+        providerEvidenceMapper,
       });
       const pipeline = new BackendPipeline({ runtime });
 
-      await expect(
-        pipeline.execute({
-          rawInput: {},
-          runId: `provider-${status}-run`,
-          chainId: fixture.chain.chainId,
-          protocol: fixture.protocol.id,
-        }),
-      ).rejects.toSatisfy((received: unknown) => {
-        const expectedCode =
-          status === "failed" || status === "invalid"
-            ? "FAILED"
-            : status === "stale"
-              ? "STALE"
-              : status === "timeout"
-                ? "TIMEOUT"
-                : status === "unsupported"
-                  ? "UNSUPPORTED"
-                  : "UNKNOWN";
-        return (
-          isProviderAdapterError(received) &&
-          received.providerId === fixture.provider.providerId &&
-          received.code === expectedCode &&
-          received.message.includes(`returned ${status}`)
-        );
+      const result = await pipeline.execute({
+        rawInput: {},
+        runId: `provider-${status}-run`,
+        chainId: fixture.chain.chainId,
+        protocol: fixture.protocol.id,
       });
+
+      expect(providerEvidenceMapper).toHaveBeenCalledWith(
+        expect.objectContaining({
+          providerResult: expect.objectContaining({ status }),
+        }),
+      );
+      expect(result.providerEvidence).toEqual({ providerStatus: status });
+      expect(core).toHaveBeenCalledWith(
+        normalizedIntent,
+        expect.objectContaining({
+          providerResult: expect.objectContaining({ status }),
+          providerEvidence: { providerStatus: status },
+        }),
+      );
+      expect(decision).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          providerResult: expect.objectContaining({ status }),
+          providerEvidence: { providerStatus: status },
+        }),
+      );
       expect(evaluations).toHaveLength(1);
-      expect(core).not.toHaveBeenCalled();
     },
   );
 
