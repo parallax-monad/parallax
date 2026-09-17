@@ -351,7 +351,7 @@ describe("Backend Native RPC evidence seam", () => {
         expect(evidence.unknownScope).toEqual(
           expect.arrayContaining(["quote", "action"]),
         );
-        expect(evidence.notChecked).toEqual(
+        expect(evidence.providerData.nativeRpc.notChecked).toEqual(
           expect.arrayContaining([
             "native-rpc.eth_call",
             "native-rpc.estimateGas",
