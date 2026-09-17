@@ -522,5 +522,4 @@ describe("Backend Native RPC evidence seam", () => {
       expect.arrayContaining(["simulation"]),
     );
   });
-
 });
