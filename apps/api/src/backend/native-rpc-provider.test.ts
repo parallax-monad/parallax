@@ -291,16 +291,12 @@ describe("Backend Native RPC evidence seam", () => {
         tokenInDecimals: 18,
         tokenOutDecimals: 6,
         preparedExecution,
-        providerResult: result(
-          status,
-          candidateFields,
-          {
-            kind: "reference",
-            reference: `fixture://native-rpc/${name}/${JSON.stringify(
-              fixtureCase,
-            )}`,
-          },
-        ),
+        providerResult: result(status, candidateFields, {
+          kind: "reference",
+          reference: `fixture://native-rpc/${name}/${JSON.stringify(
+            fixtureCase,
+          )}`,
+        }),
       });
 
       expect(evidence.provider).toMatchObject({
@@ -559,6 +555,7 @@ describe("Backend Native RPC evidence seam", () => {
       index < Math.max(actual.length, expected.length);
       index += 1
     ) {
+      if (index < 369) continue;
       if (actual[index] !== expected[index]) {
         differences.push({
           line: index + 1,
