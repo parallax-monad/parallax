@@ -231,10 +231,13 @@ const controlledCases: readonly ControlledCase[] = [
       ),
       candidateField("nativeRpc.freshness", {
         status: "stale",
-        pinnedBlock: controlledNativeRpcFixtures.cases.stale_pinned_block.pinnedBlock,
-        headBlock: controlledNativeRpcFixtures.cases.stale_pinned_block.eth_blockNumber,
+        pinnedBlock:
+          controlledNativeRpcFixtures.cases.stale_pinned_block.pinnedBlock,
+        headBlock:
+          controlledNativeRpcFixtures.cases.stale_pinned_block.eth_blockNumber,
         lag: "2",
-        maxBlockLag: controlledNativeRpcFixtures.cases.stale_pinned_block.maxBlockLag,
+        maxBlockLag:
+          controlledNativeRpcFixtures.cases.stale_pinned_block.maxBlockLag,
       }),
     ],
     expectedProviderStatus: "STALE",
