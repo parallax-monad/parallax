@@ -199,10 +199,7 @@
       "context": "pinnedBlock",
       "fetchedAt": "2026-09-17T13:05:08.552Z",
       "method": "eth_getBlockByNumber",
-      "params": [
-        "0x1277e714",
-        false
-      ],
+      "params": ["0x1277e714", false],
       "httpStatus": 200,
       "response": {
         "jsonrpc": "2.0",
@@ -247,10 +244,7 @@
       "context": "code:FACTORY",
       "fetchedAt": "2026-09-17T13:05:08.909Z",
       "method": "eth_getCode",
-      "params": [
-        "0xaA37Bea711D585478E1c04b04707cCb0f10D762a",
-        "0x1277e714"
-      ],
+      "params": ["0xaA37Bea711D585478E1c04b04707cCb0f10D762a", "0x1277e714"],
       "httpStatus": 200,
       "response": {
         "jsonrpc": "2.0",
@@ -262,10 +256,7 @@
       "context": "code:QUOTER",
       "fetchedAt": "2026-09-17T13:05:09.269Z",
       "method": "eth_getCode",
-      "params": [
-        "0xe49ef2F48539EA7498605CC1B3a242042cb5FC83",
-        "0x1277e714"
-      ],
+      "params": ["0xe49ef2F48539EA7498605CC1B3a242042cb5FC83", "0x1277e714"],
       "httpStatus": 200,
       "response": {
         "jsonrpc": "2.0",
@@ -277,10 +268,7 @@
       "context": "code:ROUTER",
       "fetchedAt": "2026-09-17T13:05:09.708Z",
       "method": "eth_getCode",
-      "params": [
-        "0x171B925C51565F5D2a7d8C494ba3188D304EFD93",
-        "0x1277e714"
-      ],
+      "params": ["0x171B925C51565F5D2a7d8C494ba3188D304EFD93", "0x1277e714"],
       "httpStatus": 200,
       "response": {
         "jsonrpc": "2.0",
@@ -292,10 +280,7 @@
       "context": "code:WETH",
       "fetchedAt": "2026-09-17T13:05:10.166Z",
       "method": "eth_getCode",
-      "params": [
-        "0x980B62Da83eFf3D4576C647993b0c1D7faf17c73",
-        "0x1277e714"
-      ],
+      "params": ["0x980B62Da83eFf3D4576C647993b0c1D7faf17c73", "0x1277e714"],
       "httpStatus": 200,
       "response": {
         "jsonrpc": "2.0",
@@ -307,10 +292,7 @@
       "context": "code:USDC",
       "fetchedAt": "2026-09-17T13:05:10.490Z",
       "method": "eth_getCode",
-      "params": [
-        "0xb893E3334D4Bd6C5ba8277Fd559e99Ed683A9FC7",
-        "0x1277e714"
-      ],
+      "params": ["0xb893E3334D4Bd6C5ba8277Fd559e99Ed683A9FC7", "0x1277e714"],
       "httpStatus": 200,
       "response": {
         "jsonrpc": "2.0",
@@ -322,10 +304,7 @@
       "context": "code:CANDIDATE_POOL",
       "fetchedAt": "2026-09-17T13:05:10.859Z",
       "method": "eth_getCode",
-      "params": [
-        "0x3965361ea4f9000ae3cf995f553115b2832d0e2d",
-        "0x1277e714"
-      ],
+      "params": ["0x3965361ea4f9000ae3cf995f553115b2832d0e2d", "0x1277e714"],
       "httpStatus": 200,
       "response": {
         "jsonrpc": "2.0",
@@ -633,10 +612,7 @@
       "context": "senderNativeBalance:0x00000000000000000000000000000000000a4b05",
       "fetchedAt": "2026-09-17T13:05:16.185Z",
       "method": "eth_getBalance",
-      "params": [
-        "0x00000000000000000000000000000000000a4b05",
-        "0x1277e714"
-      ],
+      "params": ["0x00000000000000000000000000000000000a4b05", "0x1277e714"],
       "httpStatus": 200,
       "response": {
         "jsonrpc": "2.0",
@@ -680,10 +656,7 @@
       "context": "senderNativeBalance:0xf5d0f57f31219c04f3b56f26faa5d57274e58528",
       "fetchedAt": "2026-09-17T13:05:17.065Z",
       "method": "eth_getBalance",
-      "params": [
-        "0xf5d0f57f31219c04f3b56f26faa5d57274e58528",
-        "0x1277e714"
-      ],
+      "params": ["0xf5d0f57f31219c04f3b56f26faa5d57274e58528", "0x1277e714"],
       "httpStatus": 200,
       "response": {
         "jsonrpc": "2.0",
