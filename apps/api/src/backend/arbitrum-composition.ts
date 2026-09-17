@@ -96,7 +96,9 @@ export type ArbitrumBackendBootstrap = {
  *
  * The chain endpoint and provider implementations remain explicit dependencies.
  * In particular, an empty provider list is valid and fails closed at selection;
- * this function never invents Tenderly credentials or real pool values.
+ * this function never invents Tenderly credentials or real pool values. The
+ * concrete NativeRpcProvider/raw RPC implementation belongs to Provider Owner
+ * #66; this composition accepts that replaceable ProviderAdapter explicitly.
  */
 export function createArbitrumProductionComposition(
   options: ArbitrumProductionCompositionOptions,

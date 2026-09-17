@@ -159,10 +159,10 @@ export type BackendPipelineDependencies<
 /**
  * Executes one deterministic Backend application path through the PR-A seams.
  *
- * This is an internal orchestration boundary: adapter payloads and Provider
- * results remain in the pipeline context and are never projected into a public
- * API DTO here. Core and Decision own that projection through their injected
- * ports.
+ * This is an internal orchestration boundary: raw adapter payloads never cross
+ * into a public API DTO. An explicit composition mapper may produce provisional
+ * provider evidence, which `createBackendCheckFlow` attaches to the existing
+ * RunResult boundary without making it a Core or Decision input contract.
  */
 export class BackendPipeline<
   RawInput = unknown,

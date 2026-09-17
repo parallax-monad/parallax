@@ -12,11 +12,7 @@ import {
   type ArbitrumTransaction,
 } from "./arbitrum-chain-adapter.js";
 
-import type {
-  BlockContext,
-  ChainOperationOptions,
-  GasEstimate,
-} from "./chain-adapter.js";
+import type { BlockContext, GasEstimate } from "./chain-adapter.js";
 import type { ProviderEvaluationResult } from "./provider-adapter.js";
 import type {
   ProvisionalCandidateFieldInput,
@@ -32,14 +28,6 @@ export const NATIVE_RPC_CAPABILITIES = Object.freeze([
   "estimateGas",
   "pinned-block",
 ] as const);
-
-export type NativeRpcClient = {
-  request(
-    method: string,
-    params?: readonly unknown[],
-    options?: ChainOperationOptions,
-  ): Promise<unknown>;
-};
 
 export type NativeRpcIntent = {
   readonly chainId: number;
@@ -112,6 +100,11 @@ export type NativeRpcGenericEvidenceInput = {
 
 /**
  * Explicit provisional ProviderEvaluationResult → GenericEvidence projection.
+ *
+ * The Backend owns this provider-neutral mapping only. The concrete
+ * NativeRpcProvider, raw RPC client, endpoint lifecycle, and provider-owned
+ * qualification remain the Provider Owner (#66) handoff; an adapter is passed
+ * into the composition through the existing ProviderAdapter seam.
  *
  * The projection keeps Native RPC's partial surface fail-closed: a successful
  * `eth_call` and gas estimate do not become a complete simulation receipt,
