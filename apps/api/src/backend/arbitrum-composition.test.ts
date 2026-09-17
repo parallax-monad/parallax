@@ -1,4 +1,5 @@
 import type { NormalizedSwapIntent } from "@parallax/contracts";
+import { economicFailStopResult } from "@parallax/orchestrator/application/action-gate-fixtures";
 import { describe, expect, it } from "vitest";
 import { createBackendApp } from "../bootstrap/backend.js";
 import { UnsupportedAgentFlowError } from "../ports.js";
@@ -16,6 +17,7 @@ import {
   createFakeChainAdapter,
   createFakeProviderAdapter,
 } from "./fake-harness.js";
+import { NATIVE_RPC_ARBITRUM_PROVIDER_ID } from "./native-rpc-evidence.js";
 
 const normalizedIntent: NormalizedSwapIntent = {
   chainId: 421614,
@@ -152,6 +154,212 @@ describe("Arbitrum production composition skeleton", () => {
         capability: "simulate",
       }).providerId,
     ).toBe("controlled-arbitrum-provider");
+  });
+
+  it("projects non-success Native RPC evidence through the public check response", async () => {
+    const runtime = arbitrumRuntime();
+    const provider = createFakeProviderAdapter<NormalizedSwapIntent>({
+      providerId: NATIVE_RPC_ARBITRUM_PROVIDER_ID,
+      intent: normalizedIntent,
+      chainId: 421614,
+      protocol: "camelot-v3",
+      capabilities: ["simulate", "eth_call", "estimateGas", "pinned-block"],
+      supports: () => true,
+      result: {
+        provider: {
+          providerId: NATIVE_RPC_ARBITRUM_PROVIDER_ID,
+          observedAt: "2026-09-10T00:01:00.000Z",
+        },
+        status: "unknown",
+        responseEvidence: {
+          kind: "reference",
+          reference: "fixture://native-rpc/public-check",
+        },
+        candidateFields: [
+          {
+            candidatePath: "nativeRpc.ethCall.returnData",
+            observedShape: "hex_string",
+            status: "observed",
+            nullable: false,
+            confidence: "high",
+            value: "0xabcdef",
+          },
+          {
+            candidatePath: "nativeRpc.estimateGas.gasUnits",
+            observedShape: "decimal_string",
+            status: "observed",
+            nullable: false,
+            confidence: "high",
+            value: "21000",
+          },
+        ],
+      },
+    });
+    const composition = createArbitrumProductionComposition({
+      ...arbitrumCompositionOptions(runtime),
+      providers: [provider],
+      protocolAdapter: createCamelotV3ProtocolAdapter({
+        quote: async () => ({
+          estimatedAmountOut: "0.5",
+          minimumAmountOut: "0.4",
+        }),
+        buildTransaction: async () => ({
+          to: "0x2222222222222222222222222222222222222222",
+          data: "0x1234",
+          value: "0x0",
+        }),
+      }),
+      core: { evaluate: async (input) => input },
+      decision: {
+        decide: async (_input, context) => {
+          const pipelineContext = context as {
+            runId: string;
+            intent: NormalizedSwapIntent;
+          };
+          const result = economicFailStopResult(
+            {
+              sender: pipelineContext.intent.sender,
+              mon: { kind: "native" },
+              usdc: pipelineContext.intent.tokenOut as {
+                kind: "erc20";
+                address: string;
+              },
+              simulatorPinnedBlock: "42",
+              runtimeVersion: runtime.config.moss.runtimeVersion,
+              runtimeRevision: runtime.config.moss.runtimeRevision,
+            },
+            pipelineContext.runId,
+            pipelineContext.intent,
+          );
+          return {
+            ...result,
+            route: {
+              ...result.route,
+              protocol: pipelineContext.intent.protocol,
+            },
+          };
+        },
+      },
+    });
+    const app = createBackendApp({
+      runtime,
+      composition: composition as unknown as BackendCompositionRuntime,
+    });
+
+    const response = await app.fetch(
+      new Request("https://api.example.test/api/check", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          chainId: 421614,
+          protocol: "camelot-v3",
+          sender: normalizedIntent.sender,
+          tokenIn: { kind: "native" },
+          tokenOut: {
+            kind: "erc20",
+            address: arbitrumTokenAddress,
+          },
+          amountIn: "1",
+          economicBoundary: {
+            availability: "available",
+            minimumReceived: "0.02",
+            source: "user_declared",
+          },
+        }),
+      }),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body).toMatchObject({
+      status: "completed",
+      providerEvidence: {
+        provider: {
+          providerId: NATIVE_RPC_ARBITRUM_PROVIDER_ID,
+          status: "UNKNOWN",
+        },
+        provenance: {
+          source: "mock",
+          mode: "MOCK",
+          simulationBlock: "42",
+        },
+        checkedScope: ["native-rpc.eth_call", "native-rpc.estimateGas"],
+        providerData: {
+          nativeRpc: {
+            status: "unknown",
+            freshness: { status: "not_checked" },
+            notChecked: expect.arrayContaining([
+              "receipt",
+              "outcome",
+              "assetChanges",
+            ]),
+          },
+        },
+      },
+    });
+  });
+
+  it("does not label a Native RPC provider failure as Moss simulation", async () => {
+    const runtime = arbitrumRuntime();
+    const provider = createFakeProviderAdapter<NormalizedSwapIntent>({
+      providerId: NATIVE_RPC_ARBITRUM_PROVIDER_ID,
+      intent: normalizedIntent,
+      chainId: 421614,
+      protocol: "camelot-v3",
+      capabilities: ["simulate"],
+      supports: () => false,
+    });
+    const composition = createArbitrumProductionComposition({
+      ...arbitrumCompositionOptions(runtime),
+      providers: [provider],
+    });
+    const app = createBackendApp({
+      runtime,
+      composition: composition as unknown as BackendCompositionRuntime,
+    });
+
+    const response = await app.fetch(
+      new Request("https://api.example.test/api/check", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          chainId: 421614,
+          protocol: "camelot-v3",
+          sender: normalizedIntent.sender,
+          tokenIn: { kind: "native" },
+          tokenOut: {
+            kind: "erc20",
+            address: arbitrumTokenAddress,
+          },
+          amountIn: "1",
+          economicBoundary: {
+            availability: "unavailable",
+            source: "unavailable",
+          },
+        }),
+      }),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(502);
+    expect(body).toMatchObject({
+      error: {
+        code: "UNSUPPORTED",
+        message: "Provider evaluation is not available in this runtime",
+      },
+      run: {
+        status: "integration_error",
+        scope: [
+          {
+            key: "P0-CHECK-SIMULATION-001",
+            label: "Provider evaluation",
+            status: "unknown",
+            reason: "REQUIRED_CHECK_INTERRUPTED",
+          },
+        ],
+      },
+    });
+    expect(JSON.stringify(body)).not.toContain("Moss simulation");
   });
 
   it("requires an explicit Arbitrum endpoint when no controlled chain seam is supplied", () => {

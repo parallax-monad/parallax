@@ -47,6 +47,8 @@ export type BackendPipelineContext<
   readonly gasEstimate: GasEstimate;
   readonly finality: FinalityStatus;
   readonly providerResult: ProviderEvaluationResult;
+  /** Optional provisional evidence projection for Core/Decision consumers. */
+  readonly providerEvidence?: unknown;
 };
 
 /**
@@ -110,6 +112,8 @@ export type BackendPipelineExecution<
   readonly gasEstimate: GasEstimate;
   readonly finality: FinalityStatus;
   readonly providerResult: ProviderEvaluationResult;
+  /** Optional provisional evidence projection for Backend/API composition. */
+  readonly providerEvidence?: unknown;
   readonly coreOutput: CoreOutput;
   readonly decisionOutput: DecisionOutput;
   readonly receiptLifecycle: ReceiptLifecycleHandle;
@@ -157,10 +161,10 @@ export type BackendPipelineDependencies<
 /**
  * Executes one deterministic Backend application path through the PR-A seams.
  *
- * This is an internal orchestration boundary: adapter payloads and Provider
- * results remain in the pipeline context and are never projected into a public
- * API DTO here. Core and Decision own that projection through their injected
- * ports.
+ * This is an internal orchestration boundary: raw adapter payloads never cross
+ * into a public API DTO. An explicit composition mapper may produce provisional
+ * provider evidence, which `createBackendCheckFlow` attaches to the existing
+ * RunResult boundary without making it a Core or Decision input contract.
  */
 export class BackendPipeline<
   RawInput = unknown,
@@ -309,7 +313,15 @@ export class BackendPipeline<
       provider,
       providerInput,
     );
-    if (providerResult.status !== "success") {
+    const providerEvidence =
+      this.dependencies.runtime.providerEvidenceMapper === undefined
+        ? undefined
+        : await this.dependencies.runtime.providerEvidenceMapper({
+            normalizedIntent: normalized,
+            preparedExecution,
+            providerResult,
+          });
+    if (providerResult.status !== "success" && providerEvidence === undefined) {
       throw providerResultError(providerResult);
     }
 
@@ -324,6 +336,7 @@ export class BackendPipeline<
       gasEstimate,
       finality,
       providerResult,
+      ...(providerEvidence === undefined ? {} : { providerEvidence }),
     };
     const coreOutput = await this.dependencies.runtime.evaluate(
       normalized,
@@ -362,6 +375,7 @@ export class BackendPipeline<
       gasEstimate,
       finality,
       providerResult,
+      ...(providerEvidence === undefined ? {} : { providerEvidence }),
       coreOutput,
       decisionOutput,
       receiptLifecycle,
@@ -416,7 +430,10 @@ export function createBackendCheckFlow<
           capability: options.capability,
         },
       );
-      return options.project(execution);
+      return withProviderEvidence(
+        await options.project(execution),
+        execution.providerEvidence,
+      );
     },
   };
 }
@@ -491,4 +508,19 @@ function providerResultError(
     message: `Provider ${result.provider.providerId} returned ${result.status}; Core evaluation is unavailable`,
     retryable: code === "TIMEOUT",
   });
+}
+
+function withProviderEvidence(
+  projected: unknown,
+  providerEvidence: unknown,
+): unknown {
+  if (
+    providerEvidence === undefined ||
+    typeof projected !== "object" ||
+    projected === null ||
+    Array.isArray(projected)
+  ) {
+    return projected;
+  }
+  return { ...(projected as Record<string, unknown>), providerEvidence };
 }

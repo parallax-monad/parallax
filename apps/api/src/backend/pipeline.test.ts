@@ -12,7 +12,6 @@ import {
 } from "./fake-harness.js";
 import { BackendPipeline } from "./pipeline.js";
 import { ProtocolRegistry } from "./protocol-registry.js";
-import { isProviderAdapterError } from "./provider-adapter.js";
 import { ProviderRegistry } from "./provider-registry.js";
 
 const normalizedIntent = {
@@ -230,7 +229,7 @@ describe("BackendPipeline", () => {
     "timeout",
     "unsupported",
   ] as const)(
-    "fails closed before Core when Provider evidence is %s",
+    "preserves Provider evidence status through Core and Decision for %s",
     async (status) => {
       const fixture = fakeBackendFixture();
       const { adapter: provider, evaluations } =
@@ -252,7 +251,15 @@ describe("BackendPipeline", () => {
             candidateFields: [],
           },
         });
-      const core = vi.fn(async () => "must-not-run");
+      const providerEvidenceMapper = vi.fn((input) => ({
+        providerStatus: input.providerResult.status,
+      }));
+      const core = vi.fn(
+        async (_intent: unknown, context?: unknown) => context,
+      );
+      const decision = vi.fn(
+        async (_input: unknown, context?: unknown) => context,
+      );
       const runtime = createBackendComposition({
         chainRegistry: new ChainRegistry([
           createFakeChainAdapter(fixture.chain),
@@ -267,7 +274,90 @@ describe("BackendPipeline", () => {
         providerRegistry: new ProviderRegistry([provider]),
         normalization: { normalize: () => normalizedIntent },
         core: { evaluate: core },
-        decision: { decide: async () => "decision" },
+        decision: { decide: decision },
+        runStore: new InMemoryRunStore(),
+        providerEvidenceMapper,
+      });
+      const pipeline = new BackendPipeline({ runtime });
+
+      const result = await pipeline.execute({
+        rawInput: {},
+        runId: `provider-${status}-run`,
+        chainId: fixture.chain.chainId,
+        protocol: fixture.protocol.id,
+      });
+
+      expect(providerEvidenceMapper).toHaveBeenCalledWith(
+        expect.objectContaining({
+          providerResult: expect.objectContaining({ status }),
+        }),
+      );
+      expect(result.providerEvidence).toEqual({ providerStatus: status });
+      expect(core).toHaveBeenCalledWith(
+        normalizedIntent,
+        expect.objectContaining({
+          providerResult: expect.objectContaining({ status }),
+          providerEvidence: { providerStatus: status },
+        }),
+      );
+      expect(decision).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          providerResult: expect.objectContaining({ status }),
+          providerEvidence: { providerStatus: status },
+        }),
+      );
+      expect(evaluations).toHaveLength(1);
+    },
+  );
+
+  it.each([
+    ["failed", "FAILED", "failed", false],
+    ["stale", "STALE", "stale", false],
+    ["unknown", "UNKNOWN", "unknown", false],
+    ["invalid", "FAILED", "failed", false],
+    ["timeout", "TIMEOUT", "timeout", true],
+    ["unsupported", "UNSUPPORTED", "unsupported", false],
+  ] as const)(
+    "fails closed before Core and Decision without an evidence mapper for %s",
+    async (status, code, errorStatus, retryable) => {
+      const fixture = fakeBackendFixture();
+      const { adapter: provider, evaluations } =
+        createFakeProviderAdapterHarness({
+          ...fixture.provider,
+          supports: (query) =>
+            query.chainId === fixture.chain.chainId &&
+            query.protocol === fixture.protocol.id,
+          result: {
+            provider: {
+              providerId: fixture.provider.providerId,
+              observedAt: "2026-09-01T00:00:00.000Z",
+            },
+            status,
+            responseEvidence: {
+              kind: "reference",
+              reference: `fixture://${fixture.provider.providerId}/${status}`,
+            },
+            candidateFields: [],
+          },
+        });
+      const core = vi.fn(async () => "must-not-run");
+      const decision = vi.fn(async () => "must-not-run");
+      const runtime = createBackendComposition({
+        chainRegistry: new ChainRegistry([
+          createFakeChainAdapter(fixture.chain),
+        ]),
+        protocolRegistry: new ProtocolRegistry([
+          {
+            chainId: fixture.chain.chainId,
+            protocol: fixture.protocol.id,
+            adapter: createFakeProtocolAdapter(fixture.protocol),
+          },
+        ]),
+        providerRegistry: new ProviderRegistry([provider]),
+        normalization: { normalize: () => normalizedIntent },
+        core: { evaluate: core },
+        decision: { decide: decision },
         runStore: new InMemoryRunStore(),
       });
       const pipeline = new BackendPipeline({ runtime });
@@ -275,30 +365,20 @@ describe("BackendPipeline", () => {
       await expect(
         pipeline.execute({
           rawInput: {},
-          runId: `provider-${status}-run`,
+          runId: `provider-${status}-without-mapper-run`,
           chainId: fixture.chain.chainId,
           protocol: fixture.protocol.id,
         }),
-      ).rejects.toSatisfy((received: unknown) => {
-        const expectedCode =
-          status === "failed" || status === "invalid"
-            ? "FAILED"
-            : status === "stale"
-              ? "STALE"
-              : status === "timeout"
-                ? "TIMEOUT"
-                : status === "unsupported"
-                  ? "UNSUPPORTED"
-                  : "UNKNOWN";
-        return (
-          isProviderAdapterError(received) &&
-          received.providerId === fixture.provider.providerId &&
-          received.code === expectedCode &&
-          received.message.includes(`returned ${status}`)
-        );
+      ).rejects.toMatchObject({
+        name: "ProviderAdapterError",
+        providerId: fixture.provider.providerId,
+        code,
+        status: errorStatus,
+        retryable,
       });
       expect(evaluations).toHaveLength(1);
       expect(core).not.toHaveBeenCalled();
+      expect(decision).not.toHaveBeenCalled();
     },
   );
 

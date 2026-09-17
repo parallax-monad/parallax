@@ -179,7 +179,7 @@ export class CheckApplicationService {
         {
           code: unsupported ? "UNSUPPORTED" : "AGENT_FLOW_ERROR",
           message: unsupported
-            ? "Live Agent Flow is not available in this runtime"
+            ? unsupportedCheckMessage(invoked.error)
             : "Agent Flow could not complete the check",
         },
         invoked.error,
@@ -651,7 +651,7 @@ function createIntegrationErrorResult(
     scope: [
       {
         key: "P0-CHECK-SIMULATION-001",
-        label: "Moss simulation",
+        label: integrationScopeLabel(cause),
         status: "unknown",
         reason: "REQUIRED_CHECK_INTERRUPTED",
       },
@@ -669,7 +669,7 @@ function integrationErrorForFailure(
     return {
       code: "UNSUPPORTED",
       stage: "unknown",
-      message: "Live Agent Flow is not available in this runtime",
+      message: unsupportedCheckMessage(cause),
       retryable: false,
     };
   }
@@ -760,6 +760,28 @@ function integrationErrorStage(
     default:
       return "unknown";
   }
+}
+
+function integrationScopeLabel(cause: unknown): string {
+  return isProviderBoundaryFailure(cause)
+    ? "Provider evaluation"
+    : "Moss simulation";
+}
+
+function unsupportedCheckMessage(cause: unknown): string {
+  return isProviderBoundaryFailure(cause)
+    ? "Provider evaluation is not available in this runtime"
+    : "Live Agent Flow is not available in this runtime";
+}
+
+function isProviderBoundaryFailure(cause: unknown): boolean {
+  const fields = asRecord(cause);
+  const name = stringField(fields, "name");
+  return (
+    name === "ProviderAdapterError" ||
+    name === "ProviderRegistryError" ||
+    stringField(fields, "source") === "rpc"
+  );
 }
 
 /**

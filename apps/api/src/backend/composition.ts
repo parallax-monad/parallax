@@ -19,6 +19,13 @@ import type { ReceiptAnchorer, ReceiptSigner } from "./receipt-ports.js";
 /** A dependency may be synchronous or asynchronous without changing the port. */
 export type BackendOperationResult<Value> = Value | Promise<Value>;
 
+/** Provider result projection kept optional and replaceable at composition time. */
+export type BackendProviderEvidenceMapper = (input: {
+  readonly normalizedIntent: unknown;
+  readonly preparedExecution: unknown;
+  readonly providerResult: ProviderEvaluationResult;
+}) => BackendOperationResult<unknown>;
+
 export type NormalizationFunction<Input = unknown, Output = unknown> = (
   input: Input,
 ) => BackendOperationResult<Output>;
@@ -81,6 +88,7 @@ export type BackendCompositionDependencies<
   readonly runStore: RunStore;
   readonly receiptSigner?: ReceiptSigner;
   readonly receiptAnchorer?: ReceiptAnchorer;
+  readonly providerEvidenceMapper?: BackendProviderEvidenceMapper;
 };
 
 /**
@@ -127,6 +135,9 @@ export class BackendCompositionRuntime<
   public readonly runStore: RunStore;
   public readonly receiptSigner: ReceiptSigner | undefined;
   public readonly receiptAnchorer: ReceiptAnchorer | undefined;
+  public readonly providerEvidenceMapper:
+    | BackendProviderEvidenceMapper
+    | undefined;
 
   public constructor(
     dependencies: BackendCompositionDependencies<
@@ -173,6 +184,12 @@ export class BackendCompositionRuntime<
     ) {
       throw new TypeError("receiptAnchorer.anchor must be a function");
     }
+    if (
+      dependencies.providerEvidenceMapper !== undefined &&
+      typeof dependencies.providerEvidenceMapper !== "function"
+    ) {
+      throw new TypeError("providerEvidenceMapper must be a function");
+    }
 
     this.chainRegistry = dependencies.chainRegistry;
     this.protocolRegistry = dependencies.protocolRegistry;
@@ -183,6 +200,7 @@ export class BackendCompositionRuntime<
     this.runStore = dependencies.runStore;
     this.receiptSigner = dependencies.receiptSigner;
     this.receiptAnchorer = dependencies.receiptAnchorer;
+    this.providerEvidenceMapper = dependencies.providerEvidenceMapper;
   }
 
   /** Normalizes an untrusted boundary value before Core receives it. */

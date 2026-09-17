@@ -43,6 +43,11 @@ contain the probe source, so it is superseded for canonical qualification. Its
 recorded observation values are unchanged and its provenance defect is not
 retroactively fixed.
 
+The PR-P0-B controlled Native RPC inputs live at
+`native-rpc/controlled-p0-b/`. They are deterministic `real=false` adapter
+inputs and are not an additional Provider result model or a claim of live
+Arbitrum/Camelot support.
+
 The Native RPC fixture proves only the recorded Arbitrum Sepolia public RPC
 read/error surface. It is not a Camelot transaction, complete simulation,
 `PreparedExecution`, or `NativeRpcProvider` implementation. The observed

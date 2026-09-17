@@ -281,7 +281,7 @@
       "scope": "P0_CONTROLLED_FALLBACK",
       "versionEvidence": {
         "state": "UNKNOWN",
-        "note": "NativeRpcProvider is not implemented, so no Provider implementation version exists."
+        "note": "The fixture-first NativeRpcProvider seam is implemented at native-rpc-fixture-seam-v1; no live Provider runtime version is claimed."
       },
       "endpointMetadata": {
         "state": "VERIFIED_RUNTIME",
@@ -464,6 +464,15 @@
           "chainId": 421614,
           "protocol": null,
           "note": "HISTORICAL_PRE_GUARD_CAPTURE: audit evidence only; superseded for canonical qualification because its recorded repositoryHeadAtCapture does not contain the probe source."
+        },
+        {
+          "observationId": "native-rpc-controlled-p0-b-matrix",
+          "real": false,
+          "path": "fixtures/provider-registry/be-011/native-rpc/controlled-p0-b/",
+          "classification": "RULE_TEST_INPUT",
+          "chainId": 421614,
+          "protocol": "camelot-v3",
+          "note": "Deterministic fixture-first ProviderAdapter matrix for eth_call, eth_estimateGas, pinned-block freshness, and fail-closed result mapping; not live-chain evidence."
         },
         {
           "observationId": "native-rpc-provider-outage",

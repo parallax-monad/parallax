@@ -559,7 +559,7 @@ describe("Backend composition application boundary", () => {
     "timeout",
     "unsupported",
   ] as const)(
-    "fails closed at the public Check boundary for Provider evidence %s",
+    "fails closed at the public Check boundary without an evidence mapper for %s",
     async (status) => {
       const runtime = bootstrapBackendRuntime({ environment, tokenRegistry });
       const fixture = fakeBackendFixture();
@@ -625,22 +625,23 @@ describe("Backend composition application boundary", () => {
         }),
       );
       const body = await response.json();
-      const unsupported = status === "unsupported";
-      const expectedRunErrorCode = unsupported
-        ? "UNSUPPORTED"
-        : status === "timeout"
-          ? "TIMEOUT"
-          : "INTERNAL_ERROR";
 
       expect(response.status).toBe(502);
       expect(body).toMatchObject({
-        error: { code: unsupported ? "UNSUPPORTED" : "AGENT_FLOW_ERROR" },
+        error: {
+          code: status === "unsupported" ? "UNSUPPORTED" : "AGENT_FLOW_ERROR",
+        },
         run: {
           status: "integration_error",
           systemStatus: "INTEGRATION_ERROR",
           verdict: "UNKNOWN",
           error: {
-            code: expectedRunErrorCode,
+            code:
+              status === "unsupported"
+                ? "UNSUPPORTED"
+                : status === "timeout"
+                  ? "TIMEOUT"
+                  : "INTERNAL_ERROR",
             stage: "unknown",
             retryable: status === "timeout",
           },
