@@ -1,6 +1,7 @@
 import type { NormalizedSwapIntent } from "@parallax/contracts";
 import { describe, expect, it } from "vitest";
 import controlledNativeRpcFixtures from "../../../../fixtures/provider-registry/be-011/native-rpc/controlled-p0-b/fixtures.json";
+import { NativeRpcClientError } from "./native-rpc-client.js";
 import {
   ARBITRUM_SEPOLIA_CHAIN_ID,
   createNativeRpcProvider,
@@ -89,7 +90,10 @@ describe("NativeRpcProvider", () => {
   });
 
   it("supports only the Arbitrum Camelot simulation seam without side effects", () => {
-    const provider = new NativeRpcProvider({ client: clientFor({}) });
+    const provider = new NativeRpcProvider({
+      client: clientFor({}),
+      mode: "MOCK",
+    });
 
     expect(provider.adapter.providerId).toBe(NATIVE_RPC_ARBITRUM_PROVIDER_ID);
     expect(provider.adapter.capabilities).toEqual(NATIVE_RPC_CAPABILITIES);
@@ -152,7 +156,7 @@ describe("NativeRpcProvider", () => {
     "rejects malformed chain identity %s before block or transaction RPC",
     async (chainId) => {
       const client = clientFor({ eth_chainId: chainId });
-      const provider = createNativeRpcProvider({ client });
+      const provider = createNativeRpcProvider({ client, mode: "MOCK" });
       const result = await evaluateProviderAdapter(provider, {
         runId: prepared.runId,
         intent,
@@ -184,7 +188,7 @@ describe("NativeRpcProvider", () => {
     "preserves %s chain RPC failure without later calls",
     async (status, error) => {
       const client = clientFor({ eth_chainId: error });
-      const provider = createNativeRpcProvider({ client });
+      const provider = createNativeRpcProvider({ client, mode: "MOCK" });
       const result = await evaluateProviderAdapter(provider, {
         runId: prepared.runId,
         intent,
@@ -615,7 +619,7 @@ describe("NativeRpcProvider", () => {
     ["malformed calldata", { data: "0x123" }],
   ])("rejects %s before any RPC call", async (_label, changes) => {
     const client = clientFor({ eth_call: "0x", eth_estimateGas: "0x5208" });
-    const provider = createNativeRpcProvider({ client });
+    const provider = createNativeRpcProvider({ client, mode: "MOCK" });
     const result = await evaluateProviderAdapter(provider, {
       runId: prepared.runId,
       intent,
@@ -635,7 +639,7 @@ describe("NativeRpcProvider", () => {
 
   it("keeps the exact prepared transaction including value and extra RPC fields", async () => {
     const client = clientFor({ eth_call: "0x", eth_estimateGas: "0x5208" });
-    const provider = createNativeRpcProvider({ client });
+    const provider = createNativeRpcProvider({ client, mode: "MOCK" });
     const payload = {
       ...prepared.unsignedTransaction.payload,
       value: "0x1",
@@ -668,7 +672,7 @@ describe("NativeRpcProvider", () => {
         rpcCode: -32602,
       }),
     });
-    const provider = createNativeRpcProvider({ client });
+    const provider = createNativeRpcProvider({ client, mode: "MOCK" });
     const result = await evaluateProviderAdapter(provider, {
       runId: prepared.runId,
       intent,
@@ -696,7 +700,7 @@ describe("NativeRpcProvider", () => {
       eth_call: "0x",
       eth_estimateGas: "0x5208",
     });
-    const provider = createNativeRpcProvider({ client });
+    const provider = createNativeRpcProvider({ client, mode: "MOCK" });
     const result = await evaluateProviderAdapter(provider, {
       runId: prepared.runId,
       intent,
@@ -713,7 +717,7 @@ describe("NativeRpcProvider", () => {
 
   it("rejects malformed gas quantity as incomplete evidence", async () => {
     const client = clientFor({ eth_call: "0x", eth_estimateGas: "21000" });
-    const provider = createNativeRpcProvider({ client });
+    const provider = createNativeRpcProvider({ client, mode: "MOCK" });
     const result = await evaluateProviderAdapter(provider, {
       runId: prepared.runId,
       intent,
@@ -733,6 +737,7 @@ describe("NativeRpcProvider", () => {
           return new Promise<never>(() => undefined);
         },
       },
+      mode: "MOCK",
       timeoutMs: 1,
     });
     const result = await evaluateProviderAdapter(provider, {
@@ -752,6 +757,7 @@ describe("NativeRpcProvider", () => {
     const client = clientFor({ eth_call: "0x", eth_estimateGas: "0x5208" });
     const provider = createNativeRpcProvider({
       client,
+      mode: "MOCK",
       signal: controller.signal,
     });
     const result = await evaluateProviderAdapter(provider, {
@@ -799,7 +805,7 @@ describe("NativeRpcProvider", () => {
   });
   it("never invokes raw RPC when supports rejects the requested chain or protocol", () => {
     const client = clientFor({});
-    const provider = createNativeRpcProvider({ client });
+    const provider = createNativeRpcProvider({ client, mode: "MOCK" });
     expect(
       provider.supports({
         intent,
@@ -812,7 +818,10 @@ describe("NativeRpcProvider", () => {
   });
 
   it("does not expose the raw client through the public adapter", () => {
-    const provider = new NativeRpcProvider({ client: clientFor({}) });
+    const provider = new NativeRpcProvider({
+      client: clientFor({}),
+      mode: "MOCK",
+    });
     expect(Object.keys(provider.adapter)).toEqual([
       "providerId",
       "capabilities",
@@ -821,5 +830,106 @@ describe("NativeRpcProvider", () => {
     expect(
       (provider.adapter as unknown as Record<string, unknown>).client,
     ).toBeUndefined();
+  });
+
+  it("requires an explicit mode whenever a client or rpcUrl is supplied", () => {
+    // A silent `MOCK` fallback would label real RPC observations as
+    // `source: mock` / `NOT_REPRODUCIBLE`, so endpoint-backed construction
+    // must fail closed rather than falsify provenance.
+    expect(() => new NativeRpcProvider({ client: clientFor({}) })).toThrow(
+      TypeError,
+    );
+    expect(() =>
+      createNativeRpcProvider({ rpcUrl: "https://rpc.example.invalid" }),
+    ).toThrow(TypeError);
+    expect(
+      new NativeRpcProvider({ client: clientFor({}), mode: "LIVE" }).adapter
+        .providerId,
+    ).toBe(NATIVE_RPC_ARBITRUM_PROVIDER_ID);
+  });
+
+  it("does not copy an injected client's arbitrary error message into evidence", async () => {
+    const leaked =
+      "https://secret-endpoint.invalid/?apikey=SUPERSECRET token=0xdeadbeef";
+    const client = clientFor({
+      eth_chainId: new NativeRpcClientError("NETWORK_FAILURE", leaked),
+    });
+    const provider = createNativeRpcProvider({ client, mode: "LIVE" });
+    const result = await evaluateProviderAdapter(provider, {
+      runId: prepared.runId,
+      intent,
+      chainId: prepared.chainId,
+      protocol: prepared.protocol,
+      input: prepared,
+    });
+
+    const serialized = JSON.stringify(result);
+    expect(serialized).not.toContain("secret-endpoint.invalid");
+    expect(serialized).not.toContain("SUPERSECRET");
+    expect(serialized).not.toContain("0xdeadbeef");
+    expect(result.status).toBe("failed");
+    expect(result.responseEvidence).toMatchObject({
+      kind: "redacted_snapshot",
+      snapshot: {
+        mode: "LIVE",
+        failure: {
+          status: "failed",
+          message: "Native RPC request could not reach the endpoint",
+        },
+      },
+    });
+  });
+
+  it("keeps kind-derived failure text across every client failure kind", async () => {
+    const cases = [
+      ["TIMEOUT", "timeout", "Native RPC request timed out"],
+      ["ABORTED", "unknown", "Native RPC request was aborted"],
+      [
+        "HTTP_FAILURE",
+        "failed",
+        "Native RPC endpoint returned a failing HTTP status",
+      ],
+      [
+        "JSON_PARSE_FAILURE",
+        "unknown",
+        "Native RPC response was not valid JSON",
+      ],
+      [
+        "INVALID_ENVELOPE",
+        "unknown",
+        "Native RPC response envelope was malformed",
+      ],
+      [
+        "ID_MISMATCH",
+        "unknown",
+        "Native RPC response id did not match the request id",
+      ],
+      [
+        "MISSING_RESULT",
+        "unknown",
+        "Native RPC response did not contain a result",
+      ],
+      ["RPC_ERROR", "failed", "Native RPC endpoint returned a JSON-RPC error"],
+    ] as const;
+
+    for (const [kind, status, message] of cases) {
+      const client = clientFor({
+        eth_chainId: new NativeRpcClientError(kind, "attacker controlled text"),
+      });
+      const provider = createNativeRpcProvider({ client, mode: "LIVE" });
+      const result = await evaluateProviderAdapter(provider, {
+        runId: prepared.runId,
+        intent,
+        chainId: prepared.chainId,
+        protocol: prepared.protocol,
+        input: prepared,
+      });
+      expect(result.status).toBe(status);
+      expect(JSON.stringify(result)).not.toContain("attacker controlled text");
+      expect(result.responseEvidence).toMatchObject({
+        kind: "redacted_snapshot",
+        snapshot: { failure: { status, message } },
+      });
+    }
   });
 });

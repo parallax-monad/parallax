@@ -4,6 +4,7 @@ import type { ChainOperationOptions } from "./chain-adapter.js";
 import {
   createNativeRpcClient,
   NativeRpcClientError,
+  type NativeRpcClientFailure,
 } from "./native-rpc-client.js";
 import {
   ARBITRUM_SEPOLIA_CHAIN_ID,
@@ -149,6 +150,18 @@ export class NativeRpcProvider<Intent extends NativeRpcIntent = NativeRpcIntent>
       (!Number.isSafeInteger(options.timeoutMs) || options.timeoutMs <= 0)
     ) {
       throw new TypeError("Native RPC timeoutMs must be a positive integer");
+    }
+    // An endpoint-backed or client-backed provider must never inherit a
+    // default truthfulness mode: a silent `MOCK` fallback would label real
+    // RPC observations as `source: mock` / `NOT_REPRODUCIBLE` and falsify
+    // provenance. The mode remains optional only where no runtime seam exists.
+    if (
+      options.mode === undefined &&
+      (options.client !== undefined || options.rpcUrl !== undefined)
+    ) {
+      throw new TypeError(
+        "Native RPC mode is required for a client or rpcUrl provider",
+      );
     }
     this.mode = options.mode ?? "MOCK";
     this.providerVersion = options.providerVersion ?? "native-rpc-provider-v1";
@@ -729,11 +742,44 @@ function candidate(
   };
 }
 
+/**
+ * Bounded failure text for a client-owned error kind.
+ *
+ * `NativeRpcClientError` is public, so an injected client can throw one with an
+ * arbitrary message. The message is therefore never copied across the Provider
+ * boundary; only this fixed, kind-derived text may reach a redacted snapshot.
+ * Classification still keys on `kind` and `rpcCode`, so no signal is lost.
+ */
+function boundedClientFailureMessage(kind: NativeRpcClientFailure): string {
+  switch (kind) {
+    case "TIMEOUT":
+      return "Native RPC request timed out";
+    case "ABORTED":
+      return "Native RPC request was aborted";
+    case "HTTP_FAILURE":
+      return "Native RPC endpoint returned a failing HTTP status";
+    case "NETWORK_FAILURE":
+      return "Native RPC request could not reach the endpoint";
+    case "JSON_PARSE_FAILURE":
+      return "Native RPC response was not valid JSON";
+    case "INVALID_ENVELOPE":
+      return "Native RPC response envelope was malformed";
+    case "ID_MISMATCH":
+      return "Native RPC response id did not match the request id";
+    case "RPC_ERROR":
+      return "Native RPC endpoint returned a JSON-RPC error";
+    case "MISSING_RESULT":
+      return "Native RPC response did not contain a result";
+  }
+}
+
 function classifyRpcFailure(error: unknown): ClassifiedRpcFailure {
   const candidate = error as RpcError | undefined;
+  // Only bounded text ever leaves this function. An injected client's raw
+  // `error.message` may contain an endpoint URL, credential, or request data.
   const message =
     error instanceof NativeRpcClientError
-      ? error.message
+      ? boundedClientFailureMessage(error.kind)
       : "Native RPC request failed";
   if (error instanceof NativeRpcClientError) {
     if (error.kind === "TIMEOUT")
@@ -760,6 +806,10 @@ function classifyRpcFailure(error: unknown): ClassifiedRpcFailure {
   if (candidate?.rpcCode === -32602) {
     return { status: "unknown", message, retryable: false, rpcCode: -32602 };
   }
+  // A non-client error reaches this classifier only from an injected client, so
+  // its message is inspected for semantics but never copied out: every return
+  // above and below emits the bounded `message` derived from `kind` or a fixed
+  // fallback. Inspecting text is not leaking it.
   if (
     /invalid (?:hex|quantity)|execution reverted|revert/i.test(
       error instanceof Error ? error.message : "",
@@ -772,10 +822,7 @@ function classifyRpcFailure(error: unknown): ClassifiedRpcFailure {
       rpcCode: candidate?.rpcCode,
     };
   }
-  if (
-    candidate?.name === "AbortError" ||
-    /timeout|timed out/i.test(error instanceof Error ? error.message : "")
-  ) {
+  if (candidate?.name === "AbortError") {
     return { status: "timeout", message, retryable: true };
   }
   return {
