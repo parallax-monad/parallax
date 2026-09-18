@@ -308,4 +308,100 @@ describe("CamelotV3ProtocolAdapter", () => {
       );
     });
   });
+
+  it("binds calldata protection to a caller-declared boundary that differs from the 99% floor", async () => {
+    const rpcClient: ArbitrumRpcClient = {
+      async request() {
+        return quoteResponse(2n * 10n ** 18n);
+      },
+    };
+    const adapter = new CamelotV3ProtocolAdapter({
+      rpcClient,
+      tokenOutDecimals: 18,
+    });
+    // Deliberately NOT the 99% floor (1.98) so the old hardcoded value fails.
+    const declaredMinimumAtomic = "1750000000000000000";
+    const protectedIntent = {
+      ...intent,
+      amountInAtomic: "1000000000000000",
+      tokenOut: { kind: "erc20" as const, address: CAMELOT_SEPOLIA_USDC },
+      economicBoundary: {
+        availability: "available" as const,
+        minimumReceivedAtomic: declaredMinimumAtomic,
+        source: "user_declared" as const,
+      },
+    };
+
+    const blockContext = { blockNumber: "42" };
+    const quote = await adapter.quote(protectedIntent, { blockContext });
+    const transaction = await adapter.buildTransaction(protectedIntent, {
+      blockContext,
+      quote,
+    });
+
+    const floorAt99Percent = (2n * 10n ** 18n * 99n) / 100n;
+    const encoded = calldataWord(transaction.payload.data, 5);
+    expect(encoded).toBe(
+      BigInt(declaredMinimumAtomic).toString(16).padStart(64, "0"),
+    );
+    expect(encoded).not.toBe(floorAt99Percent.toString(16).padStart(64, "0"));
+  });
+
+  it("keeps the derived 99% floor truthful when no boundary was supplied", async () => {
+    const rpcClient: ArbitrumRpcClient = {
+      async request() {
+        return quoteResponse(2n * 10n ** 18n);
+      },
+    };
+    const adapter = new CamelotV3ProtocolAdapter({
+      rpcClient,
+      tokenOutDecimals: 18,
+    });
+    const derivedIntent = {
+      ...intent,
+      amountInAtomic: "1000000000000000",
+      tokenOut: { kind: "erc20" as const, address: CAMELOT_SEPOLIA_USDC },
+    };
+
+    const blockContext = { blockNumber: "42" };
+    const quote = await adapter.quote(derivedIntent, { blockContext });
+    const transaction = await adapter.buildTransaction(derivedIntent, {
+      blockContext,
+      quote,
+    });
+
+    expect(calldataWord(transaction.payload.data, 5)).toBe(
+      ((2n * 10n ** 18n * 99n) / 100n).toString(16).padStart(64, "0"),
+    );
+    expect(adapter.protocolId).toBe(CAMELOT_V3_PROTOCOL_ID);
+  });
+
+  it("preserves an explicit recipient when the sender is different", async () => {
+    const adapter = new CamelotV3ProtocolAdapter({
+      rpcClient: {
+        request: async () => quoteResponse(2n * 10n ** 18n),
+      },
+      tokenOutDecimals: 18,
+    });
+    const recipient = "0x2222222222222222222222222222222222222222";
+    const splitIntent = {
+      ...intent,
+      recipient,
+      recipientSource: "explicit" as const,
+      amountInAtomic: "1000000000000000",
+      tokenOut: { kind: "erc20" as const, address: CAMELOT_SEPOLIA_USDC },
+    };
+
+    const blockContext = { blockNumber: "42" };
+    const quote = await adapter.quote(splitIntent, { blockContext });
+    const transaction = await adapter.buildTransaction(splitIntent, {
+      blockContext,
+      quote,
+    });
+
+    expect(calldataWord(transaction.payload.data, 2)).toBe(
+      recipient.slice(2).padStart(64, "0"),
+    );
+    expect(transaction.payload.from).toBe(intent.sender);
+  });
 });

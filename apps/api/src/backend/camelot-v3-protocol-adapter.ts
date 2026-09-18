@@ -229,7 +229,7 @@ export class CamelotV3ProtocolAdapter
     }
     const amountOut = quote.amountOut;
     const amountIn = parseAtomic(intent.amountInAtomic, "amountInAtomic");
-    const amountOutMinimum = (amountOut * 99n) / 100n;
+    const amountOutMinimum = transactionProtection(intent, amountOut);
     const deadline = BigInt(Math.floor(Date.now() / 1000) + 300);
     const data = encodeWords(ROUTER_EXACT_INPUT_SINGLE_SELECTOR, [
       protocolToken(intent.tokenIn),
@@ -383,6 +383,31 @@ function readTransactionQuote(
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/**
+ * Resolves the exact `amountOutMinimum` encoded into the prepared Camelot
+ * calldata, so the Transaction Protection reported through Evidence/API and
+ * the Transaction Protection of the prepared unsigned transaction share one
+ * source of truth.
+ *
+ * A caller-declared boundary is protocol Transaction Protection (#70), so the
+ * canonical atomic amount is bound verbatim with no float or percentage
+ * reinterpretation. Only when no boundary was supplied does the adapter fall
+ * back to a protocol-side derived floor of the quote output.
+ */
+function transactionProtection(
+  intent: NormalizedSwapIntent,
+  quoteAmountOut: bigint,
+): bigint {
+  const boundary = intent.economicBoundary;
+  if (boundary.availability === "available") {
+    return parseAtomic(
+      boundary.minimumReceivedAtomic,
+      "economicBoundary.minimumReceivedAtomic",
+    );
+  }
+  return (quoteAmountOut * 99n) / 100n;
 }
 
 function quantity(value: bigint): string {
