@@ -46,6 +46,7 @@ function verification(value: QuoteContext): CandidateVerification {
     verificationTime: "2026-09-17T00:00:01Z",
     provenance: "provider:v1",
     checkedScope: ["quote", "prepared transaction", "simulation", "risk"],
+    constraintOutcomes: [],
     isReplay: false,
     isMock: false,
     actionGateVerified: true,
@@ -141,6 +142,24 @@ describe("bounded selected-target-output solver", () => {
       amountOutAtomic: "4812",
       evaluations: 1,
     });
+  });
+
+  it("keeps malformed child verification proposed without throwing", async () => {
+    const result = await solveSelectedTargetOutput(
+      input(async (amount) => {
+        const value = quote(amount, "4812");
+        return {
+          status: "QUOTED",
+          evidenceState: "VERIFIED",
+          quote: value,
+          verification: {
+            ...verification(value),
+            constraintOutcomes: [null],
+          } as unknown as CandidateVerification,
+        };
+      }),
+    );
+    expect(result.status).toBe("PROPOSED");
   });
 
   it.each([

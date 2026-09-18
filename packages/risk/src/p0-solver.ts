@@ -1,5 +1,19 @@
 import type { EvidenceState, QuoteContext } from "./p0-diagnosis.js";
 
+export type ChildConstraintOutcome = {
+  declarationId: string;
+  name: "maxPriceImpact" | "minEffectiveRate" | "maxTotalCost" | "maxGas";
+  status: "PASS" | "FAIL" | "UNKNOWN";
+  childRunId: string;
+  candidateQuoteId: string;
+};
+
+export type ChildTransactionProtectionOutcome = {
+  status: "PASS" | "FAIL" | "UNKNOWN";
+  childRunId: string;
+  candidateQuoteId: string;
+};
+
 export type CandidateVerification = {
   preparedUnsignedTxFingerprint: string;
   preparedAmountInAtomic: string;
@@ -15,6 +29,8 @@ export type CandidateVerification = {
   verificationTime: string;
   provenance: string;
   checkedScope: readonly string[];
+  constraintOutcomes: readonly ChildConstraintOutcome[];
+  transactionProtectionOutcome?: ChildTransactionProtectionOutcome;
   isReplay: boolean;
   isMock: boolean;
   actionGateVerified: boolean;
@@ -33,6 +49,10 @@ export type CandidateEvaluation =
 export type VerifiedCandidate = {
   status: "VERIFIED";
   selectedQuoteId: string;
+  chainId: number;
+  protocol: string;
+  tokenIn: string;
+  tokenOut: string;
   amountInAtomic: string;
   amountOutAtomic: string;
   quoteId: string;
@@ -125,6 +145,13 @@ export async function solveSelectedTargetOutput(
     } catch {
       return { status: "UNKNOWN", reason: "EVALUATOR_FAILURE", evaluations };
     }
+    if (!record(result)) {
+      return {
+        status: "UNKNOWN",
+        reason: "EVIDENCE_NOT_VERIFIED",
+        evaluations,
+      };
+    }
     if (result.status === "QUOTE_FAILED") {
       return { status: "UNKNOWN", reason: "QUOTE_FAILED", evaluations };
     }
@@ -167,6 +194,10 @@ export async function solveSelectedTargetOutput(
         candidate: {
           status: "VERIFIED",
           selectedQuoteId: input.selected.quoteId,
+          chainId: result.quote.chainId,
+          protocol: result.quote.protocol,
+          tokenIn: result.quote.tokenIn,
+          tokenOut: result.quote.tokenOut,
           amountInAtomic: candidate.toString(),
           amountOutAtomic: result.quote.amountOutAtomic,
           quoteId: result.quote.quoteId,
@@ -184,8 +215,20 @@ export async function solveSelectedTargetOutput(
   return { status: "NO_VALID_CANDIDATE", evaluations: input.maxEvaluations };
 }
 
-function atomic(value: string): boolean {
-  return /^(0|[1-9]\d*)$/.test(value);
+function atomic(value: unknown): value is string {
+  return typeof value === "string" && /^(0|[1-9]\d*)$/.test(value);
+}
+
+function record(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function nonempty(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+function validTime(value: unknown): value is string {
+  return nonempty(value) && !Number.isNaN(Date.parse(value));
 }
 
 function validQuote(
@@ -194,17 +237,20 @@ function validQuote(
   candidate: bigint,
 ): boolean {
   return (
+    record(quote) &&
     selected.chainId === quote.chainId &&
     selected.protocol === quote.protocol &&
+    nonempty(quote.tokenIn) &&
+    nonempty(quote.tokenOut) &&
     selected.tokenIn.toLowerCase() === quote.tokenIn.toLowerCase() &&
     selected.tokenOut.toLowerCase() === quote.tokenOut.toLowerCase() &&
     quote.amountInAtomic === candidate.toString() &&
     atomic(quote.amountOutAtomic) &&
     atomic(quote.blockNumber) &&
     BigInt(quote.blockNumber) >= BigInt(selected.blockNumber) &&
-    quote.quoteId.trim() !== "" &&
-    quote.provenance.trim() !== "" &&
-    !Number.isNaN(Date.parse(quote.observedAt)) &&
+    nonempty(quote.quoteId) &&
+    nonempty(quote.provenance) &&
+    validTime(quote.observedAt) &&
     Date.parse(quote.observedAt) >= Date.parse(selected.observedAt)
   );
 }
@@ -215,13 +261,13 @@ function validVerification(
   proof: CandidateVerification | undefined,
 ): proof is CandidateVerification {
   return (
-    !!proof &&
-    proof.preparedUnsignedTxFingerprint.trim() !== "" &&
+    record(proof) &&
+    nonempty(proof.preparedUnsignedTxFingerprint) &&
     proof.preparedAmountInAtomic === quote.amountInAtomic &&
     proof.providerStatus === "SUCCESS" &&
     proof.riskVerdict === "PROCEED" &&
     proof.parentRunId === parentRunId &&
-    proof.childRunId.trim() !== "" &&
+    nonempty(proof.childRunId) &&
     proof.childRunId !== parentRunId &&
     proof.childStatus === "completed" &&
     proof.childAmountInAtomic === quote.amountInAtomic &&
@@ -230,11 +276,34 @@ function validVerification(
     proof.childQuoteId === quote.quoteId &&
     atomic(proof.verificationBlock) &&
     proof.verificationBlock === quote.blockNumber &&
-    !Number.isNaN(Date.parse(proof.verificationTime)) &&
+    validTime(proof.verificationTime) &&
     Date.parse(proof.verificationTime) >= Date.parse(quote.observedAt) &&
-    proof.provenance.trim() !== "" &&
+    nonempty(proof.provenance) &&
+    Array.isArray(proof.checkedScope) &&
     proof.checkedScope.length > 0 &&
-    proof.checkedScope.every((item) => item.trim() !== "") &&
+    proof.checkedScope.every(nonempty) &&
+    Array.isArray(proof.constraintOutcomes) &&
+    proof.constraintOutcomes.every(
+      (item) =>
+        record(item) &&
+        nonempty(item.declarationId) &&
+        [
+          "maxPriceImpact",
+          "minEffectiveRate",
+          "maxTotalCost",
+          "maxGas",
+        ].includes(item.name as string) &&
+        item.childRunId === proof.childRunId &&
+        item.candidateQuoteId === quote.quoteId &&
+        ["PASS", "FAIL", "UNKNOWN"].includes(item.status as string),
+    ) &&
+    (proof.transactionProtectionOutcome === undefined ||
+      (record(proof.transactionProtectionOutcome) &&
+        proof.transactionProtectionOutcome.childRunId === proof.childRunId &&
+        proof.transactionProtectionOutcome.candidateQuoteId === quote.quoteId &&
+        ["PASS", "FAIL", "UNKNOWN"].includes(
+          proof.transactionProtectionOutcome.status,
+        ))) &&
     !proof.isReplay &&
     !proof.isMock &&
     proof.actionGateVerified

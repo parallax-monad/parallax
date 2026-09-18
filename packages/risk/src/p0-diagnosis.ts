@@ -88,12 +88,26 @@ export function compareQuoteFidelity(
   };
 }
 
-function atomic(value: string): boolean {
-  return /^(0|[1-9]\d*)$/.test(value);
+function atomic(value: unknown): value is string {
+  return typeof value === "string" && /^(0|[1-9]\d*)$/.test(value);
 }
 
-function validContext(value: QuoteContext): boolean {
+function record(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function nonempty(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+function validTime(value: unknown): value is string {
+  return nonempty(value) && !Number.isNaN(Date.parse(value));
+}
+
+function validContext(value: unknown): value is QuoteContext {
+  if (!record(value)) return false;
   return (
+    typeof value.chainId === "number" &&
     Number.isSafeInteger(value.chainId) &&
     value.chainId > 0 &&
     [
@@ -104,11 +118,11 @@ function validContext(value: QuoteContext): boolean {
       value.provenance,
       value.blockNumber,
       value.observedAt,
-    ].every((part) => part.trim().length > 0) &&
+    ].every(nonempty) &&
     atomic(value.blockNumber) &&
     atomic(value.amountInAtomic) &&
     atomic(value.amountOutAtomic) &&
-    !Number.isNaN(Date.parse(value.observedAt))
+    validTime(value.observedAt)
   );
 }
 
@@ -348,27 +362,13 @@ export function evaluateP0Risk(
   ) {
     const candidate = input.verifiedRemediation;
     const relevant =
-      candidate?.status === "VERIFIED" &&
-      input.selectedQuote !== undefined &&
-      candidate.selectedQuoteId === input.selectedQuote.quoteId &&
-      atomic(candidate.amountInAtomic) &&
-      atomic(candidate.amountOutAtomic) &&
-      atomic(candidate.quoteBlockNumber) &&
-      BigInt(candidate.quoteBlockNumber) >=
-        BigInt(input.selectedQuote.blockNumber) &&
-      candidate.amountInAtomic !== input.selectedQuote.amountInAtomic &&
-      BigInt(candidate.amountOutAtomic) >=
-        BigInt(input.selectedQuote.amountOutAtomic) &&
+      candidateContextBound(candidate, input.selectedQuote) &&
       verificationBound(candidate) &&
       constraints
         .filter((item) => item.status === "FAIL")
-        .every((item) =>
-          candidate.verification.checkedScope.includes(
-            `constraint:${item.name}`,
-          ),
-        ) &&
+        .every((item) => childConstraintPassed(candidate.verification, item)) &&
       (base.verdict !== "ADJUST" ||
-        candidate.verification.checkedScope.includes("transactionProtection"));
+        childTransactionProtectionPassed(candidate.verification));
     verdict = relevant && base.verdict !== "STOP" ? "ADJUST" : "STOP";
   } else {
     verdict = "PROCEED";
@@ -390,8 +390,68 @@ export function evaluateP0Risk(
  * context is revalidated here so a structurally supplied record cannot claim a
  * block or time that its own verification does not actually match.
  */
+function candidateContextBound(
+  candidate: unknown,
+  selected: QuoteContext | undefined,
+): candidate is VerifiedCandidate {
+  if (
+    !record(candidate) ||
+    candidate.status !== "VERIFIED" ||
+    !validContext(selected)
+  )
+    return false;
+  return (
+    candidate.selectedQuoteId === selected.quoteId &&
+    candidate.chainId === selected.chainId &&
+    candidate.protocol === selected.protocol &&
+    nonempty(candidate.protocol) &&
+    nonempty(candidate.tokenIn) &&
+    nonempty(candidate.tokenOut) &&
+    candidate.tokenIn.toLowerCase() === selected.tokenIn.toLowerCase() &&
+    candidate.tokenOut.toLowerCase() === selected.tokenOut.toLowerCase() &&
+    nonempty(candidate.quoteId) &&
+    atomic(candidate.amountInAtomic) &&
+    BigInt(candidate.amountInAtomic) > 0n &&
+    candidate.amountInAtomic !== selected.amountInAtomic &&
+    atomic(candidate.amountOutAtomic) &&
+    BigInt(candidate.amountOutAtomic) >= BigInt(selected.amountOutAtomic) &&
+    atomic(candidate.quoteBlockNumber) &&
+    BigInt(candidate.quoteBlockNumber) >= BigInt(selected.blockNumber) &&
+    validTime(candidate.quoteObservedAt) &&
+    Date.parse(candidate.quoteObservedAt) >= Date.parse(selected.observedAt)
+  );
+}
+
+function childConstraintPassed(
+  proof: VerifiedCandidate["verification"],
+  failed: ConstraintEvaluation,
+): boolean {
+  const outcomes = proof.constraintOutcomes.filter(
+    (item) =>
+      item.declarationId === failed.declarationId && item.name === failed.name,
+  );
+  return (
+    outcomes.length === 1 &&
+    outcomes[0]?.status === "PASS" &&
+    outcomes[0].childRunId === proof.childRunId &&
+    outcomes[0].candidateQuoteId === proof.childQuoteId
+  );
+}
+
+function childTransactionProtectionPassed(
+  proof: VerifiedCandidate["verification"],
+): boolean {
+  const outcome = proof.transactionProtectionOutcome;
+  return (
+    outcome?.status === "PASS" &&
+    outcome.childRunId === proof.childRunId &&
+    outcome.candidateQuoteId === proof.childQuoteId
+  );
+}
+
 function verificationBound(candidate: VerifiedCandidate): boolean {
   const proof = candidate.verification;
+  if (!record(proof)) return false;
   if (
     !atomic(candidate.amountOutAtomic) ||
     !atomic(proof.childAmountOutAtomic)
@@ -399,17 +459,19 @@ function verificationBound(candidate: VerifiedCandidate): boolean {
     return false;
   }
   const quoteTime = Date.parse(candidate.quoteObservedAt);
-  const verificationTime = Date.parse(proof.verificationTime);
+  const verificationTime = validTime(proof.verificationTime)
+    ? Date.parse(proof.verificationTime)
+    : Number.NaN;
   return (
-    candidate.quoteId.trim() !== "" &&
+    nonempty(candidate.quoteId) &&
     atomic(candidate.quoteBlockNumber) &&
     !Number.isNaN(quoteTime) &&
-    proof.preparedUnsignedTxFingerprint.trim() !== "" &&
+    nonempty(proof.preparedUnsignedTxFingerprint) &&
     proof.preparedAmountInAtomic === candidate.amountInAtomic &&
     proof.providerStatus === "SUCCESS" &&
     proof.riskVerdict === "PROCEED" &&
-    proof.parentRunId.trim() !== "" &&
-    proof.childRunId.trim() !== "" &&
+    nonempty(proof.parentRunId) &&
+    nonempty(proof.childRunId) &&
     proof.childRunId !== proof.parentRunId &&
     proof.childStatus === "completed" &&
     proof.childAmountInAtomic === candidate.amountInAtomic &&
@@ -419,11 +481,35 @@ function verificationBound(candidate: VerifiedCandidate): boolean {
     proof.verificationBlock === candidate.quoteBlockNumber &&
     !Number.isNaN(verificationTime) &&
     verificationTime >= quoteTime &&
-    proof.provenance.trim() !== "" &&
+    nonempty(proof.provenance) &&
+    Array.isArray(proof.checkedScope) &&
     proof.checkedScope.length > 0 &&
-    proof.checkedScope.every((item) => item.trim() !== "") &&
-    !proof.isReplay &&
-    !proof.isMock &&
-    proof.actionGateVerified
+    proof.checkedScope.every(nonempty) &&
+    Array.isArray(proof.constraintOutcomes) &&
+    proof.constraintOutcomes.every(
+      (item: unknown) =>
+        record(item) &&
+        nonempty(item.declarationId) &&
+        [
+          "maxPriceImpact",
+          "minEffectiveRate",
+          "maxTotalCost",
+          "maxGas",
+        ].includes(item.name as string) &&
+        ["PASS", "FAIL", "UNKNOWN"].includes(item.status as string) &&
+        item.childRunId === proof.childRunId &&
+        item.candidateQuoteId === candidate.quoteId,
+    ) &&
+    (proof.transactionProtectionOutcome === undefined ||
+      (record(proof.transactionProtectionOutcome) &&
+        ["PASS", "FAIL", "UNKNOWN"].includes(
+          proof.transactionProtectionOutcome.status as string,
+        ) &&
+        proof.transactionProtectionOutcome.childRunId === proof.childRunId &&
+        proof.transactionProtectionOutcome.candidateQuoteId ===
+          candidate.quoteId)) &&
+    proof.isReplay === false &&
+    proof.isMock === false &&
+    proof.actionGateVerified === true
   );
 }

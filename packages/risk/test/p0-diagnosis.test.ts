@@ -459,6 +459,10 @@ describe("P0 verdict gate", () => {
   const verified: VerifiedCandidate = {
     status: "VERIFIED",
     selectedQuoteId: "selected-quote",
+    chainId: 42161,
+    protocol: "camelot-v3",
+    tokenIn: "0xabc",
+    tokenOut: "0xdef",
     amountInAtomic: "10300",
     amountOutAtomic: "4820",
     quoteId: "candidate-quote",
@@ -479,6 +483,15 @@ describe("P0 verdict gate", () => {
       verificationTime: "2026-09-17T00:00:02Z",
       provenance: "provider:v1",
       checkedScope: ["constraint:maxPriceImpact"],
+      constraintOutcomes: [
+        {
+          declarationId: "p",
+          name: "maxPriceImpact",
+          status: "PASS",
+          childRunId: "child",
+          candidateQuoteId: "candidate-quote",
+        },
+      ],
       isReplay: false,
       isMock: false,
       actionGateVerified: true,
@@ -815,5 +828,226 @@ describe("P0 verdict gate", () => {
         verifiedRemediation: forged,
       }).verdict,
     ).toBe("STOP");
+  });
+
+  it.each([
+    ["chain", { chainId: 1 }],
+    ["protocol", { protocol: "other" }],
+    ["token in", { tokenIn: "other" }],
+    ["token out", { tokenOut: "other" }],
+    ["selected quote", { selectedQuoteId: "other" }],
+    ["zero input", { amountInAtomic: "0" }],
+    ["malformed input", { amountInAtomic: "1.5" }],
+    ["older quote time", { quoteObservedAt: "2026-09-16T23:59:59Z" }],
+  ])("rejects candidate %s mismatch", (_label, change) => {
+    expect(
+      evaluateP0Risk(genericEvidence(), {
+        ...gateInput,
+        verifiedRemediation: { ...verified, ...change },
+      }).verdict,
+    ).toBe("STOP");
+  });
+
+  it.each([
+    [
+      "different declaration",
+      [
+        {
+          declarationId: "looser",
+          name: "maxPriceImpact",
+          status: "PASS",
+          childRunId: "child",
+          candidateQuoteId: "candidate-quote",
+        },
+      ],
+    ],
+    ["missing declaration", []],
+    [
+      "unknown",
+      [
+        {
+          declarationId: "p",
+          name: "maxPriceImpact",
+          status: "UNKNOWN",
+          childRunId: "child",
+          candidateQuoteId: "candidate-quote",
+        },
+      ],
+    ],
+    [
+      "failed",
+      [
+        {
+          declarationId: "p",
+          name: "maxPriceImpact",
+          status: "FAIL",
+          childRunId: "child",
+          candidateQuoteId: "candidate-quote",
+        },
+      ],
+    ],
+    [
+      "other child",
+      [
+        {
+          declarationId: "p",
+          name: "maxPriceImpact",
+          status: "PASS",
+          childRunId: "other",
+          candidateQuoteId: "candidate-quote",
+        },
+      ],
+    ],
+    [
+      "other quote",
+      [
+        {
+          declarationId: "p",
+          name: "maxPriceImpact",
+          status: "PASS",
+          childRunId: "child",
+          candidateQuoteId: "other",
+        },
+      ],
+    ],
+  ] as const)("requires exact child PASS for %s", (_label, outcomes) => {
+    const candidate = structuredClone(verified);
+    candidate.verification.constraintOutcomes = outcomes;
+    expect(
+      evaluateP0Risk(genericEvidence(), {
+        ...gateInput,
+        verifiedRemediation: candidate,
+      }).verdict,
+    ).toBe("STOP");
+  });
+
+  it("binds only the failed declaration when names repeat", () => {
+    const input = {
+      ...gateInput,
+      constraints: [
+        { ...constraints[0], declarationId: "loose", numerator: "60" },
+        { ...constraints[0], declarationId: "p", numerator: "50" },
+      ],
+    };
+    expect(
+      evaluateP0Risk(genericEvidence(), {
+        ...input,
+        verifiedRemediation: verified,
+      }).verdict,
+    ).toBe("ADJUST");
+    const wrong = structuredClone(verified);
+    wrong.verification.constraintOutcomes = [
+      {
+        ...verified.verification.constraintOutcomes[0],
+        declarationId: "loose",
+      },
+    ];
+    expect(
+      evaluateP0Risk(genericEvidence(), {
+        ...input,
+        verifiedRemediation: wrong,
+      }).verdict,
+    ).toBe("STOP");
+  });
+
+  it.each(["PASS", "FAIL", "UNKNOWN", "MISSING"] as const)(
+    "requires transaction protection child %s to pass",
+    (status) => {
+      const evidence = genericEvidence();
+      evidence.intent.minimumReceived = "4800";
+      evidence.intent.minimumReceivedSource = "user_declared";
+      const candidate = structuredClone(verified);
+      candidate.verification.checkedScope = ["transactionProtection"];
+      candidate.verification.constraintOutcomes = [];
+      candidate.verification.transactionProtectionOutcome =
+        status === "MISSING"
+          ? undefined
+          : {
+              status,
+              childRunId: "child",
+              candidateQuoteId: "candidate-quote",
+            };
+      expect(
+        evaluateP0Risk(evidence, {
+          selectedQuote: selected,
+          currentQuote: current,
+          evidenceState: "VERIFIED",
+          verifiedRemediation: candidate,
+        }).verdict,
+      ).toBe(status === "PASS" ? "ADJUST" : "STOP");
+    },
+  );
+
+  it("fails closed without throwing on malformed structural candidates", () => {
+    const malformed: unknown[] = [
+      { ...verified, verification: undefined },
+      { ...verified, verification: null },
+      {
+        ...verified,
+        verification: { ...verified.verification, childAmountOutAtomic: null },
+      },
+      {
+        ...verified,
+        verification: { ...verified.verification, childAmountOutAtomic: {} },
+      },
+      {
+        ...verified,
+        verification: { ...verified.verification, checkedScope: null },
+      },
+      {
+        ...verified,
+        verification: {
+          ...verified.verification,
+          checkedScope: "constraint:maxPriceImpact",
+        },
+      },
+      {
+        ...verified,
+        verification: { ...verified.verification, constraintOutcomes: null },
+      },
+      {
+        ...verified,
+        verification: { ...verified.verification, constraintOutcomes: [null] },
+      },
+      {
+        ...verified,
+        verification: {
+          ...verified.verification,
+          constraintOutcomes: [{ name: "maxPriceImpact", status: "PASS" }],
+        },
+      },
+      {
+        ...verified,
+        verification: {
+          ...verified.verification,
+          transactionProtectionOutcome: null,
+        },
+      },
+      { ...verified, quoteId: null },
+      { ...verified, quoteObservedAt: null },
+      { ...verified, amountOutAtomic: "NaN" },
+      {
+        ...verified,
+        verification: { ...verified.verification, verificationTime: {} },
+      },
+      {
+        ...verified,
+        verification: { ...verified.verification, parentRunId: {} },
+      },
+    ];
+    for (const value of malformed) {
+      expect(() =>
+        evaluateP0Risk(genericEvidence(), {
+          ...gateInput,
+          verifiedRemediation: value as VerifiedCandidate,
+        }),
+      ).not.toThrow();
+      expect(
+        evaluateP0Risk(genericEvidence(), {
+          ...gateInput,
+          verifiedRemediation: value as VerifiedCandidate,
+        }).verdict,
+      ).toBe("STOP");
+    }
   });
 });
