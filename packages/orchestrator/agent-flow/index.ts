@@ -180,6 +180,23 @@ export class KuruLiveAgentFlow {
 }
 
 /**
+ * Projects provider-neutral Evidence through the existing public RunResult
+ * boundary. Backend compositions use this when they do not supply a custom
+ * Core/Decision implementation; provider-specific payloads remain nested in
+ * `providerEvidence` and never become a decision input contract.
+ */
+export function projectGenericEvidenceToRunResult(
+  runId: string,
+  intent: NormalizedSwapIntent,
+  evidence: GenericEvidence,
+): RunResult {
+  return runResultSchema.parse({
+    ...buildRunResult(runId, intent, evidence, evaluateEvidence(evidence)),
+    providerEvidence: evidence,
+  });
+}
+
+/**
  * Backend flow for the pre-check quote; it intentionally stops before Action.
  *
  * The Quote boundary stays Kuru-specific for this Work Package: Protocol

@@ -435,19 +435,6 @@ describe("Arbitrum production composition skeleton", () => {
       runtime,
       runStore: new InMemoryRunStore(),
       rpcClient,
-      core: {
-        evaluate: async (_input, context) => {
-          const pipelineContext = context as {
-            readonly providerResult: { readonly status: string };
-            readonly providerEvidence?: unknown;
-          };
-          return {
-            providerStatus: pipelineContext.providerResult.status,
-            evidence: pipelineContext.providerEvidence,
-          };
-        },
-      },
-      decision: { decide: async (input) => input },
     });
     const pipeline = new BackendPipeline({ runtime: composition });
     const execution = await pipeline.executeNormalized(
@@ -476,6 +463,13 @@ describe("Arbitrum production composition skeleton", () => {
       },
       provenance: { mode: "LIVE", source: "rpc" },
       unknownScope: expect.arrayContaining(["receipt", "simulation"]),
+    });
+    expect(execution.decisionOutput).toMatchObject({
+      status: "completed",
+      verdict: "UNKNOWN",
+      providerEvidence: {
+        provider: { providerId: NATIVE_RPC_ARBITRUM_PROVIDER_ID },
+      },
     });
     expect(execution.unsignedTransaction.payload).toMatchObject({
       to: CAMELOT_SEPOLIA_ROUTER,

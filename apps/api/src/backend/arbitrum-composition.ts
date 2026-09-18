@@ -2,9 +2,12 @@ import {
   ARBITRUM_SEPOLIA_CHAIN_ID,
   CAMELOT_V3_PROTOCOL_ID,
   type CheckSwapRequest,
+  type GenericEvidence,
+  genericEvidenceSchema,
   type NormalizedSwapIntent,
   type QuoteRequest,
 } from "@parallax/contracts";
+import { projectGenericEvidenceToRunResult } from "@parallax/orchestrator/agent-flow";
 import {
   normalizeArbitrumCheckSwapRequest,
   normalizeArbitrumQuoteRequest,
@@ -65,8 +68,8 @@ export type ArbitrumProductionCompositionOptions = {
     ArbitrumNormalizationInput,
     NormalizedSwapIntent
   >;
-  readonly core: CorePort<NormalizedSwapIntent, unknown, unknown>;
-  readonly decision: DecisionPort<unknown, unknown, unknown>;
+  readonly core?: CorePort<NormalizedSwapIntent, unknown, unknown>;
+  readonly decision?: DecisionPort<unknown, unknown, unknown>;
   readonly receiptSigner?: ReceiptSigner;
   readonly receiptAnchorer?: ReceiptAnchorer;
 };
@@ -107,6 +110,11 @@ export type ArbitrumBackendBootstrap = {
 export function createArbitrumProductionComposition(
   options: ArbitrumProductionCompositionOptions,
 ): ArbitrumProductionComposition {
+  if ((options.core === undefined) !== (options.decision === undefined)) {
+    throw new TypeError(
+      "Arbitrum core and decision must be provided together when overriding defaults",
+    );
+  }
   const arbitrumConfig =
     options.runtime.config.arbitrum ??
     ({
@@ -192,6 +200,54 @@ export function createArbitrumProductionComposition(
       });
     });
 
+  const core =
+    options.core ??
+    ({
+      evaluate: (_input: NormalizedSwapIntent, context?: unknown) => {
+        if (
+          context === null ||
+          typeof context !== "object" ||
+          !("providerEvidence" in context)
+        ) {
+          return undefined;
+        }
+        return (context as { readonly providerEvidence?: unknown })
+          .providerEvidence;
+      },
+    } satisfies CorePort<NormalizedSwapIntent, unknown, unknown>);
+  const decision =
+    options.decision ??
+    ({
+      decide: (input: unknown, context?: unknown) => {
+        const parsedEvidence = genericEvidenceSchema.safeParse(input);
+        if (!parsedEvidence.success) {
+          throw new Error(
+            "Arbitrum default decision requires provider-neutral Evidence",
+          );
+        }
+        if (
+          context === null ||
+          typeof context !== "object" ||
+          !("runId" in context) ||
+          !("intent" in context) ||
+          typeof context.runId !== "string"
+        ) {
+          throw new Error(
+            "Arbitrum default decision requires a Backend pipeline context",
+          );
+        }
+        const pipelineContext = context as {
+          readonly runId: string;
+          readonly intent: NormalizedSwapIntent;
+        };
+        return projectGenericEvidenceToRunResult(
+          pipelineContext.runId,
+          pipelineContext.intent,
+          parsedEvidence.data as GenericEvidence,
+        );
+      },
+    } satisfies DecisionPort<unknown, unknown, unknown>);
+
   return createBackendComposition({
     chainRegistry: new ChainRegistry([chainAdapter]),
     protocolRegistry: new ProtocolRegistry([
@@ -205,8 +261,8 @@ export function createArbitrumProductionComposition(
       environment: options.providerEnvironment ?? "production",
     }),
     normalization,
-    core: options.core,
-    decision: options.decision,
+    core,
+    decision,
     runStore: options.runStore,
     receiptSigner: options.receiptSigner,
     receiptAnchorer: options.receiptAnchorer,
