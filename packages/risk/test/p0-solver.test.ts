@@ -270,4 +270,77 @@ describe("bounded selected-target-output solver", () => {
     );
     expect(result.status).toBe("NO_VALID_CANDIDATE");
   });
+
+  it.each([
+    ["empty", ""],
+    ["non-numeric", "abc"],
+    ["negative", "-1"],
+    ["leading zero", "01"],
+    ["fractional", "1.5"],
+    ["non-string", 10100],
+  ] as const)(
+    "fails closed without throwing on a %s selected exact input",
+    async (_label, value) => {
+      const seen: string[] = [];
+      const result = await solveSelectedTargetOutput(
+        input(
+          async (amount) => {
+            seen.push(amount);
+            const evaluated = quote(amount, "4812");
+            return {
+              status: "QUOTED",
+              evidenceState: "VERIFIED",
+              quote: evaluated,
+              verification: verification(evaluated),
+            };
+          },
+          {
+            selected: {
+              ...selected,
+              amountInAtomic: value as unknown as string,
+            },
+          },
+        ),
+      );
+      expect(result).toEqual({
+        status: "UNKNOWN",
+        reason: "EVIDENCE_NOT_VERIFIED",
+        evaluations: 0,
+      });
+      expect(seen).toEqual([]);
+    },
+  );
+
+  it("treats a zero selected exact input as an invalid baseline", async () => {
+    const result = await solveSelectedTargetOutput(
+      input(
+        async (amount) => ({
+          status: "QUOTED",
+          evidenceState: "VERIFIED",
+          quote: quote(amount, "4812"),
+        }),
+        { selected: { ...selected, amountInAtomic: "0" } },
+      ),
+    );
+    expect(result).toEqual({
+      status: "UNKNOWN",
+      reason: "EVIDENCE_NOT_VERIFIED",
+      evaluations: 0,
+    });
+  });
+
+  it("still verifies with a canonical positive selected exact input", async () => {
+    const result = await solveSelectedTargetOutput(
+      input(async (amount) => {
+        const evaluated = quote(amount, "4812");
+        return {
+          status: "QUOTED",
+          evidenceState: "VERIFIED",
+          quote: evaluated,
+          verification: verification(evaluated),
+        };
+      }),
+    );
+    expect(result.status).toBe("VERIFIED");
+  });
 });

@@ -501,12 +501,14 @@ describe("P0 verdict gate", () => {
   it("does not pass a missing baseline or missing constraint evidence", () => {
     expect(
       evaluateP0Risk(genericEvidence(), {
+        parentRunId: "parent",
         currentQuote: current,
         evidenceState: "VERIFIED",
       }).verdict,
     ).toBe("UNKNOWN");
     expect(
       evaluateP0Risk(genericEvidence(), {
+        parentRunId: "parent",
         selectedQuote: selected,
         currentQuote: current,
         evidenceState: "VERIFIED",
@@ -517,6 +519,7 @@ describe("P0 verdict gate", () => {
 
   it("keeps a descriptive degradation separate from a user constraint", () => {
     const result = evaluateP0Risk(genericEvidence(), {
+      parentRunId: "parent",
       selectedQuote: selected,
       currentQuote: current,
       evidenceState: "VERIFIED",
@@ -527,6 +530,7 @@ describe("P0 verdict gate", () => {
 
   it("blocks verified caller constraint violations and provider unknown", () => {
     const input = {
+      parentRunId: "parent",
       selectedQuote: selected,
       currentQuote: current,
       evidenceState: "VERIFIED" as const,
@@ -603,6 +607,13 @@ describe("P0 verdict gate", () => {
       (value: VerifiedCandidate) => ({
         ...value,
         verification: { ...value.verification, parentRunId: "" },
+      }),
+    ],
+    [
+      "a parent Run identity other than the current Run",
+      (value: VerifiedCandidate) => ({
+        ...value,
+        verification: { ...value.verification, parentRunId: "other-parent" },
       }),
     ],
     [
@@ -685,6 +696,7 @@ describe("P0 verdict gate", () => {
   ])("never emits ADJUST from %s", (_label, modify) => {
     expect(
       evaluateP0Risk(genericEvidence(), {
+        parentRunId: "parent",
         selectedQuote: selected,
         currentQuote: current,
         evidenceState: "VERIFIED",
@@ -705,6 +717,7 @@ describe("P0 verdict gate", () => {
   });
 
   const gateInput = {
+    parentRunId: "parent",
     selectedQuote: selected,
     currentQuote: current,
     evidenceState: "VERIFIED" as const,
@@ -800,6 +813,61 @@ describe("P0 verdict gate", () => {
         })),
       }).verdict,
     ).toBe("ADJUST");
+  });
+
+  it("binds the candidate to the current parent Run, not to any parent identity", () => {
+    // Same parent as the current Run: the candidate remains eligible.
+    expect(
+      evaluateP0Risk(genericEvidence(), {
+        ...gateInput,
+        parentRunId: "parent",
+        verifiedRemediation: blocked((value) => value),
+      }).verdict,
+    ).toBe("ADJUST");
+    // A child verified for a different parent Run cannot adjust this Run.
+    expect(
+      evaluateP0Risk(genericEvidence(), {
+        ...gateInput,
+        parentRunId: "other-parent",
+        verifiedRemediation: blocked((value) => value),
+      }).verdict,
+    ).toBe("STOP");
+  });
+
+  it.each([
+    ["empty", ""],
+    ["blank", "   "],
+    ["missing", undefined],
+    ["null", null],
+    ["a number", 7],
+    ["an object", {}],
+  ] as const)(
+    "fails closed without throwing when the expected parent Run identity is %s",
+    (_label, value) => {
+      const input = {
+        ...gateInput,
+        parentRunId: value as unknown as string,
+        verifiedRemediation: blocked((candidate) => candidate),
+      };
+      expect(() => evaluateP0Risk(genericEvidence(), input)).not.toThrow();
+      expect(evaluateP0Risk(genericEvidence(), input).verdict).toBe("STOP");
+    },
+  );
+
+  it("retains the distinct child requirement for the bound current parent Run", () => {
+    expect(
+      evaluateP0Risk(genericEvidence(), {
+        ...gateInput,
+        parentRunId: "parent",
+        verifiedRemediation: blocked((value) => ({
+          ...value,
+          verification: {
+            ...value.verification,
+            childRunId: value.verification.parentRunId,
+          },
+        })),
+      }).verdict,
+    ).toBe("STOP");
   });
 
   it("blocks a structurally supplied candidate that omits the preserved quote context", () => {
@@ -969,6 +1037,7 @@ describe("P0 verdict gate", () => {
             };
       expect(
         evaluateP0Risk(evidence, {
+          parentRunId: "parent",
           selectedQuote: selected,
           currentQuote: current,
           evidenceState: "VERIFIED",

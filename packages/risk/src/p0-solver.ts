@@ -98,6 +98,19 @@ export type SolverInput = {
 export async function solveSelectedTargetOutput(
   input: SolverInput,
 ): Promise<SolverResult> {
+  // The selected exact-input baseline is externally supplied quote evidence and
+  // is the user expectation this exact-input search is measured against. A
+  // malformed or non-positive baseline fails closed through the existing
+  // `UNKNOWN` result rather than the internal invalid-input boundary, so an
+  // adversarial runtime value can neither throw nor reach candidate
+  // verification.
+  if (!validSelectedExactInput(input.selected)) {
+    return {
+      status: "UNKNOWN",
+      reason: "EVIDENCE_NOT_VERIFIED",
+      evaluations: 0,
+    };
+  }
   if (
     ![
       input.selected.amountOutAtomic,
@@ -229,6 +242,18 @@ function nonempty(value: unknown): value is string {
 
 function validTime(value: unknown): value is string {
   return nonempty(value) && !Number.isNaN(Date.parse(value));
+}
+
+/**
+ * The solver is an exact-input search, so the selected baseline must be a
+ * canonical atomic decimal and a valid positive swap input. `atomic` is checked
+ * before any `BigInt` conversion so a non-string or non-canonical runtime value
+ * is rejected without throwing.
+ */
+function validSelectedExactInput(selected: QuoteContext): boolean {
+  return (
+    atomic(selected.amountInAtomic) && BigInt(selected.amountInAtomic) > 0n
+  );
 }
 
 function validQuote(

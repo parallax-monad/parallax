@@ -323,6 +323,13 @@ export function evaluateCause(
 export function evaluateP0Risk(
   evidence: GenericEvidence,
   input: {
+    /**
+     * Trusted identity of the Run this verdict is evaluated for. A verified
+     * remediation is only ever an adjustment to *this* Run, so its child
+     * verification must name exactly this Run as its parent. Callers must pass
+     * the current Run identity, never one taken from the candidate record.
+     */
+    parentRunId: string;
     selectedQuote?: QuoteContext;
     currentQuote?: QuoteContext;
     evidenceState: EvidenceState;
@@ -363,7 +370,7 @@ export function evaluateP0Risk(
     const candidate = input.verifiedRemediation;
     const relevant =
       candidateContextBound(candidate, input.selectedQuote) &&
-      verificationBound(candidate) &&
+      verificationBound(candidate, input.parentRunId) &&
       constraints
         .filter((item) => item.status === "FAIL")
         .every((item) => childConstraintPassed(candidate.verification, item)) &&
@@ -449,7 +456,18 @@ function childTransactionProtectionPassed(
   );
 }
 
-function verificationBound(candidate: VerifiedCandidate): boolean {
+/**
+ * Binds the candidate's child verification to the trusted current Run. The
+ * expected parent identity is supplied by the caller of the exported gate and
+ * is never read from the candidate, so a child Run verified for a different
+ * parent cannot support an `ADJUST` for this Run. A missing or malformed
+ * expected identity fails closed. The child Run must still be present, distinct
+ * from its parent, and no part of this check may throw on adversarial input.
+ */
+function verificationBound(
+  candidate: VerifiedCandidate,
+  expectedParentRunId: unknown,
+): boolean {
   const proof = candidate.verification;
   if (!record(proof)) return false;
   if (
@@ -470,7 +488,9 @@ function verificationBound(candidate: VerifiedCandidate): boolean {
     proof.preparedAmountInAtomic === candidate.amountInAtomic &&
     proof.providerStatus === "SUCCESS" &&
     proof.riskVerdict === "PROCEED" &&
+    nonempty(expectedParentRunId) &&
     nonempty(proof.parentRunId) &&
+    proof.parentRunId === expectedParentRunId &&
     nonempty(proof.childRunId) &&
     proof.childRunId !== proof.parentRunId &&
     proof.childStatus === "completed" &&
