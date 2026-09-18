@@ -280,7 +280,7 @@ export class BackendPipeline<
 
     await chain.connect();
     const blockContext = await chain.getBlockContext();
-    const quote = await protocol.quote(normalized as never);
+    const quote = await protocol.quote(normalized as never, { blockContext });
     const unsignedTransaction = await protocol.buildTransaction(
       normalized as never,
     );
@@ -475,7 +475,9 @@ export function createBackendQuoteFlow<
       );
       await chain.connect();
       const blockContext = await chain.getBlockContext();
-      const quote = await protocol.quote(input.intent as never);
+      const quote = await protocol.quote(input.intent as never, {
+        blockContext,
+      });
       return options.project({
         intent: input.intent as unknown as NormalizedIntent,
         chain,

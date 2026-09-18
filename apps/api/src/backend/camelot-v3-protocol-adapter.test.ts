@@ -1,10 +1,18 @@
 import { CAMELOT_V3_PROTOCOL_ID } from "@parallax/contracts";
 import { describe, expect, it } from "vitest";
+import type { ArbitrumRpcClient } from "./arbitrum-chain-adapter.js";
 import {
+  CAMELOT_SEPOLIA_QUOTER,
+  CAMELOT_SEPOLIA_ROUTER,
+  CAMELOT_SEPOLIA_USDC,
+  CAMELOT_SEPOLIA_WETH,
   CamelotV3ProtocolAdapter,
   createCamelotV3ProtocolAdapter,
 } from "./camelot-v3-protocol-adapter.js";
-import { isProtocolAdapterError } from "./protocol-adapter.js";
+import {
+  isProtocolAdapterError,
+  type UnsignedTransaction,
+} from "./protocol-adapter.js";
 
 const intent = {
   chainId: 421614,
@@ -119,5 +127,74 @@ describe("CamelotV3ProtocolAdapter", () => {
     await expect(
       adapter.quote({ ...intent, protocol: "kuru" }),
     ).rejects.toMatchObject({ code: "INVALID_INTENT" });
+  });
+
+  it("uses the injected Arbitrum RPC client for the canonical Camelot path", async () => {
+    const calls: Array<{ method: string; params: readonly unknown[] }> = [];
+    const rpcClient: ArbitrumRpcClient = {
+      async request(method, params = []) {
+        calls.push({ method, params });
+        return `0x${(2n * 10n ** 18n).toString(16).padStart(64, "0")}${"0".repeat(64)}`;
+      },
+    };
+    const canonicalIntent = {
+      ...intent,
+      amountInAtomic: "1000000000000000",
+      tokenOut: { kind: "erc20" as const, address: CAMELOT_SEPOLIA_USDC },
+    };
+    const adapter = new CamelotV3ProtocolAdapter({
+      rpcClient,
+      tokenOutDecimals: 18,
+      runtimeVersion: "test-runtime",
+      runtimeRevision: "test-revision",
+    });
+
+    await expect(adapter.quote(canonicalIntent)).resolves.toEqual({
+      estimatedAmountOut: "2",
+      source: "quote",
+      runtimeVersion: "test-runtime",
+      runtimeRevision: "test-revision",
+    });
+    const transaction = await adapter.buildTransaction(canonicalIntent);
+    const payload = (
+      transaction as UnsignedTransaction<Record<string, unknown>>
+    ).payload;
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toEqual({
+      method: "eth_call",
+      params: [
+        {
+          to: CAMELOT_SEPOLIA_QUOTER,
+          data: expect.stringMatching(/^0x2d9ebd1d[0-9a-f]{256}$/),
+        },
+        "latest",
+      ],
+    });
+    expect(payload).toMatchObject({
+      from: canonicalIntent.sender,
+      to: CAMELOT_SEPOLIA_ROUTER,
+      value: "0x38d7ea4c68000",
+      chainId: "0x66eee",
+    });
+    expect(String(payload.data).slice(0, 2 + 8 + 64)).toBe(
+      `0xbc651188${CAMELOT_SEPOLIA_WETH.slice(2).toLowerCase().padStart(64, "0")}`,
+    );
+  });
+
+  it("fails closed when the live quote response is not exactly two ABI words", async () => {
+    const adapter = new CamelotV3ProtocolAdapter({
+      rpcClient: {
+        request: async () => "0x01",
+      },
+    });
+
+    await expect(adapter.quote(intent)).rejects.toSatisfy((error: unknown) => {
+      return (
+        isProtocolAdapterError(error) &&
+        error.code === "QUOTE_FAILED" &&
+        error.protocol === CAMELOT_V3_PROTOCOL_ID
+      );
+    });
   });
 });

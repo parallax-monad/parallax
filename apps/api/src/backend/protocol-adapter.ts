@@ -1,4 +1,5 @@
 import type { NormalizedSwapIntent } from "@parallax/contracts";
+import type { BlockContext } from "./chain-adapter.js";
 import {
   BackendControlError,
   controlStatusForCode,
@@ -27,6 +28,11 @@ export type ProtocolAdapterErrorInput = {
   protocol?: string;
   retryable?: boolean;
   cause?: unknown;
+};
+
+/** Optional chain snapshot used to bind protocol reads to one execution. */
+export type ProtocolQuoteOptions = {
+  readonly blockContext?: BlockContext;
 };
 
 /** Normalized failure boundary for protocol-specific adapter operations. */
@@ -96,7 +102,7 @@ export interface ProtocolAdapter<
   /** Optional stable identifier exposed by concrete adapters. */
   readonly protocolId?: string;
 
-  quote(intent: Intent): Promise<Quote>;
+  quote(intent: Intent, options?: ProtocolQuoteOptions): Promise<Quote>;
 
   buildTransaction(intent: Intent): Promise<UnsignedTransaction<Transaction>>;
 }

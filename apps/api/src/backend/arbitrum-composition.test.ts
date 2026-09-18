@@ -6,18 +6,25 @@ import { UnsupportedAgentFlowError } from "../ports.js";
 import { bootstrapBackendRuntime } from "../runtime-config.js";
 import { InMemoryRunStore } from "../store.js";
 
+import type { ArbitrumRpcClient } from "./arbitrum-chain-adapter.js";
 import {
   type ArbitrumProductionCompositionOptions,
   bootstrapArbitrumBackend,
   createArbitrumProductionComposition,
 } from "./arbitrum-composition.js";
-import { createCamelotV3ProtocolAdapter } from "./camelot-v3-protocol-adapter.js";
+import {
+  CAMELOT_SEPOLIA_QUOTER,
+  CAMELOT_SEPOLIA_ROUTER,
+  CAMELOT_SEPOLIA_USDC,
+  createCamelotV3ProtocolAdapter,
+} from "./camelot-v3-protocol-adapter.js";
 import type { BackendCompositionRuntime } from "./composition.js";
 import {
   createFakeChainAdapter,
   createFakeProviderAdapter,
 } from "./fake-harness.js";
 import { NATIVE_RPC_ARBITRUM_PROVIDER_ID } from "./native-rpc-evidence.js";
+import { BackendPipeline } from "./pipeline.js";
 
 const normalizedIntent: NormalizedSwapIntent = {
   chainId: 421614,
@@ -382,6 +389,113 @@ describe("Arbitrum production composition skeleton", () => {
         runtime: runtimeWithoutRpc,
       }),
     ).toThrow("Arbitrum RPC URL is required");
+  });
+
+  it("wires a configured Arbitrum RPC through Camelot and NativeRpcProvider", async () => {
+    const blockHash = `0x${"ab".repeat(32)}`;
+    const calls: Array<{ method: string; params: readonly unknown[] }> = [];
+    const rpcClient: ArbitrumRpcClient = {
+      async request(method, params = []) {
+        calls.push({ method, params });
+        if (method === "eth_chainId") return "0x66eee";
+        if (method === "eth_getBlockByNumber") {
+          return { number: "0x2a", hash: blockHash };
+        }
+        if (method === "eth_estimateGas") return "0x5208";
+        if (method === "eth_call") {
+          const transaction = params[0] as { to?: string } | undefined;
+          if (
+            transaction?.to?.toLowerCase() ===
+            CAMELOT_SEPOLIA_QUOTER.toLowerCase()
+          ) {
+            return `0x${(2n * 10n ** 18n).toString(16).padStart(64, "0")}${"0".repeat(64)}`;
+          }
+          return "0x";
+        }
+        throw new Error(`unexpected RPC method ${method}`);
+      },
+    };
+    const runtime = bootstrapBackendRuntime({
+      environment: arbitrumEnvironment,
+      tokenRegistry: {
+        chains: [{ chainId: 421614, symbol: "ETH", decimals: 18 }],
+        tokens: [
+          {
+            chainId: 421614,
+            address: CAMELOT_SEPOLIA_USDC,
+            symbol: "USDC",
+            decimals: 18,
+            decimalsSource: "onchain_verified" as const,
+            verifiedAtBlock: "42",
+          },
+        ],
+      },
+    });
+    const composition = createArbitrumProductionComposition({
+      runtime,
+      runStore: new InMemoryRunStore(),
+      rpcClient,
+      core: {
+        evaluate: async (_input, context) => {
+          const pipelineContext = context as {
+            readonly providerResult: { readonly status: string };
+            readonly providerEvidence?: unknown;
+          };
+          return {
+            providerStatus: pipelineContext.providerResult.status,
+            evidence: pipelineContext.providerEvidence,
+          };
+        },
+      },
+      decision: { decide: async (input) => input },
+    });
+    const pipeline = new BackendPipeline({ runtime: composition });
+    const execution = await pipeline.executeNormalized(
+      {
+        ...normalizedIntent,
+        tokenOut: { kind: "erc20", address: CAMELOT_SEPOLIA_USDC },
+        amountInAtomic: "1000000000000000",
+      },
+      {
+        rawInput: normalizedIntent as never,
+        runId: "arbitrum-golden-path",
+        chainId: 421614,
+        protocol: "camelot-v3",
+        capability: "simulate",
+      },
+    );
+
+    expect(execution.providerResult).toMatchObject({
+      status: "success",
+      provider: { providerId: NATIVE_RPC_ARBITRUM_PROVIDER_ID },
+    });
+    expect(execution.providerEvidence).toMatchObject({
+      provider: {
+        providerId: NATIVE_RPC_ARBITRUM_PROVIDER_ID,
+        status: "UNKNOWN",
+      },
+      provenance: { mode: "LIVE", source: "rpc" },
+      unknownScope: expect.arrayContaining(["receipt", "simulation"]),
+    });
+    expect(execution.unsignedTransaction.payload).toMatchObject({
+      to: CAMELOT_SEPOLIA_ROUTER,
+      chainId: "0x66eee",
+    });
+    expect(calls[2]).toMatchObject({
+      method: "eth_call",
+      params: [expect.anything(), "0x2a"],
+    });
+    expect(calls.map(({ method }) => method)).toEqual([
+      "eth_chainId",
+      "eth_getBlockByNumber",
+      "eth_call",
+      "eth_estimateGas",
+      "eth_getBlockByNumber",
+      "eth_chainId",
+      "eth_getBlockByNumber",
+      "eth_call",
+      "eth_estimateGas",
+    ]);
   });
 
   it("normalizes Arbitrum quotes through the public app and reaches Camelot", async () => {

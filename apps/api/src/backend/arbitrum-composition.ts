@@ -18,6 +18,7 @@ import type { RunStore } from "../store.js";
 import { tokenDecimals } from "../token-decimals.js";
 import {
   ArbitrumChainAdapter,
+  type ArbitrumRpcClient,
   type ArbitrumTransaction,
 } from "./arbitrum-chain-adapter.js";
 import { CamelotV3ProtocolAdapter } from "./camelot-v3-protocol-adapter.js";
@@ -36,9 +37,10 @@ import {
   NATIVE_RPC_ARBITRUM_PROVIDER_ID,
   type NativeRpcPreparedExecution,
 } from "./native-rpc-evidence.js";
+import { createNativeRpcProviderAdapter } from "./native-rpc-provider.js";
 import { ProtocolRegistry } from "./protocol-registry.js";
-import type { ProviderAdapter } from "./provider-adapter.js";
 import {
+  type ProviderAdapter,
   type ProviderEnvironment,
   ProviderRegistry,
 } from "./provider-registry.js";
@@ -49,6 +51,8 @@ export type ArbitrumNormalizationInput = CheckSwapRequest | QuoteRequest;
 export type ArbitrumProductionCompositionOptions = {
   readonly runtime: BackendRuntime;
   readonly runStore: RunStore;
+  /** Optional shared RPC seam for deterministic integration tests. */
+  readonly rpcClient?: ArbitrumRpcClient;
   readonly chainAdapter?: ChainAdapter<ArbitrumTransaction>;
   readonly protocolAdapter?: CamelotV3ProtocolAdapter;
   readonly providers?: readonly ProviderAdapter<
@@ -95,10 +99,10 @@ export type ArbitrumBackendBootstrap = {
  * Builds the production composition skeleton for Arbitrum Sepolia × Camelot V3.
  *
  * The chain endpoint and provider implementations remain explicit dependencies.
- * In particular, an empty provider list is valid and fails closed at selection;
- * this function never invents Tenderly credentials or real pool values. The
- * concrete NativeRpcProvider/raw RPC implementation belongs to Provider Owner
- * #66; this composition accepts that replaceable ProviderAdapter explicitly.
+ * When an Arbitrum RPC endpoint is configured, the composition wires the
+ * concrete NativeRpcProvider and Camelot adapter to that endpoint. Callers may
+ * still replace either through explicit adapters/providers; without an
+ * endpoint, provider selection remains empty and fails closed.
  */
 export function createArbitrumProductionComposition(
   options: ArbitrumProductionCompositionOptions,
@@ -112,17 +116,27 @@ export function createArbitrumProductionComposition(
     } as const);
   const chainAdapter =
     options.chainAdapter ??
-    (arbitrumConfig.rpcUrl === undefined
-      ? (() => {
-          throw new Error(
-            "Arbitrum RPC URL is required unless a controlled chain adapter is injected",
-          );
-        })()
-      : new ArbitrumChainAdapter({
-          rpcUrl: arbitrumConfig.rpcUrl,
-        }));
+    (options.rpcClient !== undefined
+      ? new ArbitrumChainAdapter({ client: options.rpcClient })
+      : arbitrumConfig.rpcUrl === undefined
+        ? (() => {
+            throw new Error(
+              "Arbitrum RPC URL is required unless a controlled chain adapter is injected",
+            );
+          })()
+        : new ArbitrumChainAdapter({
+            rpcUrl: arbitrumConfig.rpcUrl,
+          }));
   const protocolAdapter =
-    options.protocolAdapter ?? new CamelotV3ProtocolAdapter();
+    options.protocolAdapter ??
+    new CamelotV3ProtocolAdapter({
+      ...(options.rpcClient === undefined
+        ? { rpcUrl: arbitrumConfig.rpcUrl }
+        : { rpcClient: options.rpcClient }),
+      tokenOutDecimals: 18,
+      runtimeVersion: "arbitrum-camelot-v3",
+      runtimeRevision: "native-rpc",
+    });
   const normalization = options.normalization ?? {
     normalize: (input: ArbitrumNormalizationInput): NormalizedSwapIntent => {
       const result =
@@ -137,7 +151,19 @@ export function createArbitrumProductionComposition(
     },
   };
 
-  const providers = [...(options.providers ?? [])];
+  const providers =
+    options.providers === undefined
+      ? options.rpcClient !== undefined || arbitrumConfig.rpcUrl !== undefined
+        ? [
+            createNativeRpcProviderAdapter({
+              ...(options.rpcClient === undefined
+                ? { rpcUrl: arbitrumConfig.rpcUrl }
+                : { client: options.rpcClient }),
+              mode: "LIVE",
+            }),
+          ]
+        : []
+      : [...options.providers];
   const providerEvidenceMapper =
     options.providerEvidenceMapper ??
     ((input) => {
