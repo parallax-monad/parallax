@@ -16,6 +16,13 @@ const CHAIN_ID = 421614n;
 const RPC_VERSION = "2.0";
 const QUALIFIED = "QUALIFIED_REAL";
 const PARTIAL = "PARTIALLY_QUALIFIED";
+/** Canonical Product-accepted scenario: exactly 0.001 WETH of exact input. */
+const CANONICAL_AMOUNT_IN = 10n ** 15n;
+/** `ISwapRouter.exactInputSingle((address,address,address,uint256,uint256,uint256,uint160))`. */
+const EXACT_INPUT_SINGLE_SELECTOR = "0xbc651188";
+/** `IQuoter.quoteExactInputSingle(address,address,uint256,uint160)`. */
+const QUOTE_EXACT_INPUT_SINGLE_SELECTOR = "0x2d9ebd1d";
+const PREPARED_TX_FIELDS = Object.freeze(["data", "from", "to", "value"]);
 
 export const ALLOWED_RPC_METHODS = Object.freeze([
   "eth_chainId",
@@ -60,19 +67,215 @@ function address(raw) {
   return `0x${words(raw)[0].slice(24)}`;
 }
 
+function normalizeAddress(value) {
+  return typeof value === "string" && ADDRESS_PATTERN.test(value)
+    ? value.toLowerCase()
+    : null;
+}
+
+function normalizeHex(value) {
+  return typeof value === "string" ? value.toLowerCase() : null;
+}
+
+function decimalToBigInt(value) {
+  return typeof value === "string" && /^[0-9]+$/.test(value)
+    ? BigInt(value)
+    : null;
+}
+
+/**
+ * Validate the persisted request-side envelope of one recorded exchange.
+ *
+ * A response can only be attributed to a request when the request side itself
+ * is complete: a JSON-RPC 2.0 object carrying an explicit `id`, a method, and
+ * an array of params. Records that predate this field (or that had it stripped)
+ * are rejected, so a response `id` is never accepted merely because it exists.
+ */
+export function requestEnvelope(record) {
+  if (record === null || typeof record !== "object")
+    return { ok: false, reason: "record is not an object" };
+  const request = record.request;
+  if (request === null || typeof request !== "object" || Array.isArray(request))
+    return {
+      ok: false,
+      reason: "request envelope is missing or not an object",
+    };
+  if (request.jsonrpc !== RPC_VERSION)
+    return {
+      ok: false,
+      reason: `request JSON-RPC version ${JSON.stringify(request.jsonrpc)} is not ${RPC_VERSION}`,
+    };
+  if (!Object.hasOwn(request, "id") || request.id === undefined)
+    return { ok: false, reason: "request id is missing" };
+  if (typeof request.method !== "string" || request.method.length === 0)
+    return { ok: false, reason: "request method is missing" };
+  if (!Array.isArray(request.params))
+    return { ok: false, reason: "request params are missing or not an array" };
+  return { ok: true, request };
+}
+
+/**
+ * Resolve one semantic context to a single request-bound record.
+ *
+ * The record must carry the expected context, an expected method on both the
+ * sanitized request object and the top-level record, and a complete request
+ * envelope. Response `id` equality is enforced later by `readResult`.
+ */
+export function boundRecord(record, { label, method, context }) {
+  if (record === null || typeof record !== "object")
+    return { ok: false, reason: `${label}: record is missing` };
+  if (record.context !== context)
+    return {
+      ok: false,
+      reason: `${label}: record context ${JSON.stringify(record.context)} is not ${context}`,
+    };
+  const requestOutcome = requestEnvelope(record);
+  if (!requestOutcome.ok)
+    return { ok: false, reason: `${label}: ${requestOutcome.reason}` };
+  if (requestOutcome.request.method !== method)
+    return {
+      ok: false,
+      reason: `${label}: request method ${JSON.stringify(requestOutcome.request.method)} is not ${method}`,
+    };
+  if (record.method !== method)
+    return {
+      ok: false,
+      reason: `${label}: recorded method ${JSON.stringify(record.method)} is not ${method}`,
+    };
+  return { ok: true, request: requestOutcome.request };
+}
+
+/**
+ * Decode the exact `exactInputSingle` calldata emitted by this probe.
+ *
+ * Field order and ABI shape are fixed by the documented Algebra
+ * `ISwapRouter.exactInputSingle` tuple, not guessed: selector followed by seven
+ * 32-byte words `(tokenIn, tokenOut, recipient, deadline, amountIn,
+ * amountOutMinimum, limitSqrtPrice)`. Any other selector, word count, or
+ * non-hex body is rejected.
+ */
+export function decodeExactInputSingleCalldata(data) {
+  if (typeof data !== "string") throw new Error("calldata is not a hex string");
+  if (!HEX_BYTES_PATTERN.test(data))
+    throw new Error("calldata is not hex-encoded");
+  const hex = data.slice(2);
+  if (hex.length !== 8 + 7 * 64)
+    throw new Error(
+      `expected a 4-byte selector and exactly 7 ABI words, got ${hex.length / 2} byte(s)`,
+    );
+  const selector = `0x${hex.slice(0, 8)}`;
+  if (selector !== EXACT_INPUT_SINGLE_SELECTOR)
+    throw new Error(
+      `selector ${selector} is not the Camelot exactInputSingle selector ${EXACT_INPUT_SINGLE_SELECTOR}`,
+    );
+  const fields = hex.slice(8).match(/.{64}/g);
+  return {
+    selector,
+    tokenIn: `0x${fields[0].slice(24)}`,
+    tokenOut: `0x${fields[1].slice(24)}`,
+    recipient: `0x${fields[2].slice(24)}`,
+    deadline: BigInt(`0x${fields[3]}`),
+    amountIn: BigInt(`0x${fields[4]}`),
+    amountOutMinimum: BigInt(`0x${fields[5]}`),
+    limitSqrtPrice: BigInt(`0x${fields[6]}`),
+  };
+}
+
+/**
+ * Decode the exact `IQuoter.quoteExactInputSingle` calldata emitted by this
+ * probe: selector followed by four 32-byte words `(tokenIn, tokenOut, amountIn,
+ * limitSqrtPrice)`.
+ */
+export function decodeQuoteCalldata(data) {
+  if (typeof data !== "string")
+    throw new Error("quote calldata is not a hex string");
+  if (!HEX_BYTES_PATTERN.test(data))
+    throw new Error("quote calldata is not hex-encoded");
+  const hex = data.slice(2);
+  if (hex.length !== 8 + 4 * 64)
+    throw new Error(
+      `expected a 4-byte selector and exactly 4 ABI words, got ${hex.length / 2} byte(s)`,
+    );
+  const selector = `0x${hex.slice(0, 8)}`;
+  if (selector !== QUOTE_EXACT_INPUT_SINGLE_SELECTOR)
+    throw new Error(
+      `selector ${selector} is not the IQuoter quoteExactInputSingle selector ${QUOTE_EXACT_INPUT_SINGLE_SELECTOR}`,
+    );
+  const fields = hex.slice(8).match(/.{64}/g);
+  return {
+    selector,
+    tokenIn: `0x${fields[0].slice(24)}`,
+    tokenOut: `0x${fields[1].slice(24)}`,
+    amountIn: BigInt(`0x${fields[2]}`),
+    limitSqrtPrice: BigInt(`0x${fields[3]}`),
+  };
+}
+
+/**
+ * Check the transaction params of one prepared `eth_call`/`eth_estimateGas`
+ * request against the stored prepared transaction. Addresses and hex quantities
+ * are compared case-insensitively; any extra or missing field is rejected so a
+ * different transaction cannot ride along under the same context.
+ */
+export function checkPreparedTxParams(params, preparedTx, label) {
+  const reasons = [];
+  if (!Array.isArray(params) || params.length !== 2)
+    return [`${label} params are not [transactionObject, blockTag]`];
+  const [callObject] = params;
+  if (
+    callObject === null ||
+    typeof callObject !== "object" ||
+    Array.isArray(callObject)
+  )
+    return [`${label} transaction params are not an object`];
+  const actual = Object.keys(callObject).sort();
+  if (
+    actual.length !== PREPARED_TX_FIELDS.length ||
+    actual.join(",") !== PREPARED_TX_FIELDS.join(",")
+  )
+    reasons.push(
+      `${label} transaction params fields ${JSON.stringify(actual)} are not exactly ${JSON.stringify(PREPARED_TX_FIELDS)}`,
+    );
+  const expectedFrom = normalizeAddress(preparedTx?.from);
+  const expectedTo = normalizeAddress(preparedTx?.to);
+  const expectedData = normalizeHex(preparedTx?.data);
+  const expectedValue = normalizeHex(preparedTx?.value);
+  if (
+    normalizeAddress(callObject.from) !== expectedFrom ||
+    expectedFrom === null
+  )
+    reasons.push(`${label} from does not match preparedSwap.tx.from`);
+  if (normalizeAddress(callObject.to) !== expectedTo || expectedTo === null)
+    reasons.push(`${label} to does not match preparedSwap.tx.to`);
+  if (normalizeHex(callObject.data) !== expectedData || expectedData === null)
+    reasons.push(`${label} data does not match preparedSwap.tx.data`);
+  if (
+    normalizeHex(callObject.value) !== expectedValue ||
+    expectedValue === null
+  )
+    reasons.push(`${label} value does not match preparedSwap.tx.value`);
+  return reasons;
+}
+
 /**
  * Structural read of one recorded JSON-RPC exchange.
  *
- * A result is usable as qualified evidence only when the HTTP status is
- * successful, the envelope is a valid JSON-RPC 2.0 object, no `error` member is
- * present, and `result` is present with the expected type. A body carrying both
- * `result` and `error`, or a non-2xx body carrying a `result`, is rejected.
- * Never throws, so expected reverts can be classified without silently
- * recovering a success that never happened.
+ * A result is usable as qualified evidence only when the persisted request
+ * envelope is complete (JSON-RPC 2.0, an explicit `id`, a method, and params),
+ * the HTTP status is successful, the response is a JSON-RPC 2.0 object carrying
+ * an `id` that equals the request `id`, no `error` member is present, and
+ * `result` is present with the expected type. A body carrying both `result` and
+ * `error`, a non-2xx body carrying a `result`, a missing request or response
+ * `id`, and a mismatched `id` are all rejected. Never throws, so expected
+ * reverts can be classified without silently recovering a success that never
+ * happened.
  */
 export function readResult(record, expectedType = "string") {
   if (record === null || typeof record !== "object")
     return { ok: false, reason: "record is not an object" };
+  const requestOutcome = requestEnvelope(record);
+  if (!requestOutcome.ok) return { ok: false, reason: requestOutcome.reason };
+  const request = requestOutcome.request;
   if (
     !Number.isInteger(record.httpStatus) ||
     record.httpStatus < 200 ||
@@ -89,6 +292,14 @@ export function readResult(record, expectedType = "string") {
     return {
       ok: false,
       reason: `JSON-RPC version ${JSON.stringify(body.jsonrpc)} is not ${RPC_VERSION}`,
+    };
+  // The response must echo the request id. Presence alone is not enough.
+  if (!Object.hasOwn(body, "id") || body.id === undefined)
+    return { ok: false, reason: "JSON-RPC response id is missing" };
+  if (body.id !== request.id)
+    return {
+      ok: false,
+      reason: `JSON-RPC response id ${JSON.stringify(body.id)} does not match request id ${JSON.stringify(request.id)}`,
     };
   // A conforming success envelope omits `error` entirely. Any present error --
   // even alongside a result -- disqualifies the exchange as evidence.
@@ -236,12 +447,17 @@ function indexByContext(recordList) {
 /**
  * Recompute `QUALIFIED_REAL` from raw records and observations.
  *
- * Qualification requires all of: a non-null prepared swap; a real two-word
- * `IQuoter` WETH->USDC quote; the exact prepared transaction; a successful
- * pinned `eth_call` whose decoded single-word output equals the quote output; a
- * successful pinned `eth_estimateGas`; and a sender drawn from a transaction
- * pinned to the evidence block. Missing optional-chaining targets can no longer
- * compare as `undefined === undefined` and qualify.
+ * Qualification proves more than response values: every value that certifies
+ * this swap must come from the exact request the evidence claims. Each required
+ * observation is bound to one context, one JSON-RPC method, and one persisted
+ * request/response id pair; the quote is bound to its canonical Quoter calldata
+ * and pinned block; the prepared `eth_call`/`eth_estimateGas` params are bound to
+ * the exact `preparedSwap.tx` and pinned block; the sender record is bound to
+ * `senderTransactionHash`; and the prepared calldata is decoded against the
+ * canonical target (chainId, SwapRouter, WETH -> test USDC, recipient, 0.001
+ * WETH amountIn, protection value, deadline and call shape). Missing
+ * optional-chaining targets can no longer compare as `undefined === undefined`
+ * and qualify.
  */
 export function assessQualification({
   observations,
@@ -255,6 +471,12 @@ export function assessQualification({
     return { qualified: false, classification: PARTIAL, reasons };
   }
 
+  const pinnedBlock = observations?.pinnedBlock;
+  const pinnedOk = isPinnedBlock(pinnedBlock);
+  if (!pinnedOk) reasons.push("pinned block number/hash is unavailable");
+  const pinnedNumber = pinnedOk ? pinnedBlock.number : null;
+
+  // ---- A. qualifying quote bound to its exact Quoter request --------------------
   const quoteProbes = Array.isArray(observations?.quoteProbes)
     ? observations.quoteProbes
     : [];
@@ -265,112 +487,319 @@ export function assessQualification({
       item?.error === null &&
       decodeTwoWordQuote(item?.raw) !== null,
   );
-  const quoteAmountOut = quote
-    ? decodeTwoWordQuote(quote.raw)[0].toString()
-    : null;
-  if (quoteAmountOut === null) {
+  let quoteAmountOut = null;
+  if (!quote) {
     reasons.push("no successful two-word IQuoter WETH_TO_USDC quote");
   } else {
-    if (quote.decodedAmountOutAtomic !== quoteAmountOut)
-      reasons.push("stored quote amount does not match its raw result");
-    if (preparedSwap.quoteAmountOutAtomic !== quoteAmountOut)
+    const context = `quote:${quote.version}:${quote.direction}`;
+    const record = byContext.get(context);
+    const binding = boundRecord(record, {
+      label: context,
+      method: "eth_call",
+      context,
+    });
+    if (!binding.ok) {
       reasons.push(
-        "prepared swap quote amount does not match the observed quote",
+        `qualifying quote is not bound to its request: ${binding.reason}`,
       );
+    } else {
+      const params = binding.request.params;
+      if (
+        params.length !== 2 ||
+        params[0] === null ||
+        typeof params[0] !== "object" ||
+        Array.isArray(params[0])
+      ) {
+        reasons.push("quote request params are not [callObject, blockTag]");
+      } else {
+        if (normalizeAddress(params[0].to) !== QUOTER.toLowerCase())
+          reasons.push("quote request target is not the pinned Camelot Quoter");
+        if (params[0].data !== quote.calldata)
+          reasons.push(
+            "quote request calldata does not match quoteProbes.calldata",
+          );
+        if (pinnedNumber === null || params[1] !== pinnedNumber)
+          reasons.push("quote request block does not match the pinned block");
+      }
+      try {
+        const decodedQuote = decodeQuoteCalldata(quote.calldata);
+        if (decodedQuote.tokenIn !== WETH.toLowerCase())
+          reasons.push("quote calldata tokenIn is not canonical WETH");
+        if (decodedQuote.tokenOut !== USDC.toLowerCase())
+          reasons.push("quote calldata tokenOut is not canonical test USDC");
+        if (decodedQuote.amountIn !== decimalToBigInt(quote.amountInAtomic))
+          reasons.push(
+            "quote calldata amountIn does not match the stored quote amountIn",
+          );
+        if (decodedQuote.limitSqrtPrice !== 0n)
+          reasons.push("quote calldata limitSqrtPrice is not zero");
+      } catch (error) {
+        reasons.push(`quote calldata cannot be decoded: ${error.message}`);
+      }
+      const outcome = readResult(record);
+      if (!outcome.ok) {
+        reasons.push(
+          `qualifying quote record is not a usable result: ${outcome.reason}`,
+        );
+      } else {
+        const parsed = decodeTwoWordQuote(outcome.result);
+        if (parsed === null) {
+          reasons.push(
+            "qualifying quote raw result is not exactly two ABI words",
+          );
+        } else {
+          quoteAmountOut = parsed[0].toString();
+          if (quote.raw !== outcome.result)
+            reasons.push(
+              "stored quote raw result does not match the raw record",
+            );
+          if (quote.decodedAmountOutAtomic !== quoteAmountOut)
+            reasons.push("stored quote amount does not match its raw result");
+          if (quote.decodedFee !== parsed[1].toString())
+            reasons.push("stored quote fee does not match its raw result");
+          if (parsed[0] <= 0n)
+            reasons.push("qualifying quote amountOut is not positive");
+        }
+      }
+    }
   }
-
-  const tx = preparedSwap.tx;
-  const txValid =
-    tx !== null &&
-    typeof tx === "object" &&
-    isAddress(tx.from) &&
-    isAddress(tx.to) &&
-    typeof tx.data === "string" &&
-    HEX_QUANTITY_PATTERN.test(tx.data) &&
-    typeof tx.value === "string" &&
-    HEX_QUANTITY_PATTERN.test(tx.value) &&
-    tx.chainId === Number(CHAIN_ID);
-  if (!txValid)
-    reasons.push("exact prepared transaction is missing or malformed");
-
-  const callRecord = byContext.get("preparedSwap.ethCall");
-  const callOutcome = callRecord
-    ? readResult(callRecord)
-    : { ok: false, reason: "record is missing" };
-  let callAmountOut = null;
-  if (!callOutcome.ok) {
+  if (
+    quoteAmountOut !== null &&
+    preparedSwap.quoteAmountOutAtomic !== quoteAmountOut
+  )
     reasons.push(
-      `pinned eth_call is not a successful result: ${callOutcome.reason}`,
+      "prepared swap quote amount does not match the observed quote",
     );
+
+  // ---- E. prepared transaction and calldata semantics ---------------------------
+  const tx = preparedSwap.tx;
+  let decodedTx = null;
+  if (tx === null || typeof tx !== "object" || Array.isArray(tx)) {
+    reasons.push("exact prepared transaction is missing or malformed");
   } else {
+    if (Number(tx.chainId) !== Number(CHAIN_ID))
+      reasons.push("prepared transaction chainId is not 421614");
+    if (!isAddress(tx.from))
+      reasons.push("prepared transaction has no valid from");
+    if (normalizeAddress(tx.to) !== ROUTER.toLowerCase())
+      reasons.push(
+        "prepared transaction to is not the canonical Camelot SwapRouter",
+      );
+    if (typeof tx.value !== "string" || !HEX_QUANTITY_PATTERN.test(tx.value))
+      reasons.push("prepared transaction value is malformed");
     try {
-      callAmountOut = decodeUint256Word(
-        callOutcome.result,
-        "preparedSwap.ethCall",
-      ).toString();
+      decodedTx = decodeExactInputSingleCalldata(tx.data);
+      if (decodedTx.tokenIn !== WETH.toLowerCase())
+        reasons.push("prepared calldata tokenIn is not canonical WETH");
+      if (decodedTx.tokenOut !== USDC.toLowerCase())
+        reasons.push("prepared calldata tokenOut is not canonical test USDC");
+      if (
+        normalizeAddress(tx.from) === null ||
+        normalizeAddress(tx.from) !== decodedTx.recipient
+      )
+        reasons.push(
+          "prepared calldata recipient does not match the prepared transaction from",
+        );
+      if (decodedTx.amountIn !== CANONICAL_AMOUNT_IN)
+        reasons.push("prepared calldata amountIn is not exactly 0.001 WETH");
+      if (
+        typeof tx.value === "string" &&
+        HEX_QUANTITY_PATTERN.test(tx.value) &&
+        BigInt(tx.value) !== decodedTx.amountIn
+      )
+        reasons.push(
+          "prepared transaction value does not equal the native WETH input amount",
+        );
+      if (
+        decodedTx.amountOutMinimum !==
+        decimalToBigInt(preparedSwap.amountOutMinimumAtomic)
+      )
+        reasons.push(
+          "prepared calldata amountOutMinimum does not match the stored protection value",
+        );
+      if (decodedTx.deadline !== decimalToBigInt(preparedSwap.deadlineUnix))
+        reasons.push(
+          "prepared calldata deadline does not match the stored deadline",
+        );
+      if (
+        pinnedOk &&
+        decodedTx.deadline !== BigInt(pinnedBlock.timestamp) + 3600n
+      )
+        reasons.push(
+          "prepared calldata deadline is not the pinned block timestamp plus one hour",
+        );
+      if (decodedTx.limitSqrtPrice !== 0n)
+        reasons.push("prepared calldata limitSqrtPrice is not zero");
+      if (
+        quoteAmountOut !== null &&
+        decodedTx.amountOutMinimum !== (BigInt(quoteAmountOut) * 99n) / 100n
+      )
+        reasons.push(
+          "prepared calldata amountOutMinimum is not 99% of the observed quote",
+        );
     } catch (error) {
       reasons.push(
-        `pinned eth_call output is not exactly one ABI word: ${error.message}`,
+        `prepared transaction calldata cannot be decoded: ${error.message}`,
       );
+    }
+    if (normalizeAddress(preparedSwap.route?.tokenIn) !== WETH.toLowerCase())
+      reasons.push("prepared route tokenIn is not canonical WETH");
+    if (normalizeAddress(preparedSwap.route?.tokenOut) !== USDC.toLowerCase())
+      reasons.push("prepared route tokenOut is not canonical test USDC");
+    if (
+      normalizeAddress(preparedSwap.route?.pool) !==
+      CANDIDATE_POOL.toLowerCase()
+    )
+      reasons.push("prepared route pool is not the canonical Camelot pool");
+  }
+
+  // ---- B. prepared swap eth_call bound to the exact prepared tx and block -------
+  const callContext = "preparedSwap.ethCall";
+  const callRecord = byContext.get(callContext);
+  const callBinding = boundRecord(callRecord, {
+    label: callContext,
+    method: "eth_call",
+    context: callContext,
+  });
+  let callAmountOut = null;
+  let callResult = null;
+  if (!callBinding.ok) {
+    reasons.push(
+      `pinned eth_call is not bound to its request: ${callBinding.reason}`,
+    );
+  } else {
+    reasons.push(
+      ...checkPreparedTxParams(callBinding.request.params, tx, callContext),
+    );
+    if (pinnedNumber === null || callBinding.request.params[1] !== pinnedNumber)
+      reasons.push(
+        "pinned eth_call block parameter does not match the pinned block",
+      );
+    const outcome = readResult(callRecord);
+    if (!outcome.ok) {
+      reasons.push(
+        `pinned eth_call is not a successful result: ${outcome.reason}`,
+      );
+    } else {
+      callResult = outcome.result;
+      try {
+        callAmountOut = decodeUint256Word(
+          outcome.result,
+          callContext,
+        ).toString();
+      } catch (error) {
+        reasons.push(
+          `pinned eth_call output is not exactly one ABI word: ${error.message}`,
+        );
+      }
     }
   }
   if (callAmountOut !== null) {
-    if (callAmountOut !== quoteAmountOut)
+    if (quoteAmountOut !== null && callAmountOut !== quoteAmountOut)
       reasons.push("decoded eth_call output does not match the quote output");
     if (preparedSwap.ethCallAmountOutAtomic !== callAmountOut)
       reasons.push(
         "stored eth_call amount does not match the raw eth_call result",
       );
-    if (preparedSwap.ethCall?.result !== callOutcome.result)
-      reasons.push(
-        "observations.preparedSwap.ethCall does not match the raw record",
-      );
   }
-
-  const gasRecord = byContext.get("preparedSwap.ethEstimateGas");
-  const gasOutcome = gasRecord
-    ? readResult(gasRecord)
-    : { ok: false, reason: "record is missing" };
-  let gas = null;
-  if (!gasOutcome.ok) {
+  if (callResult !== null && preparedSwap.ethCall?.result !== callResult)
     reasons.push(
-      `pinned eth_estimateGas is not a successful result: ${gasOutcome.reason}`,
+      "observations.preparedSwap.ethCall does not match the raw record",
+    );
+
+  // ---- C. prepared swap eth_estimateGas bound to the same tx and block ----------
+  const gasContext = "preparedSwap.ethEstimateGas";
+  const gasRecord = byContext.get(gasContext);
+  const gasBinding = boundRecord(gasRecord, {
+    label: gasContext,
+    method: "eth_estimateGas",
+    context: gasContext,
+  });
+  let gas = null;
+  let gasResult = null;
+  if (!gasBinding.ok) {
+    reasons.push(
+      `pinned eth_estimateGas is not bound to its request: ${gasBinding.reason}`,
     );
   } else {
-    try {
-      gas = decodeQuantity(gasOutcome.result, "preparedSwap.ethEstimateGas");
-      if (gas <= 0n) reasons.push("pinned eth_estimateGas is not positive");
-    } catch (error) {
-      reasons.push(`pinned eth_estimateGas is malformed: ${error.message}`);
+    reasons.push(
+      ...checkPreparedTxParams(gasBinding.request.params, tx, gasContext),
+    );
+    if (pinnedNumber === null || gasBinding.request.params[1] !== pinnedNumber)
+      reasons.push(
+        "pinned eth_estimateGas block parameter does not match the pinned block",
+      );
+    const outcome = readResult(gasRecord);
+    if (!outcome.ok) {
+      reasons.push(
+        `pinned eth_estimateGas is not a successful result: ${outcome.reason}`,
+      );
+    } else {
+      gasResult = outcome.result;
+      try {
+        gas = decodeQuantity(outcome.result, gasContext);
+        if (gas <= 0n) reasons.push("pinned eth_estimateGas is not positive");
+      } catch (error) {
+        reasons.push(`pinned eth_estimateGas is malformed: ${error.message}`);
+      }
     }
   }
-  if (gas !== null && gasOutcome.ok) {
-    if (preparedSwap.estimatedGas !== gas.toString())
-      reasons.push(
-        "stored gas estimate does not match the raw estimateGas result",
-      );
-    if (preparedSwap.ethEstimateGas?.result !== gasOutcome.result)
-      reasons.push(
-        "observations.preparedSwap.ethEstimateGas does not match the raw record",
-      );
-  }
+  if (gas !== null && preparedSwap.estimatedGas !== gas.toString())
+    reasons.push(
+      "stored gas estimate does not match the raw estimateGas result",
+    );
+  if (gasResult !== null && preparedSwap.ethEstimateGas?.result !== gasResult)
+    reasons.push(
+      "observations.preparedSwap.ethEstimateGas does not match the raw record",
+    );
 
+  // ---- D. sender transaction bound to the requested hash and pinned block -------
   const senderHash = preparedSwap.senderTransactionHash;
-  if (typeof senderHash !== "string" || senderHash.length === 0) {
+  if (typeof senderHash !== "string" || !BLOCK_HASH_PATTERN.test(senderHash)) {
     reasons.push("prepared swap has no pinned public sender transaction");
   } else {
-    const senderRecord = byContext.get(`senderCandidate:${senderHash}`);
-    const senderOutcome = senderRecord
-      ? pinnedSenderFromTransaction(senderRecord, observations?.pinnedBlock)
-      : { ok: false, reason: "sender transaction record is missing" };
-    if (!senderOutcome.ok) {
+    const context = `senderCandidate:${senderHash}`;
+    const senderRecord = byContext.get(context);
+    const binding = boundRecord(senderRecord, {
+      label: context,
+      method: "eth_getTransactionByHash",
+      context,
+    });
+    if (!binding.ok) {
       reasons.push(
-        `sender transaction provenance is not pinned: ${senderOutcome.reason}`,
+        `sender transaction evidence is not bound to its request: ${binding.reason}`,
       );
-    } else if (txValid && senderOutcome.sender !== tx.from.toLowerCase()) {
-      reasons.push(
-        "prepared transaction sender does not match the pinned sender transaction",
-      );
+    } else {
+      const params = binding.request.params;
+      if (
+        params.length !== 1 ||
+        normalizeHex(params[0]) !== senderHash.toLowerCase()
+      )
+        reasons.push(
+          "sender transaction request hash does not match the stored senderTransactionHash",
+        );
+      const outcome = pinnedSenderFromTransaction(senderRecord, pinnedBlock);
+      if (!outcome.ok) {
+        reasons.push(
+          `sender transaction provenance is not pinned: ${outcome.reason}`,
+        );
+      } else {
+        if (
+          normalizeHex(senderRecord.response?.result?.hash) !==
+          senderHash.toLowerCase()
+        )
+          reasons.push(
+            "sender transaction result hash does not match the requested hash",
+          );
+        if (decodedTx !== null && outcome.sender !== decodedTx.recipient)
+          reasons.push(
+            "prepared calldata recipient does not match the pinned sender transaction",
+          );
+        if (isAddress(tx?.from) && outcome.sender !== tx.from.toLowerCase())
+          reasons.push(
+            "prepared transaction sender does not match the pinned sender transaction",
+          );
+      }
     }
   }
 
@@ -384,8 +813,9 @@ export function assessQualification({
 
 /**
  * Structural audit of one stored request record. Returns every integrity
- * violation found, so a capture that carries a result on a non-2xx response or
- * both `result` and `error` can never stay silently qualified.
+ * violation found, so a capture that carries a result on a non-2xx response,
+ * both `result` and `error`, an incomplete request envelope, or a response id
+ * that does not match its request id can never stay silently qualified.
  */
 export function auditRecord(record, index = 0) {
   const label = `record ${index + 1}`;
@@ -398,6 +828,18 @@ export function auditRecord(record, index = 0) {
     reasons.push(
       `${label} uses non-allowlisted method ${JSON.stringify(record.method)}`,
     );
+  const requestOutcome = requestEnvelope(record);
+  if (!requestOutcome.ok) {
+    reasons.push(`${label} ${requestOutcome.reason}`);
+  } else {
+    const request = requestOutcome.request;
+    if (request.method !== record.method)
+      reasons.push(
+        `${label} request method ${JSON.stringify(request.method)} does not match recorded method ${JSON.stringify(record.method)}`,
+      );
+    if (JSON.stringify(request.params) !== JSON.stringify(record.params))
+      reasons.push(`${label} request params do not match the recorded params`);
+  }
   if (
     !Number.isInteger(record.httpStatus) ||
     record.httpStatus < 200 ||
@@ -413,6 +855,12 @@ export function auditRecord(record, index = 0) {
   }
   if (body.jsonrpc !== RPC_VERSION)
     reasons.push(`${label} has an invalid JSON-RPC version`);
+  if (!Object.hasOwn(body, "id") || body.id === undefined)
+    reasons.push(`${label} has no response id`);
+  else if (requestOutcome.ok && body.id !== requestOutcome.request.id)
+    reasons.push(
+      `${label} response id ${JSON.stringify(body.id)} does not match request id ${JSON.stringify(requestOutcome.request.id)}`,
+    );
   const hasResult = Object.hasOwn(body, "result");
   const hasError = body.error !== undefined;
   if (hasResult && hasError)
@@ -466,11 +914,14 @@ async function rpc(method, params, context) {
     signal: AbortSignal.timeout(15000),
   });
   const body = await response.json();
+  // Persist the sanitized request alongside the response so the pair can be
+  // verified later: method, params, and the JSON-RPC id are all recorded.
   const record = {
     context,
     fetchedAt,
     method,
     params,
+    request,
     httpStatus: response.status,
     response: body,
   };
@@ -682,6 +1133,10 @@ async function main() {
       CANDIDATE_POOL.toLowerCase()
   ) {
     const amountIn = BigInt(quote.amountInAtomic);
+    if (amountIn !== CANONICAL_AMOUNT_IN)
+      throw new Error(
+        `Canonical target requires exactly 0.001 WETH exact input, observed ${quote.amountInAtomic}`,
+      );
     const amountOut = uint(quote.raw);
     const minOut = (amountOut * 99n) / 100n;
     let publicSender = null;
@@ -831,7 +1286,7 @@ async function main() {
   mkdirSync(dir, { recursive: true });
   writeFileSync(
     join(dir, "capture.json"),
-    `${JSON.stringify({ schemaVersion: "be-063-camelot-readonly-v1", classification: assessment.classification, qualificationReasons: assessment.reasons, real: true, endpointClass: "arbitrum-official-public", repositoryHeadAtCapture: execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim(), source: "https://docs.camelot.exchange/contracts/arbitrum/sepolia-testnet/", observations, records }, null, 2)}\n`,
+    `${JSON.stringify({ schemaVersion: "be-063-camelot-readonly-v2", classification: assessment.classification, qualificationReasons: assessment.reasons, real: true, endpointClass: "arbitrum-official-public", repositoryHeadAtCapture: execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim(), source: "https://docs.camelot.exchange/contracts/arbitrum/sepolia-testnet/", observations, records }, null, 2)}\n`,
     { flag: "wx" },
   );
   console.log(
