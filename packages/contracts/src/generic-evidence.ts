@@ -360,6 +360,22 @@ function validateMockProvenance(
   }
 }
 
+function validateObservedChainIdentity(
+  evidence: z.infer<typeof genericEvidenceObjectSchema>,
+  context: z.RefinementCtx,
+) {
+  if (
+    evidence.provenance.observedChainId !== undefined &&
+    evidence.provenance.observedChainId !== evidence.intent.chainId
+  ) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Provider-observed chain identity must match the checked Intent",
+      path: ["provenance", "observedChainId"],
+    });
+  }
+}
+
 function validateFailureStatus(
   evidence: z.infer<typeof genericEvidenceObjectSchema>,
   context: z.RefinementCtx,
@@ -378,6 +394,7 @@ function validateFailureStatus(
 
 export const genericEvidenceSchema = genericEvidenceObjectSchema
   .superRefine(validateMockProvenance)
+  .superRefine(validateObservedChainIdentity)
   .superRefine(validateFailureStatus);
 
 export type GenericProviderStatus = z.infer<typeof genericProviderStatusSchema>;
