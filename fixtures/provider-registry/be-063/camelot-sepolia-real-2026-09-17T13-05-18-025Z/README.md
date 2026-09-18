@@ -1,6 +1,8 @@
-# BE-063 real Camelot Sepolia swap evidence
+# BE-063 real Camelot Sepolia swap evidence (historical v1 capture)
 
-`QUALIFIED_REAL` for one **read-only, pinned-block** WETH-input Camelot V3 scenario. `CANONICAL_TARGET_CANDIDATE=YES`. Product Owner acceptance under #67 is still open. This is neither a signed/broadcast transaction nor a NativeRpcProvider end-to-end test.
+> **Superseded for final controlled-Gate evidence.** This capture was taken before the PR #77 P1 hardening that persisted each request's JSON-RPC `id` and bound every qualifying value to the exact request that produced it. Its 29 records **do not store request-side ids**, so under the hardened validator it revalidates as `PARTIALLY_QUALIFIED`, not `QUALIFIED_REAL`. The raw capture is preserved unchanged as historical evidence and is **not** sufficient final controlled-P0-Gate evidence. The hardened live capture is [`../camelot-sepolia-real-2026-09-18T08-47-56-715Z/`](../camelot-sepolia-real-2026-09-18T08-47-56-715Z/).
+
+This capture is `QUALIFIED_REAL` **under the four rules that were in force when it was recorded** for one read-only, pinned-block WETH-input Camelot V3 scenario. `CANONICAL_TARGET_CANDIDATE=YES`. The canonical Product target is accepted under #67; controlled P0 Gate acceptance is still pending. This is neither a signed/broadcast transaction nor a NativeRpcProvider end-to-end test.
 
 ## Reproduce and provenance
 
@@ -14,18 +16,20 @@ The script uses only the official public Arbitrum Sepolia RPC and a fixed read-o
 
 Pinned block hash: `0x64da70b798bd462b0949e87439e7be1fa7fe5b7e5545598f6d0c3e7ec89a61c7`; block timestamp `2026-09-17T13:05:07Z`. Capture requests ran from `2026-09-17T13:05:07.382Z` to `2026-09-17T13:05:17.693Z`. `eth_chainId=0x66eee` (421614).
 
-## Hardened qualification criteria and offline revalidation
+## Qualification criteria at capture, and why this capture is now historical
 
-PR #77 review tightened four evidence-integrity rules in the probe:
+The probe applied four evidence-integrity rules when this capture was recorded:
 
 1. a result counts as evidence only when the HTTP status is successful, the JSON-RPC envelope is valid, no `error` member is present, and `result` is present with the expected type — a body carrying both `result` and `error`, or a non-2xx body carrying a `result`, is rejected;
 2. `QUALIFIED_REAL` explicitly requires a non-null `preparedSwap` plus the real quote, the exact prepared transaction, a successful pinned `eth_call`, a decoded `eth_call` output equal to the quote output, and a successful pinned `eth_estimateGas`;
 3. the public sender taken from `eth_getTransactionByHash` is usable only when that transaction exists, carries a valid sender, and has both `blockNumber` and `blockHash` equal to the pinned block;
 4. the `exactInputSingle` return value must be exactly one ABI word (32 bytes / 64 hex characters) before the `uint256` output is decoded.
 
-**This capture was not rerun and no new live RPC read was made for that hardening.** The stored raw records already carry `httpStatus` and the complete JSON-RPC envelope for all 29 requests, so the historical evidence was revalidated offline against the tightened rules. `revalidateCapture` in `scripts/provider-probes/camelot-sepolia-real-swap.mjs` replays the hardened record audit and qualification over the committed `capture.json`, and `scripts/provider-probes/camelot-sepolia-real-swap.test.mjs` asserts the deterministic result: 29/29 records pass the audit and the capture re-derives to `QUALIFIED_REAL` with no reasons. The same tests prove the rules bind, since a non-2xx record, a cleared `preparedSwap`, a changed sender `blockNumber`/`blockHash`, a widened `eth_call` word, or a record carrying both `result` and `error` each drops the capture out of `QUALIFIED_REAL`.
+The later PR #77 P1 review added two more rules that this capture cannot satisfy: every record must persist its request JSON-RPC `id`, method and params, and the response `id` must equal the request `id`; and every qualifying value must be bound to the exact request that produced it (quote target/calldata/block, prepared `eth_call`/`eth_estimateGas` tx and block, sender hash, and decoded prepared calldata semantics). This capture stores `method` and `params` but **never stored a request id**, so the request/response pair cannot be verified.
 
-The historical raw observations in `capture.json` are preserved unchanged; only the probe, its deterministic tests, and this section changed. `repositoryHeadAtCapture` stays `65f22ad889e69148d3d5edfdda798d271c8e8291`, the probe source commit at capture time.
+`revalidateCapture` in `scripts/provider-probes/camelot-sepolia-real-swap.mjs` replays the hardened record audit and qualification over the committed `capture.json`. Under the hardened rules this capture re-derives to `PARTIALLY_QUALIFIED`, not `QUALIFIED_REAL`, because its request envelopes are incomplete. `scripts/provider-probes/camelot-sepolia-real-swap.test.mjs` asserts exactly that, and also asserts that the raw capture is preserved. **No field was retrofitted and no request id was fabricated for this historical evidence.** A fresh hardened live capture was taken instead; see the sibling v2 fixture.
+
+The historical raw observations in `capture.json` are preserved unchanged. `repositoryHeadAtCapture` stays `65f22ad889e69148d3d5edfdda798d271c8e8291`, the probe source commit at capture time.
 
 ## Deployment and pool
 
@@ -62,4 +66,4 @@ Pinned `eth_call` at `2026-09-17T13:05:17.383Z` returned `15882896725531551` ato
 
 ## Product handoff
 
-`CANONICAL_TARGET_CANDIDATE=YES`: real deployment and pool, token precision, a reproducible on-chain quote, exact protected unsigned transaction, and successful pinned native-input `eth_call`/`eth_estimateGas` are present. Product Owner #67 must accept the canonical pair, intended user-facing Swap Intent and economic constraints, the minimum Native RPC evidence flow, and incomplete/stale evidence behavior. Backend #66/P0 Golden Path must integrate and validate this scenario; this fixture alone is not system acceptance. No transaction was signed or broadcast.
+`CANONICAL_TARGET_CANDIDATE=YES`: real deployment and pool, token precision, a reproducible on-chain quote, an exact protected unsigned transaction, and successful pinned native-input `eth_call`/`eth_estimateGas` are present. The canonical WETH → test-USDC Camelot V3 target is **accepted by the Product Owner**; controlled P0 Gate acceptance is **still pending** this evidence-integrity work. Backend #66/P0 Golden Path must integrate and validate this scenario; this fixture alone is not system acceptance. No transaction was signed or broadcast. This specific capture is historical and no longer sufficient final controlled-Gate evidence — see the sibling v2 fixture.
