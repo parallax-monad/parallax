@@ -9,6 +9,7 @@ import {
   type EvidenceRef,
   evidenceItemSchema,
   genericEvidenceItemSchema,
+  genericEvidenceSchema,
   normalizedSwapIntentSchema,
   type RuleResult,
   rerunRejectionReasonSchema,
@@ -1035,6 +1036,84 @@ describe("completed Run Result contract", () => {
         ],
       }).success,
     ).toBe(false);
+  });
+
+  it("keeps Provider metadata scopes separate from canonical RunResult scope", () => {
+    const field = (
+      value: unknown,
+      source: "moss" | "quote" | "derived" | "rpc",
+    ) => ({
+      value,
+      source,
+      reproducibility: "REPRODUCIBLE" as const,
+      blockNumber: "12345",
+    });
+    const providerEvidence = genericEvidenceSchema.parse({
+      intent: {
+        chainId: 143,
+        protocol: "kuru",
+        sender,
+        tokenIn: "native",
+        tokenOut: usdc.address,
+        amountIn: "1",
+        minimumReceivedSource: "unavailable",
+      },
+      provider: {
+        providerId: "fixture-provider",
+        status: "SUCCESS",
+        integrationStatus: "OK",
+        errors: field([], "moss"),
+      },
+      execution: { status: "SUCCESS" },
+      quote: field({ estimatedAmountOut: "10" }, "quote"),
+      action: field([], "moss"),
+      receipt: field({ status: "ok" }, "moss"),
+      outcome: field({ status: "ok" }, "moss"),
+      assetChanges: field([], "moss"),
+      assetChangeAssessment: "NOT_APPLICABLE",
+      warnings: field([], "moss"),
+      simulation: {
+        value: {
+          expectedTransactions: 1,
+          observedResults: 1,
+          unmatchedResultIndexes: [],
+          halted: false,
+          complete: true,
+          missingTransactionIndexes: [],
+        },
+        source: "derived",
+        reproducibility: "REPRODUCIBLE",
+        blockNumber: "12345",
+      },
+      blockNumber: field("12345", "rpc"),
+      capabilities: ["quote", "simulate"],
+      provenance: {
+        observedChainId: 143,
+        mode: "LIVE",
+        source: "moss",
+        simulationBlock: "12345",
+      },
+      checkedScope: ["quote"],
+      unknownScope: ["simulation"],
+      providerData: {},
+    });
+    const parsed = runResultSchema.safeParse({
+      ...completedResult,
+      providerEvidence,
+    });
+
+    expect(parsed.success).toBe(true);
+    if (parsed.success && parsed.data.status === "completed") {
+      expect(parsed.data.providerEvidence?.capabilities).toEqual([
+        "quote",
+        "simulate",
+      ]);
+      expect(parsed.data.providerEvidence?.checkedScope).toEqual(["quote"]);
+      expect(parsed.data.providerEvidence?.unknownScope).toEqual([
+        "simulation",
+      ]);
+      expect(parsed.data.scope).toEqual(completedResult.scope);
+    }
   });
 
   it("preserves Economic FAIL independently from the global Verdict", () => {
