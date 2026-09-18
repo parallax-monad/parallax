@@ -283,6 +283,7 @@ export class BackendPipeline<
     const quote = await protocol.quote(normalized as never, { blockContext });
     const unsignedTransaction = await protocol.buildTransaction(
       normalized as never,
+      { blockContext, quote },
     );
     const gasEstimate = await chain.estimateGas(unsignedTransaction.payload);
     const finality = await chain.getFinality(blockContext);

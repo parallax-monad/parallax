@@ -10,6 +10,8 @@ import {
 } from "./chain-adapter.js";
 import type {
   ProtocolAdapter,
+  ProtocolQuoteOptions,
+  ProtocolTransactionOptions,
   UnsignedTransaction,
 } from "./protocol-adapter.js";
 import {
@@ -128,6 +130,7 @@ export type FakeProtocolFixture<Quote = unknown, Transaction = unknown> = {
 export type FakeProtocolCall<Intent> = {
   readonly operation: "quote" | "buildTransaction";
   readonly intent: Intent;
+  readonly options?: ProtocolQuoteOptions | ProtocolTransactionOptions<unknown>;
 };
 
 export type FakeProtocolAdapter<
@@ -152,14 +155,18 @@ export function createFakeProtocolAdapter<
   const calls: FakeProtocolCall<Intent>[] = [];
   return {
     calls,
-    async quote(intent: Intent): Promise<Quote> {
-      calls.push({ operation: "quote", intent });
+    async quote(
+      intent: Intent,
+      options?: ProtocolQuoteOptions,
+    ): Promise<Quote> {
+      calls.push({ operation: "quote", intent, options });
       return fixture.quote;
     },
     async buildTransaction(
       intent: Intent,
+      options?: ProtocolTransactionOptions<Quote>,
     ): Promise<UnsignedTransaction<Transaction>> {
-      calls.push({ operation: "buildTransaction", intent });
+      calls.push({ operation: "buildTransaction", intent, options });
       return { kind: "unsigned", payload: fixture.transaction };
     },
   };

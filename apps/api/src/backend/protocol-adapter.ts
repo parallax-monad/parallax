@@ -35,6 +35,12 @@ export type ProtocolQuoteOptions = {
   readonly blockContext?: BlockContext;
 };
 
+/** Transaction construction must consume the quote for the same execution. */
+export type ProtocolTransactionOptions<Quote = unknown> =
+  ProtocolQuoteOptions & {
+    readonly quote?: Quote;
+  };
+
 /** Normalized failure boundary for protocol-specific adapter operations. */
 export class ProtocolAdapterError extends BackendControlError {
   public readonly name = "ProtocolAdapterError";
@@ -104,5 +110,8 @@ export interface ProtocolAdapter<
 
   quote(intent: Intent, options?: ProtocolQuoteOptions): Promise<Quote>;
 
-  buildTransaction(intent: Intent): Promise<UnsignedTransaction<Transaction>>;
+  buildTransaction(
+    intent: Intent,
+    options?: ProtocolTransactionOptions<Quote>,
+  ): Promise<UnsignedTransaction<Transaction>>;
 }

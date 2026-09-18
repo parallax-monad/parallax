@@ -32,6 +32,16 @@ const intent = {
   },
 };
 
+function quoteResponse(amountOut: bigint): string {
+  return `0x${amountOut.toString(16).padStart(64, "0")}${"0".repeat(64)}`;
+}
+
+function calldataWord(data: unknown, index: number): string {
+  if (typeof data !== "string") throw new Error("expected calldata");
+  const start = 2 + 8 + index * 64;
+  return data.slice(start, start + 64);
+}
+
 describe("CamelotV3ProtocolAdapter", () => {
   it("keeps Camelot quote and transaction construction behind replaceable seams", async () => {
     const quote = { status: "controlled", scenarioId: "quote-seam" };
@@ -140,6 +150,8 @@ describe("CamelotV3ProtocolAdapter", () => {
     const canonicalIntent = {
       ...intent,
       amountInAtomic: "1000000000000000",
+      recipient: "0x2222222222222222222222222222222222222222",
+      recipientSource: "explicit" as const,
       tokenOut: { kind: "erc20" as const, address: CAMELOT_SEPOLIA_USDC },
     };
     const adapter = new CamelotV3ProtocolAdapter({
@@ -149,13 +161,19 @@ describe("CamelotV3ProtocolAdapter", () => {
       runtimeRevision: "test-revision",
     });
 
-    await expect(adapter.quote(canonicalIntent)).resolves.toEqual({
+    const blockContext = { blockNumber: "42" };
+    const quote = await adapter.quote(canonicalIntent, { blockContext });
+    expect(quote).toEqual({
       estimatedAmountOut: "2",
       source: "quote",
+      blockNumber: "42",
       runtimeVersion: "test-runtime",
       runtimeRevision: "test-revision",
     });
-    const transaction = await adapter.buildTransaction(canonicalIntent);
+    const transaction = await adapter.buildTransaction(canonicalIntent, {
+      blockContext,
+      quote,
+    });
     const payload = (
       transaction as UnsignedTransaction<Record<string, unknown>>
     ).payload;
@@ -168,7 +186,7 @@ describe("CamelotV3ProtocolAdapter", () => {
           to: CAMELOT_SEPOLIA_QUOTER,
           data: expect.stringMatching(/^0x2d9ebd1d[0-9a-f]{256}$/),
         },
-        "latest",
+        "0x2a",
       ],
     });
     expect(payload).toMatchObject({
@@ -177,9 +195,102 @@ describe("CamelotV3ProtocolAdapter", () => {
       value: "0x38d7ea4c68000",
       chainId: "0x66eee",
     });
+    expect(calldataWord(payload.data, 2)).toBe(
+      canonicalIntent.recipient.slice(2).toLowerCase().padStart(64, "0"),
+    );
     expect(String(payload.data).slice(0, 2 + 8 + 64)).toBe(
       `0xbc651188${CAMELOT_SEPOLIA_WETH.slice(2).toLowerCase().padStart(64, "0")}`,
     );
+    expect(calls).toHaveLength(1);
+  });
+
+  it("binds quote and transaction construction to the supplied pinned block", async () => {
+    const calls: Array<{ method: string; params: readonly unknown[] }> = [];
+    const rpcClient: ArbitrumRpcClient = {
+      async request(method, params = []) {
+        calls.push({ method, params });
+        const amountOut =
+          params[1] === "0x2a" ? 2n * 10n ** 18n : 3n * 10n ** 18n;
+        return quoteResponse(amountOut);
+      },
+    };
+    const canonicalIntent = {
+      ...intent,
+      amountInAtomic: "1000000000000000",
+      tokenOut: { kind: "erc20" as const, address: CAMELOT_SEPOLIA_USDC },
+    };
+    const adapter = new CamelotV3ProtocolAdapter({
+      rpcClient,
+      tokenOutDecimals: 18,
+    });
+
+    const block42 = { blockNumber: "42" };
+    const block43 = { blockNumber: "43" };
+    const quote42 = await adapter.quote(canonicalIntent, {
+      blockContext: block42,
+    });
+    const transaction42 = await adapter.buildTransaction(canonicalIntent, {
+      blockContext: block42,
+      quote: quote42,
+    });
+    const quote43 = await adapter.quote(canonicalIntent, {
+      blockContext: block43,
+    });
+    const transaction43 = await adapter.buildTransaction(canonicalIntent, {
+      blockContext: block43,
+      quote: quote43,
+    });
+
+    expect(quote42).toMatchObject({
+      estimatedAmountOut: "2",
+      blockNumber: "42",
+    });
+    expect(quote43).toMatchObject({
+      estimatedAmountOut: "3",
+      blockNumber: "43",
+    });
+    expect(calldataWord(transaction42.payload.data, 5)).toBe(
+      ((2n * 10n ** 18n * 99n) / 100n).toString(16).padStart(64, "0"),
+    );
+    expect(calldataWord(transaction43.payload.data, 5)).toBe(
+      ((3n * 10n ** 18n * 99n) / 100n).toString(16).padStart(64, "0"),
+    );
+    await expect(
+      adapter.buildTransaction(canonicalIntent, {
+        blockContext: block43,
+        quote: quote42,
+      }),
+    ).rejects.toMatchObject({
+      code: "BUILD_TRANSACTION_FAILED",
+      cause: expect.objectContaining({
+        message: "Camelot quote is not bound to the requested pinned block",
+      }),
+    });
+    expect(calls).toHaveLength(2);
+  });
+
+  it("does not re-quote when building a live transaction without the execution quote", async () => {
+    const adapter = new CamelotV3ProtocolAdapter({
+      rpcClient: {
+        request: async () => quoteResponse(2n * 10n ** 18n),
+      },
+      tokenOutDecimals: 18,
+    });
+    const canonicalIntent = {
+      ...intent,
+      amountInAtomic: "1000000000000000",
+      tokenOut: { kind: "erc20" as const, address: CAMELOT_SEPOLIA_USDC },
+    };
+
+    await expect(
+      adapter.buildTransaction(canonicalIntent),
+    ).rejects.toMatchObject({
+      code: "BUILD_TRANSACTION_FAILED",
+      cause: expect.objectContaining({
+        message:
+          "Camelot transaction construction requires the quote produced for this execution",
+      }),
+    });
   });
 
   it("fails closed when the live quote response is not exactly two ABI words", async () => {

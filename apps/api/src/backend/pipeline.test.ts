@@ -101,6 +101,13 @@ describe("BackendPipeline", () => {
       "quote",
       "buildTransaction",
     ]);
+    expect(protocol.calls[1]).toMatchObject({
+      operation: "buildTransaction",
+      options: {
+        blockContext: { blockNumber: fixture.chain.blockNumber },
+        quote: fixture.protocol.quote,
+      },
+    });
     expect(core.evaluate).toHaveBeenCalledWith(
       normalizedIntent,
       expect.objectContaining({

@@ -2,6 +2,7 @@ import {
   ARBITRUM_SEPOLIA_CHAIN_ID,
   CAMELOT_V3_PROTOCOL_ID,
   convertAtomicAmountToHuman,
+  convertHumanAmountToAtomic,
   type NormalizedSwapIntent,
   normalizedSwapIntentSchema,
 } from "@parallax/contracts";
@@ -9,7 +10,10 @@ import {
   type ArbitrumRpcClient,
   createArbitrumRpcClient,
 } from "./arbitrum-chain-adapter.js";
-import type { ProtocolQuoteOptions } from "./protocol-adapter.js";
+import type {
+  ProtocolQuoteOptions,
+  ProtocolTransactionOptions,
+} from "./protocol-adapter.js";
 import {
   isProtocolAdapterError,
   type ProtocolAdapter,
@@ -26,6 +30,7 @@ export type CamelotV3Transaction = Readonly<Record<string, unknown>>;
 
 export type CamelotV3TransactionSeam = (
   intent: NormalizedSwapIntent,
+  options?: ProtocolTransactionOptions<unknown>,
 ) =>
   | CamelotV3Transaction
   | UnsignedTransaction<CamelotV3Transaction>
@@ -77,7 +82,6 @@ export class CamelotV3ProtocolAdapter
   public readonly protocolId = CAMELOT_V3_PROTOCOL_ID;
   private readonly quoteSeam: CamelotV3QuoteSeam | undefined;
   private readonly transactionSeam: CamelotV3TransactionSeam | undefined;
-  private readonly liveQuotes = new Map<string, bigint>();
 
   public constructor(options: CamelotV3ProtocolAdapterOptions = {}) {
     const liveClient =
@@ -100,7 +104,8 @@ export class CamelotV3ProtocolAdapter
       options.buildTransaction ??
       (liveClient === undefined
         ? undefined
-        : (intent) => this.liveTransaction(intent, liveClient, metadata));
+        : (intent, transactionOptions) =>
+            this.liveTransaction(intent, metadata, transactionOptions));
   }
 
   public async quote(
@@ -120,13 +125,14 @@ export class CamelotV3ProtocolAdapter
 
   public async buildTransaction(
     intent: NormalizedSwapIntent,
+    options?: ProtocolTransactionOptions<unknown>,
   ): Promise<UnsignedTransaction<CamelotV3Transaction>> {
     const normalized = this.validateIntent(intent, "buildTransaction");
     if (this.transactionSeam === undefined) {
       throw unavailable("unsigned transaction construction");
     }
     try {
-      const transaction = await this.transactionSeam(normalized);
+      const transaction = await this.transactionSeam(normalized, options);
       if (isUnsignedTransaction(transaction)) return transaction;
       return { kind: "unsigned", payload: transaction };
     } catch (error) {
@@ -188,13 +194,15 @@ export class CamelotV3ProtocolAdapter
       blockTag(options),
     ]);
     const decoded = decodeQuote(raw);
-    this.liveQuotes.set(quoteKey(intent), decoded.amountOut);
     return {
       estimatedAmountOut: convertAtomicAmountToHuman(
         decoded.amountOut.toString(),
         metadata.tokenOutDecimals,
       ),
       source: "quote",
+      ...(options?.blockContext === undefined
+        ? {}
+        : { blockNumber: options.blockContext.blockNumber }),
       runtimeVersion: metadata.runtimeVersion,
       runtimeRevision: metadata.runtimeRevision,
     };
@@ -202,28 +210,31 @@ export class CamelotV3ProtocolAdapter
 
   private async liveTransaction(
     intent: NormalizedSwapIntent,
-    client: ArbitrumRpcClient,
     metadata: {
       tokenOutDecimals: number;
       runtimeVersion: string;
       runtimeRevision: string;
     },
+    options?: ProtocolTransactionOptions<unknown>,
   ): Promise<CamelotV3Transaction> {
-    let amountOut = this.liveQuotes.get(quoteKey(intent));
-    if (amountOut === undefined) {
-      await this.liveQuote(intent, client, metadata);
-      amountOut = this.liveQuotes.get(quoteKey(intent));
+    const quote = readTransactionQuote(
+      options?.quote,
+      metadata.tokenOutDecimals,
+    );
+    const requestedBlock = options?.blockContext?.blockNumber;
+    if (requestedBlock !== undefined && quote.blockNumber !== requestedBlock) {
+      throw new Error(
+        "Camelot quote is not bound to the requested pinned block",
+      );
     }
-    if (amountOut === undefined) {
-      throw new Error("Camelot quote output was not retained");
-    }
+    const amountOut = quote.amountOut;
     const amountIn = parseAtomic(intent.amountInAtomic, "amountInAtomic");
     const amountOutMinimum = (amountOut * 99n) / 100n;
     const deadline = BigInt(Math.floor(Date.now() / 1000) + 300);
     const data = encodeWords(ROUTER_EXACT_INPUT_SINGLE_SELECTOR, [
       protocolToken(intent.tokenIn),
       protocolToken(intent.tokenOut),
-      intent.sender,
+      intent.recipient,
       deadline.toString(),
       amountIn.toString(),
       amountOutMinimum.toString(),
@@ -333,20 +344,45 @@ function decodeQuote(raw: unknown): { amountOut: bigint } {
   return { amountOut: BigInt(`0x${words[0]}`) };
 }
 
-function quoteKey(intent: NormalizedSwapIntent): string {
-  return JSON.stringify([
-    intent.chainId,
-    intent.protocol,
-    intent.sender.toLowerCase(),
-    intent.recipient.toLowerCase(),
-    intent.tokenIn.kind === "native"
-      ? "native"
-      : intent.tokenIn.address.toLowerCase(),
-    intent.tokenOut.kind === "native"
-      ? "native"
-      : intent.tokenOut.address.toLowerCase(),
-    intent.amountInAtomic,
-  ]);
+function readTransactionQuote(
+  value: unknown,
+  tokenOutDecimals: number,
+): { amountOut: bigint; blockNumber?: string } {
+  const quote =
+    isRecord(value) && value.status === "available" && isRecord(value.quote)
+      ? value.quote
+      : value;
+  if (!isRecord(quote) || typeof quote.estimatedAmountOut !== "string") {
+    throw new Error(
+      "Camelot transaction construction requires the quote produced for this execution",
+    );
+  }
+  const converted = convertHumanAmountToAtomic(
+    quote.estimatedAmountOut,
+    tokenOutDecimals,
+  );
+  if (!converted.success) {
+    throw new Error(
+      `Camelot quote amount is not representable in atomic units: ${converted.error.message}`,
+    );
+  }
+  if (
+    quote.blockNumber !== undefined &&
+    (typeof quote.blockNumber !== "string" ||
+      !DECIMAL_UINT_PATTERN.test(quote.blockNumber))
+  ) {
+    throw new Error("Camelot quote block number is malformed");
+  }
+  return {
+    amountOut: BigInt(converted.amountAtomic),
+    ...(quote.blockNumber === undefined
+      ? {}
+      : { blockNumber: quote.blockNumber }),
+  };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function quantity(value: bigint): string {
