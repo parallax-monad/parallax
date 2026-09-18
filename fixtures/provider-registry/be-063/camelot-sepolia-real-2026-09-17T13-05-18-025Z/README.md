@@ -14,6 +14,19 @@ The script uses only the official public Arbitrum Sepolia RPC and a fixed read-o
 
 Pinned block hash: `0x64da70b798bd462b0949e87439e7be1fa7fe5b7e5545598f6d0c3e7ec89a61c7`; block timestamp `2026-09-17T13:05:07Z`. Capture requests ran from `2026-09-17T13:05:07.382Z` to `2026-09-17T13:05:17.693Z`. `eth_chainId=0x66eee` (421614).
 
+## Hardened qualification criteria and offline revalidation
+
+PR #77 review tightened four evidence-integrity rules in the probe:
+
+1. a result counts as evidence only when the HTTP status is successful, the JSON-RPC envelope is valid, no `error` member is present, and `result` is present with the expected type — a body carrying both `result` and `error`, or a non-2xx body carrying a `result`, is rejected;
+2. `QUALIFIED_REAL` explicitly requires a non-null `preparedSwap` plus the real quote, the exact prepared transaction, a successful pinned `eth_call`, a decoded `eth_call` output equal to the quote output, and a successful pinned `eth_estimateGas`;
+3. the public sender taken from `eth_getTransactionByHash` is usable only when that transaction exists, carries a valid sender, and has both `blockNumber` and `blockHash` equal to the pinned block;
+4. the `exactInputSingle` return value must be exactly one ABI word (32 bytes / 64 hex characters) before the `uint256` output is decoded.
+
+**This capture was not rerun and no new live RPC read was made for that hardening.** The stored raw records already carry `httpStatus` and the complete JSON-RPC envelope for all 29 requests, so the historical evidence was revalidated offline against the tightened rules. `revalidateCapture` in `scripts/provider-probes/camelot-sepolia-real-swap.mjs` replays the hardened record audit and qualification over the committed `capture.json`, and `scripts/provider-probes/camelot-sepolia-real-swap.test.mjs` asserts the deterministic result: 29/29 records pass the audit and the capture re-derives to `QUALIFIED_REAL` with no reasons. The same tests prove the rules bind, since a non-2xx record, a cleared `preparedSwap`, a changed sender `blockNumber`/`blockHash`, a widened `eth_call` word, or a record carrying both `result` and `error` each drops the capture out of `QUALIFIED_REAL`.
+
+The historical raw observations in `capture.json` are preserved unchanged; only the probe, its deterministic tests, and this section changed. `repositoryHeadAtCapture` stays `65f22ad889e69148d3d5edfdda798d271c8e8291`, the probe source commit at capture time.
+
 ## Deployment and pool
 
 | Role | Address | Pinned observation |
