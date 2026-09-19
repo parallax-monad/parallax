@@ -26,6 +26,7 @@ import {
   CAMELOT_SEPOLIA_QUOTER,
   CAMELOT_SEPOLIA_ROUTER,
   CAMELOT_SEPOLIA_USDC,
+  CAMELOT_SEPOLIA_WETH,
   createCamelotV3ProtocolAdapter,
 } from "./camelot-v3-protocol-adapter.js";
 import type { BackendCompositionRuntime } from "./composition.js";
@@ -335,14 +336,14 @@ describe("Arbitrum production composition skeleton", () => {
         if (method === "eth_getBlockByNumber") {
           return { number: "0x2a", hash: blockHash };
         }
-        if (method === "eth_estimateGas") return "0x5208";
+        if (method === "eth_estimateGas") return "0x42674";
         if (method === "eth_call") {
           const transaction = params[0] as { to?: string } | undefined;
           if (
             transaction?.to?.toLowerCase() ===
             CAMELOT_SEPOLIA_QUOTER.toLowerCase()
           ) {
-            return `0x${(2n * 10n ** 18n).toString(16).padStart(64, "0")}${"0".repeat(64)}`;
+            return `0x${15882896725531551n.toString(16).padStart(64, "0")}${"0".repeat(64)}`;
           }
           return "0x";
         }
@@ -526,14 +527,14 @@ describe("Arbitrum production composition skeleton", () => {
         if (method === "eth_getBlockByNumber") {
           return { number: "0x2a", hash: blockHash };
         }
-        if (method === "eth_estimateGas") return "0x5208";
+        if (method === "eth_estimateGas") return "0x42674";
         if (method === "eth_call") {
           const transaction = params[0] as { to?: string } | undefined;
           if (
             transaction?.to?.toLowerCase() ===
             CAMELOT_SEPOLIA_QUOTER.toLowerCase()
           ) {
-            return `0x${(2n * 10n ** 18n).toString(16).padStart(64, "0")}${"0".repeat(64)}`;
+            return `0x${15882896725531551n.toString(16).padStart(64, "0")}${"0".repeat(64)}`;
           }
           return "0x";
         }
@@ -599,6 +600,35 @@ describe("Arbitrum production composition skeleton", () => {
     expect(execution.unsignedTransaction.payload).toMatchObject({
       to: CAMELOT_SEPOLIA_ROUTER,
       chainId: "0x66eee",
+    });
+    const quoteCall = calls.find(
+      ({ method, params }) =>
+        method === "eth_call" &&
+        (params[0] as { to?: string } | undefined)?.to?.toLowerCase() ===
+          CAMELOT_SEPOLIA_QUOTER.toLowerCase(),
+    );
+    expect(quoteCall).toMatchObject({
+      params: [
+        {
+          to: CAMELOT_SEPOLIA_QUOTER,
+          data: expect.stringContaining(
+            `2d9ebd1d${CAMELOT_SEPOLIA_WETH.slice(2).toLowerCase().padStart(64, "0")}${CAMELOT_SEPOLIA_USDC.slice(2).toLowerCase().padStart(64, "0")}${1000000000000000n.toString(16).padStart(64, "0")}`,
+          ),
+        },
+        "0x2a",
+      ],
+    });
+    const estimateCall = calls.find(
+      ({ method }) => method === "eth_estimateGas",
+    );
+    expect(estimateCall).toMatchObject({
+      params: [
+        expect.objectContaining({
+          to: CAMELOT_SEPOLIA_ROUTER,
+          data: expect.stringContaining("bc651188"),
+          chainId: "0x66eee",
+        }),
+      ],
     });
     expect(calls[2]).toMatchObject({
       method: "eth_call",
@@ -951,6 +981,65 @@ describe("Arbitrum composition P0 Risk wiring", () => {
     expect(runResultSchema.safeParse(execution.decisionOutput).success).toBe(
       true,
     );
+  });
+
+  it("runs bounded remediation through a terminal child Run before recording VERIFIED", async () => {
+    const store = new InMemoryRunStore();
+    const composition = createArbitrumProductionComposition(
+      p0CompositionOptions({
+        runStore: store,
+        providerEvidenceMapper: () => p0VerifiedEvidence(),
+        p0Risk: {
+          selectedQuote: p0SelectedQuote,
+          constraints: p0Constraints,
+          constraintEvidence: p0ConstraintEvidence,
+          remediation: {
+            maxAmountInAtomic: "3000",
+            initialStepAtomic: "1000",
+            maxEvaluations: 2,
+            constraintEvidenceForCandidate: () => [
+              {
+                name: "maxPriceImpact",
+                state: "VERIFIED",
+                numerator: "1",
+                denominator: "1",
+                unit: "bps",
+                evidenceKey: "candidate-impact",
+              },
+            ],
+          },
+        },
+      }),
+    );
+
+    const execution = await runP0Check(composition, "p0-remediation");
+    const result = execution.decisionOutput as {
+      readonly status: "completed";
+      readonly verdict: string;
+      readonly providerEvidence?: GenericEvidence;
+    };
+    const backendP0 = result.providerEvidence
+      ? (result.providerEvidence.providerData.backendP0 as
+          | {
+              remediation?: {
+                status?: string;
+                candidate?: { verification?: { childRunId?: string } };
+              };
+            }
+          | undefined)
+      : undefined;
+    const remediation = backendP0?.remediation;
+
+    expect(remediation?.status).toBe("VERIFIED");
+    const childRunId = remediation?.candidate?.verification?.childRunId;
+    expect(childRunId).toEqual(expect.any(String));
+    await expect(store.get(childRunId as string)).resolves.toMatchObject({
+      status: "completed",
+      parentRunId: "p0-remediation",
+    });
+    // The current public contract has no verified ActionEvaluation projection
+    // for this provider-neutral slice yet; it therefore remains fail-closed.
+    expect(result.verdict).toBe("STOP");
   });
 
   it("leaves an injected custom core/decision override unchanged", async () => {

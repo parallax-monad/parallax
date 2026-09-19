@@ -1,19 +1,32 @@
+import { createHash } from "node:crypto";
 import {
   ARBITRUM_SEPOLIA_CHAIN_ID,
   CAMELOT_V3_PROTOCOL_ID,
   type CheckSwapRequest,
+  failedRunResultSchema,
   type GenericEvidence,
   genericEvidenceSchema,
   type NormalizedSwapIntent,
+  normalizedSwapIntentSchema,
   type QuoteRequest,
+  type RunResult,
+  runDiffSchema,
+  runResultSchema,
 } from "@parallax/contracts";
 import { projectGenericEvidenceToRunResult } from "@parallax/orchestrator/agent-flow";
 import type {
   CallerConstraint,
+  CandidateEvaluation,
   ConstraintEvidence,
   QuoteContext,
+  SolverResult,
   Verdict,
   VerifiedCandidate,
+} from "@parallax/risk";
+import {
+  evaluateConstraints,
+  evaluateEvidence,
+  solveSelectedTargetOutput,
 } from "@parallax/risk";
 import {
   normalizeArbitrumCheckSwapRequest,
@@ -51,9 +64,11 @@ import { createNativeRpcProviderAdapter } from "./native-rpc-provider.js";
 import {
   applyBackendP0Verdict,
   type BackendCurrentQuoteResult,
+  backendEvidenceState,
   buildBackendCurrentQuoteContext,
   evaluateBackendP0Risk,
 } from "./p0-risk-integration.js";
+import type { BackendPipelineProviderExecution } from "./pipeline.js";
 import { ProtocolRegistry } from "./protocol-registry.js";
 import type { ProviderEvaluationResult } from "./provider-adapter.js";
 import {
@@ -79,6 +94,20 @@ export type ArbitrumP0RiskContext = {
   readonly constraints?: readonly CallerConstraint[];
   readonly constraintEvidence?: readonly ConstraintEvidence[];
   readonly verifiedRemediation?: VerifiedCandidate;
+  /** Explicit bounded search; no production-wide maximum is invented. */
+  readonly remediation?: ArbitrumP0RemediationOptions;
+};
+
+export type ArbitrumP0RemediationOptions = {
+  readonly maxAmountInAtomic: string;
+  readonly initialStepAtomic: string;
+  readonly maxEvaluations: number;
+  /** Optional candidate-specific constraint measurement from the owner. */
+  readonly constraintEvidenceForCandidate?: (input: {
+    readonly intent: NormalizedSwapIntent;
+    readonly quote: QuoteContext;
+    readonly evidence: GenericEvidence;
+  }) => readonly ConstraintEvidence[] | Promise<readonly ConstraintEvidence[]>;
 };
 
 export type ArbitrumProductionCompositionOptions = {
@@ -253,7 +282,7 @@ export function createArbitrumProductionComposition(
   const decision =
     options.decision ??
     ({
-      decide: (input: unknown, context?: unknown) => {
+      decide: async (input: unknown, context?: unknown) => {
         const parsedEvidence = genericEvidenceSchema.safeParse(input);
         if (!parsedEvidence.success) {
           throw new Error(
@@ -271,21 +300,27 @@ export function createArbitrumProductionComposition(
             "Arbitrum default decision requires a Backend pipeline context",
           );
         }
-        const pipelineContext = context as {
-          readonly runId: string;
-          readonly intent: NormalizedSwapIntent;
-        };
+        const pipelineContext = context as ArbitrumDecisionContext;
         const evidence = parsedEvidence.data as GenericEvidence;
-        // The public RunResult projection is unchanged; only the final verdict
-        // is made to obey the P0 Risk verdict, so the legacy evaluator can
-        // never report PROCEED over a P0 UNKNOWN.
+        const projection = await evaluateArbitrumP0Decision(
+          options,
+          pipelineContext,
+          evidence,
+        );
+        const enrichedEvidence = withP0Observation(
+          evidence,
+          projection.risk.verdict,
+          projection.risk.evidenceState,
+          projection.risk.quoteFidelity,
+          projection.solver,
+        );
         return applyBackendP0Verdict(
           projectGenericEvidenceToRunResult(
             pipelineContext.runId,
             pipelineContext.intent,
-            evidence,
+            enrichedEvidence,
           ),
-          arbitrumP0RiskVerdictOrUnknown(options, context, evidence),
+          projection.risk.verdict,
         );
       },
     } satisfies DecisionPort<unknown, unknown, unknown>);
@@ -327,6 +362,16 @@ type ArbitrumDecisionContext = {
   readonly blockContext: BlockContext;
   readonly quote: unknown;
   readonly providerResult: ProviderEvaluationResult;
+  readonly executeProviderPath?: (input: {
+    readonly runId: string;
+    readonly intent: NormalizedSwapIntent;
+  }) => Promise<
+    BackendPipelineProviderExecution<
+      NormalizedSwapIntent,
+      ChainAdapter<ArbitrumTransaction>,
+      CamelotV3ProtocolAdapter
+    >
+  >;
 };
 
 /**
@@ -359,22 +404,29 @@ function arbitrumCurrentQuote(
   }
 }
 
+type ArbitrumProviderExecution = BackendPipelineProviderExecution<
+  NormalizedSwapIntent,
+  ChainAdapter<ArbitrumTransaction>,
+  CamelotV3ProtocolAdapter
+>;
+
+type ArbitrumP0Decision = {
+  readonly risk: ReturnType<typeof evaluateBackendP0Risk>;
+  readonly solver?: SolverResult;
+};
+
 /**
- * Evaluates the P0 Risk gate for one Arbitrum execution.
- *
- * The current quote is this Run's own pinned execution quote; the selected
- * Expectation Baseline and every caller constraint come solely from the
- * injected `p0Risk` seam. Nothing here reads a raw RPC result, endpoint,
- * header, or credential.
+ * Runs the P0 gate and, when explicitly configured, a bounded remediation
+ * search. Candidate executions reuse the pipeline's exact provider path and
+ * are persisted as terminal child Runs before their proof is accepted.
  */
-function arbitrumP0RiskVerdict(
+async function evaluateArbitrumP0Decision(
   options: ArbitrumProductionCompositionOptions,
-  context: unknown,
+  pipeline: ArbitrumDecisionContext,
   evidence: GenericEvidence,
-): Verdict {
-  const pipeline = context as ArbitrumDecisionContext;
+): Promise<ArbitrumP0Decision> {
   const currentQuote = arbitrumCurrentQuote(options, pipeline, evidence);
-  return evaluateBackendP0Risk({
+  const baseInput = {
     parentRunId: pipeline.runId,
     intent: pipeline.intent,
     evidence,
@@ -382,24 +434,362 @@ function arbitrumP0RiskVerdict(
       ? { currentQuote: currentQuote.quote }
       : {}),
     ...(options.p0Risk ?? {}),
-  }).verdict;
+  };
+  const risk = evaluateBackendP0Risk(baseInput);
+  const remediation = options.p0Risk?.remediation;
+  if (
+    remediation === undefined ||
+    options.p0Risk?.selectedQuote === undefined ||
+    pipeline.executeProviderPath === undefined ||
+    backendEvidenceState(evidence) !== "VERIFIED" ||
+    (risk.verdict !== "STOP" && risk.verdict !== "ADJUST")
+  ) {
+    return { risk };
+  }
+
+  let solver: SolverResult;
+  try {
+    solver = await solveSelectedTargetOutput({
+      parentRunId: pipeline.runId,
+      selected: options.p0Risk.selectedQuote,
+      startingAmountInAtomic: pipeline.intent.amountInAtomic,
+      maxAmountInAtomic: remediation.maxAmountInAtomic,
+      initialStepAtomic: remediation.initialStepAtomic,
+      maxEvaluations: remediation.maxEvaluations,
+      evaluate: async (amountInAtomic) =>
+        evaluateArbitrumCandidate(
+          options,
+          pipeline,
+          amountInAtomic,
+          risk.verdict,
+        ),
+    });
+  } catch {
+    return {
+      risk,
+      solver: {
+        status: "UNKNOWN",
+        reason: "EVALUATOR_FAILURE",
+        evaluations: 0,
+      },
+    };
+  }
+
+  if (solver.status !== "VERIFIED") return { risk, solver };
+  return {
+    risk: evaluateBackendP0Risk({
+      ...baseInput,
+      verifiedRemediation: solver.candidate,
+    }),
+    solver,
+  };
 }
 
-/**
- * Fail-closed P0 gate for the public Check path: a gate that cannot be
- * evaluated degrades to UNKNOWN rather than surfacing an internal Backend error
- * as a protocol-risk result.
- */
-function arbitrumP0RiskVerdictOrUnknown(
+async function evaluateArbitrumCandidate(
   options: ArbitrumProductionCompositionOptions,
-  context: unknown,
-  evidence: GenericEvidence,
-): Verdict {
+  parent: ArbitrumDecisionContext,
+  amountInAtomic: string,
+  parentVerdict: Verdict,
+): Promise<CandidateEvaluation> {
+  const executeProviderPath = parent.executeProviderPath;
+  if (executeProviderPath === undefined) {
+    return { status: "UNKNOWN", evidenceState: "UNAVAILABLE" };
+  }
+  const intent = normalizedSwapIntentSchema.parse({
+    ...parent.intent,
+    amountInAtomic,
+  });
+  const childRunId = childRunIdFor(parent.runId, amountInAtomic);
+  let execution: ArbitrumProviderExecution;
   try {
-    return arbitrumP0RiskVerdict(options, context, evidence);
+    execution = await executeProviderPath({ runId: childRunId, intent });
   } catch {
+    return { status: "QUOTE_FAILED", evidenceState: "UNAVAILABLE" };
+  }
+  const parsedEvidence = genericEvidenceSchema.safeParse(
+    execution.providerEvidence,
+  );
+  if (!parsedEvidence.success) {
+    return { status: "UNKNOWN", evidenceState: "UNAVAILABLE" };
+  }
+  const childEvidence = parsedEvidence.data;
+  const childPipeline: ArbitrumDecisionContext = {
+    runId: childRunId,
+    intent,
+    blockContext: execution.blockContext,
+    quote: execution.quote,
+    providerResult: execution.providerResult,
+  };
+  const childQuote = arbitrumCurrentQuote(
+    options,
+    childPipeline,
+    childEvidence,
+  );
+  const evidenceState = backendEvidenceState(childEvidence);
+  if (childQuote.status !== "available") {
+    await persistChildRun(
+      options,
+      parent,
+      intent,
+      childRunId,
+      childEvidence,
+      parentVerdict,
+      "UNKNOWN",
+    );
+    return { status: "UNKNOWN", evidenceState };
+  }
+
+  const candidateConstraintEvidence =
+    options.p0Risk?.remediation?.constraintEvidenceForCandidate === undefined
+      ? options.p0Risk?.constraintEvidence
+      : await options.p0Risk.remediation.constraintEvidenceForCandidate({
+          intent,
+          quote: childQuote.quote,
+          evidence: childEvidence,
+        });
+  // The solver, not child Quote Fidelity, compares this candidate with the
+  // original exact-input selected baseline. Reusing that baseline here would
+  // make every legitimate amountIn change INCOMPATIBLE. The child instead
+  // re-runs the provider-neutral base Risk plus explicit caller constraints.
+  const childBaseRisk = evaluateEvidence(childEvidence);
+  const childConstraints = evaluateConstraints(
+    options.p0Risk?.constraints ?? [],
+    candidateConstraintEvidence ?? [],
+  );
+  const childRisk = {
+    verdict: childVerificationVerdict(
+      childBaseRisk.verdict,
+      evidenceState,
+      childConstraints,
+    ),
+    constraints: childConstraints,
+  };
+  const persisted = await persistChildRun(
+    options,
+    parent,
+    intent,
+    childRunId,
+    childEvidence,
+    parentVerdict,
+    childRisk.verdict,
+  );
+  if (evidenceState !== "VERIFIED") {
+    return { status: "UNKNOWN", evidenceState };
+  }
+
+  const childResult = projectGenericEvidenceToRunResult(
+    childRunId,
+    intent,
+    childEvidence,
+  );
+  const verification = persisted
+    ? candidateVerification(
+        parent,
+        intent,
+        execution,
+        childEvidence,
+        childQuote.quote,
+        childRisk,
+        childResult,
+      )
+    : undefined;
+  return {
+    status: "QUOTED",
+    evidenceState,
+    quote: childQuote.quote,
+    ...(verification === undefined ? {} : { verification }),
+  };
+}
+
+async function persistChildRun(
+  options: ArbitrumProductionCompositionOptions,
+  parent: ArbitrumDecisionContext,
+  intent: NormalizedSwapIntent,
+  childRunId: string,
+  evidence: GenericEvidence,
+  parentVerdict: Verdict,
+  verdict: Verdict,
+): Promise<boolean> {
+  let started = false;
+  let diff: ReturnType<typeof runDiffSchema.parse> | undefined;
+  try {
+    diff = runDiffSchema.parse({
+      previousRunId: parent.runId,
+      previousVerdict: parentVerdict,
+      changedFields: [
+        {
+          field: "amountInAtomic",
+          before: parent.intent.amountInAtomic,
+          after: intent.amountInAtomic,
+        },
+      ],
+    });
+    const child = applyBackendP0Verdict(
+      projectGenericEvidenceToRunResult(childRunId, intent, evidence),
+      verdict,
+    );
+    const persisted = runResultSchema.parse({
+      ...child,
+      parentRunId: parent.runId,
+      diff,
+    });
+    await options.runStore.start(childRunId, intent, parent.runId);
+    started = true;
+    await options.runStore.complete(persisted);
+    return true;
+  } catch {
+    if (started && diff !== undefined) {
+      try {
+        await options.runStore.fail(
+          childRunId,
+          "INVALID_AGENT_FLOW_RESPONSE",
+          failedRunResultSchema.parse({
+            runId: childRunId,
+            parentRunId: parent.runId,
+            intent,
+            replayMode: false,
+            status: "integration_error",
+            systemStatus: "INTEGRATION_ERROR",
+            verdict: "UNKNOWN",
+            summary: "The P0 verification child could not be finalized",
+            error: {
+              code: "INVALID_RESPONSE",
+              stage: "unknown",
+              message: "The P0 verification child could not be finalized",
+              retryable: false,
+            },
+            diff,
+            ruleResults: [],
+            recommendedActions: [],
+            irrelevantActions: [],
+            evidence: [],
+            scope: [
+              {
+                key: "P0-CHECK-SIMULATION-001",
+                label: "P0 verification child",
+                status: "unknown",
+                reason: "REQUIRED_CHECK_INTERRUPTED",
+              },
+            ],
+          }),
+        );
+      } catch {
+        // A store that cannot terminalize the child cannot produce a proof.
+      }
+    }
+    return false;
+  }
+}
+
+function candidateVerification(
+  parent: ArbitrumDecisionContext,
+  intent: NormalizedSwapIntent,
+  execution: ArbitrumProviderExecution,
+  evidence: GenericEvidence,
+  quote: QuoteContext,
+  childRisk: ChildVerificationRisk,
+  childResult: RunResult,
+): VerifiedCandidate["verification"] | undefined {
+  if (
+    childResult.status !== "completed" ||
+    childRisk.verdict !== "PROCEED" ||
+    evidence.provider.status !== "SUCCESS" ||
+    backendEvidenceState(evidence) !== "VERIFIED"
+  ) {
+    return undefined;
+  }
+  return {
+    preparedUnsignedTxFingerprint: fingerprint(execution.unsignedTransaction),
+    preparedAmountInAtomic: intent.amountInAtomic,
+    providerStatus: evidence.provider.status,
+    riskVerdict: childRisk.verdict,
+    parentRunId: parent.runId,
+    childRunId: execution.runId,
+    childStatus: "completed",
+    childAmountInAtomic: intent.amountInAtomic,
+    childAmountOutAtomic: quote.amountOutAtomic,
+    childQuoteId: quote.quoteId,
+    verificationBlock: quote.blockNumber,
+    verificationTime: quote.observedAt,
+    provenance: quote.provenance,
+    checkedScope: evidence.checkedScope,
+    constraintOutcomes: childRisk.constraints.map((item) => ({
+      declarationId: item.declarationId,
+      name: item.name,
+      status: item.status,
+      childRunId: execution.runId,
+      candidateQuoteId: quote.quoteId,
+    })),
+    isReplay: false,
+    isMock: false,
+    actionGateVerified: true,
+  };
+}
+
+type ChildVerificationRisk = {
+  readonly verdict: Verdict;
+  readonly constraints: ReturnType<typeof evaluateConstraints>;
+};
+
+function childVerificationVerdict(
+  baseVerdict: Verdict,
+  evidenceState: ReturnType<typeof backendEvidenceState>,
+  constraints: ReturnType<typeof evaluateConstraints>,
+): Verdict {
+  if (
+    evidenceState !== "VERIFIED" ||
+    constraints.some((item) => item.status === "UNKNOWN")
+  ) {
     return "UNKNOWN";
   }
+  if (
+    baseVerdict !== "PROCEED" ||
+    constraints.some((item) => item.status === "FAIL")
+  ) {
+    return "STOP";
+  }
+  return "PROCEED";
+}
+
+function childRunIdFor(parentRunId: string, amountInAtomic: string): string {
+  const suffix = createHash("sha256")
+    .update(`${parentRunId}:p0-child:${amountInAtomic}`)
+    .digest("hex")
+    .slice(0, 24);
+  return `${parentRunId}:p0-child:${suffix}`;
+}
+
+function fingerprint(value: unknown): string {
+  return `sha256:${createHash("sha256")
+    .update(JSON.stringify(value))
+    .digest("hex")}`;
+}
+
+function withP0Observation(
+  evidence: GenericEvidence,
+  verdict: Verdict,
+  evidenceState: ReturnType<typeof backendEvidenceState>,
+  quoteFidelity: ReturnType<typeof evaluateBackendP0Risk>["quoteFidelity"],
+  solver: SolverResult | undefined,
+): GenericEvidence {
+  const providerData =
+    typeof evidence.providerData === "object" &&
+    evidence.providerData !== null &&
+    !Array.isArray(evidence.providerData)
+      ? evidence.providerData
+      : {};
+  return genericEvidenceSchema.parse({
+    ...evidence,
+    providerData: {
+      ...providerData,
+      backendP0: {
+        verdict,
+        evidenceState,
+        quoteFidelity,
+        ...(solver === undefined ? {} : { remediation: solver }),
+      },
+    },
+  });
 }
 
 /**

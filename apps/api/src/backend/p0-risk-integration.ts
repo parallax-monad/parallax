@@ -384,9 +384,10 @@ const RESTRICTED_SUMMARY: Record<"UNKNOWN" | "STOP", string> = {
  *
  * An `integration_error` Run is contractually fixed to `UNKNOWN`, so a P0
  * `STOP` must never rewrite an interrupted check into a protocol-risk result.
- * This slice creates no remediation child Run, so an `ADJUST` with no
- * recommendable actions would violate the shared Run contract and is published
- * as `STOP`, mirroring the existing projection rule.
+ * The shared Run projection still publishes a verified `ADJUST` as `STOP`
+ * until a canonical ActionEvaluation/ActionGate attestation is available; the
+ * Backend P0 observation and terminal child Run remain available through the
+ * provider-neutral evidence metadata.
  */
 export function applyBackendP0Verdict(
   projected: RunResult,

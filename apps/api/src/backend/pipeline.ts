@@ -49,6 +49,37 @@ export type BackendPipelineContext<
   readonly providerResult: ProviderEvaluationResult;
   /** Optional provisional evidence projection for Core/Decision consumers. */
   readonly providerEvidence?: unknown;
+  /**
+   * Re-enters the same Chain → Protocol → Provider path for a child Run.
+   *
+   * This is deliberately an internal execution seam. It prepares and evaluates
+   * the candidate, but does not invoke Core/Decision again; the composition that
+   * owns the P0 gate decides how the child evidence is interpreted and stored.
+   */
+  readonly executeProviderPath?: (input: {
+    readonly runId: string;
+    readonly intent: NormalizedIntent;
+  }) => Promise<
+    BackendPipelineProviderExecution<NormalizedIntent, Chain, Protocol>
+  >;
+};
+
+export type BackendPipelineProviderExecution<
+  NormalizedIntent,
+  Chain extends ChainAdapter,
+  Protocol extends ProtocolAdapter<never, unknown, unknown>,
+> = {
+  readonly runId: string;
+  readonly intent: NormalizedIntent;
+  readonly chain: Chain;
+  readonly protocol: Protocol;
+  readonly blockContext: BlockContext;
+  readonly quote: unknown;
+  readonly unsignedTransaction: UnsignedTransaction<unknown>;
+  readonly gasEstimate: GasEstimate;
+  readonly finality: FinalityStatus;
+  readonly providerResult: ProviderEvaluationResult;
+  readonly providerEvidence?: unknown;
 };
 
 /**
@@ -263,6 +294,83 @@ export class BackendPipeline<
       unknown
     >
   > {
+    const prepared = await this.prepareProviderExecution(normalized, input);
+
+    const context: BackendPipelineContext<NormalizedIntent, Chain, Protocol> = {
+      runId: input.runId,
+      intent: normalized,
+      chain: prepared.chain,
+      protocol: prepared.protocol,
+      blockContext: prepared.blockContext,
+      quote: prepared.quote,
+      unsignedTransaction: prepared.unsignedTransaction,
+      gasEstimate: prepared.gasEstimate,
+      finality: prepared.finality,
+      providerResult: prepared.providerResult,
+      ...(prepared.providerEvidence === undefined
+        ? {}
+        : { providerEvidence: prepared.providerEvidence }),
+      executeProviderPath: async (candidate) =>
+        this.prepareProviderExecution(candidate.intent, {
+          rawInput: candidate.intent as unknown as RawInput,
+          runId: candidate.runId,
+          chainId: input.chainId,
+          protocol: input.protocol,
+          capability: input.capability,
+        }),
+    };
+    const coreOutput = await this.dependencies.runtime.evaluate(
+      normalized,
+      context,
+    );
+    const decisionOutput = await this.dependencies.runtime.decide(
+      this.buildDecisionInput({ coreOutput, context }),
+      context,
+    );
+    const buildReceipt = this.dependencies.buildReceipt;
+    const receiptLifecycle = createReceiptLifecycle({
+      buildReceipt:
+        buildReceipt === undefined
+          ? undefined
+          : () =>
+              buildReceipt({
+                runId: input.runId,
+                intent: normalized,
+                coreOutput,
+                decisionOutput,
+                context,
+              }),
+      signer: this.dependencies.runtime.receiptSigner,
+      anchorer: this.dependencies.runtime.receiptAnchorer,
+      timeoutMs: this.dependencies.receiptTimeoutMs,
+    });
+
+    return {
+      runId: input.runId,
+      intent: normalized,
+      chain: prepared.chain,
+      protocol: prepared.protocol,
+      blockContext: prepared.blockContext,
+      quote: prepared.quote,
+      unsignedTransaction: prepared.unsignedTransaction,
+      gasEstimate: prepared.gasEstimate,
+      finality: prepared.finality,
+      providerResult: prepared.providerResult,
+      ...(prepared.providerEvidence === undefined
+        ? {}
+        : { providerEvidence: prepared.providerEvidence }),
+      coreOutput,
+      decisionOutput,
+      receiptLifecycle,
+    };
+  }
+
+  private async prepareProviderExecution(
+    normalized: NormalizedIntent,
+    input: BackendPipelineInput<RawInput>,
+  ): Promise<
+    BackendPipelineProviderExecution<NormalizedIntent, Chain, Protocol>
+  > {
     const chain = this.dependencies.runtime.resolveChain(input.chainId);
     const protocol = this.dependencies.runtime.resolveProtocol(
       input.chainId,
@@ -326,45 +434,6 @@ export class BackendPipeline<
       throw providerResultError(providerResult);
     }
 
-    const context: BackendPipelineContext<NormalizedIntent, Chain, Protocol> = {
-      runId: input.runId,
-      intent: normalized,
-      chain,
-      protocol,
-      blockContext,
-      quote,
-      unsignedTransaction: unsignedTransaction as UnsignedTransaction<unknown>,
-      gasEstimate,
-      finality,
-      providerResult,
-      ...(providerEvidence === undefined ? {} : { providerEvidence }),
-    };
-    const coreOutput = await this.dependencies.runtime.evaluate(
-      normalized,
-      context,
-    );
-    const decisionOutput = await this.dependencies.runtime.decide(
-      this.buildDecisionInput({ coreOutput, context }),
-      context,
-    );
-    const buildReceipt = this.dependencies.buildReceipt;
-    const receiptLifecycle = createReceiptLifecycle({
-      buildReceipt:
-        buildReceipt === undefined
-          ? undefined
-          : () =>
-              buildReceipt({
-                runId: input.runId,
-                intent: normalized,
-                coreOutput,
-                decisionOutput,
-                context,
-              }),
-      signer: this.dependencies.runtime.receiptSigner,
-      anchorer: this.dependencies.runtime.receiptAnchorer,
-      timeoutMs: this.dependencies.receiptTimeoutMs,
-    });
-
     return {
       runId: input.runId,
       intent: normalized,
@@ -377,9 +446,6 @@ export class BackendPipeline<
       finality,
       providerResult,
       ...(providerEvidence === undefined ? {} : { providerEvidence }),
-      coreOutput,
-      decisionOutput,
-      receiptLifecycle,
     };
   }
 }
