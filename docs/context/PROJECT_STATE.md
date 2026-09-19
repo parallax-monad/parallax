@@ -1,57 +1,71 @@
 # Project State
 
-Last checkpoint: 2026-09-19
+Last checkpoint: 2026-09-20
 
 ## Main
 
-`main = db6769c06b313f170c9a590d825e0baf158c3c6f`
+`main = bd98013dc956bfa4ff15ff95959f6cb614bf8c9b`
 
-Merged immediately before this checkpoint:
+Merged before this checkpoint:
 
-- #77 — real Camelot Sepolia evidence qualification;
+- #69 — NativeRpcProvider implementation and handoff;
 - #76 — P0 diagnosis and quantified remediation;
-- #79 — Provider chain/scope contract boundary.
+- #77 — hardened real Camelot Sepolia evidence qualification;
+- #80 — receipt-contract review synchronization;
+- #81 — real Arbitrum Golden Path and public re-verification integration;
+- #82 — project control plane.
 
 ## Product gates
 
 - #67: CLOSED. Canonical target accepted; #77 evidence sufficient for controlled P0 Gate entry.
 - #70: CLOSED. Product semantics frozen.
 
-## PR #69 — NativeRpcProvider
+## Merged implementation baseline
 
-- OPEN;
-- current head: `40a8bace5fb71021798d5a066e63cfa7b5baec20`;
-- Git identity history repair is DONE: the three commits previously attributed to
-  `jie <jie@users.noreply.github.com>` were rebuilt with author/committer
-  `jzhao0 <181855088+jzhao0@users.noreply.github.com>`, preserving trees/messages/topology;
-- repaired head: `8d97e7536110a10955a48e5825988f96ec15c08f`; the remote update used exact
-  `--force-with-lease` (see `MUTATION_LEDGER.md`);
-- #69 has continued past the repair: `5e1aa4a` preserves partial evidence and fails closed on
-  unsafe inputs, with two handoff documentation-truth corrections (`4303d3a`, `40a8bac`);
-- #69 is now in scoped Backend / Contract re-review of that post-repair delta only;
-- exact-head CI/re-review is still required on the current head before merge.
-
-## PR #81 — P0-D integration
-
-- OPEN;
-- checkpoint head: `e7a688250d2e09cc8c706fc271f3ccdcc11d88a2`;
-- Product correctness blockers previously cleared;
-- must not merge before accepted #69 Provider state is reconciled.
+- #69 NativeRpcProvider is merged at head `40a8bace5fb71021798d5a066e63cfa7b5baec20`.
+- #76 P0 diagnosis and quantified remediation is merged.
+- #77 real Camelot Sepolia evidence is merged and was accepted by #67 for controlled P0 use.
+- #81 real Arbitrum Golden Path and public re-verification integration is merged at
+  `8700726cc43b9e61b8c3f47558211c2a4c07185d`.
+- #66 is closed; #67 is closed/accepted; #70 is closed/frozen.
 
 ## PR #82 — Project control plane
 
-- OPEN;
+- MERGED;
 - control-plane files (`AGENTS.md`, `RUNBOOK.md`, `docs/context/*`) hold Contract Owner
   approval for owner authority, fail-closed Evidence boundaries, and unsigned/read-only scope;
 - `#82` is NOT a blanket blocker for routine feature work or review fixes; those follow the
   proportional gates in `AGENTS.md` (direct lane vs hard-stop lane);
 - no write freeze is in force: only hard-stop-lane changes require an explicit gate.
 
-## Remaining P0-D integration work
+## Issue #78 — final Backend P0 convergence
 
-1. P0 Risk → quantified remediation → fresh candidate → child Run → re-verification;
-2. complete public P0 RunResult/API projection;
-3. independent canonical real Golden Path exercise.
+The merged #81 backbone leaves three acceptance items open:
+
+1. independently exercise the accepted canonical transaction through the concrete
+   NativeRpcProvider with reproducible real evidence;
+2. close the minimum public P0 RunResult/API projection needed by the first demo;
+3. independently exercise the assembled Backend Golden Path / Demo Gate outside the
+   deterministic component fixtures.
+
+Issue #78 owns this final convergence. It must not reopen #67/#70 semantics.
+
+## Issue #73 — Frontend P0 consumer
+
+Frontend work is an Antony-owned workstream that may proceed in parallel: add the
+Arbitrum/Camelot mode, consume the stable public API through a provider-neutral
+presentation seam, and run the first integrated demo smoke test without breaking the
+Monad × Kuru baseline. PR #84 is retained as an experimental spike/reference only, not
+an accepted implementation baseline.
+
+## Parallel / deferred work
+
+- #72 / PR #75 Tenderly qualification remains parallel and non-blocking for Native RPC P0.
+- #65 is CLOSED / COMPLETE after its recorded provisional Contract mapping review and
+  downstream dependency closure; it does not reopen GenericEvidence semantics.
+- #71 is CLOSED / COMPLETE after the Risk-side implementation was delivered; remaining
+  orchestration and public projection belong to #78.
+- Strong-stage expansion waits until #78 and #73 produce a stable first P0 demo.
 
 ## Recorded P2
 
@@ -61,8 +75,26 @@ Merged immediately before this checkpoint:
 
 ## Critical path
 
-`#69 → #81 → P0-D → canonical real E2E`
+```text
+#78 Backend P0 convergence
+├─ independent canonical NativeRpcProvider real exercise
+├─ minimum public P0 projection
+└─ independent real Backend Golden Path / Demo Gate evidence
 
-Current node: #69 scoped Backend / Contract re-review of the post-repair delta. Routine,
-localized, reversible work in an already-clear owner boundary may proceed in parallel under
-the direct lane; it is not blocked by #69, #81, or #82.
+parallel
+
+#73 Frontend P0
+├─ Arbitrum/Camelot mode
+├─ real API consumer integration
+└─ first integrated demo smoke test
+
+        ↓
+
+Final P0 Demo Gate
+        ↓
+
+Strong stage
+```
+
+Routine, localized, reversible work in a clear owner boundary may proceed in parallel under
+the direct lane; only the hard-stop categories in `AGENTS.md` require an explicit gate.
