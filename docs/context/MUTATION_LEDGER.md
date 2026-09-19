@@ -48,3 +48,11 @@ unchanged above as the historical state at the time it was written.
 - #82 no longer blocks routine #69/#81 development or review fixes.
 
 The #69 identity-attribution incident history above is unchanged.
+
+## 2026-09-20 — post-#81 takeover state sync
+
+Fresh GitHub state confirmed that #69, #76, #77, #80, #81, and #82 are merged into
+`main = bd98013dc956bfa4ff15ff95959f6cb614bf8c9b`. The remaining P0 work is recorded as
+#78 final Backend convergence (canonical NativeRpcProvider exercise, minimum public P0
+projection, and independent assembled Golden Path evidence) in parallel with #73 Frontend
+integration. No Product semantics from #67/#70 were changed.
