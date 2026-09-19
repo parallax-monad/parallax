@@ -12,7 +12,7 @@ This document records the confirmed Receipt boundaries from Issue #62. It is a B
 - Related metadata and Evidence provenance decision: [Issue #53](https://github.com/parallax-monad/parallax/issues/53)
 - Existing Receipt lifecycle implementation: [PR #61](https://github.com/parallax-monad/parallax/pull/61)
 
-The current phase records the accepted lifecycle boundaries and explicitly preserves unresolved or deferred final-contract decisions. BE-GATE-006 must be re-evaluated after this checklist and the BE-032 progress record are synchronized.
+The current phase records the accepted lifecycle boundaries and explicitly preserves unresolved or deferred final-contract decisions. The BE-032 progress record is synchronized, and BE-GATE-006 has been re-evaluated with a **PASS** result. The final closure evidence is recorded in [Issue #62](https://github.com/parallax-monad/parallax/issues/62#issuecomment-5739211958).
 
 ## Existing implementation boundary
 
@@ -61,7 +61,7 @@ The current implementation does not introduce a final Receipt contract, ABI, dep
 - Provider Owner supplies factual Provider/Evidence and provenance constraints when Receipt decisions depend on them.
 - Product, Risk, security, and operations owners participate when unresolved decisions affect user-facing behavior, policy, key custody, deployment, or operations.
 - Backend must not create defaults for rows marked `UNRESOLVED` or `DEFERRED`.
-- BE-GATE-006 must be re-evaluated after this checklist and the BE-032 progress record are updated.
+- BE-GATE-006 has been re-evaluated with a **PASS** result against this checklist, the synchronized BE-032 progress record, and the recorded Contract/Provider Owner evidence.
 
 ## Completion record
 
@@ -70,8 +70,8 @@ The current implementation does not introduce a final Receipt contract, ABI, dep
 - [x] Confirmed non-blocking Decision/Receipt and Provider/Evidence boundaries are recorded.
 - [x] No final Receipt schema, ABI, deployment address, event contract, or public API is inferred.
 - [x] This checklist is synchronized with the Contract Owner decision matrix.
-- [ ] BE-032 progress record is synchronized with this checklist and linked evidence.
-- [ ] BE-GATE-006 is re-evaluated after the documentation sync.
+- [x] BE-032 progress record is synchronized with this checklist and linked evidence.
+- [x] BE-GATE-006 is re-evaluated with a **PASS** result after the documentation sync.
 
 ## Out of scope for this phase
 
@@ -79,4 +79,4 @@ The current implementation does not introduce a final Receipt contract, ABI, dep
 - Selecting unresolved payload, serialization, signature, event, idempotency, access-control, deployment, proof, retry, or public-projection semantics by Backend convention;
 - Deployment scripts, real RPC anchoring, explorer integration, or user Swap signing;
 - Changing the existing non-blocking Decision behavior;
-- Marking BE-032 or BE-GATE-006 complete before the progress record and Gate re-evaluation are updated.
+- Treating the BE-GATE-006 **PASS** result as approval for final Receipt contract implementation; future implementation PRs must return to Contract Owner review.
