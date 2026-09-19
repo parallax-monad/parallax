@@ -11,7 +11,7 @@ import type {
   ConstraintEvidence,
   QuoteContext,
 } from "@parallax/risk";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import canonicalRealCamelotCapture from "../../../../fixtures/provider-registry/be-063/camelot-sepolia-real-2026-09-18T08-47-56-715Z/capture.json";
 import { createBackendApp } from "../bootstrap/backend.js";
 import { UnsupportedAgentFlowError } from "../ports.js";
@@ -1337,6 +1337,87 @@ describe("Arbitrum composition P0 Risk wiring", () => {
         parentRunId: "p0-public-remediation",
       });
     }
+  });
+
+  it("does not rerun the legacy Action Gate for an already-attested HTTP ADJUST", async () => {
+    const store = new InMemoryRunStore();
+    const startSpy = vi.spyOn(store, "start");
+    const runtime = arbitrumRuntime();
+    const composition = createArbitrumProductionComposition(
+      p0CompositionOptions({
+        runtime,
+        runStore: store,
+        providerEvidenceMapper: ({ normalizedIntent }) => {
+          const candidate = normalizedIntent as NormalizedSwapIntent;
+          return p0VerifiedEvidence(candidate, {
+            estimatedAmountOut:
+              candidate.amountInAtomic === "1000" ? "0.5" : "0.7",
+            amountReceivedAtomic:
+              candidate.amountInAtomic === "1000" ? "500000" : "700000",
+          });
+        },
+        p0Risk: {
+          selectedQuote: p0SelectedQuote,
+          constraints: p0Constraints,
+          constraintEvidence: p0ConstraintEvidence,
+          remediation: {
+            maxAmountInAtomic: "3000",
+            initialStepAtomic: "1000",
+            maxEvaluations: 2,
+            constraintEvidenceForCandidate: () => [
+              {
+                name: "maxPriceImpact",
+                state: "VERIFIED",
+                numerator: "1",
+                denominator: "1",
+                unit: "bps",
+                evidenceKey: "candidate-impact",
+              },
+            ],
+          },
+        },
+      }),
+    );
+    const app = createBackendApp({
+      runtime,
+      composition: composition as unknown as BackendCompositionRuntime,
+    });
+
+    const response = await app.fetch(
+      new Request("https://api.example.test/api/check", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          chainId: 421614,
+          protocol: "camelot-v3",
+          sender: normalizedIntent.sender,
+          tokenIn: { kind: "native" },
+          tokenOut: { kind: "erc20", address: arbitrumTokenAddress },
+          amountIn: "0.000000000000001",
+          economicBoundary: {
+            availability: "available",
+            minimumReceived: "0.6",
+            source: "user_declared",
+          },
+        }),
+      }),
+    );
+    const result = runResultSchema.parse(await response.json());
+
+    expect(response.status).toBe(200);
+    expect(result).toMatchObject({
+      status: "completed",
+      verdict: "ADJUST",
+      recommendedActions: [
+        {
+          proposedChange: { before: "1000", after: "2000" },
+        },
+      ],
+    });
+    expect(startSpy).toHaveBeenCalledTimes(2);
+    expect(
+      startSpy.mock.calls.filter(([runId]) => runId.includes(":p0-child:")),
+    ).toHaveLength(1);
   });
 
   it("leaves an injected custom core/decision override unchanged", async () => {
