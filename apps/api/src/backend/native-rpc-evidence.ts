@@ -205,10 +205,12 @@ export function toNativeRpcGenericEvidence(
       notChecked,
       unknown: unknownScope,
       freshness,
-      ...(callField?.value === undefined
-        ? {}
-        : { callReturnData: callField.value }),
-      ...(gasField?.value === undefined ? {} : { gasUnits: gasField.value }),
+      ...(callChecked && callField?.value !== undefined
+        ? { callReturnData: callField.value }
+        : {}),
+      ...(gasChecked && gasField?.value !== undefined
+        ? { gasUnits: gasField.value }
+        : {}),
     },
   };
   const evidence = genericEvidenceSchema.parse({

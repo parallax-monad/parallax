@@ -1,0 +1,152 @@
+{
+  "schemaVersion": "provider-owner-camelot-sepolia-qualification-v1",
+  "classification": "LIVE_READ_ONLY_PARTIAL",
+  "real": true,
+  "chainId": 421614,
+  "endpointClass": "arbitrum-official-public",
+  "endpointSource": "https://docs.camelot.exchange/contracts/arbitrum/sepolia-testnet/",
+  "repositoryBaseCommit": "24e17189008f04cf7a13efd7920cd94bc48dde22",
+  "probeSource": "Ad hoc fixed read-only Node.js probe; exact methods and parameters are recorded below. No committed script version is claimed.",
+  "pinnedBlock": {
+    "number": "309542712",
+    "hex": "0x12733f38",
+    "hash": "0x96f7acffd774582a051f36cef58b1ce6ec0d770aa39223ba7b044849f70ebbb8"
+  },
+  "observations": [
+    {
+      "method": "eth_chainId",
+      "params": [],
+      "fetchedAt": "2026-09-16T15:55:25.819Z",
+      "result": "0x66eee"
+    },
+    {
+      "method": "eth_blockNumber",
+      "params": [],
+      "fetchedAt": "2026-09-16T15:55:26.118Z",
+      "result": "0x12733f38"
+    },
+    {
+      "method": "eth_getBlockByNumber",
+      "params": ["0x12733f38", false],
+      "fetchedAt": "2026-09-16T15:55:26.420Z",
+      "result": {
+        "number": "0x12733f38",
+        "hash": "0x96f7acffd774582a051f36cef58b1ce6ec0d770aa39223ba7b044849f70ebbb8",
+        "timestamp": "0x6aaabbec"
+      }
+    },
+    {
+      "method": "eth_getCode",
+      "params": ["0xaA37Bea711D585478E1c04b04707cCb0f10D762a", "0x12733f38"],
+      "fetchedAt": "2026-09-16T15:55:26.721Z",
+      "result": {
+        "nonEmpty": true,
+        "byteLength": 14031,
+        "role": "AlgebraFactory"
+      }
+    },
+    {
+      "method": "eth_getCode",
+      "params": ["0xe49ef2F48539EA7498605CC1B3a242042cb5FC83", "0x12733f38"],
+      "fetchedAt": "2026-09-16T15:55:27.145Z",
+      "result": { "nonEmpty": true, "byteLength": 5112, "role": "Quoter" }
+    },
+    {
+      "method": "eth_getCode",
+      "params": ["0x171B925C51565F5D2a7d8C494ba3188D304EFD93", "0x12733f38"],
+      "fetchedAt": "2026-09-16T15:55:27.455Z",
+      "result": { "nonEmpty": true, "byteLength": 12697, "role": "SwapRouter" }
+    },
+    {
+      "method": "eth_getCode",
+      "params": ["0x980B62Da83eFf3D4576C647993b0c1D7faf17c73", "0x12733f38"],
+      "fetchedAt": "2026-09-16T15:55:27.750Z",
+      "result": { "nonEmpty": true, "byteLength": 2147, "role": "WETH" }
+    },
+    {
+      "method": "eth_call",
+      "params": [
+        {
+          "to": "0x980B62Da83eFf3D4576C647993b0c1D7faf17c73",
+          "data": "0x313ce567"
+        },
+        "0x12733f38"
+      ],
+      "fetchedAt": "2026-09-16T15:55:28.050Z",
+      "result": "0x0000000000000000000000000000000000000000000000000000000000000012",
+      "interpretation": { "decimals": 18 }
+    },
+    {
+      "method": "eth_getCode",
+      "params": ["0xb893E3334D4Bd6C5ba8277Fd559e99Ed683A9FC7", "0x12733f38"],
+      "fetchedAt": "2026-09-16T15:55:28.363Z",
+      "result": {
+        "nonEmpty": true,
+        "byteLength": 3456,
+        "role": "Camelot-listed USDC"
+      }
+    },
+    {
+      "method": "eth_call",
+      "params": [
+        {
+          "to": "0xb893E3334D4Bd6C5ba8277Fd559e99Ed683A9FC7",
+          "data": "0x313ce567"
+        },
+        "0x12733f38"
+      ],
+      "fetchedAt": "2026-09-16T15:55:28.743Z",
+      "result": "0x0000000000000000000000000000000000000000000000000000000000000012",
+      "interpretation": { "decimals": 18 }
+    },
+    {
+      "method": "eth_estimateGas",
+      "params": [
+        {
+          "from": "0x0000000000000000000000000000000000000001",
+          "to": "0x980B62Da83eFf3D4576C647993b0c1D7faf17c73",
+          "data": "0x313ce567",
+          "value": "0x0"
+        },
+        "0x12733f38"
+      ],
+      "fetchedAt": "2026-09-16T15:55:29.024Z",
+      "result": "0x7a44",
+      "interpretation": { "gasUnits": "31300", "blockParameterAccepted": true }
+    },
+    {
+      "method": "eth_call",
+      "params": [
+        {
+          "to": "0xaA37Bea711D585478E1c04b04707cCb0f10D762a",
+          "data": "0xd9a641e1000000000000000000000000980b62da83eff3d4576c647993b0c1d7faf17c73000000000000000000000000b893e3334d4bd6c5ba8277fd559e99ed683a9fc7"
+        },
+        "0x12733f38"
+      ],
+      "fetchedAt": null,
+      "captureFinishedAt": "2026-09-16T15:57:49.805Z",
+      "result": "0x0000000000000000000000003965361ea4f9000ae3cf995f553115b2832d0e2d",
+      "interpretation": {
+        "candidatePool": "0x3965361ea4f9000ae3cf995f553115b2832d0e2d"
+      }
+    },
+    {
+      "method": "eth_getCode",
+      "params": ["0x3965361ea4f9000ae3cf995f553115b2832d0e2d", "0x12733f38"],
+      "fetchedAt": null,
+      "captureFinishedAt": "2026-09-16T15:57:49.805Z",
+      "result": {
+        "nonEmpty": true,
+        "byteLength": 22689,
+        "role": "candidate WETH/USDC pool"
+      }
+    }
+  ],
+  "limitations": [
+    "The WETH/USDC pair is a verified candidate, not the Product Owner's confirmed P0 target.",
+    "No Camelot quoter call, prepared swap transaction, swap eth_call, or swap gas estimate was executed.",
+    "Pinned eth_estimateGas parameter acceptance was observed only for a WETH decimals call at this endpoint and block.",
+    "Code size and non-empty code do not prove contract source equivalence or quote correctness.",
+    "No signing, broadcast, wallet use, or chain write occurred."
+  ]
+}
