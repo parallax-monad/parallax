@@ -48,6 +48,45 @@ Write mode requires a local, untracked `.parallax-agent.local` file containing t
 
 Do not write if repository/remote is unexpected, identity differs, worktree is already dirty, target head moved, owner scope is unclear, or unrelated-project context appears.
 
+## Proportional gating
+
+Gate depth is proportional to risk, reversibility, and semantic reach. It is not
+proportional to how many unrelated PRs or reviewers happen to be open. A blanket freeze
+over unrelated work is not a safety control and must not be used as one.
+
+### Direct lane — no hard gate
+
+Ordinary, localized, low-risk, reversible work inside an already-clear owner boundary may
+proceed directly, without waiting for unrelated reviewers or PRs:
+
+`preflight → implement → validate → normal push → scoped review if needed`
+
+This lane covers, for example:
+
+- localized bug fixes;
+- regression tests;
+- documentation truth corrections;
+- lint / format fixes;
+- clearly scoped review findings;
+- non-semantic fixture / index maintenance;
+- other explicitly owner-bounded, low-risk, reversible changes.
+
+### Hard-stop lane — explicit gate required
+
+Stop and obtain an explicit owner/gate decision before writing when a change is any of:
+
+- a Product semantic change;
+- a shared Contract semantic change;
+- an architecture-wide change;
+- a history rewrite / force push;
+- a destructive Git operation;
+- a security / secrets incident;
+- a signing / broadcasting / custody / wallet mutation;
+- an owner authority conflict;
+- accepted evidence fabrication, rewrite, or meaning change;
+- a large cross-owner public API change;
+- a change whose frozen-semantic-boundary impact cannot be determined.
+
 ## Ownership and decision boundaries
 
 Write access is not authority to approve, merge, close, or reopen another owner's semantic gate.
@@ -56,7 +95,9 @@ Respect `.github/CODEOWNERS`, active Issue/PR ownership, and frozen Product/Cont
 
 ## Exact-head discipline
 
-Every review and merge gate is bound to an exact commit head. When a head moves, inspect the delta and rerun only the required validation. Do not blindly transfer old exact-head claims.
+Every review and merge gate is bound to an exact commit head. When a head moves, inspect the material delta and rerun only the required validation. Do not blindly transfer old exact-head claims.
+
+A head move re-opens only that material delta. It does not automatically trigger a full stacked-baseline broad re-review.
 
 ## Mutation discipline
 
