@@ -8,6 +8,13 @@ import {
   type QuoteRequest,
 } from "@parallax/contracts";
 import { projectGenericEvidenceToRunResult } from "@parallax/orchestrator/agent-flow";
+import type {
+  CallerConstraint,
+  ConstraintEvidence,
+  QuoteContext,
+  Verdict,
+  VerifiedCandidate,
+} from "@parallax/risk";
 import {
   normalizeArbitrumCheckSwapRequest,
   normalizeArbitrumQuoteRequest,
@@ -25,7 +32,7 @@ import {
   type ArbitrumTransaction,
 } from "./arbitrum-chain-adapter.js";
 import { CamelotV3ProtocolAdapter } from "./camelot-v3-protocol-adapter.js";
-import type { ChainAdapter } from "./chain-adapter.js";
+import type { BlockContext, ChainAdapter } from "./chain-adapter.js";
 import { ChainRegistry } from "./chain-registry.js";
 import {
   type BackendCompositionRuntime,
@@ -41,7 +48,14 @@ import {
   type NativeRpcPreparedExecution,
 } from "./native-rpc-evidence.js";
 import { createNativeRpcProviderAdapter } from "./native-rpc-provider.js";
+import {
+  applyBackendP0Verdict,
+  type BackendCurrentQuoteResult,
+  buildBackendCurrentQuoteContext,
+  evaluateBackendP0Risk,
+} from "./p0-risk-integration.js";
 import { ProtocolRegistry } from "./protocol-registry.js";
+import type { ProviderEvaluationResult } from "./provider-adapter.js";
 import {
   type ProviderAdapter,
   type ProviderEnvironment,
@@ -50,6 +64,22 @@ import {
 import type { ReceiptAnchorer, ReceiptSigner } from "./receipt-ports.js";
 
 export type ArbitrumNormalizationInput = CheckSwapRequest | QuoteRequest;
+
+/**
+ * Backend-internal P0 Risk seam for the Arbitrum composition.
+ *
+ * It is deliberately not part of the public Check request: the selected quote /
+ * Expectation Baseline is an independent input, and the current execution quote
+ * is never promoted to it. When no `selectedQuote` is supplied the P0 gate fails
+ * closed to `UNKNOWN`. Only constraints explicitly declared here are evaluated;
+ * the Intent Economic Boundary never becomes one.
+ */
+export type ArbitrumP0RiskContext = {
+  readonly selectedQuote?: QuoteContext;
+  readonly constraints?: readonly CallerConstraint[];
+  readonly constraintEvidence?: readonly ConstraintEvidence[];
+  readonly verifiedRemediation?: VerifiedCandidate;
+};
 
 export type ArbitrumProductionCompositionOptions = {
   readonly runtime: BackendRuntime;
@@ -70,6 +100,11 @@ export type ArbitrumProductionCompositionOptions = {
   >;
   readonly core?: CorePort<NormalizedSwapIntent, unknown, unknown>;
   readonly decision?: DecisionPort<unknown, unknown, unknown>;
+  /**
+   * Optional P0 Risk seam for the default decision only. A custom `decision`
+   * continues to replace the default decision entirely.
+   */
+  readonly p0Risk?: ArbitrumP0RiskContext;
   readonly receiptSigner?: ReceiptSigner;
   readonly receiptAnchorer?: ReceiptAnchorer;
 };
@@ -240,10 +275,17 @@ export function createArbitrumProductionComposition(
           readonly runId: string;
           readonly intent: NormalizedSwapIntent;
         };
-        return projectGenericEvidenceToRunResult(
-          pipelineContext.runId,
-          pipelineContext.intent,
-          parsedEvidence.data as GenericEvidence,
+        const evidence = parsedEvidence.data as GenericEvidence;
+        // The public RunResult projection is unchanged; only the final verdict
+        // is made to obey the P0 Risk verdict, so the legacy evaluator can
+        // never report PROCEED over a P0 UNKNOWN.
+        return applyBackendP0Verdict(
+          projectGenericEvidenceToRunResult(
+            pipelineContext.runId,
+            pipelineContext.intent,
+            evidence,
+          ),
+          arbitrumP0RiskVerdictOrUnknown(options, context, evidence),
         );
       },
     } satisfies DecisionPort<unknown, unknown, unknown>);
@@ -273,6 +315,92 @@ export function createArbitrumProductionComposition(
 /** Naming alias for callers that use the shorter Backend composition term. */
 export const createArbitrumBackendComposition =
   createArbitrumProductionComposition;
+
+/**
+ * The Backend pipeline context fields the default decision's P0 gate consumes.
+ * The pipeline always supplies them; a direct caller with a partial context
+ * degrades to the fail-closed UNKNOWN verdict instead of throwing.
+ */
+type ArbitrumDecisionContext = {
+  readonly runId: string;
+  readonly intent: NormalizedSwapIntent;
+  readonly blockContext: BlockContext;
+  readonly quote: unknown;
+  readonly providerResult: ProviderEvaluationResult;
+};
+
+/**
+ * Builds this Run's current quote context from its own pinned execution
+ * material and provider-neutral Evidence. A missing trusted tokenOut decimals
+ * entry cannot produce a legal atomic output, so the context is reported
+ * unavailable and the gate fails closed.
+ */
+function arbitrumCurrentQuote(
+  options: ArbitrumProductionCompositionOptions,
+  pipeline: ArbitrumDecisionContext,
+  evidence: GenericEvidence,
+): BackendCurrentQuoteResult {
+  const intent = pipeline.intent;
+  try {
+    return buildBackendCurrentQuoteContext({
+      intent,
+      evidence,
+      quote: pipeline.quote,
+      blockNumber: pipeline.blockContext.blockNumber,
+      observedAt: pipeline.providerResult.provider.observedAt,
+      tokenOutDecimals: tokenDecimals(
+        options.runtime,
+        intent.tokenOut,
+        intent.chainId,
+      ),
+    });
+  } catch {
+    return { status: "unavailable", reason: "QUOTE_UNAVAILABLE" };
+  }
+}
+
+/**
+ * Evaluates the P0 Risk gate for one Arbitrum execution.
+ *
+ * The current quote is this Run's own pinned execution quote; the selected
+ * Expectation Baseline and every caller constraint come solely from the
+ * injected `p0Risk` seam. Nothing here reads a raw RPC result, endpoint,
+ * header, or credential.
+ */
+function arbitrumP0RiskVerdict(
+  options: ArbitrumProductionCompositionOptions,
+  context: unknown,
+  evidence: GenericEvidence,
+): Verdict {
+  const pipeline = context as ArbitrumDecisionContext;
+  const currentQuote = arbitrumCurrentQuote(options, pipeline, evidence);
+  return evaluateBackendP0Risk({
+    parentRunId: pipeline.runId,
+    intent: pipeline.intent,
+    evidence,
+    ...(currentQuote.status === "available"
+      ? { currentQuote: currentQuote.quote }
+      : {}),
+    ...(options.p0Risk ?? {}),
+  }).verdict;
+}
+
+/**
+ * Fail-closed P0 gate for the public Check path: a gate that cannot be
+ * evaluated degrades to UNKNOWN rather than surfacing an internal Backend error
+ * as a protocol-risk result.
+ */
+function arbitrumP0RiskVerdictOrUnknown(
+  options: ArbitrumProductionCompositionOptions,
+  context: unknown,
+  evidence: GenericEvidence,
+): Verdict {
+  try {
+    return arbitrumP0RiskVerdict(options, context, evidence);
+  } catch {
+    return "UNKNOWN";
+  }
+}
 
 /**
  * Bootstraps only the runtime descriptor and composition wiring. It deliberately

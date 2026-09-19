@@ -17,6 +17,7 @@
     "@parallax/contracts": "workspace:*",
     "@parallax/moss-bridge": "workspace:*",
     "@parallax/orchestrator": "workspace:*",
+    "@parallax/risk": "workspace:*",
     "hono": "4.12.33",
     "node-pg-migrate": "9.0.0",
     "pg": "8.23.0",
