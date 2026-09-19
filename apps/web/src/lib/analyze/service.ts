@@ -120,7 +120,12 @@ const decimalsFor = (symbol: string, chainId: ChainId = 143) =>
  * rendering human copy from the Intent plus token registry rather than showing
  * atomic strings or reverse-engineering Diff values.
  */
-function displayChange(value: unknown, field: string, unit: string) {
+function displayChange(
+  value: unknown,
+  field: string,
+  unit: string,
+  chainId: ChainId,
+) {
   const change = obj(value);
   const before = str(change?.before);
   const after = str(change?.after);
@@ -131,8 +136,8 @@ function displayChange(value: unknown, field: string, unit: string) {
   if (!isAmount) return { before, after, unit: "" };
 
   return {
-    before: decimal(before, decimalsFor(unit)),
-    after: decimal(after, decimalsFor(unit)),
+    before: decimal(before, decimalsFor(unit, chainId)),
+    after: decimal(after, decimalsFor(unit, chainId)),
     unit,
   };
 }
@@ -141,6 +146,7 @@ function suggestion(
   value: unknown,
   tokenIn: string,
   tokenOut: string,
+  chainId: ChainId,
 ): ActionSuggestion | undefined {
   const evaluation = obj(value);
   const action = obj(evaluation?.action);
@@ -167,7 +173,12 @@ function suggestion(
     reason:
       ACTION_REASON[reasonCode ?? ""] ??
       cp("This action carries no recognized reason code."),
-    proposedChange: displayChange(evaluation?.proposedChange, field, unit),
+    proposedChange: displayChange(
+      evaluation?.proposedChange,
+      field,
+      unit,
+      chainId,
+    ),
   };
 }
 
@@ -411,10 +422,10 @@ function mapRun(
         (apiFailure ? failureCopy(apiFailure).en : "No summary provided"),
     ),
     recommendedActions: arr(run?.recommendedActions)
-      .map((item) => suggestion(item, tokenIn, tokenOut))
+      .map((item) => suggestion(item, tokenIn, tokenOut, chainId))
       .filter((item): item is ActionSuggestion => !!item),
     irrelevantActions: arr(run?.irrelevantActions)
-      .map((item) => suggestion(item, tokenIn, tokenOut))
+      .map((item) => suggestion(item, tokenIn, tokenOut, chainId))
       .filter((item): item is ActionSuggestion => !!item),
     checked: scope
       .filter((item) => item.status === "checked")
