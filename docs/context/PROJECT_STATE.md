@@ -31,7 +31,7 @@ Merged before this checkpoint:
 
 ## PR #82 — Project control plane
 
-- OPEN;
+- MERGED;
 - control-plane files (`AGENTS.md`, `RUNBOOK.md`, `docs/context/*`) hold Contract Owner
   approval for owner authority, fail-closed Evidence boundaries, and unsigned/read-only scope;
 - `#82` is NOT a blanket blocker for routine feature work or review fixes; those follow the
@@ -52,15 +52,19 @@ Issue #78 owns this final convergence. It must not reopen #67/#70 semantics.
 
 ## Issue #73 — Frontend P0 consumer
 
-Frontend work is active in parallel: add the Arbitrum/Camelot mode, consume the existing
-public API through a provider-neutral presentation seam, and run the first integrated demo
-smoke test without breaking the Monad × Kuru baseline.
+Frontend work is an Antony-owned workstream that may proceed in parallel: add the
+Arbitrum/Camelot mode, consume the stable public API through a provider-neutral
+presentation seam, and run the first integrated demo smoke test without breaking the
+Monad × Kuru baseline. PR #84 is retained as an experimental spike/reference only, not
+an accepted implementation baseline.
 
 ## Parallel / deferred work
 
 - #72 / PR #75 Tenderly qualification remains parallel and non-blocking for Native RPC P0.
-- #65 remains open only for downstream closure of its already-recorded provisional Contract
-  mapping; it does not reopen GenericEvidence semantics.
+- #65 is CLOSED / COMPLETE after its recorded provisional Contract mapping review and
+  downstream dependency closure; it does not reopen GenericEvidence semantics.
+- #71 is CLOSED / COMPLETE after the Risk-side implementation was delivered; remaining
+  orchestration and public projection belong to #78.
 - Strong-stage expansion waits until #78 and #73 produce a stable first P0 demo.
 
 ## Recorded P2

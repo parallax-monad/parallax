@@ -6,8 +6,10 @@ Checkpoint: 2026-09-20
 
 1. Run `./scripts/agent-preflight.sh --read`.
 2. Fresh-fetch GitHub and confirm `main = bd98013dc956bfa4ff15ff95959f6cb614bf8c9b`.
-3. Treat #69, #76, #77, #80, #81, and #82 as merged baseline work; do not reopen #67/#70.
-4. Continue #78 final Backend P0 convergence and #73 Frontend integration in parallel.
+3. Treat #69, #76, #77, #80, #81, and #82 as merged baseline work; #65 and #71 are
+   closed/complete; do not reopen #67/#70.
+4. Continue #78 final Backend P0 convergence and Antony-owned #73 Frontend integration in
+   parallel. PR #84 is an experimental spike/reference only, not an accepted implementation.
 5. Route new work by risk: routine, scoped, low-risk reversible changes follow the direct lane in `AGENTS.md`; only hard-stop categories need an explicit gate.
 
 ## Expected checkpoint
@@ -19,6 +21,7 @@ Checkpoint: 2026-09-20
 - #70: closed/frozen
 - #78: open/final P0 convergence
 - #73: active/parallel Frontend consumer
+- #84: experimental Frontend spike/reference only; final implementation remains owned by Antony
 
 ## Incident
 
