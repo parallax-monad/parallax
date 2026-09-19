@@ -59,7 +59,9 @@ export type BackendCurrentQuoteUnavailableReason =
   | "QUOTE_UNAVAILABLE"
   | "INVALID_AMOUNT"
   | "BLOCK_NUMBER_UNAVAILABLE"
+  | "BLOCK_NUMBER_MISMATCH"
   | "OBSERVED_AT_UNAVAILABLE"
+  | "OBSERVED_AT_MISMATCH"
   | "RUNTIME_PROVENANCE_UNAVAILABLE";
 
 export type BackendCurrentQuoteResult =
@@ -98,14 +100,32 @@ export function buildBackendCurrentQuoteContext(
   );
   if (!converted.success) return unavailable("INVALID_AMOUNT");
 
-  const blockNumber =
-    atomicText(quote.blockNumber) ?? atomicText(input.blockNumber);
+  const blockNumber = atomicText(input.blockNumber);
   if (blockNumber === undefined) {
     return unavailable("BLOCK_NUMBER_UNAVAILABLE");
   }
-  const observedAt = firstTimestamp(quote.fetchedAt, input.observedAt);
+  if (quote.blockNumber !== undefined) {
+    const quoteBlockNumber = atomicText(quote.blockNumber);
+    if (quoteBlockNumber === undefined) {
+      return unavailable("BLOCK_NUMBER_UNAVAILABLE");
+    }
+    if (quoteBlockNumber !== blockNumber) {
+      return unavailable("BLOCK_NUMBER_MISMATCH");
+    }
+  }
+
+  const observedAt = firstTimestamp(input.observedAt);
   if (observedAt === undefined) {
     return unavailable("OBSERVED_AT_UNAVAILABLE");
+  }
+  if (quote.fetchedAt !== undefined) {
+    const quoteObservedAt = firstTimestamp(quote.fetchedAt);
+    if (quoteObservedAt === undefined) {
+      return unavailable("OBSERVED_AT_UNAVAILABLE");
+    }
+    if (quoteObservedAt !== observedAt) {
+      return unavailable("OBSERVED_AT_MISMATCH");
+    }
   }
   const runtime = input.evidence.provenance.runtime;
   const runtimeVersion = firstText(
@@ -379,15 +399,17 @@ const RESTRICTED_SUMMARY: Record<"UNKNOWN" | "STOP", string> = {
 
 /**
  * Minimal Backend-side decision wrapper: the public RunResult shape and every
- * other field are kept unchanged, and only the final verdict (plus its summary
- * when the verdict changed) is made to obey the P0 Risk verdict.
+ * other field stay on the existing contract, and the final verdict (plus its
+ * summary when the verdict changed) is made to obey the P0 Risk verdict.
  *
  * An `integration_error` Run is contractually fixed to `UNKNOWN`, so a P0
  * `STOP` must never rewrite an interrupted check into a protocol-risk result.
- * The shared Run projection still publishes a verified `ADJUST` as `STOP`
- * until a canonical ActionEvaluation/ActionGate attestation is available; the
- * Backend P0 observation and terminal child Run remain available through the
- * provider-neutral evidence metadata.
+ * A verified `ADJUST` is published only after the existing
+ * ActionEvaluation/ActionGate attestation has been attached by the
+ * composition. The public P0-facing projection therefore remains the existing
+ * provider-neutral Run fields (Verdict, Rule Results, Scope, Quote, Evidence,
+ * and Actions); Risk-internal quote-fidelity and constraint records are not
+ * invented as a second public contract here.
  */
 export function applyBackendP0Verdict(
   projected: RunResult,

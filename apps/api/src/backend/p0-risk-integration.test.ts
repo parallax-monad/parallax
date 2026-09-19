@@ -703,12 +703,6 @@ describe("Backend P0 Risk bridge: current quote identity", () => {
         undefined,
       ],
       [
-        "blockNumber",
-        { quote: executionQuote({ blockNumber: "43" }) },
-        undefined,
-      ],
-      ["observedAt", { observedAt: "2026-09-18T00:00:00.000Z" }, undefined],
-      [
         "runtimeVersion",
         { quote: executionQuote({ runtimeVersion: "camelot-v4" }) },
         undefined,
@@ -738,6 +732,25 @@ describe("Backend P0 Risk bridge: current quote identity", () => {
     expect(context.observedAt).toBe(OBSERVED_AT);
   });
 
+  it("rejects quote block and observation time drift from the pipeline context", () => {
+    expect(
+      buildBackendCurrentQuoteContext(
+        currentQuoteInput({
+          quote: executionQuote({ blockNumber: "43" }),
+        }),
+      ),
+    ).toEqual({ status: "unavailable", reason: "BLOCK_NUMBER_MISMATCH" });
+    expect(
+      buildBackendCurrentQuoteContext(
+        currentQuoteInput({
+          quote: executionQuote({
+            fetchedAt: "2026-09-18T00:00:00.000Z",
+          }),
+        }),
+      ),
+    ).toEqual({ status: "unavailable", reason: "OBSERVED_AT_MISMATCH" });
+  });
+
   it("fails closed instead of inventing a block, time, or runtime identity", () => {
     const cases: ReadonlyArray<
       [string, Partial<BackendCurrentQuoteInput>, string]
@@ -750,6 +763,11 @@ describe("Backend P0 Risk bridge: current quote identity", () => {
       [
         "latest block",
         { quote: { estimatedAmountOut: "0.5" }, blockNumber: "latest" },
+        "BLOCK_NUMBER_UNAVAILABLE",
+      ],
+      [
+        "malformed quote block",
+        { quote: executionQuote({ blockNumber: "latest" }) },
         "BLOCK_NUMBER_UNAVAILABLE",
       ],
       [

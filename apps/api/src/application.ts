@@ -597,7 +597,24 @@ function interpretAgentFlowCandidate(
     };
   }
 
-  return { ok: true, result };
+  return { ok: true, result: publicRunResult(result) };
+}
+
+/**
+ * Provider-specific metadata is an internal Evidence concern. Keep the
+ * provider-neutral fields needed by the public Run contract, but do not let a
+ * custom composition or Agent Flow bypass the public redaction boundary by
+ * copying `providerData` into an HTTP response or persisted Run.
+ */
+function publicRunResult(result: RunResult): RunResult {
+  if (result.providerEvidence === undefined) return result;
+  return runResultSchema.parse({
+    ...result,
+    providerEvidence: {
+      ...result.providerEvidence,
+      providerData: {},
+    },
+  });
 }
 
 function failClosedAdjustCandidate(candidate: unknown): unknown | undefined {

@@ -12,6 +12,7 @@ import type {
   QuoteContext,
 } from "@parallax/risk";
 import { describe, expect, it } from "vitest";
+import canonicalRealCamelotCapture from "../../../../fixtures/provider-registry/be-063/camelot-sepolia-real-2026-09-18T08-47-56-715Z/capture.json";
 import { createBackendApp } from "../bootstrap/backend.js";
 import { UnsupportedAgentFlowError } from "../ports.js";
 import { bootstrapBackendRuntime } from "../runtime-config.js";
@@ -134,6 +135,76 @@ function arbitrumCompositionOptions(
     core: { evaluate: async (input) => input },
     decision: { decide: async (input) => input },
   };
+}
+
+type CanonicalCaptureRecord = {
+  readonly context: string;
+  readonly method: string;
+  readonly request: { readonly params: readonly unknown[] };
+  readonly response: { readonly result?: unknown };
+};
+
+function canonicalRealRpcReplay() {
+  const capture = canonicalRealCamelotCapture as unknown as {
+    readonly observations: {
+      readonly pinnedBlock: {
+        readonly number: string;
+        readonly hash: string;
+      };
+    };
+    readonly records: readonly CanonicalCaptureRecord[];
+  };
+  const records = capture.records;
+  const quoteRecord = records.find(
+    (record) => record.context === "quote:IQuoter:WETH_TO_USDC",
+  );
+  const preparedCallRecord = records.find(
+    (record) => record.context === "preparedSwap.ethCall",
+  );
+  const preparedGasRecord = records.find(
+    (record) => record.context === "preparedSwap.ethEstimateGas",
+  );
+  if (
+    quoteRecord?.response.result === undefined ||
+    preparedCallRecord?.response.result === undefined ||
+    preparedGasRecord?.response.result === undefined
+  ) {
+    throw new Error(
+      "canonical BE-063 capture is missing prepared swap records",
+    );
+  }
+
+  const calls: Array<{ method: string; params: readonly unknown[] }> = [];
+  const client: ArbitrumRpcClient = {
+    async request(method, params = []) {
+      calls.push({ method, params });
+      if (method === "eth_chainId") return "0x66eee";
+      if (method === "eth_getBlockByNumber") {
+        return {
+          number: capture.observations.pinnedBlock.number,
+          hash: capture.observations.pinnedBlock.hash,
+        };
+      }
+      if (method === "eth_call") {
+        const transaction = params[0] as { readonly to?: unknown } | undefined;
+        const target =
+          typeof transaction?.to === "string"
+            ? transaction.to.toLowerCase()
+            : undefined;
+        if (target === CAMELOT_SEPOLIA_QUOTER.toLowerCase()) {
+          return quoteRecord.response.result;
+        }
+        if (target === CAMELOT_SEPOLIA_ROUTER.toLowerCase()) {
+          return preparedCallRecord.response.result;
+        }
+      }
+      if (method === "eth_estimateGas") {
+        return preparedGasRecord.response.result;
+      }
+      throw new Error(`unexpected canonical fixture RPC method ${method}`);
+    },
+  };
+  return { calls, client, capture, quoteRecord };
 }
 
 describe("Arbitrum production composition skeleton", () => {
@@ -310,19 +381,11 @@ describe("Arbitrum production composition skeleton", () => {
           },
         },
         checkedScope: ["native-rpc.eth_call", "native-rpc.estimateGas"],
-        providerData: {
-          nativeRpc: {
-            status: "unknown",
-            freshness: { status: "not_checked" },
-            notChecked: expect.arrayContaining([
-              "receipt",
-              "outcome",
-              "assetChanges",
-            ]),
-          },
-        },
+        providerData: {},
       },
     });
+    expect(JSON.stringify(body)).not.toContain("callReturnData");
+    expect(JSON.stringify(body)).not.toContain("gasUnits");
   });
 
   it("accepts the LIVE Arbitrum composition runtime instead of the Moss runtime identity", async () => {
@@ -646,6 +709,84 @@ describe("Arbitrum production composition skeleton", () => {
       "eth_call",
       "eth_estimateGas",
     ]);
+  });
+
+  it("replays the committed QUALIFIED_REAL Camelot fixture through the production path", async () => {
+    const replay = canonicalRealRpcReplay();
+    const blockNumber = String(
+      BigInt(replay.capture.observations.pinnedBlock.number),
+    );
+    const runtime = bootstrapBackendRuntime({
+      environment: arbitrumEnvironment,
+      tokenRegistry: {
+        chains: [{ chainId: 421614, symbol: "ETH", decimals: 18 }],
+        tokens: [
+          {
+            chainId: 421614,
+            address: CAMELOT_SEPOLIA_USDC,
+            symbol: "USDC",
+            decimals: 18,
+            decimalsSource: "onchain_verified" as const,
+            verifiedAtBlock: blockNumber,
+          },
+        ],
+      },
+    });
+    const composition = createArbitrumProductionComposition({
+      runtime,
+      runStore: new InMemoryRunStore(),
+      rpcClient: replay.client,
+    });
+    const pipeline = new BackendPipeline({ runtime: composition });
+    const execution = await pipeline.executeNormalized(
+      {
+        chainId: 421614,
+        protocol: "camelot-v3",
+        sender: "0xeb7c5322f0997ee70f4bbd3ae7e428072c9af396",
+        recipient: "0xeb7c5322f0997ee70f4bbd3ae7e428072c9af396",
+        recipientSource: "explicit",
+        tokenIn: { kind: "native" },
+        tokenOut: { kind: "erc20", address: CAMELOT_SEPOLIA_USDC },
+        amountInAtomic: "1000000000000000",
+        economicBoundary: {
+          availability: "unavailable",
+          source: "unavailable",
+        },
+      },
+      {
+        rawInput: normalizedIntent as never,
+        runId: "arbitrum-be-063-qualified-real",
+        chainId: 421614,
+        protocol: "camelot-v3",
+        capability: "simulate",
+      },
+    );
+
+    expect(execution.providerResult).toMatchObject({ status: "success" });
+    expect(execution.providerEvidence).toMatchObject({
+      provider: { providerId: NATIVE_RPC_ARBITRUM_PROVIDER_ID },
+      quote: {
+        value: { estimatedAmountOut: "0.015882896725531551" },
+        blockNumber,
+      },
+      providerData: { nativeRpc: { gasUnits: "272052" } },
+    });
+    expect(execution.unsignedTransaction.payload).toMatchObject({
+      to: CAMELOT_SEPOLIA_ROUTER,
+      value: "0x38d7ea4c68000",
+    });
+    const quoteCall = replay.calls.find(
+      ({ method, params }) =>
+        method === "eth_call" &&
+        (params[0] as { readonly to?: unknown } | undefined)?.to ===
+          CAMELOT_SEPOLIA_QUOTER,
+    );
+    expect(quoteCall?.params[0]).toMatchObject(
+      replay.quoteRecord.request.params[0] as Record<string, unknown>,
+    );
+
+    const publicResult = runResultSchema.parse(execution.decisionOutput);
+    expect(publicResult.providerEvidence?.providerData).toEqual({});
   });
 
   it("normalizes Arbitrum quotes through the public app and reaches Camelot", async () => {
