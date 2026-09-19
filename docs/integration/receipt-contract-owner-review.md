@@ -9,6 +9,7 @@ This document records the confirmed Receipt boundaries from Issue #62. It is a B
 - Contract Owner decision matrix: [Issue #62 comment](https://github.com/parallax-monad/parallax/issues/62#issuecomment-5706761280)
 - BE-032 status clarification: [Issue #62 comment](https://github.com/parallax-monad/parallax/issues/62#issuecomment-5714565944)
 - Provider Owner evidence: [Issue #62 comment](https://github.com/parallax-monad/parallax/issues/62#issuecomment-5691741520)
+- Related metadata and Evidence provenance decision: [Issue #53](https://github.com/parallax-monad/parallax/issues/53)
 - Existing Receipt lifecycle implementation: [PR #61](https://github.com/parallax-monad/parallax/pull/61)
 
 The current phase records the accepted lifecycle boundaries and explicitly preserves unresolved or deferred final-contract decisions. BE-GATE-006 must be re-evaluated after this checklist and the BE-032 progress record are synchronized.
@@ -40,7 +41,7 @@ The current implementation does not introduce a final Receipt contract, ABI, dep
 | Deployment boundary | **DEFERRED** | No network, address, ABI, upgradeability, RPC, or deployment prerequisite is selected. | Contract Owner and Product/operations when anchoring is scheduled. |
 | Explorer proof | **DEFERRED** | No explorer proof is required for a completed Decision, and no explorer representation is approved. | Contract Owner and Product after anchoring design. |
 | Failure / retry | **APPROVED BOUNDARY; DURABLE SEMANTICS UNRESOLVED** | Signing/anchoring failure, timeout, or absence remains observable and non-blocking for an already completed Decision. Durable statuses, retryability, backoff, and recovery remain deferred. | Backend proposes mechanics; Contract Owner approves durable semantics. |
-| Public API / lifecycle projection | **DEFERRED** | Receipt lifecycle stays internal. No Run, Replay, Re-run, public API field, requiredness, or separate-resource model is approved. | Backend proposes an additive projection with Product input; Contract Owner reviews it against the Evidence rules. |
+| Public API / lifecycle projection | **DEFERRED** | Receipt lifecycle stays internal. No Run, Replay, Re-run, public API field, requiredness, or separate-resource model is approved. | Backend proposes an additive projection with Product input; Contract Owner reviews it against [#53](https://github.com/parallax-monad/parallax/issues/53) and the Evidence provenance rules. |
 
 ## Cross-cutting rules retained
 
