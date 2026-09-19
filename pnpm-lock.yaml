@@ -38,6 +38,9 @@ importers:
       '@parallax/orchestrator':
         specifier: workspace:*
         version: link:../../packages/orchestrator
+      '@parallax/risk':
+        specifier: workspace:*
+        version: link:../../packages/risk
       hono:
         specifier: 4.12.33
         version: 4.12.33

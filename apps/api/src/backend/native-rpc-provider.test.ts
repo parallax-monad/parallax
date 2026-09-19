@@ -1,6 +1,15 @@
-import type { NormalizedSwapIntent } from "@parallax/contracts";
+import {
+  convertAtomicAmountToHuman,
+  convertHumanAmountToAtomic,
+  type NormalizedSwapIntent,
+} from "@parallax/contracts";
 import { describe, expect, it } from "vitest";
 import controlledNativeRpcFixtures from "../../../../fixtures/provider-registry/be-011/native-rpc/controlled-p0-b/fixtures.json";
+import type { ArbitrumRpcClient } from "./arbitrum-chain-adapter.js";
+import {
+  CAMELOT_SEPOLIA_USDC,
+  CamelotV3ProtocolAdapter,
+} from "./camelot-v3-protocol-adapter.js";
 import {
   ARBITRUM_SEPOLIA_CHAIN_ID,
   NATIVE_RPC_ARBITRUM_PROVIDER_ID,
@@ -248,6 +257,111 @@ const controlledCases: readonly ControlledCase[] = [
 ];
 
 describe("Backend Native RPC evidence seam", () => {
+  it("reports the same Transaction Protection the prepared Camelot calldata encodes", async () => {
+    const amountOutQuoted = 2n * 10n ** 18n;
+    const declaredMinimumAtomic = "1750000000000000000";
+    const rpcClient: ArbitrumRpcClient = {
+      request: async () =>
+        `0x${amountOutQuoted.toString(16).padStart(64, "0")}${"0".repeat(64)}`,
+    };
+    const adapter = new CamelotV3ProtocolAdapter({
+      rpcClient,
+      tokenOutDecimals: 18,
+    });
+    const protectedIntent: NormalizedSwapIntent = {
+      ...intent,
+      amountInAtomic: "1000000000000000",
+      tokenOut: { kind: "erc20", address: CAMELOT_SEPOLIA_USDC },
+      economicBoundary: {
+        availability: "available",
+        minimumReceivedAtomic: declaredMinimumAtomic,
+        source: "user_declared",
+      },
+    };
+    const blockContext = { blockNumber: "42" };
+    const quote = await adapter.quote(protectedIntent, { blockContext });
+    const unsignedTransaction = await adapter.buildTransaction(
+      protectedIntent,
+      { blockContext, quote },
+    );
+    const calldataMinimum = BigInt(
+      `0x${String(unsignedTransaction.payload.data).slice(2 + 8 + 5 * 64, 2 + 8 + 6 * 64)}`,
+    );
+    const evidence = toNativeRpcGenericEvidence({
+      intent: protectedIntent,
+      tokenInDecimals: 18,
+      tokenOutDecimals: 18,
+      preparedExecution: {
+        ...prepared,
+        intent: protectedIntent,
+        quote,
+        blockContext,
+        unsignedTransaction: unsignedTransaction as never,
+      },
+      providerResult: result("success"),
+    });
+
+    // The public Evidence must not silently fall back to the 99% protocol floor.
+    expect(calldataMinimum).toBe(BigInt(declaredMinimumAtomic));
+    expect(calldataMinimum).not.toBe((amountOutQuoted * 99n) / 100n);
+    expect(evidence.intent.minimumReceivedSource).toBe("user_declared");
+    expect(evidence.intent.minimumReceived).toBe(
+      convertAtomicAmountToHuman(declaredMinimumAtomic, 18),
+    );
+    // Same source of truth: the reported protection round-trips to calldata.
+    const roundTrip = convertHumanAmountToAtomic(
+      evidence.intent.minimumReceived as string,
+      18,
+    );
+    expect(roundTrip).toMatchObject({ success: true });
+    if (roundTrip.success) {
+      expect(BigInt(roundTrip.amountAtomic)).toBe(calldataMinimum);
+    }
+  });
+
+  it("does not fabricate a caller declaration when the boundary is unavailable", async () => {
+    const amountOutQuoted = 2n * 10n ** 18n;
+    const rpcClient: ArbitrumRpcClient = {
+      request: async () =>
+        `0x${amountOutQuoted.toString(16).padStart(64, "0")}${"0".repeat(64)}`,
+    };
+    const adapter = new CamelotV3ProtocolAdapter({
+      rpcClient,
+      tokenOutDecimals: 18,
+    });
+    const derivedIntent: NormalizedSwapIntent = {
+      ...intent,
+      amountInAtomic: "1000000000000000",
+      tokenOut: { kind: "erc20", address: CAMELOT_SEPOLIA_USDC },
+    };
+    const blockContext = { blockNumber: "42" };
+    const quote = await adapter.quote(derivedIntent, { blockContext });
+    const unsignedTransaction = await adapter.buildTransaction(derivedIntent, {
+      blockContext,
+      quote,
+    });
+    const evidence = toNativeRpcGenericEvidence({
+      intent: derivedIntent,
+      tokenInDecimals: 18,
+      tokenOutDecimals: 18,
+      preparedExecution: {
+        ...prepared,
+        intent: derivedIntent,
+        quote,
+        blockContext,
+        unsignedTransaction: unsignedTransaction as never,
+      },
+      providerResult: result("success"),
+    });
+
+    const calldataMinimum = BigInt(
+      `0x${String(unsignedTransaction.payload.data).slice(2 + 8 + 5 * 64, 2 + 8 + 6 * 64)}`,
+    );
+    expect(calldataMinimum).toBe((amountOutQuoted * 99n) / 100n);
+    expect(evidence.intent.minimumReceived).toBeUndefined();
+    expect(evidence.intent.minimumReceivedSource).toBe("unavailable");
+  });
+
   it("keeps the controlled fixture explicitly non-live", () => {
     expect(controlledNativeRpcFixtures).toMatchObject({
       real: false,

@@ -165,6 +165,7 @@ export function toNativeRpcGenericEvidence(
     blockNumber,
     fetchedAt,
   );
+  const runtime = runtimeFromQuote(input.preparedExecution.quote);
   const actionValue = jsonValueOrNull(
     input.preparedExecution.unsignedTransaction.payload,
   );
@@ -272,6 +273,7 @@ export function toNativeRpcGenericEvidence(
       mode,
       source,
       simulationBlock: blockNumber,
+      ...(runtime === undefined ? {} : { runtime }),
     },
     checkedScope,
     unknownScope,
@@ -360,6 +362,21 @@ function quoteField(
     blockNumber,
     fetchedAt,
   };
+}
+
+function runtimeFromQuote(quote: unknown) {
+  if (!isRecord(quote)) return undefined;
+  const runtimeVersion = quote.runtimeVersion;
+  const runtimeRevision = quote.runtimeRevision;
+  if (
+    typeof runtimeVersion !== "string" ||
+    runtimeVersion.trim() === "" ||
+    typeof runtimeRevision !== "string" ||
+    runtimeRevision.trim() === ""
+  ) {
+    return undefined;
+  }
+  return { runtimeVersion, runtimeRevision };
 }
 
 function jsonField(
