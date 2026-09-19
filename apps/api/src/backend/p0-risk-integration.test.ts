@@ -367,6 +367,68 @@ describe("Backend P0 Risk bridge: EvidenceState mapping", () => {
     ).toBe("UNKNOWN");
   });
 
+  it("keeps frozen Native RPC partial semantics: LIVE, fresh, reproducible Evidence stays INCOMPLETE and UNKNOWN", () => {
+    // Frozen #69 / #70 semantics: a successful but partial Native RPC
+    // evaluation reports provider.status=UNKNOWN and must never be promoted to
+    // a complete Provider SUCCESS. Even with a verified current quote and an
+    // injected selected baseline, the Backend Evidence State must stay
+    // INCOMPLETE and the final P0 verdict must stay UNKNOWN. This is the
+    // correct fail-closed P0 result while the Native RPC surface stays partial,
+    // not a bug, and it must not be relaxed to VERIFIED.
+    const evidence = verifiedEvidence({
+      provider: {
+        providerId: "native-rpc-arbitrum",
+        status: "UNKNOWN",
+        integrationStatus: "OK",
+        errors: field([]),
+      },
+      simulation: {
+        value: null,
+        source: "rpc",
+        reproducibility: "REPRODUCIBLE",
+        blockNumber: BLOCK_NUMBER,
+        fetchedAt: OBSERVED_AT,
+      },
+      receipt: field(null),
+      outcome: field(null),
+      assetChanges: field(null),
+      capabilities: ["simulate", "eth_call", "estimateGas", "pinned-block"],
+      checkedScope: ["native-rpc.eth_call", "native-rpc.estimateGas"],
+      unknownScope: ["receipt", "outcome", "assetChanges", "simulation"],
+      providerData: {
+        nativeRpc: {
+          status: "unknown",
+          freshness: {
+            status: "fresh",
+            pinnedBlock: BLOCK_NUMBER,
+            headBlock: BLOCK_NUMBER,
+            lag: "0",
+            maxBlockLag: 5,
+          },
+        },
+      },
+    });
+
+    expect(evidence.provider.status).toBe("UNKNOWN");
+    expect(evidence.provider.integrationStatus).toBe("OK");
+    expect(evidence.provenance.mode).toBe("LIVE");
+    expect(evidence.provenance.source).toBe("rpc");
+    expect(evidence.quote.reproducibility).toBe("REPRODUCIBLE");
+
+    expect(backendEvidenceState(evidence)).toBe("INCOMPLETE");
+    expect(backendEvidenceState(evidence)).not.toBe("VERIFIED");
+
+    expect(
+      evaluateBackendP0Risk({
+        parentRunId: PARENT_RUN_ID,
+        intent: baseIntent,
+        evidence,
+        currentQuote: currentQuote(),
+        selectedQuote: baseline(),
+      }).verdict,
+    ).toBe("UNKNOWN");
+  });
+
   it("maps a reserved unknownScope key to INCOMPLETE", () => {
     const evidence = verifiedEvidence({
       unknownScope: ["quote", "receipt"],

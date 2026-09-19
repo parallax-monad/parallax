@@ -1,10 +1,12 @@
-import type {
-  CheckSwapRequest,
-  EvidenceItem,
-  EvidenceRef,
-  NormalizedSwapIntent,
-  Quote,
-  RunResult,
+import {
+  type CheckSwapRequest,
+  type EvidenceItem,
+  type EvidenceRef,
+  type GenericEvidence,
+  genericEvidenceSchema,
+  type NormalizedSwapIntent,
+  type Quote,
+  type RunResult,
 } from "@parallax/contracts";
 import { ReplayApplicationService } from "@parallax/orchestrator/application";
 import {
@@ -353,6 +355,109 @@ function completedEconomicResult(
       reason: "No route in test fixture",
     },
   });
+}
+
+const providerEvidenceRuntime = {
+  runtimeVersion: "arbitrum-camelot-v3",
+  runtimeRevision: "native-rpc",
+} as const;
+
+type ProviderEvidenceOverrides = {
+  mode?: "LIVE" | "RECORDED_REPLAY" | "MOCK";
+  source?:
+    | "moss"
+    | "rpc"
+    | "quote"
+    | "external"
+    | "derived"
+    | "mock"
+    | "unknown";
+  runtime?: { runtimeVersion: string; runtimeRevision: string };
+  omitRuntime?: boolean;
+  simulationBlock?: string;
+};
+
+function providerEvidenceField<T>(value: T) {
+  return {
+    value,
+    source: "rpc" as const,
+    reproducibility: "REPRODUCIBLE" as const,
+    blockNumber: simulatorPinnedBlock,
+    fetchedAt: createdAt,
+  };
+}
+
+/**
+ * A minimal provider-neutral Evidence projection, used to exercise the
+ * provider-aware runtime authority independently of any real provider.
+ */
+function providerEvidence(
+  overrides: ProviderEvidenceOverrides = {},
+): GenericEvidence {
+  return genericEvidenceSchema.parse({
+    intent: {
+      chainId: 143,
+      protocol: "kuru",
+      sender,
+      tokenIn: "native",
+      tokenOut: usdcAddress,
+      amountIn: "1.5",
+      minimumReceivedSource: "unavailable",
+    },
+    provider: {
+      providerId: "native-rpc-arbitrum",
+      status: "UNKNOWN",
+      integrationStatus: "OK",
+      errors: providerEvidenceField([]),
+    },
+    execution: { status: "UNKNOWN" },
+    quote: providerEvidenceField(null),
+    action: providerEvidenceField([]),
+    receipt: providerEvidenceField(null),
+    outcome: providerEvidenceField(null),
+    assetChanges: providerEvidenceField(null),
+    assetChangeAssessment: "UNKNOWN",
+    warnings: providerEvidenceField([]),
+    simulation: providerEvidenceField(null),
+    blockNumber: providerEvidenceField(simulatorPinnedBlock),
+    capabilities: ["simulate"],
+    provenance: {
+      mode: overrides.mode ?? "LIVE",
+      source: overrides.source ?? "rpc",
+      simulationBlock: overrides.simulationBlock ?? simulatorPinnedBlock,
+      ...(overrides.omitRuntime === true
+        ? {}
+        : { runtime: overrides.runtime ?? providerEvidenceRuntime }),
+    },
+    checkedScope: ["native-rpc.eth_call"],
+    unknownScope: ["quote", "action", "receipt", "simulation"],
+    providerData: {},
+  });
+}
+
+/**
+ * A completed Run whose authoritative route Evidence and provider-neutral
+ * providerEvidence are both present. The runtime identity of the route
+ * Evidence defaults to the providerEvidence runtime, not the Moss runtime.
+ */
+function providerAwareRouteResult(
+  runId: string,
+  intent: NormalizedSwapIntent,
+  overrides: {
+    runtimeVersion?: string;
+    runtimeRevision?: string;
+    evidence?: GenericEvidence;
+  } = {},
+): RunResult {
+  return {
+    ...completedRouteResult(
+      runId,
+      intent,
+      overrides.runtimeVersion ?? providerEvidenceRuntime.runtimeVersion,
+      overrides.runtimeRevision ?? providerEvidenceRuntime.runtimeRevision,
+    ),
+    providerEvidence: overrides.evidence ?? providerEvidence(),
+  };
 }
 
 function createService(
@@ -1094,6 +1199,168 @@ describe("CheckApplicationService", () => {
     expect(await store.get("run-1")).toMatchObject({
       status: "completed",
       result: response.body,
+    });
+  });
+
+  it("accepts a LIVE providerEvidence runtime that differs from the Moss runtime", async () => {
+    // Provider-neutral composition Evidence carries its own runtime authority
+    // (e.g. arbitrum-camelot-v3 / native-rpc). The configured Moss runtime is
+    // unrelated and must not reject it.
+    const store = new InMemoryRunStore();
+    const service = createService(
+      {
+        async check(input) {
+          return providerAwareRouteResult(input.runId, input.intent);
+        },
+      },
+      store,
+    );
+
+    const response = await service.check(publicRequest());
+
+    expect(response.status).toBe(200);
+    expect(await store.get("run-1")).toMatchObject({
+      status: "completed",
+      result: response.body,
+    });
+  });
+
+  it.each([
+    {
+      name: "runtime version",
+      overrides: { runtimeVersion: runtime.config.moss.runtimeVersion },
+    },
+    {
+      name: "runtime revision",
+      overrides: { runtimeRevision: runtime.config.moss.runtimeRevision },
+    },
+  ])(
+    "rejects authoritative Evidence whose $name disagrees with providerEvidence",
+    async (testCase) => {
+      const store = new InMemoryRunStore();
+      const service = createService(
+        {
+          async check(input) {
+            return providerAwareRouteResult(input.runId, input.intent, {
+              ...testCase.overrides,
+              evidence: providerEvidence(),
+            });
+          },
+        },
+        store,
+      );
+
+      const response = await service.check(publicRequest());
+
+      expect(response).toMatchObject({
+        status: 502,
+        body: {
+          error: {
+            code: "INVALID_AGENT_FLOW_RESPONSE",
+            message:
+              "Agent Flow returned Evidence from a different Moss runtime",
+          },
+        },
+      });
+      expect(await store.get("run-1")).toMatchObject({
+        status: "failed",
+        failure: "INVALID_AGENT_FLOW_RESPONSE",
+      });
+    },
+  );
+
+  it("fails closed instead of falling back to Moss when providerEvidence has no runtime identity", async () => {
+    // The authoritative Evidence deliberately matches the Moss runtime here.
+    // A providerEvidence without its own runtime identity must still fail
+    // closed: falling back to Moss would accept an unrelated runtime.
+    const service = createService({
+      async check(input) {
+        return providerAwareRouteResult(input.runId, input.intent, {
+          runtimeVersion: runtime.config.moss.runtimeVersion,
+          runtimeRevision: runtime.config.moss.runtimeRevision,
+          evidence: providerEvidence({ omitRuntime: true }),
+        });
+      },
+    });
+
+    const response = await service.check(publicRequest());
+
+    expect(response).toMatchObject({
+      status: 502,
+      body: { error: { code: "INVALID_AGENT_FLOW_RESPONSE" } },
+    });
+  });
+
+  it.each([
+    { name: "MOCK mode", evidence: { mode: "MOCK", source: "mock" } },
+    { name: "unknown source", evidence: { source: "unknown" } },
+    { name: "external source", evidence: { source: "external" } },
+  ] as const)(
+    "rejects providerEvidence that is not a trusted $name projection",
+    async (testCase) => {
+      const service = createService({
+        async check(input) {
+          return providerAwareRouteResult(input.runId, input.intent, {
+            evidence: providerEvidence(testCase.evidence),
+          });
+        },
+      });
+
+      const response = await service.check(publicRequest());
+
+      expect(response).toMatchObject({
+        status: 502,
+        body: { error: { code: "INVALID_AGENT_FLOW_RESPONSE" } },
+      });
+    },
+  );
+
+  it("rejects a providerEvidence simulation block that disagrees with the Run pinned block", async () => {
+    const service = createService({
+      async check(input) {
+        return providerAwareRouteResult(input.runId, input.intent, {
+          evidence: providerEvidence({ simulationBlock: "99999999" }),
+        });
+      },
+    });
+
+    const response = await service.check(publicRequest());
+
+    expect(response).toMatchObject({
+      status: 502,
+      body: { error: { code: "INVALID_AGENT_FLOW_RESPONSE" } },
+    });
+  });
+
+  it("accepts a legacy Moss result without providerEvidence", async () => {
+    const service = createService({
+      async check(input) {
+        return completedRouteResult(input.runId, input.intent);
+      },
+    });
+
+    const response = await service.check(publicRequest());
+
+    expect(response.status).toBe(200);
+  });
+
+  it("rejects a legacy Moss result whose runtime disagrees with config.moss", async () => {
+    const service = createService({
+      async check(input) {
+        return completedRouteResult(
+          input.runId,
+          input.intent,
+          "moss-0.0.9",
+          runtime.config.moss.runtimeRevision,
+        );
+      },
+    });
+
+    const response = await service.check(publicRequest());
+
+    expect(response).toMatchObject({
+      status: 502,
+      body: { error: { code: "INVALID_AGENT_FLOW_RESPONSE" } },
     });
   });
 

@@ -785,6 +785,74 @@ function isProviderBoundaryFailure(cause: unknown): boolean {
 }
 
 /**
+ * The runtime identity every authoritative Evidence item of one Run must
+ * carry. It is resolved per Run because the provider-neutral composition path
+ * and the legacy Moss Agent Flow path have different runtime authorities.
+ */
+type AuthoritativeRuntimeIdentity = {
+  readonly runtimeVersion: string;
+  readonly runtimeRevision: string;
+};
+
+/**
+ * Resolves the runtime authority for this Run's authoritative Evidence.
+ *
+ * A RunResult that carries `providerEvidence` comes from the provider-neutral
+ * composition path (e.g. Arbitrum × Camelot × Native RPC): that Evidence's own
+ * provider runtime is the authority, so the configured Moss runtime identity
+ * must never be applied to it. The provider runtime is trusted only when the
+ * projection is LIVE, its source is neither mock, unknown, nor external, and
+ * it carries a non-empty runtime version and revision.
+ *
+ * A `providerEvidence` that cannot establish that trusted runtime identity
+ * resolves to `undefined` and the caller fails closed. Falling back to the
+ * Moss runtime here would accept composition Evidence produced by an unrelated
+ * runtime, which is exactly what this boundary must prevent.
+ *
+ * A legacy RunResult without `providerEvidence` keeps the existing Moss
+ * runtime identity contract unchanged.
+ */
+function expectedAuthoritativeRuntime(
+  result: RunResult,
+  moss: BackendRuntime["config"]["moss"],
+): AuthoritativeRuntimeIdentity | undefined {
+  const providerEvidence = result.providerEvidence;
+  if (providerEvidence === undefined) {
+    return {
+      runtimeVersion: moss.runtimeVersion,
+      runtimeRevision: moss.runtimeRevision,
+    };
+  }
+
+  const provenance = providerEvidence.provenance;
+  if (provenance.mode !== "LIVE") {
+    return undefined;
+  }
+  if (
+    provenance.source === "mock" ||
+    provenance.source === "unknown" ||
+    provenance.source === "external"
+  ) {
+    return undefined;
+  }
+
+  const runtime = provenance.runtime;
+  if (
+    runtime?.runtimeVersion === undefined ||
+    runtime.runtimeVersion.trim() === "" ||
+    runtime.runtimeRevision === undefined ||
+    runtime.runtimeRevision.trim() === ""
+  ) {
+    return undefined;
+  }
+
+  return {
+    runtimeVersion: runtime.runtimeVersion,
+    runtimeRevision: runtime.runtimeRevision,
+  };
+}
+
+/**
  * Checks the Evidence that can establish a live core outcome against the
  * immutable runtime identity used for this request. Action-only and
  * supplementary Evidence remain outside this boundary until their ownership
@@ -792,7 +860,7 @@ function isProviderBoundaryFailure(cause: unknown): boolean {
  */
 function hasMismatchedAuthoritativeRuntime(
   result: RunResult,
-  runtime: BackendRuntime["config"]["moss"],
+  moss: BackendRuntime["config"]["moss"],
 ): boolean {
   const evidenceByKey = new Map(
     result.evidence.map((evidence) => [evidence.key, evidence]),
@@ -842,6 +910,25 @@ function hasMismatchedAuthoritativeRuntime(
     return true;
   }
 
+  // The provider-neutral projection pins its simulation base block on the
+  // Evidence provenance; a Run whose own pinned block disagrees must fail
+  // closed. Native RPC never relaxes pinned-block integrity.
+  const providerSimulationBlock =
+    result.providerEvidence?.provenance.simulationBlock;
+  if (
+    result.status === "completed" &&
+    providerSimulationBlock !== undefined &&
+    providerSimulationBlock !== result.simulatorPinnedBlock
+  ) {
+    return true;
+  }
+
+  const expectedRuntime = expectedAuthoritativeRuntime(result, moss);
+  if (expectedRuntime === undefined) {
+    // providerEvidence exists but cannot establish a trusted runtime identity.
+    return true;
+  }
+
   const visited = new Set<string>();
   const visit = (key: string): boolean => {
     if (visited.has(key)) return false;
@@ -850,8 +937,8 @@ function hasMismatchedAuthoritativeRuntime(
     const evidence = evidenceByKey.get(key);
     if (
       evidence === undefined ||
-      evidence.runtimeVersion !== runtime.runtimeVersion ||
-      evidence.runtimeRevision !== runtime.runtimeRevision
+      evidence.runtimeVersion !== expectedRuntime.runtimeVersion ||
+      evidence.runtimeRevision !== expectedRuntime.runtimeRevision
     ) {
       return true;
     }
