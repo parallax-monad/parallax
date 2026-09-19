@@ -14,7 +14,6 @@ import {
   type GenericSwapIntent,
   type NormalizedSwapIntent,
   type P0ReasonCode,
-  type P0Result,
   type Quote,
   type QuoteResult,
   quoteResultSchema,
@@ -190,12 +189,10 @@ export function projectGenericEvidenceToRunResult(
   runId: string,
   intent: NormalizedSwapIntent,
   evidence: GenericEvidence,
-  options: { readonly p0?: P0Result } = {},
 ): RunResult {
   return runResultSchema.parse({
     ...buildRunResult(runId, intent, evidence, evaluateEvidence(evidence)),
     providerEvidence: evidence,
-    ...(options.p0 === undefined ? {} : { p0: options.p0 }),
   });
 }
 

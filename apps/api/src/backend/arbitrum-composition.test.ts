@@ -1,5 +1,15 @@
-import type { NormalizedSwapIntent } from "@parallax/contracts";
+import {
+  type GenericEvidence,
+  genericEvidenceSchema,
+  type NormalizedSwapIntent,
+  runResultSchema,
+} from "@parallax/contracts";
 import { economicFailStopResult } from "@parallax/orchestrator/application/action-gate-fixtures";
+import type {
+  CallerConstraint,
+  ConstraintEvidence,
+  QuoteContext,
+} from "@parallax/risk";
 import { describe, expect, it } from "vitest";
 import { createBackendApp } from "../bootstrap/backend.js";
 import { UnsupportedAgentFlowError } from "../ports.js";
@@ -467,22 +477,6 @@ describe("Arbitrum production composition skeleton", () => {
     expect(execution.decisionOutput).toMatchObject({
       status: "completed",
       verdict: "UNKNOWN",
-      p0: {
-        evidenceState: "INCOMPLETE",
-        verdict: "UNKNOWN",
-        quoteFidelity: {
-          status: "UNKNOWN",
-          reason: "EVIDENCE_NOT_VERIFIED",
-        },
-        remediation: {
-          status: "UNKNOWN",
-          reason: "EVIDENCE_NOT_VERIFIED",
-        },
-        currentQuote: {
-          amountOutAtomic: "2000000000000000000",
-          blockNumber: "42",
-        },
-      },
       providerEvidence: {
         provider: { providerId: NATIVE_RPC_ARBITRUM_PROVIDER_ID },
       },
@@ -614,6 +608,256 @@ describe("Arbitrum production composition skeleton", () => {
       protocol: "camelot-v3",
       amountInAtomic: "1000000000000000000",
       economicBoundary: { availability: "unavailable" },
+    });
+  });
+});
+
+const p0IntentAmountInAtomic = "1000";
+const p0ObservedAt = "2026-09-01T00:00:00.000Z";
+
+function p0Field<T>(value: T) {
+  return {
+    value,
+    source: "rpc" as const,
+    reproducibility: "REPRODUCIBLE" as const,
+    blockNumber: "42",
+    fetchedAt: p0ObservedAt,
+  };
+}
+
+/**
+ * A fully verified provider-neutral observation, used only to prove that the
+ * default Arbitrum decision obeys the P0 Risk verdict. It is never a claim
+ * about real Native RPC evidence.
+ */
+function p0VerifiedEvidence(): GenericEvidence {
+  return genericEvidenceSchema.parse({
+    intent: {
+      chainId: 421614,
+      protocol: "camelot-v3",
+      sender: normalizedIntent.sender,
+      tokenIn: "native",
+      tokenOut: arbitrumTokenAddress,
+      amountIn: "0.001",
+      minimumReceivedSource: "unavailable",
+    },
+    provider: {
+      providerId: NATIVE_RPC_ARBITRUM_PROVIDER_ID,
+      status: "SUCCESS",
+      integrationStatus: "OK",
+      errors: p0Field([]),
+    },
+    execution: { status: "SUCCESS" },
+    quote: {
+      value: { estimatedAmountOut: "0.5" },
+      source: "quote",
+      reproducibility: "REPRODUCIBLE",
+      blockNumber: "42",
+      fetchedAt: p0ObservedAt,
+    },
+    action: p0Field([]),
+    receipt: p0Field({}),
+    outcome: p0Field({}),
+    assetChanges: p0Field([]),
+    assetChangeAssessment: "NOT_APPLICABLE",
+    warnings: p0Field([]),
+    simulation: {
+      value: {
+        expectedTransactions: 1,
+        observedResults: 1,
+        unmatchedResultIndexes: [],
+        halted: false,
+        complete: true,
+        missingTransactionIndexes: [],
+      },
+      source: "derived",
+      reproducibility: "REPRODUCIBLE",
+      blockNumber: "42",
+      fetchedAt: p0ObservedAt,
+    },
+    blockNumber: p0Field("42"),
+    capabilities: ["quote"],
+    provenance: {
+      observedChainId: 421614,
+      fetchedAt: p0ObservedAt,
+      mode: "LIVE",
+      source: "rpc",
+      simulationBlock: "42",
+      runtime: {
+        runtimeVersion: "arbitrum-camelot-v3",
+        runtimeRevision: "native-rpc",
+      },
+    },
+    checkedScope: ["quote"],
+    unknownScope: [],
+    providerData: {},
+  });
+}
+
+const p0SelectedQuote: QuoteContext = {
+  chainId: 421614,
+  protocol: "camelot-v3",
+  tokenIn: "native",
+  tokenOut: arbitrumTokenAddress,
+  amountInAtomic: p0IntentAmountInAtomic,
+  amountOutAtomic: "490000",
+  quoteId: "selected-baseline",
+  provenance: "quote-adapter:v1",
+  blockNumber: "41",
+  observedAt: "2026-08-31T00:00:00.000Z",
+};
+
+const p0Constraints: readonly CallerConstraint[] = [
+  {
+    name: "maxPriceImpact",
+    source: "caller",
+    declarationId: "impact",
+    numerator: "10",
+    denominator: "1",
+    unit: "bps",
+  },
+];
+
+const p0ConstraintEvidence: readonly ConstraintEvidence[] = [
+  {
+    name: "maxPriceImpact",
+    state: "VERIFIED",
+    numerator: "50",
+    denominator: "1",
+    unit: "bps",
+    evidenceKey: "impact",
+  },
+];
+
+function p0CompositionOptions(
+  overrides: Partial<ArbitrumProductionCompositionOptions> = {},
+): ArbitrumProductionCompositionOptions {
+  return {
+    runtime: arbitrumRuntime(),
+    runStore: new InMemoryRunStore(),
+    chainAdapter: createFakeChainAdapter({
+      chainId: 421614,
+      blockNumber: "42",
+      gasUnits: "21000",
+      finality: { status: "finalized" },
+    }),
+    providers: [
+      createFakeProviderAdapter<NormalizedSwapIntent>({
+        providerId: NATIVE_RPC_ARBITRUM_PROVIDER_ID,
+        intent: normalizedIntent,
+        chainId: 421614,
+        protocol: "camelot-v3",
+        capabilities: ["simulate", "eth_call", "estimateGas", "pinned-block"],
+        supports: () => true,
+      }),
+    ],
+    protocolAdapter: createCamelotV3ProtocolAdapter({
+      quote: async () => ({
+        estimatedAmountOut: "0.5",
+        blockNumber: "42",
+        runtimeVersion: "arbitrum-camelot-v3",
+        runtimeRevision: "native-rpc",
+      }),
+      buildTransaction: async () => ({
+        to: "0x2222222222222222222222222222222222222222",
+        data: "0x1234",
+        value: "0x0",
+      }),
+    }),
+    ...overrides,
+  };
+}
+
+async function runP0Check(
+  composition: ReturnType<typeof createArbitrumProductionComposition>,
+  runId: string,
+) {
+  const pipeline = new BackendPipeline({ runtime: composition });
+  return pipeline.executeNormalized(
+    { ...normalizedIntent, amountInAtomic: p0IntentAmountInAtomic },
+    {
+      rawInput: normalizedIntent as never,
+      runId,
+      chainId: 421614,
+      protocol: "camelot-v3",
+      capability: "simulate",
+    },
+  );
+}
+
+describe("Arbitrum composition P0 Risk wiring", () => {
+  it("fails the default decision closed to UNKNOWN without a selected baseline", async () => {
+    // The legacy projection of this verified Evidence is PROCEED; the P0 gate
+    // has no Expectation Baseline, so the published verdict must be UNKNOWN and
+    // the current quote must never be used as the baseline.
+    const composition = createArbitrumProductionComposition(
+      p0CompositionOptions({
+        providerEvidenceMapper: () => p0VerifiedEvidence(),
+      }),
+    );
+
+    const execution = await runP0Check(composition, "p0-no-baseline");
+
+    expect(execution.decisionOutput).toMatchObject({
+      status: "completed",
+      verdict: "UNKNOWN",
+      summary: "Live check could not establish a trustworthy result",
+    });
+    expect(
+      (execution.decisionOutput as { readonly verdict: string }).verdict,
+    ).not.toBe("PROCEED");
+    // The Backend-side verdict override must keep the shared Run contract valid.
+    expect(runResultSchema.safeParse(execution.decisionOutput).success).toBe(
+      true,
+    );
+  });
+
+  it("makes the final verdict obey the P0 Risk verdict for an injected baseline", async () => {
+    const composition = createArbitrumProductionComposition(
+      p0CompositionOptions({
+        providerEvidenceMapper: () => p0VerifiedEvidence(),
+        p0Risk: {
+          selectedQuote: p0SelectedQuote,
+          constraints: p0Constraints,
+          constraintEvidence: p0ConstraintEvidence,
+        },
+      }),
+    );
+
+    const execution = await runP0Check(composition, "p0-constraint-stop");
+
+    // The legacy projection of this verified Evidence is PROCEED; the injected
+    // caller constraint violation must still be published as STOP.
+    expect(execution.decisionOutput).toMatchObject({
+      status: "completed",
+      verdict: "STOP",
+      summary: "Live check completed with verdict STOP",
+    });
+    expect(runResultSchema.safeParse(execution.decisionOutput).success).toBe(
+      true,
+    );
+  });
+
+  it("leaves an injected custom core/decision override unchanged", async () => {
+    const composition = createArbitrumProductionComposition(
+      p0CompositionOptions({
+        core: { evaluate: async () => ({ custom: "core" }) },
+        decision: {
+          decide: async (input) => ({ custom: "decision", input }),
+        },
+        p0Risk: {
+          selectedQuote: p0SelectedQuote,
+          constraints: p0Constraints,
+          constraintEvidence: p0ConstraintEvidence,
+        },
+      }),
+    );
+
+    const execution = await runP0Check(composition, "custom-override");
+
+    expect(execution.decisionOutput).toEqual({
+      custom: "decision",
+      input: { custom: "core" },
     });
   });
 });
