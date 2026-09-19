@@ -109,6 +109,14 @@ export function WalletSwap({
   onReplay: () => void;
 }) {
   const [advancedOpen, setAdvancedOpen] = useState(false);
+  const isArbitrum = form.chainId === 421614;
+  const tokenInOptions = isArbitrum ? (["WETH"] as const) : SUPPORTED_TOKENS_IN;
+  const tokenOutOptions = isArbitrum
+    ? (["USDC"] as const)
+    : SUPPORTED_TOKENS_OUT;
+  const venueLabel = isArbitrum
+    ? "Camelot V3 · Arbitrum Sepolia"
+    : "Kuru (live API)";
 
   const set = <K extends keyof FormState>(key: K, value: FormState[K]) =>
     onChange({ ...form, [key]: value });
@@ -130,6 +138,20 @@ export function WalletSwap({
         onSubmit();
       }}
     >
+      <div className="border border-monad/30 bg-monad/[0.06] px-4 py-3 text-[12px] text-dim">
+        <strong className="text-monad-dim">
+          {say(language, {
+            en: isArbitrum ? "Arbitrum Sepolia · Camelot V3" : "Monad · Kuru",
+            zh: isArbitrum ? "Arbitrum Sepolia · Camelot V3" : "Monad · Kuru",
+          })}
+        </strong>
+        <span className="ml-2">
+          {say(language, {
+            en: isArbitrum ? "Native RPC P0 path" : "Existing demo path",
+            zh: isArbitrum ? "Native RPC P0 路径" : "现有演示路径",
+          })}
+        </span>
+      </div>
       <section className="border border-line bg-ink-rail p-4">
         <div className="flex items-baseline justify-between gap-3">
           <span className="text-[12px] font-bold uppercase tracking-[0.08em] text-dim">
@@ -161,7 +183,7 @@ export function WalletSwap({
           />
           <TokenSelect
             language={language}
-            options={SUPPORTED_TOKENS_IN}
+            options={tokenInOptions}
             value={form.tokenIn}
             onSelect={(value) => set("tokenIn", value)}
           />
@@ -218,7 +240,7 @@ export function WalletSwap({
           </strong>
           <TokenSelect
             language={language}
-            options={SUPPORTED_TOKENS_OUT}
+            options={tokenOutOptions}
             value={form.tokenOut}
             onSelect={(value) => set("tokenOut", value)}
           />
@@ -401,8 +423,8 @@ export function WalletSwap({
               </span>
               <span className="field-control text-white">
                 {say(language, {
-                  en: "Kuru (live API)",
-                  zh: "Kuru（实时 API）",
+                  en: venueLabel,
+                  zh: venueLabel,
                 })}
               </span>
               {flagFor("protocol") && (
@@ -431,16 +453,26 @@ export function WalletSwap({
           zh: "提交实时检查",
         })}
       </button>
-      <button
-        type="button"
-        className="btn btn-monad-outline mt-2 w-full"
-        onClick={onReplay}
-      >
-        {say(language, {
-          en: "Load recorded replay",
-          zh: "载入录制回放",
-        })}
-      </button>
+      {!isArbitrum && (
+        <button
+          type="button"
+          className="btn btn-monad-outline mt-2 w-full"
+          onClick={onReplay}
+        >
+          {say(language, {
+            en: "Load recorded replay",
+            zh: "载入录制回放",
+          })}
+        </button>
+      )}
+      {isArbitrum && (
+        <p className="text-center text-[12px] leading-[1.5] text-dim">
+          {say(language, {
+            en: "Recorded replay is available for the Monad demo only.",
+            zh: "录制回放目前仅适用于 Monad 演示。",
+          })}
+        </p>
+      )}
       <p className="text-center text-[12px] leading-[1.5] text-dim">
         {say(language, {
           en: "Parallax runs a pre-sign check. No signing, no broadcasting.",

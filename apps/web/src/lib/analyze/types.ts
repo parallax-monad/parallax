@@ -6,7 +6,8 @@ export type BoundarySource =
   | "demo_preset"
   | "unavailable";
 
-export type Protocol = "kuru" | "pancake";
+export type Protocol = "kuru" | "pancake" | "camelot-v3";
+export type ChainId = 143 | 421614;
 export type SystemStatus = "OK" | "INTEGRATION_ERROR";
 export type ProductRunMode = "LIVE" | "RECORDED_REPLAY";
 export type Verdict = "PROCEED" | "ADJUST" | "STOP" | "UNKNOWN";
@@ -29,6 +30,7 @@ export type ActionSuggestion = {
 };
 
 export type CheckSwapInput = {
+  chainId?: ChainId;
   parentRunId?: string;
   sender?: string;
   protocol: Protocol;
@@ -42,6 +44,7 @@ export type CheckSwapInput = {
 
 /** `/api/quote` accepts the exact-input pair only, without boundary or rerun fields. */
 export type QuoteSwapInput = {
+  chainId?: ChainId;
   sender?: string;
   protocol: Protocol;
   tokenIn: string;

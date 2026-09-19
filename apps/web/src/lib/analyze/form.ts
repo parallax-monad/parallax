@@ -1,11 +1,13 @@
 import type { Copy } from "@/lib/i18n";
-import type { CheckSwapInput, Protocol } from "./types";
+import type { ChainId, CheckSwapInput, Protocol } from "./types";
 
 /**
  * The swap intent as the UI holds it. Kept out of any screen component so the
  * wallet flow and the check service share one contract.
  */
 export type FormState = {
+  /** The selected API/runtime network. Omitted values preserve Monad MVP behavior. */
+  chainId?: ChainId;
   protocol: Protocol;
   tokenIn: string;
   tokenOut: string;
@@ -16,6 +18,8 @@ export type FormState = {
 
 /** The demo picks route and slippage, so the swap sheet stays wallet-like. */
 export const DEMO_PROTOCOL: Protocol = "kuru";
+export const ARBITRUM_PROTOCOL: Protocol = "camelot-v3";
+export const ARBITRUM_CHAIN_ID: ChainId = 421614;
 export const DEMO_SLIPPAGE = "0.5";
 export const MIN_SLIPPAGE = 0;
 export const MAX_SLIPPAGE = 100;
@@ -201,6 +205,7 @@ export function planSubmission(
 }
 
 export const INITIAL_FORM: FormState = {
+  chainId: 143,
   protocol: DEMO_PROTOCOL,
   tokenIn: "MON",
   tokenOut: "USDC",
@@ -209,9 +214,20 @@ export const INITIAL_FORM: FormState = {
   minimumReceived: "",
 };
 
+export const ARBITRUM_INITIAL_FORM: FormState = {
+  chainId: ARBITRUM_CHAIN_ID,
+  protocol: ARBITRUM_PROTOCOL,
+  tokenIn: "WETH",
+  tokenOut: "USDC",
+  amountIn: "0.001",
+  slippage: DEMO_SLIPPAGE,
+  minimumReceived: "",
+};
+
 export function toInput(form: FormState, parentRunId?: string): CheckSwapInput {
   return {
     parentRunId,
+    chainId: form.chainId ?? 143,
     protocol: form.protocol,
     tokenIn: form.tokenIn,
     tokenOut: form.tokenOut,

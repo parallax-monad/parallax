@@ -26,7 +26,12 @@ export const ASSETS: readonly WalletAsset[] = [
 ];
 
 export function assetFor(symbol: string): WalletAsset | undefined {
-  return ASSETS.find((asset) => asset.symbol === symbol);
+  return (
+    ASSETS.find((asset) => asset.symbol === symbol) ??
+    (symbol === "WETH"
+      ? { symbol: "WETH", name: "Wrapped Ether", balance: 2, price: 1 }
+      : undefined)
+  );
 }
 
 export function balanceOf(symbol: string): number {

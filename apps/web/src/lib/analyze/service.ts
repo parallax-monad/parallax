@@ -4,6 +4,7 @@ import type {
   ActionSuggestion,
   ApiFailure,
   ApiFailureIssue,
+  ChainId,
   CheckSwapInput,
   CheckSwapResult,
   EvidenceItem,
@@ -18,6 +19,11 @@ import type {
 
 export const DEFAULT_SENDER = "0x1111111111111111111111111111111111111111";
 export const MONAD_USDC_ADDRESS = "0x754704Bc059F8C67012fEd69BC8A327a5aafb603";
+export const ARBITRUM_SEPOLIA_CHAIN_ID: ChainId = 421614;
+export const ARBITRUM_WETH_ADDRESS =
+  "0x980B62Da83eFf3D4576C647993b0c1D7faf17c73";
+export const ARBITRUM_TEST_USDC_ADDRESS =
+  "0xb893E3334D4Bd6C5ba8277Fd559e99Ed683A9FC7";
 const API_BASE = "";
 const cp = (value: string) => ({ en: value, zh: value });
 const obj = (value: unknown): Record<string, unknown> | undefined =>
@@ -28,15 +34,34 @@ const str = (value: unknown) => (typeof value === "string" ? value : undefined);
 const arr = (value: unknown): unknown[] => (Array.isArray(value) ? value : []);
 const unavailable = cp("unavailable");
 
-function symbol(value: unknown): string {
+function symbol(value: unknown, chainId: ChainId = 143): string {
   const asset = obj(value);
-  if (asset?.kind === "native") return "MON";
+  if (asset?.kind === "native")
+    return chainId === ARBITRUM_SEPOLIA_CHAIN_ID ? "WETH" : "MON";
   const address = str(asset?.address)?.toLowerCase();
+  if (
+    chainId === ARBITRUM_SEPOLIA_CHAIN_ID &&
+    address === ARBITRUM_TEST_USDC_ADDRESS.toLowerCase()
+  )
+    return "USDC";
+  if (
+    chainId === ARBITRUM_SEPOLIA_CHAIN_ID &&
+    address === ARBITRUM_WETH_ADDRESS.toLowerCase()
+  )
+    return "WETH";
   if (address === MONAD_USDC_ADDRESS.toLowerCase()) return "USDC";
   return address ? `${address.slice(0, 6)}…${address.slice(-4)}` : "unknown";
 }
 
-function asset(value: string) {
+function asset(value: string, chainId: ChainId = 143) {
+  if (chainId === ARBITRUM_SEPOLIA_CHAIN_ID && value === "WETH") {
+    // Camelot's accepted P0 path uses the payable native input, which the
+    // protocol adapter wraps as WETH in the prepared unsigned transaction.
+    return { kind: "native" };
+  }
+  if (chainId === ARBITRUM_SEPOLIA_CHAIN_ID && value === "USDC") {
+    return { kind: "erc20", address: ARBITRUM_TEST_USDC_ADDRESS };
+  }
   if (value === "MON") return { kind: "native" };
   if (value === "USDC") return { kind: "erc20", address: MONAD_USDC_ADDRESS };
   throw new Error(`Unsupported token: ${value}`);
@@ -84,15 +109,23 @@ const ACTION_REASON: Record<string, Copy> = {
 };
 
 /** Registry decimals for the P0 pair, so atomic values never reach a screen. */
-const DECIMALS: Record<string, number> = { MON: 18, USDC: 6 };
-const decimalsFor = (symbol: string) => DECIMALS[symbol] ?? 18;
+const DECIMALS: Record<string, number> = { MON: 18, USDC: 6, WETH: 18 };
+const decimalsFor = (symbol: string, chainId: ChainId = 143) =>
+  symbol === "USDC" && chainId === ARBITRUM_SEPOLIA_CHAIN_ID
+    ? 18
+    : (DECIMALS[symbol] ?? 18);
 
 /**
  * Converts an atomic `proposedChange` into display units. The handoff requires
  * rendering human copy from the Intent plus token registry rather than showing
  * atomic strings or reverse-engineering Diff values.
  */
-function displayChange(value: unknown, field: string, unit: string) {
+function displayChange(
+  value: unknown,
+  field: string,
+  unit: string,
+  chainId: ChainId,
+) {
   const change = obj(value);
   const before = str(change?.before);
   const after = str(change?.after);
@@ -103,8 +136,8 @@ function displayChange(value: unknown, field: string, unit: string) {
   if (!isAmount) return { before, after, unit: "" };
 
   return {
-    before: decimal(before, decimalsFor(unit)),
-    after: decimal(after, decimalsFor(unit)),
+    before: decimal(before, decimalsFor(unit, chainId)),
+    after: decimal(after, decimalsFor(unit, chainId)),
     unit,
   };
 }
@@ -113,6 +146,7 @@ function suggestion(
   value: unknown,
   tokenIn: string,
   tokenOut: string,
+  chainId: ChainId,
 ): ActionSuggestion | undefined {
   const evaluation = obj(value);
   const action = obj(evaluation?.action);
@@ -139,7 +173,12 @@ function suggestion(
     reason:
       ACTION_REASON[reasonCode ?? ""] ??
       cp("This action carries no recognized reason code."),
-    proposedChange: displayChange(evaluation?.proposedChange, field, unit),
+    proposedChange: displayChange(
+      evaluation?.proposedChange,
+      field,
+      unit,
+      chainId,
+    ),
   };
 }
 
@@ -206,7 +245,11 @@ function evidence(value: unknown, replay: boolean): EvidenceItem | undefined {
  * strings. The handoff requires human copy from the Intent plus token registry,
  * so the row is relabeled `amountIn` and converted with trusted decimals.
  */
-function diff(value: unknown, tokenIn: string): RunDiff | undefined {
+function diff(
+  value: unknown,
+  tokenIn: string,
+  chainId: ChainId,
+): RunDiff | undefined {
   const rows = arr(obj(value)?.changedFields).flatMap((raw) => {
     const item = obj(raw);
     const field = str(item?.field);
@@ -216,7 +259,9 @@ function diff(value: unknown, tokenIn: string): RunDiff | undefined {
 
     const isAmount = field === "amountInAtomic";
     const show = (atomic: string) =>
-      isAmount ? `${decimal(atomic, decimalsFor(tokenIn))} ${tokenIn}` : atomic;
+      isAmount
+        ? `${decimal(atomic, decimalsFor(tokenIn, chainId))} ${tokenIn}`
+        : atomic;
 
     return [
       {
@@ -328,6 +373,10 @@ function mapRun(
   if (!runId || !intent || !systemStatus || !verdict) return;
   const replayMode = run?.replayMode === true;
   const runError = obj(run?.error);
+  const chainId =
+    run?.intent && typeof obj(run.intent)?.chainId === "number"
+      ? (obj(run.intent)?.chainId as ChainId)
+      : 143;
   const apiFailure: ApiFailure | undefined =
     systemStatus === "INTEGRATION_ERROR"
       ? {
@@ -354,12 +403,14 @@ function mapRun(
     .filter((item): item is Record<string, unknown> => !!item);
   const route = obj(run?.route);
   const runQuote = obj(run?.quote);
-  const routePath = arr(route?.path).map(symbol).join(" → ");
+  const routePath = arr(route?.path)
+    .map((item) => symbol(item, chainId))
+    .join(" → ");
   const output = arr(run?.evidence)
     .map(obj)
     .find((item) => item?.kind === "simulated_token_out");
-  const tokenIn = symbol(intent?.tokenIn);
-  const tokenOut = symbol(intent?.tokenOut);
+  const tokenIn = symbol(intent?.tokenIn, chainId);
+  const tokenOut = symbol(intent?.tokenOut, chainId);
   const boundary = obj(intent?.economicBoundary);
   return {
     runId,
@@ -371,10 +422,10 @@ function mapRun(
         (apiFailure ? failureCopy(apiFailure).en : "No summary provided"),
     ),
     recommendedActions: arr(run?.recommendedActions)
-      .map((item) => suggestion(item, tokenIn, tokenOut))
+      .map((item) => suggestion(item, tokenIn, tokenOut, chainId))
       .filter((item): item is ActionSuggestion => !!item),
     irrelevantActions: arr(run?.irrelevantActions)
-      .map((item) => suggestion(item, tokenIn, tokenOut))
+      .map((item) => suggestion(item, tokenIn, tokenOut, chainId))
       .filter((item): item is ActionSuggestion => !!item),
     checked: scope
       .filter((item) => item.status === "checked")
@@ -396,9 +447,9 @@ function mapRun(
     intent: {
       tokenIn,
       tokenOut,
-      amountIn: decimal(intent?.amountInAtomic, tokenIn === "USDC" ? 6 : 18),
+      amountIn: decimal(intent?.amountInAtomic, decimalsFor(tokenIn, chainId)),
     },
-    diff: diff(run?.diff, tokenIn),
+    diff: diff(run?.diff, tokenIn, chainId),
     quote: {
       // The handoff separates the QUOTE-stage observation from the simulated
       // output, so the top-level Quote wins for the "expected" figure and the
@@ -406,7 +457,7 @@ function mapRun(
       expectedOutput:
         str(runQuote?.estimatedAmountOut) ??
         (output
-          ? decimal(output.amountReceivedAtomic, tokenOut === "USDC" ? 6 : 18)
+          ? decimal(output.amountReceivedAtomic, decimalsFor(tokenOut, chainId))
           : "unavailable"),
       route: routePath ? cp(routePath) : unavailable,
       blockNumber:
@@ -416,7 +467,7 @@ function mapRun(
         "unavailable",
     },
     simulatedOutput: output
-      ? decimal(output.amountReceivedAtomic, tokenOut === "USDC" ? 6 : 18)
+      ? decimal(output.amountReceivedAtomic, decimalsFor(tokenOut, chainId))
       : "unavailable",
     minimumReceivedSource: (str(boundary?.source) ??
       "unavailable") as CheckSwapResult["minimumReceivedSource"],
@@ -440,13 +491,14 @@ function mapRun(
 }
 
 function body(input: CheckSwapInput) {
+  const chainId = input.chainId ?? 143;
   return {
     ...(input.parentRunId ? { parentRunId: input.parentRunId } : {}),
-    chainId: 143,
+    chainId,
     protocol: input.protocol,
     sender: input.sender ?? DEFAULT_SENDER,
-    tokenIn: asset(input.tokenIn),
-    tokenOut: asset(input.tokenOut),
+    tokenIn: asset(input.tokenIn, chainId),
+    tokenOut: asset(input.tokenOut, chainId),
     amountIn: input.amountIn,
     economicBoundary: input.minimumReceived
       ? {
@@ -462,12 +514,13 @@ export type CheckOptions = { fetch?: typeof fetch; signal?: AbortSignal };
 
 /** `/api/quote` is a strict exact-input body: no boundary, no parent, no slippage. */
 function quoteBody(input: QuoteSwapInput) {
+  const chainId = input.chainId ?? 143;
   return {
-    chainId: 143,
+    chainId,
     protocol: input.protocol,
     sender: input.sender ?? DEFAULT_SENDER,
-    tokenIn: asset(input.tokenIn),
-    tokenOut: asset(input.tokenOut),
+    tokenIn: asset(input.tokenIn, chainId),
+    tokenOut: asset(input.tokenOut, chainId),
     amountIn: input.amountIn,
   };
 }
@@ -587,6 +640,7 @@ export async function checkSwap(
   options: CheckOptions = {},
 ): Promise<CheckSwapResult> {
   const validation = validateForm({
+    chainId: input.chainId,
     protocol: input.protocol,
     tokenIn: input.tokenIn,
     tokenOut: input.tokenOut,
@@ -814,7 +868,14 @@ export function formFromRunResult(result: CheckSwapResult): FormState {
 
   return {
     ...INITIAL_FORM,
-    protocol: protocol === "kuru" || protocol === "pancake" ? protocol : "kuru",
+    chainId:
+      rawIntent?.chainId === ARBITRUM_SEPOLIA_CHAIN_ID
+        ? ARBITRUM_SEPOLIA_CHAIN_ID
+        : 143,
+    protocol:
+      protocol === "kuru" || protocol === "pancake" || protocol === "camelot-v3"
+        ? protocol
+        : "kuru",
     tokenIn: result.intent.tokenIn,
     tokenOut: result.intent.tokenOut,
     amountIn: result.intent.amountIn,
@@ -822,7 +883,13 @@ export function formFromRunResult(result: CheckSwapResult): FormState {
       rawBoundary?.availability === "available"
         ? decimal(
             rawBoundary.minimumReceivedAtomic,
-            decimalsFor(result.intent.tokenOut),
+            decimalsFor(
+              result.intent.tokenOut,
+              result.rawResponse &&
+                rawIntent?.chainId === ARBITRUM_SEPOLIA_CHAIN_ID
+                ? ARBITRUM_SEPOLIA_CHAIN_ID
+                : 143,
+            ),
           )
         : "",
   };
