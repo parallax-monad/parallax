@@ -453,16 +453,26 @@ export function WalletSwap({
           zh: "提交实时检查",
         })}
       </button>
-      <button
-        type="button"
-        className="btn btn-monad-outline mt-2 w-full"
-        onClick={onReplay}
-      >
-        {say(language, {
-          en: "Load recorded replay",
-          zh: "载入录制回放",
-        })}
-      </button>
+      {!isArbitrum && (
+        <button
+          type="button"
+          className="btn btn-monad-outline mt-2 w-full"
+          onClick={onReplay}
+        >
+          {say(language, {
+            en: "Load recorded replay",
+            zh: "载入录制回放",
+          })}
+        </button>
+      )}
+      {isArbitrum && (
+        <p className="text-center text-[12px] leading-[1.5] text-dim">
+          {say(language, {
+            en: "Recorded replay is available for the Monad demo only.",
+            zh: "录制回放目前仅适用于 Monad 演示。",
+          })}
+        </p>
+      )}
       <p className="text-center text-[12px] leading-[1.5] text-dim">
         {say(language, {
           en: "Parallax runs a pre-sign check. No signing, no broadcasting.",
