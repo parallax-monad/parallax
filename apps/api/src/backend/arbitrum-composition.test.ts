@@ -1,4 +1,5 @@
 import {
+  convertAtomicAmountToHuman,
   type GenericEvidence,
   genericEvidenceSchema,
   type NormalizedSwapIntent,
@@ -336,7 +337,7 @@ describe("Arbitrum production composition skeleton", () => {
         if (method === "eth_getBlockByNumber") {
           return { number: "0x2a", hash: blockHash };
         }
-        if (method === "eth_estimateGas") return "0x42674";
+        if (method === "eth_estimateGas") return "0x426b4";
         if (method === "eth_call") {
           const transaction = params[0] as { to?: string } | undefined;
           if (
@@ -527,7 +528,7 @@ describe("Arbitrum production composition skeleton", () => {
         if (method === "eth_getBlockByNumber") {
           return { number: "0x2a", hash: blockHash };
         }
-        if (method === "eth_estimateGas") return "0x42674";
+        if (method === "eth_estimateGas") return "0x426b4";
         if (method === "eth_call") {
           const transaction = params[0] as { to?: string } | undefined;
           if (
@@ -775,16 +776,36 @@ function p0Field<T>(value: T) {
  * default Arbitrum decision obeys the P0 Risk verdict. It is never a claim
  * about real Native RPC evidence.
  */
-function p0VerifiedEvidence(): GenericEvidence {
+function p0VerifiedEvidence(
+  intent: NormalizedSwapIntent = normalizedIntent,
+  options: {
+    estimatedAmountOut?: string;
+    amountReceivedAtomic?: string;
+  } = {},
+): GenericEvidence {
+  const estimatedAmountOut = options.estimatedAmountOut ?? "0.5";
+  const amountReceivedAtomic = options.amountReceivedAtomic ?? "500000";
+  const minimumReceived =
+    intent.economicBoundary.availability === "available"
+      ? convertAtomicAmountToHuman(
+          intent.economicBoundary.minimumReceivedAtomic,
+          6,
+        )
+      : undefined;
   return genericEvidenceSchema.parse({
     intent: {
       chainId: 421614,
       protocol: "camelot-v3",
-      sender: normalizedIntent.sender,
+      sender: intent.sender,
       tokenIn: "native",
       tokenOut: arbitrumTokenAddress,
-      amountIn: "0.001",
-      minimumReceivedSource: "unavailable",
+      amountIn: convertAtomicAmountToHuman(intent.amountInAtomic, 18),
+      ...(minimumReceived === undefined
+        ? { minimumReceivedSource: "unavailable" }
+        : {
+            minimumReceived,
+            minimumReceivedSource: intent.economicBoundary.source,
+          }),
     },
     provider: {
       providerId: NATIVE_RPC_ARBITRUM_PROVIDER_ID,
@@ -794,15 +815,19 @@ function p0VerifiedEvidence(): GenericEvidence {
     },
     execution: { status: "SUCCESS" },
     quote: {
-      value: { estimatedAmountOut: "0.5" },
+      value: { estimatedAmountOut },
       source: "quote",
       reproducibility: "REPRODUCIBLE",
       blockNumber: "42",
       fetchedAt: p0ObservedAt,
     },
     action: p0Field([]),
-    receipt: p0Field({}),
-    outcome: p0Field({}),
+    receipt: p0Field({ status: "success" }),
+    outcome: p0Field({
+      amountReceivedAtomic,
+      recipient: intent.recipient,
+      tokenOut: arbitrumTokenAddress,
+    }),
     assetChanges: p0Field([]),
     assetChangeAssessment: "NOT_APPLICABLE",
     warnings: p0Field([]),
@@ -916,18 +941,16 @@ function p0CompositionOptions(
 async function runP0Check(
   composition: ReturnType<typeof createArbitrumProductionComposition>,
   runId: string,
+  intent: NormalizedSwapIntent = normalizedIntent,
 ) {
   const pipeline = new BackendPipeline({ runtime: composition });
-  return pipeline.executeNormalized(
-    { ...normalizedIntent, amountInAtomic: p0IntentAmountInAtomic },
-    {
-      rawInput: normalizedIntent as never,
-      runId,
-      chainId: 421614,
-      protocol: "camelot-v3",
-      capability: "simulate",
-    },
-  );
+  return pipeline.executeNormalized(intent, {
+    rawInput: normalizedIntent as never,
+    runId,
+    chainId: 421614,
+    protocol: "camelot-v3",
+    capability: "simulate",
+  });
 }
 
 describe("Arbitrum composition P0 Risk wiring", () => {
@@ -937,7 +960,8 @@ describe("Arbitrum composition P0 Risk wiring", () => {
     // the current quote must never be used as the baseline.
     const composition = createArbitrumProductionComposition(
       p0CompositionOptions({
-        providerEvidenceMapper: () => p0VerifiedEvidence(),
+        providerEvidenceMapper: ({ normalizedIntent }) =>
+          p0VerifiedEvidence(normalizedIntent as NormalizedSwapIntent),
       }),
     );
 
@@ -960,7 +984,8 @@ describe("Arbitrum composition P0 Risk wiring", () => {
   it("makes the final verdict obey the P0 Risk verdict for an injected baseline", async () => {
     const composition = createArbitrumProductionComposition(
       p0CompositionOptions({
-        providerEvidenceMapper: () => p0VerifiedEvidence(),
+        providerEvidenceMapper: ({ normalizedIntent }) =>
+          p0VerifiedEvidence(normalizedIntent as NormalizedSwapIntent),
         p0Risk: {
           selectedQuote: p0SelectedQuote,
           constraints: p0Constraints,
@@ -988,7 +1013,8 @@ describe("Arbitrum composition P0 Risk wiring", () => {
     const composition = createArbitrumProductionComposition(
       p0CompositionOptions({
         runStore: store,
-        providerEvidenceMapper: () => p0VerifiedEvidence(),
+        providerEvidenceMapper: ({ normalizedIntent }) =>
+          p0VerifiedEvidence(normalizedIntent as NormalizedSwapIntent),
         p0Risk: {
           selectedQuote: p0SelectedQuote,
           constraints: p0Constraints,
@@ -1013,33 +1039,163 @@ describe("Arbitrum composition P0 Risk wiring", () => {
     );
 
     const execution = await runP0Check(composition, "p0-remediation");
-    const result = execution.decisionOutput as {
-      readonly status: "completed";
-      readonly verdict: string;
-      readonly providerEvidence?: GenericEvidence;
-    };
-    const backendP0 = result.providerEvidence
-      ? (result.providerEvidence.providerData.backendP0 as
-          | {
-              remediation?: {
-                status?: string;
-                candidate?: { verification?: { childRunId?: string } };
-              };
-            }
-          | undefined)
-      : undefined;
-    const remediation = backendP0?.remediation;
-
-    expect(remediation?.status).toBe("VERIFIED");
-    const childRunId = remediation?.candidate?.verification?.childRunId;
-    expect(childRunId).toEqual(expect.any(String));
-    await expect(store.get(childRunId as string)).resolves.toMatchObject({
+    const result = runResultSchema.parse(execution.decisionOutput);
+    expect(result).toMatchObject({
       status: "completed",
-      parentRunId: "p0-remediation",
+      verdict: "STOP",
+      recommendedActions: [],
     });
-    // The current public contract has no verified ActionEvaluation projection
-    // for this provider-neutral slice yet; it therefore remains fail-closed.
-    expect(result.verdict).toBe("STOP");
+    expect(result.providerEvidence?.providerData).not.toHaveProperty(
+      "backendP0",
+    );
+  });
+
+  it("fails closed when candidate Evidence is bound to the baseline Intent", async () => {
+    const composition = createArbitrumProductionComposition(
+      p0CompositionOptions({
+        providerEvidenceMapper: () => p0VerifiedEvidence(),
+        p0Risk: {
+          selectedQuote: p0SelectedQuote,
+          constraints: p0Constraints,
+          constraintEvidence: p0ConstraintEvidence,
+          remediation: {
+            maxAmountInAtomic: "3000",
+            initialStepAtomic: "1000",
+            maxEvaluations: 2,
+            constraintEvidenceForCandidate: () => [
+              {
+                name: "maxPriceImpact",
+                state: "VERIFIED",
+                numerator: "1",
+                denominator: "1",
+                unit: "bps",
+                evidenceKey: "candidate-impact",
+              },
+            ],
+          },
+        },
+      }),
+    );
+
+    const execution = await runP0Check(composition, "p0-mismatched-candidate");
+
+    expect(runResultSchema.parse(execution.decisionOutput)).toMatchObject({
+      status: "completed",
+      verdict: "STOP",
+      recommendedActions: [],
+    });
+  });
+
+  it("does not reuse parent constraint Evidence for a changed candidate", async () => {
+    const composition = createArbitrumProductionComposition(
+      p0CompositionOptions({
+        providerEvidenceMapper: ({ normalizedIntent }) =>
+          p0VerifiedEvidence(normalizedIntent as NormalizedSwapIntent),
+        p0Risk: {
+          selectedQuote: p0SelectedQuote,
+          constraints: p0Constraints,
+          constraintEvidence: p0ConstraintEvidence,
+          remediation: {
+            maxAmountInAtomic: "3000",
+            initialStepAtomic: "1000",
+            maxEvaluations: 2,
+          },
+        },
+      }),
+    );
+
+    const execution = await runP0Check(composition, "p0-parent-constraints");
+
+    expect(runResultSchema.parse(execution.decisionOutput)).toMatchObject({
+      status: "completed",
+      verdict: "STOP",
+      recommendedActions: [],
+    });
+  });
+
+  it("publishes a verified remediation through the existing RunResult Action Gate", async () => {
+    const store = new InMemoryRunStore();
+    const availableIntent: NormalizedSwapIntent = {
+      ...normalizedIntent,
+      economicBoundary: {
+        availability: "available",
+        minimumReceivedAtomic: "600000",
+        source: "user_declared",
+      },
+    };
+    const composition = createArbitrumProductionComposition(
+      p0CompositionOptions({
+        runStore: store,
+        providerEvidenceMapper: ({ normalizedIntent }) => {
+          const candidate = normalizedIntent as NormalizedSwapIntent;
+          return p0VerifiedEvidence(candidate, {
+            estimatedAmountOut:
+              candidate.amountInAtomic === "1000" ? "0.5" : "0.7",
+            amountReceivedAtomic:
+              candidate.amountInAtomic === "1000" ? "500000" : "700000",
+          });
+        },
+        p0Risk: {
+          selectedQuote: p0SelectedQuote,
+          constraints: p0Constraints,
+          constraintEvidence: p0ConstraintEvidence,
+          remediation: {
+            maxAmountInAtomic: "3000",
+            initialStepAtomic: "1000",
+            maxEvaluations: 2,
+            constraintEvidenceForCandidate: () => [
+              {
+                name: "maxPriceImpact",
+                state: "VERIFIED",
+                numerator: "1",
+                denominator: "1",
+                unit: "bps",
+                evidenceKey: "candidate-impact",
+              },
+            ],
+          },
+        },
+      }),
+    );
+
+    const execution = await runP0Check(
+      composition,
+      "p0-public-remediation",
+      availableIntent,
+    );
+    const result = runResultSchema.parse(execution.decisionOutput);
+
+    expect(result).toMatchObject({
+      status: "completed",
+      verdict: "ADJUST",
+      recommendedActions: [
+        {
+          action: { kind: "TRANSACTION_ADJUSTMENT", field: "amountIn" },
+          recommendable: true,
+          proposedChange: { before: "1000", after: "2000" },
+        },
+      ],
+    });
+    expect(result.providerEvidence?.providerData).not.toHaveProperty(
+      "backendP0",
+    );
+    const verification = result.evidence.find(
+      (item) => item.kind === "action_verification",
+    );
+    expect(verification).toMatchObject({
+      kind: "action_verification",
+      baselineRunId: "p0-public-remediation",
+      beforeValue: "1000",
+      afterValue: "2000",
+    });
+    if (verification?.kind === "action_verification") {
+      await expect(
+        store.get(verification.verificationRunId),
+      ).resolves.toMatchObject({
+        status: "completed",
+        parentRunId: "p0-public-remediation",
+      });
+    }
   });
 
   it("leaves an injected custom core/decision override unchanged", async () => {

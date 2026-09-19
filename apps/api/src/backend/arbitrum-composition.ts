@@ -3,6 +3,7 @@ import {
   ARBITRUM_SEPOLIA_CHAIN_ID,
   CAMELOT_V3_PROTOCOL_ID,
   type CheckSwapRequest,
+  convertAtomicAmountToHuman,
   failedRunResultSchema,
   type GenericEvidence,
   genericEvidenceSchema,
@@ -14,6 +15,7 @@ import {
   runResultSchema,
 } from "@parallax/contracts";
 import { projectGenericEvidenceToRunResult } from "@parallax/orchestrator/agent-flow";
+import { buildVerifiedAdjustBaseline } from "@parallax/orchestrator/application";
 import type {
   CallerConstraint,
   CandidateEvaluation,
@@ -37,7 +39,7 @@ import {
   type BackendRuntime,
   bootstrapBackendRuntime,
 } from "../runtime-config.js";
-import type { RunStore } from "../store.js";
+import type { CheckRunRecord, RunStore } from "../store.js";
 import { tokenDecimals } from "../token-decimals.js";
 import {
   ArbitrumChainAdapter,
@@ -307,20 +309,18 @@ export function createArbitrumProductionComposition(
           pipelineContext,
           evidence,
         );
-        const enrichedEvidence = withP0Observation(
-          evidence,
-          projection.risk.verdict,
-          projection.risk.evidenceState,
-          projection.risk.quoteFidelity,
-          projection.solver,
-        );
-        return applyBackendP0Verdict(
+        const projected = applyBackendP0Verdict(
           projectGenericEvidenceToRunResult(
             pipelineContext.runId,
             pipelineContext.intent,
-            enrichedEvidence,
+            evidence,
           ),
           projection.risk.verdict,
+        );
+        return projectVerifiedArbitrumRemediation(
+          projected,
+          projection.solver,
+          options.runStore,
         );
       },
     } satisfies DecisionPort<unknown, unknown, unknown>);
@@ -485,6 +485,49 @@ async function evaluateArbitrumP0Decision(
   };
 }
 
+/**
+ * Projects a verified candidate through the existing RunResult Action Gate
+ * boundary. Provider Evidence remains provider-owned; P0 remediation is
+ * represented by the canonical RunResult Evidence/Action fields instead of
+ * being nested under GenericEvidence.providerData.
+ */
+async function projectVerifiedArbitrumRemediation(
+  projected: RunResult,
+  solver: SolverResult | undefined,
+  runStore: RunStore,
+): Promise<RunResult> {
+  if (
+    projected.status !== "completed" ||
+    projected.verdict !== "STOP" ||
+    solver?.status !== "VERIFIED"
+  ) {
+    return projected;
+  }
+
+  let childRecord: CheckRunRecord | undefined;
+  try {
+    childRecord = await runStore.get(solver.candidate.verification.childRunId);
+  } catch {
+    return projected;
+  }
+
+  if (
+    childRecord?.status !== "completed" ||
+    childRecord.result.status !== "completed"
+  ) {
+    return projected;
+  }
+
+  try {
+    return buildVerifiedAdjustBaseline(projected, childRecord.result, {
+      before: projected.intent.amountInAtomic,
+      after: solver.candidate.amountInAtomic,
+    });
+  } catch {
+    return projected;
+  }
+}
+
 async function evaluateArbitrumCandidate(
   options: ArbitrumProductionCompositionOptions,
   parent: ArbitrumDecisionContext,
@@ -513,6 +556,15 @@ async function evaluateArbitrumCandidate(
     return { status: "UNKNOWN", evidenceState: "UNAVAILABLE" };
   }
   const childEvidence = parsedEvidence.data;
+  if (
+    !providerEvidenceMatchesCandidateIntent(
+      childEvidence,
+      intent,
+      options.runtime,
+    )
+  ) {
+    return { status: "UNKNOWN", evidenceState: "UNAVAILABLE" };
+  }
   const childPipeline: ArbitrumDecisionContext = {
     runId: childRunId,
     intent,
@@ -541,7 +593,7 @@ async function evaluateArbitrumCandidate(
 
   const candidateConstraintEvidence =
     options.p0Risk?.remediation?.constraintEvidenceForCandidate === undefined
-      ? options.p0Risk?.constraintEvidence
+      ? undefined
       : await options.p0Risk.remediation.constraintEvidenceForCandidate({
           intent,
           quote: childQuote.quote,
@@ -698,6 +750,18 @@ function candidateVerification(
   ) {
     return undefined;
   }
+  const transactionProtectionOutcome = candidateTransactionProtectionOutcome(
+    intent,
+    childResult,
+    execution.runId,
+    quote.quoteId,
+  );
+  if (
+    intent.economicBoundary.availability === "available" &&
+    transactionProtectionOutcome?.status !== "PASS"
+  ) {
+    return undefined;
+  }
   return {
     preparedUnsignedTxFingerprint: fingerprint(execution.unsignedTransaction),
     preparedAmountInAtomic: intent.amountInAtomic,
@@ -720,10 +784,80 @@ function candidateVerification(
       childRunId: execution.runId,
       candidateQuoteId: quote.quoteId,
     })),
+    ...(transactionProtectionOutcome === undefined
+      ? {}
+      : { transactionProtectionOutcome }),
     isReplay: false,
     isMock: false,
     actionGateVerified: true,
   };
+}
+
+function candidateTransactionProtectionOutcome(
+  intent: NormalizedSwapIntent,
+  childResult: RunResult,
+  childRunId: string,
+  candidateQuoteId: string,
+): VerifiedCandidate["verification"]["transactionProtectionOutcome"] {
+  if (intent.economicBoundary.availability !== "available") {
+    return undefined;
+  }
+
+  const economic = childResult.ruleResults.find(
+    (rule) => rule.ruleId === "P0-ECONOMIC-001",
+  );
+  const status =
+    economic?.status === "PASS"
+      ? "PASS"
+      : economic?.status === "FAIL"
+        ? "FAIL"
+        : "UNKNOWN";
+  return { status, childRunId, candidateQuoteId };
+}
+
+function providerEvidenceMatchesCandidateIntent(
+  evidence: GenericEvidence,
+  intent: NormalizedSwapIntent,
+  runtime: BackendRuntime,
+): boolean {
+  try {
+    const tokenInDecimals = tokenDecimals(
+      runtime,
+      intent.tokenIn,
+      intent.chainId,
+    );
+    const tokenOutDecimals = tokenDecimals(
+      runtime,
+      intent.tokenOut,
+      intent.chainId,
+    );
+    const boundary = intent.economicBoundary;
+    const expectedMinimumReceived =
+      boundary.availability === "available"
+        ? convertAtomicAmountToHuman(
+            boundary.minimumReceivedAtomic,
+            tokenOutDecimals,
+          )
+        : undefined;
+
+    return (
+      evidence.intent.chainId === intent.chainId &&
+      evidence.intent.protocol === intent.protocol &&
+      evidence.intent.sender.toLowerCase() === intent.sender.toLowerCase() &&
+      evidence.intent.tokenIn.toLowerCase() === assetKey(intent.tokenIn) &&
+      evidence.intent.tokenOut.toLowerCase() === assetKey(intent.tokenOut) &&
+      evidence.intent.amountIn ===
+        convertAtomicAmountToHuman(intent.amountInAtomic, tokenInDecimals) &&
+      evidence.intent.minimumReceivedSource === boundary.source &&
+      evidence.intent.minimumReceived === expectedMinimumReceived
+    );
+  } catch {
+    return false;
+  }
+}
+
+function assetKey(asset: NormalizedSwapIntent["tokenIn"]): string {
+  return asset.kind === "native" ? "native" : asset.address.toLowerCase();
 }
 
 type ChildVerificationRisk = {
@@ -763,33 +897,6 @@ function fingerprint(value: unknown): string {
   return `sha256:${createHash("sha256")
     .update(JSON.stringify(value))
     .digest("hex")}`;
-}
-
-function withP0Observation(
-  evidence: GenericEvidence,
-  verdict: Verdict,
-  evidenceState: ReturnType<typeof backendEvidenceState>,
-  quoteFidelity: ReturnType<typeof evaluateBackendP0Risk>["quoteFidelity"],
-  solver: SolverResult | undefined,
-): GenericEvidence {
-  const providerData =
-    typeof evidence.providerData === "object" &&
-    evidence.providerData !== null &&
-    !Array.isArray(evidence.providerData)
-      ? evidence.providerData
-      : {};
-  return genericEvidenceSchema.parse({
-    ...evidence,
-    providerData: {
-      ...providerData,
-      backendP0: {
-        verdict,
-        evidenceState,
-        quoteFidelity,
-        ...(solver === undefined ? {} : { remediation: solver }),
-      },
-    },
-  });
 }
 
 /**
