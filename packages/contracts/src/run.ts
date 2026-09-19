@@ -18,6 +18,7 @@ import {
 } from "./evidence.js";
 import { genericEvidenceSchema } from "./generic-evidence.js";
 import { normalizedSwapIntentSchema } from "./intent.js";
+import { p0ResultSchema } from "./p0.js";
 import { quoteSchema } from "./quote.js";
 import { routeSchema } from "./route.js";
 
@@ -1332,6 +1333,8 @@ export const completedRunResultSchema = runIdentitySchema
     quote: quoteSchema.optional(),
     /** Provisional Backend provider evidence; not part of canonical rule input. */
     providerEvidence: genericEvidenceSchema.optional(),
+    /** P0 diagnosis/remediation summary; raw Provider payloads stay in Evidence. */
+    p0: p0ResultSchema.optional(),
     diff: runDiffSchema.optional(),
   })
   .strict()
@@ -1434,6 +1437,8 @@ export const failedRunResultSchema = runIdentitySchema
     route: routeSchema.optional(),
     /** Provisional Backend provider evidence; not part of canonical rule input. */
     providerEvidence: genericEvidenceSchema.optional(),
+    /** P0 diagnosis/remediation summary when a partial result is available. */
+    p0: p0ResultSchema.optional(),
   })
   .strict()
   .superRefine((result, context) => {

@@ -6,6 +6,7 @@ export * from "./evidence-provider.js";
 export * from "./generic-evidence.js";
 export * from "./intent.js";
 export * from "./normalization.js";
+export * from "./p0.js";
 export * from "./quote.js";
 export * from "./registry.js";
 export * from "./replay.js";

@@ -24,6 +24,7 @@ import {
   type ArbitrumRpcClient,
   type ArbitrumTransaction,
 } from "./arbitrum-chain-adapter.js";
+import { projectArbitrumP0Result } from "./arbitrum-p0.js";
 import { CamelotV3ProtocolAdapter } from "./camelot-v3-protocol-adapter.js";
 import type { ChainAdapter } from "./chain-adapter.js";
 import { ChainRegistry } from "./chain-registry.js";
@@ -240,10 +241,21 @@ export function createArbitrumProductionComposition(
           readonly runId: string;
           readonly intent: NormalizedSwapIntent;
         };
+        const p0 = projectArbitrumP0Result({
+          runId: pipelineContext.runId,
+          intent: pipelineContext.intent,
+          evidence: parsedEvidence.data as GenericEvidence,
+          tokenOutDecimals: tokenDecimals(
+            options.runtime,
+            pipelineContext.intent.tokenOut,
+            pipelineContext.intent.chainId,
+          ),
+        });
         return projectGenericEvidenceToRunResult(
           pipelineContext.runId,
           pipelineContext.intent,
           parsedEvidence.data as GenericEvidence,
+          p0 === undefined ? {} : { p0 },
         );
       },
     } satisfies DecisionPort<unknown, unknown, unknown>);

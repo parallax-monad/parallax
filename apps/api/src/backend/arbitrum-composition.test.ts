@@ -467,6 +467,22 @@ describe("Arbitrum production composition skeleton", () => {
     expect(execution.decisionOutput).toMatchObject({
       status: "completed",
       verdict: "UNKNOWN",
+      p0: {
+        evidenceState: "INCOMPLETE",
+        verdict: "UNKNOWN",
+        quoteFidelity: {
+          status: "UNKNOWN",
+          reason: "EVIDENCE_NOT_VERIFIED",
+        },
+        remediation: {
+          status: "UNKNOWN",
+          reason: "EVIDENCE_NOT_VERIFIED",
+        },
+        currentQuote: {
+          amountOutAtomic: "2000000000000000000",
+          blockNumber: "42",
+        },
+      },
       providerEvidence: {
         provider: { providerId: NATIVE_RPC_ARBITRUM_PROVIDER_ID },
       },
