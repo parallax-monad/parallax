@@ -59,3 +59,13 @@ If you are implementing a feature, start from its owning specification and accep
 ## Reading boundaries
 
 Code and merged implementation documentation define current implementation truth. The planning set defines the normative plan and acceptance gates; research provides rationale and evidence. Planned capabilities are not implementation or deployment claims unless the code and merged integration documentation verify them.
+
+## Project continuity and agent operations
+
+- [Agent contract](../AGENTS.md)
+- [Runbook](../RUNBOOK.md)
+- [Context recovery](./context/CONTEXT_RECOVERY.md)
+- [Project state](./context/PROJECT_STATE.md)
+- [Decision log](./context/DECISION_LOG.md)
+- [Agent handoff](./context/AGENT_HANDOFF.md)
+- [Mutation ledger](./context/MUTATION_LEDGER.md)
