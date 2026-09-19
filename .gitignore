@@ -17,3 +17,6 @@ coverage/
 
 # Live smoke scratch output (never committed)
 .smoke-live/
+
+# Local Parallax agent/operator identity declaration
+.parallax-agent.local

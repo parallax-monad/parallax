@@ -1,0 +1,5 @@
+# Copy to .parallax-agent.local and edit for the actual operator.
+# The real file is ignored by Git.
+
+PARALLAX_GIT_NAME="your-github-login"
+PARALLAX_GIT_EMAIL="your-github-verified-email-or-noreply-address"
