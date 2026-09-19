@@ -7,6 +7,8 @@ import {
   validateForm,
 } from "./form";
 import {
+  ARBITRUM_SEPOLIA_CHAIN_ID,
+  ARBITRUM_TEST_USDC_ADDRESS,
   checkSwap,
   fetchQuote,
   formFromRunResult,
@@ -545,6 +547,33 @@ describe("fetchQuote", () => {
     expect(sent.economicBoundary).toBeUndefined();
     expect(sent.parentRunId).toBeUndefined();
     expect(sent.slippage).toBeUndefined();
+  });
+
+  test("posts the canonical Arbitrum/Camelot P0 input without changing Monad mapping", async () => {
+    const request = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(jsonResponse(available));
+
+    await fetchQuote(
+      {
+        chainId: ARBITRUM_SEPOLIA_CHAIN_ID,
+        protocol: "camelot-v3",
+        tokenIn: "WETH",
+        tokenOut: "USDC",
+        amountIn: "0.001",
+      },
+      { fetch: request },
+    );
+
+    const sent = JSON.parse(String(request.mock.calls[0]?.[1]?.body));
+    expect(sent).toEqual({
+      chainId: 421614,
+      protocol: "camelot-v3",
+      sender: "0x1111111111111111111111111111111111111111",
+      tokenIn: { kind: "native" },
+      tokenOut: { kind: "erc20", address: ARBITRUM_TEST_USDC_ADDRESS },
+      amountIn: "0.001",
+    });
   });
 
   test("keeps backend human-unit amounts verbatim", async () => {

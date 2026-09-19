@@ -14,7 +14,7 @@ export function WalletHome({
   onSwap,
 }: {
   language: Language;
-  onSwap: () => void;
+  onSwap: (mode: "monad" | "arbitrum") => void;
 }) {
   return (
     <div className="flex flex-col gap-5 px-5 pb-6 pt-2">
@@ -36,10 +36,22 @@ export function WalletHome({
       <button
         type="button"
         className="btn btn-monad flex w-full items-center justify-center gap-2 py-4"
-        onClick={onSwap}
+        onClick={() => onSwap("monad")}
       >
         <SwapIcon size={20} />
         {say(language, { en: "Swap", zh: "兑换" })}
+      </button>
+
+      <button
+        type="button"
+        className="btn btn-monad-outline flex w-full items-center justify-center gap-2 py-3"
+        onClick={() => onSwap("arbitrum")}
+      >
+        <SwapIcon size={18} />
+        {say(language, {
+          en: "Try Arbitrum · Camelot P0",
+          zh: "体验 Arbitrum · Camelot P0",
+        })}
       </button>
 
       <section

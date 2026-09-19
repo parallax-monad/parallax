@@ -11,6 +11,7 @@ import { WalletResult } from "@/components/wallet/WalletResult";
 import { WalletSwap } from "@/components/wallet/WalletSwap";
 import { flaggedFields } from "@/lib/analyze/fields";
 import {
+  ARBITRUM_INITIAL_FORM,
   DEMO_SLIPPAGE,
   type FormFieldErrors,
   type FormState,
@@ -286,6 +287,16 @@ export function WalletApp({ language }: { language: Language }) {
   // starts rather than pointing at conditions the user already changed.
   const flags = result ? flaggedFields(result) : [];
 
+  const startSwap = (mode: "monad" | "arbitrum") => {
+    recoveryCancelledRef.current = true;
+    setResult(undefined);
+    setSubmittedForm(undefined);
+    setFormErrors({});
+    setQuote({ status: "idle" });
+    setForm(mode === "arbitrum" ? ARBITRUM_INITIAL_FORM : INITIAL_FORM);
+    setScreen("swap");
+  };
+
   return (
     // Desktop stays tucked beneath the nav; mobile uses a separate utility row.
     <div className="wallet-app-shell relative mx-auto flex w-[92vw] flex-col pb-6 pt-2 md:-mt-[var(--header-h)] md:w-[45vw] md:pt-4">
@@ -324,13 +335,7 @@ export function WalletApp({ language }: { language: Language }) {
           <ScreenTransition key={screen}>
             <div className="flex w-full flex-1 flex-col">
               {screen === "home" && (
-                <WalletHome
-                  language={language}
-                  onSwap={() => {
-                    recoveryCancelledRef.current = true;
-                    setScreen("swap");
-                  }}
-                />
+                <WalletHome language={language} onSwap={startSwap} />
               )}
               {screen === "swap" && (
                 <WalletSwap
