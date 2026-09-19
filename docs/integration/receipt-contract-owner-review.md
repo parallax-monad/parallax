@@ -1,37 +1,82 @@
 # Decision Receipt Contract Owner Review Checklist
 
-Status: **BE-032 prepared for Contract Owner Review; no items below are confirmed contract semantics.**
+Status: **BE-032 Contract Owner review recorded for the current lifecycle boundary; the final Receipt schema and on-chain/public contract design remain unresolved or deferred.**
 
-This checklist records the open Receipt decisions needed before any public Receipt schema, registry ABI, deployment, or production anchoring work. The current backend implementation intentionally keeps Receipt payloads opaque and only provides optional, non-blocking `ReceiptSigner` / `ReceiptAnchorer` ports with deterministic local fakes.
+This document records the confirmed Receipt boundaries from Issue #62. It is a Backend-maintained decision record and implementation checklist. It does not authorize Backend to infer a final Receipt schema, ABI, deployment, signing, anchoring, or public API contract from the current opaque lifecycle.
 
-## Decisions required
+## Evidence and scope
 
-| Area | Open decision | Current implementation boundary |
-| --- | --- | --- |
-| Receipt payload fields | Contract Owner Review: define the canonical payload fields, required/optional fields, field encoding, versioning, and whether `runId`, Intent, Evidence, Decision, provenance, timestamps, and adapter outcomes are included. | No Receipt schema is defined. The lifecycle accepts an opaque payload supplied by the application seam. |
-| Commitment / hash | Contract Owner Review: choose the commitment preimage, canonical serialization, hash algorithm, domain separator, and version migration rules. | No hash or commitment is computed. |
-| Events | Contract Owner Review: define registry event names, indexed fields, event payloads, and whether sign/anchor lifecycle transitions are emitted. | No ABI or events are implemented. |
-| Validation | Contract Owner Review: define validation rules, canonicalization, size limits, timestamp/freshness checks, provenance requirements, and invalid-payload behavior. | The lifecycle only observes adapter success, failure, and timeout; it does not validate Receipt fields. |
-| Duplicate semantics | Contract Owner Review: define whether duplicate commitments are idempotent, rejected, replaceable, or associated with a new attestation/version. | No deduplication or registry lookup is performed. |
-| Access control | Contract Owner Review: define who may submit, query, replace, or invalidate a Receipt and whether authorization is role-, signature-, or registry-based. | No access control or user-wallet authorization is implemented. |
-| Backend attestor signature | Contract Owner Review: select the signature scheme, key custody/rotation, attestor identity binding, domain separation, and verification rules. | The signer is an opaque optional backend-attestor port; it never signs a user Swap. |
-| Deployment network | Contract Owner Review: confirm target network(s), chain IDs, deployment addresses, confirmation/finality policy, and environment separation. | No deployment target or RPC integration is selected. |
-| Explorer proof | Contract Owner Review: define the explorer(s), URL construction, proof fields, and whether explorer availability is advisory or validation-critical. | No explorer URL or on-chain proof is generated. |
-| Failure and retry status | Contract Owner Review: define durable states, retry ownership, idempotency keys, backoff, terminal failure rules, and whether signing and anchoring retry independently. | The local lifecycle reports `not_configured`, `pending`, `signed`, `anchored`, `failed`, or `timed_out`; adapter errors remain observable and do not block Decision return. |
+- Contract Owner decision matrix: [Issue #62 comment](https://github.com/parallax-monad/parallax/issues/62#issuecomment-5706761280)
+- BE-032 status clarification: [Issue #62 comment](https://github.com/parallax-monad/parallax/issues/62#issuecomment-5714565944)
+- Provider Owner evidence: [Issue #62 comment](https://github.com/parallax-monad/parallax/issues/62#issuecomment-5691741520)
+- Related metadata and Evidence provenance decision: [Issue #53](https://github.com/parallax-monad/parallax/issues/53)
+- Existing Receipt lifecycle implementation: [PR #61](https://github.com/parallax-monad/parallax/pull/61)
 
-## Current lifecycle behavior for review
+The current phase records the accepted lifecycle boundaries and explicitly preserves unresolved or deferred final-contract decisions. The BE-032 progress record is synchronized, and BE-GATE-006 has been re-evaluated with a **PASS** result. The final closure evidence is recorded in [Issue #62](https://github.com/parallax-monad/parallax/issues/62#issuecomment-5739211958).
 
-- Decision execution is awaited first.
-- Receipt preparation, signing, and anchoring are optional and controlled by an observable lifecycle handle returned by the internal Backend Pipeline execution.
-- When both adapters are configured, signing is attempted before anchoring; anchoring is skipped if signing fails or times out.
-- A successful signer without an anchorer is reported as `signed`; a successful anchorer without a signer is reported as `anchored` and remains a Contract Owner decision for production semantics.
-- Adapter failures and timeout errors are retained in the lifecycle snapshot. They are not converted into a successful Decision and do not become unhandled background rejections.
-- No public Run/Replay/Re-run/Action Gate response schema is changed by this preparation.
+## Existing implementation boundary
 
-## Explicitly excluded from BE-030/031
+The Backend currently provides only the controlled, non-blocking Receipt lifecycle boundary:
 
-- Final on-chain Receipt schema or registry contract ABI
-- Commitment/hash implementation
-- Deployment scripts or network configuration
-- Real RPC, Moss, Tenderly, or production anchoring integration
-- User Swap signing, broadcasting, custody, or wallet mutation
+- An opaque Receipt payload supplied by an internal application seam;
+- Optional signer and anchorer adapters;
+- Signer-before-anchorer ordering when both adapters are configured;
+- Observable success, failure, thrown-error, timeout, and unconfigured states;
+- Non-blocking behavior after Decision completion;
+- Deterministic fake/no-op tests.
+
+The current implementation does not introduce a final Receipt contract, ABI, deployment, RPC anchoring, explorer proof, or user Swap signing. Receipt processing must not rewrite an already completed Decision.
+
+## Decision matrix
+
+| Area | Decision status | Confirmed boundary | Owner / follow-up |
+| --- | --- | --- | --- |
+| Receipt payload | **UNRESOLVED** | A Receipt must be an explicitly constructed immutable payload. It must not be inferred from `decisionOutput`, a configured/selected adapter, request identity, or transport success. | Contract Owner proposes canonical payload and versioning with Product and Provider input before implementation. |
+| Commitment / hash | **UNRESOLVED** | No serialization, field ordering, hash, domain separation, or commitment is approved. | Contract Owner proposes the commitment design and test vectors. |
+| Events / observability | **DEFERRED** | Internal lifecycle snapshots are accepted for this phase; no event or ABI schema is implied. | Contract Owner and Backend when public/on-chain design is scheduled. |
+| Validation | **APPROVED BOUNDARY** | Payload validation must precede signing/anchoring. Invalid, incomplete, or unverifiable payloads must not be signed or anchored. Later Receipt validation failure must not retroactively change an already completed upstream Decision. | Backend implements only after the payload schema exists; Contract Owner reviews the implementation. |
+| Duplicate / idempotency | **UNRESOLVED** | No duplicate, retry, restart, or uncertain-external-action default is approved. | Contract Owner and Backend propose idempotency and reconciliation semantics. |
+| Access control | **UNRESOLVED** | No role, allowlist, pause, query, or retry permission model is approved. | Contract Owner prepares the security and access-control proposal. |
+| Backend attestor signing | **APPROVED BOUNDARY; DETAILS UNRESOLVED** | Backend attestor signing remains separate from user Swap signing and may sign only an approved Receipt payload or commitment. Scheme, typed domain, key custody, rotation, and verification remain unapproved. | Contract Owner with security and operations input. |
+| Deployment boundary | **DEFERRED** | No network, address, ABI, upgradeability, RPC, or deployment prerequisite is selected. | Contract Owner and Product/operations when anchoring is scheduled. |
+| Explorer proof | **DEFERRED** | No explorer proof is required for a completed Decision, and no explorer representation is approved. | Contract Owner and Product after anchoring design. |
+| Failure / retry | **APPROVED BOUNDARY; DURABLE SEMANTICS UNRESOLVED** | Signing/anchoring failure, timeout, or absence remains observable and non-blocking for an already completed Decision. Durable statuses, retryability, backoff, and recovery remain deferred. | Backend proposes mechanics; Contract Owner approves durable semantics. |
+| Public API / lifecycle projection | **DEFERRED** | Receipt lifecycle stays internal. No Run, Replay, Re-run, public API field, requiredness, or separate-resource model is approved. | Backend proposes an additive projection with Product input; Contract Owner reviews it against [#53](https://github.com/parallax-monad/parallax/issues/53) and the Evidence provenance rules. |
+
+## Cross-cutting rules retained
+
+- Provider identity, declared capabilities, per-run `checkedScope` / `unknownScope`, provenance, and Core decision scope remain separate. Receipt processing must not manufacture Provider Evidence.
+- Provider identity and provenance may be claimed only when the Provider was actually invoked and produced Evidence. A configured or selected adapter is not equivalent to observed Provider Evidence.
+- `LIVE`, `MOCK`, and `RECORDED_REPLAY` remain distinct. Replay must not replace original Evidence acquisition time with replay time.
+- `fetchedAt` and block context are acquisition facts only. Freshness or stale claims require a separately approved policy.
+- Incomplete, unavailable, or failed Provider Evidence must not become successful Evidence merely because a Decision or Receipt lifecycle exists.
+- Backend preparation provenance remains distinct from Provider evaluation-output provenance.
+- Receipt signing or anchoring must not weaken upstream fail-closed Evidence handling.
+- Backend attestor signing is never user Swap signing.
+
+## Ownership and sequencing
+
+- Backend Owner maintains this checklist, the BE-032 progress record, and the implementation boundary after confirmed decisions are recorded.
+- Contract Owner owns the canonical Receipt semantics and has completed the current lifecycle-boundary review recorded in Issue #62.
+- Provider Owner supplies factual Provider/Evidence and provenance constraints when Receipt decisions depend on them.
+- Product, Risk, security, and operations owners participate when unresolved decisions affect user-facing behavior, policy, key custody, deployment, or operations.
+- Backend must not create defaults for rows marked `UNRESOLVED` or `DEFERRED`.
+- BE-GATE-006 has been re-evaluated with a **PASS** result against this checklist, the synchronized BE-032 progress record, and the recorded Contract/Provider Owner evidence.
+
+## Completion record
+
+- [x] Each decision-matrix row is marked `APPROVED BOUNDARY`, `UNRESOLVED`, or `DEFERRED`.
+- [x] Every unresolved or deferred row has an owner and follow-up.
+- [x] Confirmed non-blocking Decision/Receipt and Provider/Evidence boundaries are recorded.
+- [x] No final Receipt schema, ABI, deployment address, event contract, or public API is inferred.
+- [x] This checklist is synchronized with the Contract Owner decision matrix.
+- [x] BE-032 progress record is synchronized with this checklist and linked evidence.
+- [x] BE-GATE-006 is re-evaluated with a **PASS** result after the documentation sync.
+
+## Out of scope for this phase
+
+- Implementing the final Receipt contract or registry ABI;
+- Selecting unresolved payload, serialization, signature, event, idempotency, access-control, deployment, proof, retry, or public-projection semantics by Backend convention;
+- Deployment scripts, real RPC anchoring, explorer integration, or user Swap signing;
+- Changing the existing non-blocking Decision behavior;
+- Treating the BE-GATE-006 **PASS** result as approval for final Receipt contract implementation; future implementation PRs must return to Contract Owner review.
