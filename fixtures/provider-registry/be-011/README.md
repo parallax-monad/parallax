@@ -24,6 +24,7 @@ It exists so Backend can discover deterministic BE-011 evidence without treating
 | Moss reverted | mock/rule input (`real=false`) | `fixtures/chain-evidence/kuru/reverted/` |
 | Native RPC controlled partial surface (guarded canonical capture) | real | `fixtures/provider-registry/be-011/native-rpc/arbitrum-sepolia-public-2026-09-10T12-19-45-890Z/` |
 | Native RPC controlled partial surface (historical pre-guard capture) | real | `fixtures/provider-registry/be-011/native-rpc/arbitrum-sepolia-public-2026-09-08/` |
+| Native RPC Camelot Sepolia candidate pair/pool (read-only partial) | real | `fixtures/provider-registry/be-011/native-rpc/camelot-sepolia-2026-09-16/qualification.json` |
 
 The BE-011 capability manifest is `manifest.json`.
 
@@ -42,6 +43,17 @@ probe whose exact source commit is recorded as `repositoryHeadAtCapture`. The
 contain the probe source, so it is superseded for canonical qualification. Its
 recorded observation values are unchanged and its provenance defect is not
 retroactively fixed.
+
+The separate `camelot-sepolia-2026-09-16` fixture is indexed in `manifest.json`
+with classification `LIVE_READ_ONLY_PARTIAL`. It is an ad hoc fixed read-only
+candidate qualification at pinned block `309542712`, not a guarded-probe
+recapture: its `repositoryBaseCommit` is historical provenance and no committed
+probe script version is claimed. It qualifies a candidate WETH/USDC pair/pool
+only — no Camelot quote, prepared swap transaction, swap `eth_call`, or swap gas
+estimate — so its protocol remains unqualified. Eleven of its thirteen
+observations record a per-response `fetchedAt`; two pooled observations record
+only `captureFinishedAt` with `fetchedAt: null`. That incomplete-timestamp gap
+is a retained historical limitation and is not fabricated or backfilled.
 
 The PR-P0-B controlled Native RPC inputs live at
 `native-rpc/controlled-p0-b/`. They are deterministic `real=false` adapter

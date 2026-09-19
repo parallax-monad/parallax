@@ -312,6 +312,17 @@
           "status": "HISTORICAL_PRE_GUARD_CAPTURE",
           "supersededForCanonicalQualification": true,
           "note": "repositoryHeadAtCapture predates the probe source commit, so this capture does not prove reproducibility of the current probe. Retained as audit evidence only."
+        },
+        {
+          "path": "fixtures/provider-registry/be-011/native-rpc/camelot-sepolia-2026-09-16/",
+          "real": true,
+          "scope": "native-rpc-camelot-sepolia-candidate-qualification",
+          "endpointClass": "arbitrum-official-public",
+          "protocol": null,
+          "intent": null,
+          "canonical": false,
+          "status": "LIVE_READ_ONLY_PARTIAL",
+          "note": "Ad hoc fixed read-only probe, not a guarded-probe recapture: repositoryBaseCommit is historical provenance and no committed probe script version is claimed. Qualifies a candidate WETH/USDC pair/pool only; no Camelot quote or swap call. Two observations record fetchedAt=null with captureFinishedAt only; retained unbackfilled as a historical limitation."
         }
       ],
       "intentTypes": [
@@ -455,6 +466,15 @@
           "chainId": 421614,
           "protocol": null,
           "note": "Observed JSON-RPC -32601 method-not-found envelope; NOT a final Provider UNSUPPORTED status. Guarded canonical capture."
+        },
+        {
+          "observationId": "native-rpc-camelot-sepolia-candidate-pair",
+          "real": true,
+          "path": "fixtures/provider-registry/be-011/native-rpc/camelot-sepolia-2026-09-16/qualification.json",
+          "classification": "LIVE_READ_ONLY_PARTIAL",
+          "chainId": 421614,
+          "protocol": null,
+          "note": "Ad hoc read-only 2026-09-16 candidate qualification at pinned block 309542712: official-endpoint chain identity, listed-address code, WETH/USDC decimals, AlgebraFactory poolByPair, one pinned eth_estimateGas, and one WETH decimals eth_call. Qualifies a candidate pair/pool only: no Camelot quote, prepared swap transaction, swap eth_call, or swap gas estimate, and protocol remains unqualified. Historical limitation: two pooled observations record fetchedAt=null with only captureFinishedAt, so per-response timestamps are incomplete for those two records; not backfilled."
         },
         {
           "observationId": "native-rpc-controlled-reads-pre-guard",

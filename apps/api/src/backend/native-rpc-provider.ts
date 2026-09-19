@@ -4,6 +4,7 @@ import type { ChainOperationOptions } from "./chain-adapter.js";
 import {
   createNativeRpcClient,
   NativeRpcClientError,
+  type NativeRpcClientFailure,
 } from "./native-rpc-client.js";
 import {
   ARBITRUM_SEPOLIA_CHAIN_ID,
@@ -150,6 +151,18 @@ export class NativeRpcProvider<Intent extends NativeRpcIntent = NativeRpcIntent>
     ) {
       throw new TypeError("Native RPC timeoutMs must be a positive integer");
     }
+    // An endpoint-backed or client-backed provider must never inherit a
+    // default truthfulness mode: a silent `MOCK` fallback would label real
+    // RPC observations as `source: mock` / `NOT_REPRODUCIBLE` and falsify
+    // provenance. The mode remains optional only where no runtime seam exists.
+    if (
+      options.mode === undefined &&
+      (options.client !== undefined || options.rpcUrl !== undefined)
+    ) {
+      throw new TypeError(
+        "Native RPC mode is required for a client or rpcUrl provider",
+      );
+    }
     this.mode = options.mode ?? "MOCK";
     this.providerVersion = options.providerVersion ?? "native-rpc-provider-v1";
     this.now = options.now ?? (() => new Date().toISOString());
@@ -180,14 +193,33 @@ export class NativeRpcProvider<Intent extends NativeRpcIntent = NativeRpcIntent>
     if (invalid !== undefined) {
       return this.result(input.runId, "unknown", {
         fields: [
-          candidate(
+          invalidCandidate(
             "nativeRpc.preparedExecution",
             "prepared_execution",
-            "invalid",
             invalid,
           ),
         ],
         freshness: { status: "unknown", reason: invalid },
+      });
+    }
+
+    // `quote` is caller-supplied and unknown-shaped. Normalize it with an
+    // ancestor-tracking walk before any RPC call so a cyclic or otherwise
+    // non-JSON quote fails closed with controlled UNKNOWN evidence instead of
+    // overflowing the stack or silently becoming `quote: null` in a success.
+    const quote = toJsonValue(input.input.quote);
+    if (quote === undefined) {
+      const unsupportedQuote =
+        "Native RPC requires a JSON-serializable prepared quote";
+      return this.result(input.runId, "unknown", {
+        fields: [
+          invalidCandidate(
+            "nativeRpc.preparedExecution",
+            "prepared_execution",
+            unsupportedQuote,
+          ),
+        ],
+        freshness: { status: "unknown", reason: unsupportedQuote },
       });
     }
 
@@ -202,21 +234,18 @@ export class NativeRpcProvider<Intent extends NativeRpcIntent = NativeRpcIntent>
     try {
       const response = await this.request("eth_chainId", []);
       if (!isHexQuantity(response)) {
-        return this.result(input.runId, "unknown", {
-          ...state,
-          fields: [
-            candidate(
-              "nativeRpc.chainId",
-              "hex_quantity",
-              "invalid",
-              "eth_chainId returned an invalid quantity",
-            ),
-          ],
-          freshness: {
-            status: "unknown",
-            reason: "RPC chain identity is invalid",
-          },
-        });
+        state.freshness = {
+          status: "unknown",
+          reason: "RPC chain identity is invalid",
+        };
+        state.fields.push(
+          invalidCandidate(
+            "nativeRpc.chainId",
+            "hex_quantity",
+            "eth_chainId returned an invalid quantity",
+          ),
+        );
+        return this.result(input.runId, "unknown", state);
       }
       state.observedChainId = response;
       state.fields.push(
@@ -229,38 +258,31 @@ export class NativeRpcProvider<Intent extends NativeRpcIntent = NativeRpcIntent>
         ),
       );
       if (BigInt(response) !== BigInt(ARBITRUM_SEPOLIA_CHAIN_ID)) {
-        return this.result(input.runId, "unknown", {
-          ...state,
-          freshness: {
-            status: "unknown",
-            reason: "RPC chain identity does not match Arbitrum Sepolia",
-          },
-        });
+        state.freshness = {
+          status: "unknown",
+          reason: "RPC chain identity does not match Arbitrum Sepolia",
+        };
+        return this.result(input.runId, "unknown", state);
       }
     } catch (error) {
       const classified = classifyRpcFailure(error);
-      return this.result(
-        input.runId,
-        classified.status,
-        {
-          ...state,
-          fields: [
-            candidate(
-              "nativeRpc.chainId",
-              "hex_quantity",
-              "missing",
-              undefined,
-              "$.result",
-              classified.message,
-            ),
-          ],
-          freshness: {
-            status: "unknown",
-            reason: "RPC chain identity unavailable",
-          },
-        },
-        { failure: classified },
+      state.freshness = {
+        status: "unknown",
+        reason: "RPC chain identity unavailable",
+      };
+      state.fields.push(
+        candidate(
+          "nativeRpc.chainId",
+          "hex_quantity",
+          "missing",
+          undefined,
+          "$.result",
+          classified.message,
+        ),
       );
+      return this.result(input.runId, classified.status, state, {
+        failure: classified,
+      });
     }
 
     try {
@@ -276,21 +298,18 @@ export class NativeRpcProvider<Intent extends NativeRpcIntent = NativeRpcIntent>
           observed.hash.toLowerCase() !==
             input.input.blockContext.blockHash.toLowerCase())
       ) {
-        return this.result(input.runId, "unknown", {
-          ...state,
-          fields: [
-            candidate(
-              "nativeRpc.pinnedBlock",
-              "block",
-              "invalid",
-              "Pinned block could not be verified",
-            ),
-          ],
-          freshness: {
-            status: "unknown",
-            reason: "Pinned block could not be verified",
-          },
-        });
+        state.freshness = {
+          status: "unknown",
+          reason: "Pinned block could not be verified",
+        };
+        state.fields.push(
+          invalidCandidate(
+            "nativeRpc.pinnedBlock",
+            "block",
+            "Pinned block could not be verified",
+          ),
+        );
+        return this.result(input.runId, "unknown", state);
       }
       state.fields.push(
         candidate(
@@ -310,43 +329,41 @@ export class NativeRpcProvider<Intent extends NativeRpcIntent = NativeRpcIntent>
       );
     } catch (error) {
       const classified = classifyRpcFailure(error);
-      return this.result(
-        input.runId,
-        classified.status,
-        {
-          ...state,
-          fields: [
-            candidate(
-              "nativeRpc.pinnedBlock",
-              "block",
-              "missing",
-              undefined,
-              "$.result",
-              classified.message,
-            ),
-          ],
-          freshness: { status: "unknown", reason: "Pinned block unavailable" },
-        },
-        { failure: classified },
+      state.freshness = {
+        status: "unknown",
+        reason: "Pinned block unavailable",
+      };
+      state.fields.push(
+        candidate(
+          "nativeRpc.pinnedBlock",
+          "block",
+          "missing",
+          undefined,
+          "$.result",
+          classified.message,
+        ),
       );
+      return this.result(input.runId, classified.status, state, {
+        failure: classified,
+      });
     }
 
     let callReturnData: string;
     try {
       const response = await this.request("eth_call", [transaction, blockTag]);
       if (!isHexData(response)) {
-        return this.result(input.runId, "unknown", {
-          ...state,
-          fields: [
-            candidate(
-              "nativeRpc.ethCall.returnData",
-              "hex_string",
-              "invalid",
-              "eth_call returned a non-hex result",
-            ),
-          ],
-          freshness: { status: "unknown", reason: "invalid eth_call result" },
-        });
+        state.freshness = {
+          status: "unknown",
+          reason: "invalid eth_call result",
+        };
+        state.fields.push(
+          invalidCandidate(
+            "nativeRpc.ethCall.returnData",
+            "hex_string",
+            "eth_call returned a non-hex result",
+          ),
+        );
+        return this.result(input.runId, "unknown", state);
       }
       callReturnData = response;
       state.fields.push(
@@ -420,10 +437,9 @@ export class NativeRpcProvider<Intent extends NativeRpcIntent = NativeRpcIntent>
             reason: "RPC head is behind the pinned block",
           };
           state.fields.push(
-            candidate(
+            invalidCandidate(
               "nativeRpc.freshness",
               "freshness",
-              "invalid",
               "RPC head is behind the pinned block",
             ),
           );
@@ -453,10 +469,9 @@ export class NativeRpcProvider<Intent extends NativeRpcIntent = NativeRpcIntent>
         const classified = classifyRpcFailure(error);
         state.freshness = { status: "unknown", reason: classified.message };
         state.fields.push(
-          candidate(
+          invalidCandidate(
             "nativeRpc.freshness",
             "freshness",
-            "invalid",
             classified.message,
           ),
         );
@@ -474,7 +489,7 @@ export class NativeRpcProvider<Intent extends NativeRpcIntent = NativeRpcIntent>
         {
           chainId: input.input.chainId,
           protocol: input.input.protocol,
-          quote: jsonValueOrNull(input.input.quote),
+          quote,
           gasEstimate: input.input.gasEstimate.gasUnits,
           finality: input.input.finality.status,
         },
@@ -729,11 +744,67 @@ function candidate(
   };
 }
 
+/**
+ * A failed observation candidate.
+ *
+ * Diagnostic text is semantic metadata only. It must never be passed as the
+ * candidate `value`, because a downstream GenericEvidence projection reads
+ * values as observed provider data. Keeping the text in `semanticNote` lets it
+ * inform review without any chance of it being projected as call return data.
+ */
+function invalidCandidate(
+  candidatePath: string,
+  observedShape: string,
+  semanticNote: string,
+): ProvisionalCandidateFieldInput {
+  return candidate(
+    candidatePath,
+    observedShape,
+    "invalid",
+    undefined,
+    undefined,
+    semanticNote,
+  );
+}
+
+/**
+ * Bounded failure text for a client-owned error kind.
+ *
+ * `NativeRpcClientError` is public, so an injected client can throw one with an
+ * arbitrary message. The message is therefore never copied across the Provider
+ * boundary; only this fixed, kind-derived text may reach a redacted snapshot.
+ * Classification still keys on `kind` and `rpcCode`, so no signal is lost.
+ */
+function boundedClientFailureMessage(kind: NativeRpcClientFailure): string {
+  switch (kind) {
+    case "TIMEOUT":
+      return "Native RPC request timed out";
+    case "ABORTED":
+      return "Native RPC request was aborted";
+    case "HTTP_FAILURE":
+      return "Native RPC endpoint returned a failing HTTP status";
+    case "NETWORK_FAILURE":
+      return "Native RPC request could not reach the endpoint";
+    case "JSON_PARSE_FAILURE":
+      return "Native RPC response was not valid JSON";
+    case "INVALID_ENVELOPE":
+      return "Native RPC response envelope was malformed";
+    case "ID_MISMATCH":
+      return "Native RPC response id did not match the request id";
+    case "RPC_ERROR":
+      return "Native RPC endpoint returned a JSON-RPC error";
+    case "MISSING_RESULT":
+      return "Native RPC response did not contain a result";
+  }
+}
+
 function classifyRpcFailure(error: unknown): ClassifiedRpcFailure {
   const candidate = error as RpcError | undefined;
+  // Only bounded text ever leaves this function. An injected client's raw
+  // `error.message` may contain an endpoint URL, credential, or request data.
   const message =
     error instanceof NativeRpcClientError
-      ? error.message
+      ? boundedClientFailureMessage(error.kind)
       : "Native RPC request failed";
   if (error instanceof NativeRpcClientError) {
     if (error.kind === "TIMEOUT")
@@ -760,6 +831,10 @@ function classifyRpcFailure(error: unknown): ClassifiedRpcFailure {
   if (candidate?.rpcCode === -32602) {
     return { status: "unknown", message, retryable: false, rpcCode: -32602 };
   }
+  // A non-client error reaches this classifier only from an injected client, so
+  // its message is inspected for semantics but never copied out: every return
+  // above and below emits the bounded `message` derived from `kind` or a fixed
+  // fallback. Inspecting text is not leaking it.
   if (
     /invalid (?:hex|quantity)|execution reverted|revert/i.test(
       error instanceof Error ? error.message : "",
@@ -772,10 +847,7 @@ function classifyRpcFailure(error: unknown): ClassifiedRpcFailure {
       rpcCode: candidate?.rpcCode,
     };
   }
-  if (
-    candidate?.name === "AbortError" ||
-    /timeout|timed out/i.test(error instanceof Error ? error.message : "")
-  ) {
+  if (candidate?.name === "AbortError") {
     return { status: "timeout", message, retryable: true };
   }
   return {
@@ -839,17 +911,29 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function jsonValueOrNull(value: unknown): ProvisionalJsonValue | null {
-  return toJsonValue(value) ?? null;
-}
-
-function toJsonValue(value: unknown): ProvisionalJsonValue | undefined {
+/**
+ * Convert an unknown-shaped value into the provisional JSON value model.
+ *
+ * `ancestors` tracks the current path so a cyclic array/object yields
+ * `undefined` (a controlled rejection) instead of recursing until the stack
+ * overflows. A non-JSON scalar (function, symbol, non-finite number) also
+ * yields `undefined`. Callers must fail closed rather than substitute `null`.
+ */
+function toJsonValue(
+  value: unknown,
+  ancestors: ReadonlySet<object> = new Set(),
+): ProvisionalJsonValue | undefined {
   if (value === null) return null;
   if (typeof value === "string" || typeof value === "boolean") return value;
   if (typeof value === "number")
     return Number.isFinite(value) ? value : undefined;
+  if (typeof value !== "object") return undefined;
+  if (ancestors.has(value)) return undefined;
+
+  const nextAncestors = new Set(ancestors);
+  nextAncestors.add(value);
   if (Array.isArray(value)) {
-    const values = value.map(toJsonValue);
+    const values = value.map((entry) => toJsonValue(entry, nextAncestors));
     return values.some((entry) => entry === undefined)
       ? undefined
       : (values as ProvisionalJsonValue[]);
@@ -857,7 +941,7 @@ function toJsonValue(value: unknown): ProvisionalJsonValue | undefined {
   if (isRecord(value)) {
     const result: Record<string, ProvisionalJsonValue> = {};
     for (const [key, entry] of Object.entries(value)) {
-      const normalized = toJsonValue(entry);
+      const normalized = toJsonValue(entry, nextAncestors);
       if (normalized === undefined) return undefined;
       result[key] = normalized;
     }

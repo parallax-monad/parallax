@@ -117,4 +117,21 @@ describe("Native RPC JSON-RPC transport", () => {
     controller.abort();
     await expect(request).rejects.toMatchObject({ kind: "ABORTED" });
   });
+
+  it("does not invoke fetch when the caller signal is already aborted", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const fetchMock = vi.fn(async () =>
+      rpcResponse({ jsonrpc: "2.0", id: 1, result: "0x" }),
+    );
+    const client = createNativeRpcClient({
+      rpcUrl,
+      fetchImplementation: fetchMock as unknown as typeof fetch,
+    });
+
+    await expect(
+      client.request("eth_call", [], { signal: controller.signal }),
+    ).rejects.toMatchObject({ kind: "ABORTED" });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
 });

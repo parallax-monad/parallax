@@ -54,6 +54,15 @@ export function createNativeRpcClient(
   let nextId = 0;
   return {
     async request(method, params = [], operation = {}): Promise<unknown> {
+      // An already-aborted caller signal must fail through the controlled
+      // ABORTED path before any transport work. Aborting the internal
+      // controller alone would still invoke the injected fetch implementation.
+      if (operation.signal?.aborted) {
+        throw new NativeRpcClientError(
+          "ABORTED",
+          "Native RPC request was cancelled",
+        );
+      }
       const id = ++nextId;
       const controller = new AbortController();
       let timedOut = false;

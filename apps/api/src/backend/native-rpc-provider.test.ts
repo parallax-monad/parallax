@@ -625,6 +625,36 @@ describe("Backend Native RPC evidence seam", () => {
     expect(evidence.provenance).not.toHaveProperty("observedChainId");
   });
 
+  it("never projects diagnostic text from a non-observed call field as callReturnData", () => {
+    const diagnostic = "eth_call returned a non-hex result";
+    const evidence = toNativeRpcGenericEvidence({
+      intent,
+      tokenInDecimals: 18,
+      tokenOutDecimals: 6,
+      preparedExecution: prepared,
+      providerResult: result("unknown", [
+        candidateField("nativeRpc.ethCall.returnData", diagnostic, "invalid"),
+        candidateField(
+          "nativeRpc.estimateGas.gasUnits",
+          "gas unavailable",
+          "missing",
+        ),
+      ]),
+    });
+
+    const nativeRpc = evidence.providerData.nativeRpc as Record<
+      string,
+      unknown
+    >;
+    expect(nativeRpc).not.toHaveProperty("callReturnData");
+    expect(nativeRpc).not.toHaveProperty("gasUnits");
+    expect(evidence.unknownScope).toEqual(
+      expect.arrayContaining(["native-rpc.eth_call", "native-rpc.estimateGas"]),
+    );
+    expect(evidence.checkedScope).not.toContain("native-rpc.eth_call");
+    expect(JSON.stringify(evidence)).not.toContain(diagnostic);
+  });
+
   it("preserves non-success provider evidence", () => {
     const evidence = toNativeRpcGenericEvidence({
       intent,
