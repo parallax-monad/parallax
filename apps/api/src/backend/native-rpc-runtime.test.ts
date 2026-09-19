@@ -713,7 +713,159 @@ describe("NativeRpcProvider", () => {
       "eth_chainId",
       "eth_getBlockByNumber",
     ]);
+    // A later pinned-block failure must not erase the truthful chain identity
+    // that was already observed.
+    expect(result.candidateFields).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          candidatePath: "nativeRpc.chainId",
+          status: "observed",
+          value: "0x66eee",
+        }),
+        expect.objectContaining({
+          candidatePath: "nativeRpc.pinnedBlock",
+          status: "invalid",
+        }),
+      ]),
+    );
   });
+
+  it("retains observed chain identity when the pinned block RPC fails", async () => {
+    const client = clientFor({
+      eth_getBlockByNumber: new NativeRpcClientError(
+        "NETWORK_FAILURE",
+        "endpoint unreachable",
+      ),
+    });
+    const provider = createNativeRpcProvider({ client, mode: "MOCK" });
+    const result = await evaluateProviderAdapter(provider, {
+      runId: prepared.runId,
+      intent,
+      chainId: prepared.chainId,
+      protocol: prepared.protocol,
+      input: prepared,
+    });
+    expect(result.status).toBe("failed");
+    expect(result.candidateFields).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          candidatePath: "nativeRpc.chainId",
+          status: "observed",
+          value: "0x66eee",
+        }),
+        expect.objectContaining({
+          candidatePath: "nativeRpc.pinnedBlock",
+          status: "missing",
+        }),
+      ]),
+    );
+  });
+
+  it("retains chain and verified block evidence when eth_call returns non-hex data", async () => {
+    const client = clientFor({
+      eth_call: "not-hex",
+      eth_estimateGas: "0x5208",
+    });
+    const provider = createNativeRpcProvider({ client, mode: "MOCK" });
+    const result = await evaluateProviderAdapter(provider, {
+      runId: prepared.runId,
+      intent,
+      chainId: prepared.chainId,
+      protocol: prepared.protocol,
+      input: prepared,
+    });
+    expect(result.status).toBe("unknown");
+    expect(client.calls.map((call) => call.method)).toEqual([
+      "eth_chainId",
+      "eth_getBlockByNumber",
+      "eth_call",
+    ]);
+    expect(result.candidateFields).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          candidatePath: "nativeRpc.chainId",
+          status: "observed",
+          value: "0x66eee",
+        }),
+        expect.objectContaining({
+          candidatePath: "nativeRpc.blockContext.blockNumber",
+          status: "observed",
+          value: "42",
+        }),
+        expect.objectContaining({
+          candidatePath: "nativeRpc.blockContext.blockHash",
+          status: "observed",
+          value: prepared.blockContext.blockHash,
+        }),
+        expect.objectContaining({
+          candidatePath: "nativeRpc.ethCall.returnData",
+          status: "invalid",
+        }),
+      ]),
+    );
+    // Diagnostic text is semantic metadata, never candidate return data.
+    const callField = result.candidateFields.find(
+      (field) => field.candidatePath === "nativeRpc.ethCall.returnData",
+    );
+    expect(callField?.value).toBeUndefined();
+    expect(callField?.semanticNote).toBe("eth_call returned a non-hex result");
+    expect(result.responseEvidence).toMatchObject({
+      kind: "redacted_snapshot",
+      snapshot: {
+        methods: { eth_chainId: "0x66eee", eth_call: null },
+      },
+    });
+  });
+
+  it.each([
+    [
+      "an object cycle",
+      () => {
+        const cyclic: Record<string, unknown> = { estimatedAmountOut: "0.5" };
+        cyclic.self = cyclic;
+        return cyclic;
+      },
+    ],
+    [
+      "an array cycle",
+      () => {
+        const cyclic: unknown[] = [];
+        cyclic.push(cyclic);
+        return cyclic;
+      },
+    ],
+    ["a non-JSON bigint", () => ({ estimatedAmountOut: 1n })],
+  ])(
+    "fails closed without recursion for %s in the prepared quote",
+    async (_label, makeQuote) => {
+      const client = clientFor({
+        eth_call: "0xabcdef",
+        eth_estimateGas: "0x5208",
+      });
+      const provider = createNativeRpcProvider({ client, mode: "MOCK" });
+
+      const result = await evaluateProviderAdapter(provider, {
+        runId: prepared.runId,
+        intent,
+        chainId: prepared.chainId,
+        protocol: prepared.protocol,
+        input: { ...prepared, quote: makeQuote() },
+      });
+
+      expect(result.status).toBe("unknown");
+      expect(client.calls).toHaveLength(0);
+      expect(result.candidateFields).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            candidatePath: "nativeRpc.preparedExecution",
+            status: "invalid",
+            semanticNote:
+              "Native RPC requires a JSON-serializable prepared quote",
+          }),
+        ]),
+      );
+    },
+  );
 
   it("rejects malformed gas quantity as incomplete evidence", async () => {
     const client = clientFor({ eth_call: "0x", eth_estimateGas: "21000" });
