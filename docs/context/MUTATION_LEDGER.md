@@ -28,3 +28,23 @@ Remote update used exact `--force-with-lease` against `8e1f28bec2f10f3b8134c8549
 ## 2026-09-19 — project control plane
 
 Added durable takeover/context recovery files and local identity preflight. Feature development remains paused until the repaired #69 head and this control change are validated.
+
+## 2026-09-19 — proportional gating supersedes blanket development freeze
+
+Policy update, appended. The earlier "Feature development remains paused" note is retained
+unchanged above as the historical state at the time it was written.
+
+- The blanket development freeze is superseded by proportional gating (`AGENTS.md`,
+  `RUNBOOK.md`): gate depth is keyed to risk, reversibility, and semantic reach, not to the
+  number of unrelated open PRs or reviewers.
+- Routine, scoped, low-risk, reversible work in an already-clear owner boundary may proceed
+  after preflight, following `preflight → implement → validate → normal push → scoped review
+  if needed`.
+- Hard-stop categories that still require an explicit owner/gate decision: Product/Contract
+  semantic changes, architecture-wide changes, history rewrite / force push, destructive Git
+  operations, security/secrets incidents, signing/broadcasting/custody/wallet mutation, owner
+  authority conflicts, accepted-evidence rewrite or meaning change, large cross-owner public
+  API changes, and uncertain frozen-boundary impact.
+- #82 no longer blocks routine #69/#81 development or review fixes.
+
+The #69 identity-attribution incident history above is unchanged.
