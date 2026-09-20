@@ -2,9 +2,15 @@
 
 Last checkpoint: 2026-09-20
 
-## Main
+## Main checkpoint
 
-`main = bd98013dc956bfa4ff15ff95959f6cb614bf8c9b`
+`checkpoint_head = bd98013dc956bfa4ff15ff95959f6cb614bf8c9b`
+
+This is the known-good main tip at checkpoint time. It is not a claim about current `main`.
+
+After a fresh fetch, validate that `checkpoint_head` is an ancestor of current `origin/main`;
+equality is neither required nor expected. Non-ancestry means history divergence or rewrite and
+requires explicit reconciliation before `TAKEOVER_READY=YES`.
 
 Merged before this checkpoint:
 
@@ -25,8 +31,9 @@ Merged before this checkpoint:
 - #69 NativeRpcProvider is merged at head `40a8bace5fb71021798d5a066e63cfa7b5baec20`.
 - #76 P0 diagnosis and quantified remediation is merged.
 - #77 real Camelot Sepolia evidence is merged and was accepted by #67 for controlled P0 use.
-- #81 real Arbitrum Golden Path and public re-verification integration is merged at
-  `8700726cc43b9e61b8c3f47558211c2a4c07185d`.
+- #81 real Arbitrum Golden Path and public re-verification integration is merged at main commit
+  `bd98013dc956bfa4ff15ff95959f6cb614bf8c9b` (squash merge); its historical PR head
+  `8700726cc43b9e61b8c3f47558211c2a4c07185d` is retained as such and is not an ancestor of `main`.
 - #66 is closed; #67 is closed/accepted; #70 is closed/frozen.
 
 ## PR #82 — Project control plane

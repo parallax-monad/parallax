@@ -22,7 +22,9 @@ Only then decide whether old chat is still needed.
 
 ## Checkpoint minimum
 
-Persist current main, active PR heads, accepted/frozen decisions, pass/fail state, unresolved owner gates, critical path, next executable action, and material incidents.
+Persist `checkpoint_head = main tip at checkpoint time`, active PR heads, accepted/frozen decisions, pass/fail state, unresolved owner gates, critical path, next executable action, and material incidents.
+
+`checkpoint_head` is historical, not a claim about current main. Future takeover verifies after a fresh fetch that it is an ancestor of current main; equality is neither required nor expected. PR heads are not covered by this ancestry rule: because this repository uses squash merges, a merged PR's historical head need not be an ancestor of main, so record the actual merge/squash commit when known and label any retained PR head as historical.
 
 ## Parallel-agent rule
 
