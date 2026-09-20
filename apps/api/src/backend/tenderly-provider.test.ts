@@ -40,7 +40,10 @@ const input = {
   input: prepared,
 };
 
-function response(overrides: Record<string, unknown> = {}) {
+function response(
+  transactionOverrides: Record<string, unknown> = {},
+  simulationOverrides: Record<string, unknown> = {},
+) {
   return {
     transaction: {
       from: sender,
@@ -50,10 +53,11 @@ function response(overrides: Record<string, unknown> = {}) {
       network_id: "421614",
       block_number: 123,
       block_hash: hash,
+      gas: 21000,
       status: true,
       gas_used: 20000,
       transaction_info: { asset_changes: [], balance_changes: [] },
-      ...overrides,
+      ...transactionOverrides,
     },
     simulation: {
       from: sender,
@@ -62,7 +66,9 @@ function response(overrides: Record<string, unknown> = {}) {
       value: "0",
       network_id: "421614",
       block_number: 123,
+      gas: 21000,
       status: true,
+      ...simulationOverrides,
     },
   };
 }
@@ -116,6 +122,88 @@ describe("TenderlyProvider", () => {
     );
     expect(fetcher).toHaveBeenCalledOnce();
   });
+
+  it.each([
+    ["transaction gas mismatch", response({ gas: 21001 })],
+    ["simulation gas mismatch", response({}, { gas: 21001 })],
+    ["transaction gas missing", response({ gas: undefined })],
+    ["simulation gas missing", response({}, { gas: undefined })],
+    ["malformed gas", response({ gas: "not-a-quantity" })],
+    ["unsafe gas", response({ gas: Number.MAX_SAFE_INTEGER + 1 })],
+  ])(
+    "keeps an exact prepared gas mismatch unknown: %s",
+    async (_label, body) => {
+      const provider = adapter(
+        vi.fn(async () => Response.json(body)) as typeof fetch,
+      );
+      expect((await evaluateProviderAdapter(provider, input)).status).toBe(
+        "unknown",
+      );
+    },
+  );
+
+  it("does not invent or require gas when the prepared transaction has none", async () => {
+    const noGasPrepared = {
+      ...prepared,
+      unsignedTransaction: {
+        ...prepared.unsignedTransaction,
+        payload: {
+          ...(prepared.unsignedTransaction.payload as Record<string, unknown>),
+          gas: undefined,
+        },
+      },
+    } as TenderlyPreparedExecution;
+    const fetcher = vi.fn(
+      async (_url: RequestInfo | URL, options?: RequestInit) => {
+        expect(JSON.parse(String(options?.body))).toEqual({
+          network_id: "421614",
+          from: sender,
+          to: target,
+          input: "0x1234",
+          value: "0",
+          block_number: 123,
+          save: false,
+          save_if_fails: false,
+          simulation_type: "full",
+        });
+        return Response.json(response({ gas: undefined }, { gas: undefined }));
+      },
+    ) as typeof fetch;
+    const result = await evaluateProviderAdapter(adapter(fetcher), {
+      ...input,
+      input: noGasPrepared,
+    });
+    expect(result.status).toBe("success");
+  });
+
+  it("accepts a semantically equivalent cloned input intent", async () => {
+    const result = await evaluateProviderAdapter(
+      adapter(vi.fn(async () => Response.json(response())) as typeof fetch),
+      {
+        ...input,
+        intent: { ...intent, sender: sender.toUpperCase() },
+      },
+    );
+    expect(result.status).toBe("success");
+  });
+
+  it.each([
+    ["chain", { chainId: 1 }],
+    ["protocol", { protocol: "other" }],
+    ["sender", { sender: target }],
+  ])(
+    "rejects an input intent %s mismatch before HTTP",
+    async (_label, change) => {
+      const fetcher = vi.fn() as unknown as typeof fetch;
+      await expect(
+        evaluateProviderAdapter(adapter(fetcher), {
+          ...input,
+          intent: { ...intent, ...change },
+        }),
+      ).rejects.toBeInstanceOf(ProviderAdapterError);
+      expect(fetcher).not.toHaveBeenCalled();
+    },
+  );
 
   it.each([
     ["runId", { runId: "other" }],

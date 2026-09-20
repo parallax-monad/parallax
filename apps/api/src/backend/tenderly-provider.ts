@@ -87,6 +87,27 @@ function parseQuantity(value: unknown): bigint | undefined {
   }
 }
 
+function parseTenderlyQuantity(value: unknown): bigint | undefined {
+  if (typeof value === "number") {
+    return Number.isSafeInteger(value) && value >= 0
+      ? BigInt(value)
+      : undefined;
+  }
+  return parseQuantity(value);
+}
+
+function sameTenderlyIntent(left: unknown, right: unknown): boolean {
+  return (
+    record(left) &&
+    record(right) &&
+    left.chainId === right.chainId &&
+    left.protocol === right.protocol &&
+    typeof left.sender === "string" &&
+    typeof right.sender === "string" &&
+    left.sender.toLowerCase() === right.sender.toLowerCase()
+  );
+}
+
 function exactTransaction(
   prepared: TenderlyPreparedExecution,
 ): ExactTransaction {
@@ -168,7 +189,8 @@ function prepare(
     !address.test(prepared.intent.sender) ||
     (input.chainId !== undefined && input.chainId !== prepared.chainId) ||
     (input.protocol !== undefined && input.protocol !== prepared.protocol) ||
-    (input.intent !== undefined && input.intent !== prepared.intent)
+    (input.intent !== undefined &&
+      !sameTenderlyIntent(input.intent, prepared.intent))
   ) {
     throw failure(
       "UNKNOWN",
@@ -236,6 +258,13 @@ function normalize(
   const hash = transaction.block_hash;
   const transactionValue = parseQuantity(transaction.value);
   const simulationValue = parseQuantity(simulation.value);
+  const requestedGas =
+    request.gas === undefined ? undefined : BigInt(request.gas);
+  const transactionGas = parseTenderlyQuantity(transaction.gas);
+  const simulationGas = parseTenderlyQuantity(simulation.gas);
+  const gasBound =
+    requestedGas === undefined ||
+    (transactionGas === requestedGas && simulationGas === requestedGas);
   const bound =
     transaction.from === request.from &&
     transaction.to === request.to &&
@@ -249,6 +278,7 @@ function normalize(
     simulation.network_id === request.network_id &&
     transactionBlock === request.block_number &&
     simulationBlock === request.block_number &&
+    gasBound &&
     typeof hash === "string" &&
     hash.toLowerCase() === expectedHash.toLowerCase();
   const status =
