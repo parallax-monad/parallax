@@ -56,3 +56,21 @@ Fresh GitHub state confirmed that #69, #76, #77, #80, #81, and #82 are merged in
 #78 final Backend convergence (canonical NativeRpcProvider exercise, minimum public P0
 projection, and independent assembled Golden Path evidence) in parallel with #73 Frontend
 integration. No Product semantics from #67/#70 were changed.
+
+## 2026-09-20 — checkpoint ancestry semantics correction
+
+Stale equality semantics identified: `PROJECT_STATE.md`, `AGENT_HANDOFF.md`, and
+`CONTEXT_RECOVERY.md` recorded the main checkpoint as `main = <sha>` and instructed a fresh fetch
+to confirm current `main` equalled that value, and #81's historical PR head was described as a
+merged main head.
+
+Wording corrected to checkpoint ancestry semantics: a recorded `checkpoint_head` is the
+known-good main tip at checkpoint time, not a claim about current main. Takeover validates after a
+fresh fetch that `checkpoint_head` is an ancestor of current main; equality is neither required
+nor expected, and non-ancestry means history divergence/rewrite requiring explicit reconciliation
+before `TAKEOVER_READY=YES`. This ancestry rule applies to main checkpoints only. #81 is now
+recorded with its squash merge/main commit `bd98013dc956bfa4ff15ff95959f6cb614bf8c9b` and its
+historical PR head `8700726cc43b9e61b8c3f47558211c2a4c07185d` explicitly labeled as non-ancestral.
+
+No runtime, preflight, Product, Contract, Provider, Backend, Risk, or Frontend behavior changed;
+`scripts/agent-preflight.sh` was not modified.

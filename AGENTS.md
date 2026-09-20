@@ -99,6 +99,10 @@ Every review and merge gate is bound to an exact commit head. When a head moves,
 
 A head move re-opens only that material delta. It does not automatically trigger a full stacked-baseline broad re-review.
 
+A recorded main checkpoint is historical; fresh GitHub state is live truth. Validate checkpoint ancestry: after a fresh fetch, confirm the recorded `checkpoint_head` is an ancestor of current `main`, and never require `current_main == checkpoint_head`. Non-ancestry means history divergence or rewrite and requires explicit reconciliation before `TAKEOVER_READY=YES`.
+
+This ancestry rule applies to main checkpoints only. Because the repository uses squash merges, a merged PR's historical head need not be an ancestor of `main`: record the actual merge/squash commit when known, and label a retained PR head explicitly as historical.
+
 ## Mutation discipline
 
 Before mutation record repository, branch/ref, expected old SHA, intended scope, and owner/gate.
