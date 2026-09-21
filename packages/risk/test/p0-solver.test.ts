@@ -15,6 +15,8 @@ const selected: QuoteContext = {
   amountInAtomic: "10000",
   amountOutAtomic: "4812",
   quoteId: "selected",
+  runtimeVersion: "arbitrum-camelot-v3",
+  runtimeRevision: "native-rpc",
   provenance: "quote:v1",
   blockNumber: "100",
   observedAt: "2026-09-17T00:00:00Z",

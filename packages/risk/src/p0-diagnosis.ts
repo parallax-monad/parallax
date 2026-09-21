@@ -18,6 +18,10 @@ export type QuoteContext = {
   amountInAtomic: string;
   amountOutAtomic: string;
   quoteId: string;
+  /** Runtime identity is shared provenance used to decide comparability. */
+  runtimeVersion: string;
+  runtimeRevision: string;
+  /** Human-readable provenance; its formatting may differ by quote source. */
   provenance: string;
   blockNumber: string;
   observedAt: string;
@@ -55,6 +59,19 @@ export function compareQuoteFidelity(
   }
   if (![selected, current].every(validContext)) {
     return { status: "UNKNOWN", reason: "INVALID_AMOUNT" };
+  }
+  // `provenance` is descriptive and intentionally has source-specific
+  // formatting. The runtime identity is the comparable provenance shared by
+  // the selected public Quote and this Run's current provider evidence.
+  if (
+    !nonempty(selected.runtimeVersion) ||
+    !nonempty(selected.runtimeRevision) ||
+    !nonempty(current.runtimeVersion) ||
+    !nonempty(current.runtimeRevision) ||
+    selected.runtimeVersion !== current.runtimeVersion ||
+    selected.runtimeRevision !== current.runtimeRevision
+  ) {
+    return { status: "UNKNOWN", reason: "INCOMPATIBLE" };
   }
   if (
     selected.chainId !== current.chainId ||

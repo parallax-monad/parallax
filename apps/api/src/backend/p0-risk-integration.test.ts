@@ -134,6 +134,20 @@ function executionQuote(
   };
 }
 
+function evidenceWithRuntime(
+  runtimeVersion: string,
+  runtimeRevision: string,
+): GenericEvidence {
+  const evidence = verifiedEvidence();
+  return genericEvidenceSchema.parse({
+    ...evidence,
+    provenance: {
+      ...evidence.provenance,
+      runtime: { runtimeVersion, runtimeRevision },
+    },
+  });
+}
+
 function currentQuoteInput(
   overrides: Partial<BackendCurrentQuoteInput> = {},
 ): BackendCurrentQuoteInput {
@@ -704,12 +718,18 @@ describe("Backend P0 Risk bridge: current quote identity", () => {
       ],
       [
         "runtimeVersion",
-        { quote: executionQuote({ runtimeVersion: "camelot-v4" }) },
+        {
+          quote: executionQuote({ runtimeVersion: "camelot-v4" }),
+          evidence: evidenceWithRuntime("camelot-v4", RUNTIME_REVISION),
+        },
         undefined,
       ],
       [
         "runtimeRevision",
-        { quote: executionQuote({ runtimeRevision: "other-revision" }) },
+        {
+          quote: executionQuote({ runtimeRevision: "other-revision" }),
+          evidence: evidenceWithRuntime(RUNTIME_VERSION, "other-revision"),
+        },
         undefined,
       ],
     ];
@@ -805,6 +825,19 @@ describe("Backend P0 Risk bridge: current quote identity", () => {
         label,
       ).toEqual({ status: "unavailable", reason });
     }
+  });
+
+  it("rejects quote runtime metadata that conflicts with provider provenance", () => {
+    expect(
+      buildBackendCurrentQuoteContext(
+        currentQuoteInput({
+          quote: executionQuote({ runtimeRevision: "other-revision" }),
+        }),
+      ),
+    ).toEqual({
+      status: "unavailable",
+      reason: "RUNTIME_PROVENANCE_MISMATCH",
+    });
   });
 });
 

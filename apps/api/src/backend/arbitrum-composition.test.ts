@@ -1072,8 +1072,8 @@ const p0ExpectationBaseline: ExpectationBaseline = {
     source: "quote",
     blockNumber: "41",
     fetchedAt: "2026-08-31T00:00:00.000Z",
-    runtimeVersion: "quote-adapter",
-    runtimeRevision: "v1",
+    runtimeVersion: "arbitrum-camelot-v3",
+    runtimeRevision: "native-rpc",
   },
 };
 
@@ -1194,6 +1194,50 @@ describe("Arbitrum composition P0 Risk wiring", () => {
       true,
     );
   });
+
+  it.each(["runtimeVersion", "runtimeRevision"] as const)(
+    "fails closed when the selected quote %s differs from current Evidence",
+    async (identityField) => {
+      const composition = createArbitrumProductionComposition(
+        p0CompositionOptions({
+          providerEvidenceMapper: ({ normalizedIntent }) =>
+            p0VerifiedEvidence(normalizedIntent as NormalizedSwapIntent),
+        }),
+      );
+      const mismatchedBaseline =
+        identityField === "runtimeVersion"
+          ? {
+              ...p0ExpectationBaseline,
+              quote: {
+                ...p0ExpectationBaseline.quote,
+                runtimeVersion: "different-runtime",
+              },
+            }
+          : {
+              ...p0ExpectationBaseline,
+              quote: {
+                ...p0ExpectationBaseline.quote,
+                runtimeRevision: "different-revision",
+              },
+            };
+
+      const execution = await runP0Check(
+        composition,
+        "p0-runtime-mismatch",
+        normalizedIntent,
+        mismatchedBaseline,
+      );
+
+      expect(execution.decisionOutput).toMatchObject({
+        status: "completed",
+        verdict: "UNKNOWN",
+        p0: {
+          expectationBaseline: { status: "AVAILABLE" },
+          quoteFidelity: { status: "UNKNOWN", reason: "INCOMPATIBLE" },
+        },
+      });
+    },
+  );
 
   it("makes the final verdict obey the P0 Risk verdict for an injected baseline", async () => {
     const composition = createArbitrumProductionComposition(

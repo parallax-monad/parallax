@@ -18,6 +18,8 @@ const selected: QuoteContext = {
   amountInAtomic: "10000",
   amountOutAtomic: "4812",
   quoteId: "selected-quote",
+  runtimeVersion: "arbitrum-camelot-v3",
+  runtimeRevision: "native-rpc",
   provenance: "quote-adapter:v1",
   blockNumber: "100",
   observedAt: "2026-09-17T00:00:00Z",
@@ -73,6 +75,32 @@ describe("P0 quote fidelity", () => {
         "VERIFIED",
       ).status,
     ).toBe("UNKNOWN");
+  });
+
+  it.each([
+    ["runtime version", { runtimeVersion: "arbitrum-camelot-v4" }],
+    ["runtime revision", { runtimeRevision: "other-revision" }],
+  ] as const)(
+    "fails closed when the selected and current %s differ",
+    (_label, runtimeIdentity) => {
+      expect(
+        compareQuoteFidelity(
+          { ...selected, ...runtimeIdentity },
+          current,
+          "VERIFIED",
+        ),
+      ).toEqual({ status: "UNKNOWN", reason: "INCOMPATIBLE" });
+    },
+  );
+
+  it("fails closed when either runtime provenance component is missing", () => {
+    expect(
+      compareQuoteFidelity(
+        { ...selected, runtimeRevision: "" },
+        current,
+        "VERIFIED",
+      ),
+    ).toEqual({ status: "UNKNOWN", reason: "INCOMPATIBLE" });
   });
 
   it.each(["INCOMPLETE", "UNAVAILABLE", "STALE", "UNVERIFIED"] as const)(

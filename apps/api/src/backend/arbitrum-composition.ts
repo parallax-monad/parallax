@@ -481,6 +481,8 @@ function arbitrumSelectedQuote(
         identity.runtimeVersion,
         identity.runtimeRevision,
       ]),
+      runtimeVersion: identity.runtimeVersion,
+      runtimeRevision: identity.runtimeRevision,
       provenance: `source=quote;runtime=${identity.runtimeVersion}@${identity.runtimeRevision}`,
       blockNumber: identity.blockNumber,
       observedAt: identity.observedAt,

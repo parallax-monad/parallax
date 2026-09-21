@@ -164,7 +164,10 @@ Notes:
 `POST /api/check` may include the quote the user selected before starting the
 Check. Send the quote response together with the exact original quote request
 context; Backend compares it with the current Check and fails closed when the
-intent, quote time, or required provenance is not comparable.
+intent, quote time, or required provenance is not comparable. The selected
+quote's `runtimeVersion` and `runtimeRevision` must match the current Run's
+provider Evidence runtime identity; a missing or mismatched identity yields
+`p0.quoteFidelity.status = UNKNOWN` with reason `INCOMPATIBLE`.
 
 ```json
 "expectationBaseline": {

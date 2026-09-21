@@ -62,7 +62,8 @@ export type BackendCurrentQuoteUnavailableReason =
   | "BLOCK_NUMBER_MISMATCH"
   | "OBSERVED_AT_UNAVAILABLE"
   | "OBSERVED_AT_MISMATCH"
-  | "RUNTIME_PROVENANCE_UNAVAILABLE";
+  | "RUNTIME_PROVENANCE_UNAVAILABLE"
+  | "RUNTIME_PROVENANCE_MISMATCH";
 
 export type BackendCurrentQuoteResult =
   | { readonly status: "available"; readonly quote: QuoteContext }
@@ -128,14 +129,22 @@ export function buildBackendCurrentQuoteContext(
     }
   }
   const runtime = input.evidence.provenance.runtime;
-  const runtimeVersion = firstText(
-    quote.runtimeVersion,
-    runtime?.runtimeVersion,
-  );
-  const runtimeRevision = firstText(
-    quote.runtimeRevision,
-    runtime?.runtimeRevision,
-  );
+  const quoteRuntimeVersion = firstText(quote.runtimeVersion);
+  const quoteRuntimeRevision = firstText(quote.runtimeRevision);
+  const evidenceRuntimeVersion = firstText(runtime?.runtimeVersion);
+  const evidenceRuntimeRevision = firstText(runtime?.runtimeRevision);
+  if (
+    (quoteRuntimeVersion !== undefined &&
+      evidenceRuntimeVersion !== undefined &&
+      quoteRuntimeVersion !== evidenceRuntimeVersion) ||
+    (quoteRuntimeRevision !== undefined &&
+      evidenceRuntimeRevision !== undefined &&
+      quoteRuntimeRevision !== evidenceRuntimeRevision)
+  ) {
+    return unavailable("RUNTIME_PROVENANCE_MISMATCH");
+  }
+  const runtimeVersion = evidenceRuntimeVersion ?? quoteRuntimeVersion;
+  const runtimeRevision = evidenceRuntimeRevision ?? quoteRuntimeRevision;
   if (runtimeVersion === undefined || runtimeRevision === undefined) {
     return unavailable("RUNTIME_PROVENANCE_UNAVAILABLE");
   }
@@ -162,6 +171,8 @@ export function buildBackendCurrentQuoteContext(
       amountInAtomic: identity.amountInAtomic,
       amountOutAtomic: identity.amountOutAtomic,
       quoteId: quoteIdentity(identity),
+      runtimeVersion: identity.runtimeVersion,
+      runtimeRevision: identity.runtimeRevision,
       provenance: quoteProvenance(
         input.evidence,
         runtimeVersion,
@@ -465,7 +476,7 @@ function firstTimestamp(...values: readonly unknown[]): string | undefined {
 
 function firstText(...values: readonly unknown[]): string | undefined {
   for (const value of values) {
-    if (typeof value === "string" && value.trim() !== "") return value;
+    if (typeof value === "string" && value.trim() !== "") return value.trim();
   }
   return undefined;
 }
