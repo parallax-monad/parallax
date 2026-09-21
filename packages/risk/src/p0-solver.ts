@@ -53,6 +53,8 @@ export type VerifiedCandidate = {
   protocol: string;
   tokenIn: string;
   tokenOut: string;
+  runtimeVersion: string;
+  runtimeRevision: string;
   amountInAtomic: string;
   amountOutAtomic: string;
   quoteId: string;
@@ -211,6 +213,8 @@ export async function solveSelectedTargetOutput(
           protocol: result.quote.protocol,
           tokenIn: result.quote.tokenIn,
           tokenOut: result.quote.tokenOut,
+          runtimeVersion: result.quote.runtimeVersion,
+          runtimeRevision: result.quote.runtimeRevision,
           amountInAtomic: candidate.toString(),
           amountOutAtomic: result.quote.amountOutAtomic,
           quoteId: result.quote.quoteId,
@@ -269,6 +273,12 @@ function validQuote(
     nonempty(quote.tokenOut) &&
     selected.tokenIn.toLowerCase() === quote.tokenIn.toLowerCase() &&
     selected.tokenOut.toLowerCase() === quote.tokenOut.toLowerCase() &&
+    nonempty(selected.runtimeVersion) &&
+    nonempty(selected.runtimeRevision) &&
+    nonempty(quote.runtimeVersion) &&
+    nonempty(quote.runtimeRevision) &&
+    selected.runtimeVersion === quote.runtimeVersion &&
+    selected.runtimeRevision === quote.runtimeRevision &&
     quote.amountInAtomic === candidate.toString() &&
     atomic(quote.amountOutAtomic) &&
     atomic(quote.blockNumber) &&

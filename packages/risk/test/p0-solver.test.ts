@@ -92,6 +92,10 @@ describe("bounded selected-target-output solver", () => {
     if (result.status === "VERIFIED") {
       expect(result.candidate.amountInAtomic).toBe("10300");
       expect(result.candidate.amountOutAtomic).toBe("4820");
+      expect(result.candidate).toMatchObject({
+        runtimeVersion: selected.runtimeVersion,
+        runtimeRevision: selected.runtimeRevision,
+      });
       expect(result.candidate.verification.parentRunId).toBe("parent");
       expect(result.candidate.verification.verificationBlock).toBe("101");
     }
@@ -145,6 +149,60 @@ describe("bounded selected-target-output solver", () => {
       evaluations: 1,
     });
   });
+
+  it.each([
+    ["runtime version", "runtimeVersion"],
+    ["runtime revision", "runtimeRevision"],
+  ] as const)(
+    "fails closed when a remediation quote changes the selected %s",
+    async (_label, identityField) => {
+      const result = await solveSelectedTargetOutput(
+        input(async (amount) => {
+          const value = {
+            ...quote(amount, "4812"),
+            [identityField]: "different-runtime",
+          };
+          return {
+            status: "QUOTED",
+            evidenceState: "VERIFIED",
+            quote: value,
+            verification: verification(value),
+          };
+        }),
+      );
+      expect(result).toEqual({
+        status: "UNKNOWN",
+        reason: "EVIDENCE_NOT_VERIFIED",
+        evaluations: 1,
+      });
+    },
+  );
+
+  it.each(["runtimeVersion", "runtimeRevision"] as const)(
+    "fails closed when a remediation quote omits %s",
+    async (identityField) => {
+      const result = await solveSelectedTargetOutput(
+        input(async (amount) => {
+          const value = {
+            ...quote(amount, "4812"),
+          } as unknown as Record<string, unknown>;
+          delete value[identityField];
+          const candidateQuote = value as unknown as QuoteContext;
+          return {
+            status: "QUOTED",
+            evidenceState: "VERIFIED",
+            quote: candidateQuote,
+            verification: verification(candidateQuote),
+          };
+        }),
+      );
+      expect(result).toEqual({
+        status: "UNKNOWN",
+        reason: "EVIDENCE_NOT_VERIFIED",
+        evaluations: 1,
+      });
+    },
+  );
 
   it("keeps malformed child verification proposed without throwing", async () => {
     const result = await solveSelectedTargetOutput(

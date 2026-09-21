@@ -491,6 +491,8 @@ describe("P0 verdict gate", () => {
     protocol: "camelot-v3",
     tokenIn: "0xabc",
     tokenOut: "0xdef",
+    runtimeVersion: selected.runtimeVersion,
+    runtimeRevision: selected.runtimeRevision,
     amountInAtomic: "10300",
     amountOutAtomic: "4820",
     quoteId: "candidate-quote",
@@ -842,6 +844,39 @@ describe("P0 verdict gate", () => {
       }).verdict,
     ).toBe("ADJUST");
   });
+
+  it.each([
+    ["runtime version", { runtimeVersion: "different-runtime" }],
+    ["runtime revision", { runtimeRevision: "different-revision" }],
+  ] as const)(
+    "does not let a candidate from another %s support ADJUST",
+    (_label, runtimeIdentity) => {
+      const candidate = {
+        ...verified,
+        ...runtimeIdentity,
+      } as unknown as VerifiedCandidate;
+      expect(
+        evaluateP0Risk(genericEvidence(), {
+          ...gateInput,
+          verifiedRemediation: candidate,
+        }).verdict,
+      ).toBe("STOP");
+    },
+  );
+
+  it.each(["runtimeVersion", "runtimeRevision"] as const)(
+    "does not let a candidate missing %s support ADJUST",
+    (identityField) => {
+      const candidate = { ...verified } as unknown as Record<string, unknown>;
+      delete candidate[identityField];
+      expect(
+        evaluateP0Risk(genericEvidence(), {
+          ...gateInput,
+          verifiedRemediation: candidate as unknown as VerifiedCandidate,
+        }).verdict,
+      ).toBe("STOP");
+    },
+  );
 
   it("binds the candidate to the current parent Run, not to any parent identity", () => {
     // Same parent as the current Run: the candidate remains eligible.

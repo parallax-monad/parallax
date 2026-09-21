@@ -433,6 +433,12 @@ function candidateContextBound(
     nonempty(candidate.tokenOut) &&
     candidate.tokenIn.toLowerCase() === selected.tokenIn.toLowerCase() &&
     candidate.tokenOut.toLowerCase() === selected.tokenOut.toLowerCase() &&
+    nonempty(selected.runtimeVersion) &&
+    nonempty(selected.runtimeRevision) &&
+    nonempty(candidate.runtimeVersion) &&
+    nonempty(candidate.runtimeRevision) &&
+    candidate.runtimeVersion === selected.runtimeVersion &&
+    candidate.runtimeRevision === selected.runtimeRevision &&
     nonempty(candidate.quoteId) &&
     atomic(candidate.amountInAtomic) &&
     BigInt(candidate.amountInAtomic) > 0n &&
