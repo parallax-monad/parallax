@@ -40,6 +40,8 @@ type EvidenceProvenance = {
 export function isActionGateCandidate(result: CompletedRun): boolean {
   if (
     (result.verdict !== "STOP" && result.verdict !== "ADJUST") ||
+    (result.p0RiskVerdict !== undefined &&
+      result.p0RiskVerdict !== "PROCEED") ||
     result.parentRunId !== undefined ||
     result.intent.economicBoundary.availability !== "available" ||
     result.scope.some((item) => item.status === "unknown") ||
@@ -136,6 +138,8 @@ export function childRunPassesActionGate(
   const output = economicSimulatedTokenOutEvidence(child);
   if (
     child.parentRunId !== baselineRunId ||
+    child.verdict !== "PROCEED" ||
+    (child.p0RiskVerdict !== undefined && child.p0RiskVerdict !== "PROCEED") ||
     child.replayMode ||
     child.systemStatus !== "OK" ||
     child.scope.some((item) => item.status === "unknown") ||

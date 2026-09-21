@@ -422,14 +422,16 @@ export function applyBackendP0Verdict(
       ? projected.verdict
       : p0Verdict;
   const verdict: Verdict = merged === "ADJUST" ? "STOP" : merged;
-  if (verdict === projected.verdict) return projected;
   return {
     ...projected,
+    p0RiskVerdict: p0Verdict,
     verdict,
     summary:
-      verdict === "UNKNOWN" || verdict === "STOP"
-        ? RESTRICTED_SUMMARY[verdict]
-        : projected.summary,
+      verdict === projected.verdict
+        ? projected.summary
+        : verdict === "UNKNOWN" || verdict === "STOP"
+          ? RESTRICTED_SUMMARY[verdict]
+          : projected.summary,
   };
 }
 

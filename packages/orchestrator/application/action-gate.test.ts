@@ -102,6 +102,13 @@ describe("Action Gate fixture helpers", () => {
     ).toBe(false);
   });
 
+  it("rejects a P0 STOP baseline even when legacy economic rules make it a candidate", () => {
+    const baseline = economicFailStopResult(assets, "run-1", availableIntent);
+    expect(isActionGateCandidate({ ...baseline, p0RiskVerdict: "STOP" })).toBe(
+      false,
+    );
+  });
+
   it("rejects baselines with blocking UNKNOWN Rule Results", () => {
     const baseline = economicFailStopResult(assets, "run-1", availableIntent);
     const execution = ruleById(baseline, "P0-EXECUTION-001");
@@ -214,6 +221,38 @@ describe("Action Gate fixture helpers", () => {
           item.verificationRunId === "run-2",
       ),
     ).toBe(true);
+  });
+
+  it("rejects a P0 child whose published verdict is UNKNOWN even when legacy rules pass", () => {
+    const baseline = economicFailStopResult(assets, "run-1", availableIntent);
+    const adjustment = proposeAmountInAdjustment(baseline.intent);
+    const childBase = economicPassChildResult(
+      assets,
+      "run-2",
+      adjustment.nextIntent,
+    );
+    const child: Completed = {
+      ...childBase,
+      verdict: "UNKNOWN",
+      parentRunId: "run-1",
+      diff: {
+        previousRunId: "run-1",
+        previousVerdict: "STOP",
+        changedFields: [
+          {
+            field: "amountInAtomic",
+            before: adjustment.before,
+            after: adjustment.after,
+          },
+        ],
+      },
+    };
+
+    expect(child.ruleResults).toHaveLength(3);
+    expect(child.ruleResults.every((rule) => rule.status === "PASS")).toBe(
+      true,
+    );
+    expect(childRunPassesActionGate(child, "run-1")).toBe(false);
   });
 
   it("resolves a verified ADJUST from application-loaded child records", () => {

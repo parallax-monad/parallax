@@ -1322,6 +1322,8 @@ export const completedRunResultSchema = runIdentitySchema
     simulatorPinnedBlock: z.string().regex(/^\d+$/).optional(),
     systemStatus: z.literal("OK"),
     verdict: verdictSchema,
+    /** Backend P0 verdict before it is merged into the legacy Run verdict. */
+    p0RiskVerdict: verdictSchema.optional(),
     summary: z.string().trim().min(1),
     ruleResults: z.array(ruleResultSchema).min(1),
     recommendedActions: z.array(actionEvaluationSchema),

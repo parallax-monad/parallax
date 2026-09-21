@@ -1339,6 +1339,66 @@ describe("Arbitrum composition P0 Risk wiring", () => {
     }
   });
 
+  it("keeps an explicit P0 STOP from entering the legacy HTTP Action Gate", async () => {
+    const store = new InMemoryRunStore();
+    const startSpy = vi.spyOn(store, "start");
+    const runtime = arbitrumRuntime();
+    const composition = createArbitrumProductionComposition(
+      p0CompositionOptions({
+        runtime,
+        runStore: store,
+        providerEvidenceMapper: ({ normalizedIntent }) => {
+          const candidate = normalizedIntent as NormalizedSwapIntent;
+          return p0VerifiedEvidence(candidate, {
+            estimatedAmountOut:
+              candidate.amountInAtomic === "1000" ? "0.5" : "0.7",
+            amountReceivedAtomic:
+              candidate.amountInAtomic === "1000" ? "500000" : "700000",
+          });
+        },
+        p0Risk: {
+          selectedQuote: p0SelectedQuote,
+          constraints: p0Constraints,
+          constraintEvidence: p0ConstraintEvidence,
+        },
+      }),
+    );
+    const app = createBackendApp({
+      runtime,
+      composition: composition as unknown as BackendCompositionRuntime,
+    });
+
+    const response = await app.fetch(
+      new Request("https://api.example.test/api/check", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          chainId: 421614,
+          protocol: "camelot-v3",
+          sender: normalizedIntent.sender,
+          tokenIn: { kind: "native" },
+          tokenOut: { kind: "erc20", address: arbitrumTokenAddress },
+          amountIn: "0.000000000000001",
+          economicBoundary: {
+            availability: "available",
+            minimumReceived: "0.6",
+            source: "user_declared",
+          },
+        }),
+      }),
+    );
+    const result = runResultSchema.parse(await response.json());
+
+    expect(response.status).toBe(200);
+    expect(result).toMatchObject({
+      status: "completed",
+      verdict: "STOP",
+      p0RiskVerdict: "STOP",
+      recommendedActions: [],
+    });
+    expect(startSpy).toHaveBeenCalledTimes(1);
+  });
+
   it("does not rerun the legacy Action Gate for an already-attested HTTP ADJUST", async () => {
     const store = new InMemoryRunStore();
     const startSpy = vi.spyOn(store, "start");

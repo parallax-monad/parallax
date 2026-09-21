@@ -829,6 +829,7 @@ describe("Backend P0 Risk verdict merge", () => {
     });
     expect(applyBackendP0Verdict(projected("PROCEED"), "STOP")).toMatchObject({
       verdict: "STOP",
+      p0RiskVerdict: "STOP",
       summary: "Live check completed with verdict STOP",
     });
   });
@@ -854,6 +855,7 @@ describe("Backend P0 Risk verdict merge", () => {
     const result = applyBackendP0Verdict(projected("PROCEED"), "PROCEED");
     expect(result).toMatchObject({
       verdict: "PROCEED",
+      p0RiskVerdict: "PROCEED",
       summary: "projected summary",
     });
   });
