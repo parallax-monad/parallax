@@ -27,7 +27,6 @@ describe("canonical Native RPC exercise input", () => {
         blockContext: {
           blockNumber: "310131879",
           blockHash: capture.observations.pinnedBlock.hash,
-          observedAt: "2026-09-18T08:47:42.000Z",
         },
         quote: {
           estimatedAmountOut: "0.015882896725531551",
@@ -41,6 +40,8 @@ describe("canonical Native RPC exercise input", () => {
       },
     });
     expect(evaluation.input.quote).not.toHaveProperty("minimumAmountOut");
+    // The block timestamp establishes the deadline, not an observation time.
+    expect(evaluation.input.blockContext).not.toHaveProperty("observedAt");
     expect(evaluation.input.intent).toEqual(evaluation.intent);
     expect(evaluation.input.intent.economicBoundary).toEqual({
       availability: "unavailable",

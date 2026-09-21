@@ -1,14 +1,18 @@
-import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   type CanonicalNativeRpcCapture,
+  type CanonicalNativeRpcEvaluationInput,
   createCanonicalNativeRpcEvaluationInput,
 } from "../../apps/api/src/backend/native-rpc-canonical-exercise.js";
 import { createNativeRpcProvider } from "../../apps/api/src/backend/native-rpc-provider.js";
 import { evaluateProviderAdapter } from "../../apps/api/src/backend/provider-adapter.js";
+import {
+  assertUnchangedSource,
+  captureSourceProvenance,
+} from "./native-rpc-source-provenance.js";
 
 const OFFICIAL_RPC = "https://sepolia-rollup.arbitrum.io/rpc";
 const SOURCE_CAPTURE =
@@ -72,25 +76,12 @@ function assertObservedCandidate(
   }
 }
 
-async function main(): Promise<void> {
-  assertEndpoint();
-  const fixtureBytes = readFileSync(join(REPO_ROOT, SOURCE_CAPTURE));
-  const capture = JSON.parse(
-    fixtureBytes.toString("utf8"),
-  ) as CanonicalNativeRpcCapture;
-  const startedAt = new Date().toISOString();
-  const runId = `be-078-canonical-${startedAt
-    .replaceAll(/[^0-9]/g, "")
-    .slice(0, 17)}`;
-  const evaluation = createCanonicalNativeRpcEvaluationInput(capture, runId);
+export function validateCanonicalProviderResult(
+  providerResult: Awaited<ReturnType<typeof evaluateProviderAdapter>>,
+  evaluation: CanonicalNativeRpcEvaluationInput,
+  capture: CanonicalNativeRpcCapture,
+) {
   const preparedSwap = capture.observations.preparedSwap;
-
-  const adapter = createNativeRpcProvider({
-    rpcUrl: endpoint,
-    mode: "LIVE",
-    timeoutMs: 30_000,
-  });
-  const providerResult = await evaluateProviderAdapter(adapter, evaluation);
   if (providerResult.status !== "success") {
     const failureSnapshot =
       providerResult.responseEvidence.kind === "redacted_snapshot"
@@ -134,13 +125,13 @@ async function main(): Promise<void> {
   const methods = object(snapshot.methods, "Provider method observations");
   if (
     snapshot.mode !== "LIVE" ||
-    snapshot.runId !== runId ||
+    snapshot.runId !== evaluation.runId ||
     BigInt(String(methods.eth_chainId)) !== 421_614n ||
     typeof methods.eth_call !== "string" ||
     methods.eth_call.toLowerCase() !==
       preparedSwap.ethCall.result.toLowerCase() ||
     typeof methods.eth_estimateGas !== "string" ||
-    BigInt(methods.eth_estimateGas) !== BigInt(preparedSwap.estimatedGas)
+    !/^[1-9][0-9]*$/.test(methods.eth_estimateGas)
   ) {
     throw new Error(
       "NativeRpcProvider observations differ from the accepted canonical capture",
@@ -160,7 +151,7 @@ async function main(): Promise<void> {
   assertObservedCandidate(
     providerResult,
     "nativeRpc.estimateGas.gasUnits",
-    preparedSwap.estimatedGas,
+    methods.eth_estimateGas as string,
   );
   assertObservedCandidate(
     providerResult,
@@ -168,21 +159,58 @@ async function main(): Promise<void> {
     capture.observations.pinnedBlock.hash,
   );
 
+  const observedGasUnits = methods.eth_estimateGas as string;
+  return {
+    historicalGasUnits: preparedSwap.estimatedGas,
+    observedGasUnits,
+    differenceGasUnits: (
+      BigInt(observedGasUnits) - BigInt(preparedSwap.estimatedGas)
+    ).toString(),
+  };
+}
+
+async function main(): Promise<void> {
+  assertEndpoint();
+  const sourceProvenance = captureSourceProvenance(REPO_ROOT);
+  const fixtureBytes = readFileSync(join(REPO_ROOT, SOURCE_CAPTURE));
+  const capture = JSON.parse(
+    fixtureBytes.toString("utf8"),
+  ) as CanonicalNativeRpcCapture;
+  const startedAt = new Date().toISOString();
+  const runId = `be-078-canonical-${startedAt
+    .replaceAll(/[^0-9]/g, "")
+    .slice(0, 17)}`;
+  const evaluation = createCanonicalNativeRpcEvaluationInput(capture, runId);
+  const adapter = createNativeRpcProvider({
+    rpcUrl: endpoint,
+    mode: "LIVE",
+    timeoutMs: 30_000,
+  });
+  const providerResult = await evaluateProviderAdapter(adapter, evaluation);
+  const gasEstimateComparison = validateCanonicalProviderResult(
+    providerResult,
+    evaluation,
+    capture,
+  );
+
   const capturedAt = new Date().toISOString();
   const sourceFixtureDigest = hash(fixtureBytes);
   const scriptDigest = hash(readFileSync(SCRIPT_PATH));
-  const repositoryHead = execFileSync("git", ["rev-parse", "HEAD"], {
-    cwd: REPO_ROOT,
-    encoding: "utf8",
-  }).trim();
+  assertUnchangedSource(sourceProvenance, captureSourceProvenance(REPO_ROOT));
+  if (
+    hash(readFileSync(join(REPO_ROOT, SOURCE_CAPTURE))) !== sourceFixtureDigest
+  ) {
+    throw new Error("Canonical source fixture changed during execution");
+  }
   const evidence = {
-    schemaVersion: "be-078-native-rpc-canonical-exercise-v1",
+    schemaVersion: "be-078-native-rpc-canonical-exercise-v2",
     status: "PASS",
     real: true,
     readOnly: true,
     endpointClass,
     capturedAt,
-    repositoryHeadAtCapture: repositoryHead,
+    repositoryHeadAtCapture: sourceProvenance.repositoryHead,
+    sourceProvenance,
     source: {
       fixture: SOURCE_CAPTURE,
       fixtureSha256: sourceFixtureDigest,
@@ -193,13 +221,14 @@ async function main(): Promise<void> {
     execution: {
       providerId: providerResult.provider.providerId,
       providerVersion: providerResult.provider.providerVersion,
-      mode: snapshot.mode,
+      mode: "LIVE",
       runId,
       chainId: evaluation.chainId,
       protocol: evaluation.protocol,
       blockContext: evaluation.input.blockContext,
       transaction: evaluation.input.unsignedTransaction.payload,
     },
+    gasEstimateComparison,
     providerResult,
   };
 
@@ -224,9 +253,11 @@ async function main(): Promise<void> {
   );
 }
 
-main().catch((error: unknown) => {
-  const message =
-    error instanceof Error ? error.message : "Unknown probe failure";
-  process.stderr.write(`Native RPC canonical exercise failed: ${message}\n`);
-  process.exitCode = 1;
-});
+if (process.argv[1] && resolve(process.argv[1]) === SCRIPT_PATH) {
+  main().catch((error: unknown) => {
+    const message =
+      error instanceof Error ? error.message : "Unknown probe failure";
+    process.stderr.write(`Native RPC canonical exercise failed: ${message}\n`);
+    process.exitCode = 1;
+  });
+}

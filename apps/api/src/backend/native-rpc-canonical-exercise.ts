@@ -186,7 +186,6 @@ export function createCanonicalNativeRpcEvaluationInput(
     blockContext: {
       blockNumber,
       blockHash: pinnedBlock.hash.toLowerCase(),
-      observedAt: new Date(Number(blockTimestamp) * 1000).toISOString(),
     },
     quote: {
       estimatedAmountOut: convertAtomicAmountToHuman(

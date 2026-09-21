@@ -1,0 +1,351 @@
+{
+  "schemaVersion": "be-078-native-rpc-canonical-exercise-v2",
+  "status": "PASS",
+  "real": true,
+  "readOnly": true,
+  "endpointClass": "environment-supplied",
+  "capturedAt": "2026-09-21T12:13:23.953Z",
+  "repositoryHeadAtCapture": "365bcb30a42cc3d13d29893bd8358745576d2deb",
+  "sourceProvenance": {
+    "repositoryHead": "365bcb30a42cc3d13d29893bd8358745576d2deb",
+    "worktreeDirty": true,
+    "nodeVersion": "v22.23.2",
+    "files": [
+      {
+        "path": "apps/api/package.json",
+        "sha256": "4c7f5b18b9ef5b911d498991efee891754281a0a30d1f03725c127e8a6a54aee"
+      },
+      {
+        "path": "apps/api/src/backend/arbitrum-chain-adapter.ts",
+        "sha256": "701416d6948db20e89f35a9f337fefd360bf725f9cc49e697b64e58bf6367272"
+      },
+      {
+        "path": "apps/api/src/backend/arbitrum-composition.ts",
+        "sha256": "18dbbeb985d12c167201a8a4d13fd77f5b4a5722240ec180baa92c8150156400"
+      },
+      {
+        "path": "apps/api/src/backend/camelot-v3-feasibility.ts",
+        "sha256": "6f602f5cb4491a22077734e8f77ddb96350233b2af90897cc2cd5acb7bcbc52f"
+      },
+      {
+        "path": "apps/api/src/backend/camelot-v3-protocol-adapter.ts",
+        "sha256": "712b0655b5275493a2e5500a5c540de78d750c01a28f342336205cb70eee675e"
+      },
+      {
+        "path": "apps/api/src/backend/chain-adapter.ts",
+        "sha256": "a484632557b0675cb8adedc3e8a9c0a0585e0c1bf55558dcee1edc98c40f9678"
+      },
+      {
+        "path": "apps/api/src/backend/chain-registry.ts",
+        "sha256": "7248554c233699dd08338e49e23b5578b3df1a00bb802624ed7cfeddffbd1146"
+      },
+      {
+        "path": "apps/api/src/backend/composition.ts",
+        "sha256": "9ba0df40773b921dffae1b387605b550c1cd7b0532144c38b4ca461ccd76037c"
+      },
+      {
+        "path": "apps/api/src/backend/control-boundary.ts",
+        "sha256": "62bafc018619a4841054a8871ac7948dadb934657a64647208ff03d826cb40f5"
+      },
+      {
+        "path": "apps/api/src/backend/fake-harness.ts",
+        "sha256": "1176accbbfa65c7c9058fcd768aeac43d1d38b9762daa52053dacd6316a527a8"
+      },
+      {
+        "path": "apps/api/src/backend/native-rpc-canonical-exercise.ts",
+        "sha256": "551ad340b342132f01738b26e9103fab77b0ff1aa60ff9140be6e1bf275b9c5c"
+      },
+      {
+        "path": "apps/api/src/backend/native-rpc-client.ts",
+        "sha256": "a223781a34a7c1e40cae244575aa71aebe588a24e4e31799492047b04228f2b1"
+      },
+      {
+        "path": "apps/api/src/backend/native-rpc-evidence.ts",
+        "sha256": "30aba259860d86f4ad8816645fa52439c9f0956dbc436930348803258eb6f940"
+      },
+      {
+        "path": "apps/api/src/backend/native-rpc-provider.ts",
+        "sha256": "19be80177ef52de2fedb77ab6a0677f072dd1a4f7980533d9a640b3671a1b302"
+      },
+      {
+        "path": "apps/api/src/backend/p0-risk-integration.ts",
+        "sha256": "1cf2663744956ede360edd5003371b5b030a8768d2f5f801ef69d7f6a2c6147e"
+      },
+      {
+        "path": "apps/api/src/backend/pipeline.ts",
+        "sha256": "7b37a47b742801464224270d2df505b5b2aa58143a8dda5832730f5398350bab"
+      },
+      {
+        "path": "apps/api/src/backend/protocol-adapter.ts",
+        "sha256": "be339cbc3f663b20b352a7bc9cc7f6e14c145579d99ca99327d771cf340dbdf7"
+      },
+      {
+        "path": "apps/api/src/backend/protocol-registry.ts",
+        "sha256": "96abfdfceb59c8e9ac364fee27ab5410a12ba4096cec5d34349e07e6d64c5108"
+      },
+      {
+        "path": "apps/api/src/backend/provider-adapter.ts",
+        "sha256": "2420bc7c8dcc4165fb358d4ad6283613344368abcf793ba8119c06c29ba5e5d3"
+      },
+      {
+        "path": "apps/api/src/backend/provider-registry.ts",
+        "sha256": "8ad97614e6f235a5aec9edb65aee7bdbd962dcdd6f7c0fb8800c71b5ef3e4189"
+      },
+      {
+        "path": "apps/api/src/backend/provider-result-boundary.ts",
+        "sha256": "9df7190bda6400721d98f793487366a8d4a427c1cef42369404041312d49d7b7"
+      },
+      {
+        "path": "apps/api/src/backend/receipt-ports.ts",
+        "sha256": "1c51c81d8af7a362c6bcdf614ade9c13f901806cf0600a8d4cc48866b3ed4f09"
+      },
+      {
+        "path": "apps/api/src/backend/registry-core.ts",
+        "sha256": "8e0d0b114b685201485f1cf515f6b30e3d4b372762dfcd6b694f16691079e4f4"
+      },
+      {
+        "path": "apps/api/src/backend/registry-errors.ts",
+        "sha256": "504e214a959013762e182ade509295e619f36fc8d6a809f0c02a17eb1754c79b"
+      },
+      {
+        "path": "apps/api/tsconfig.json",
+        "sha256": "5ed80efde27f927157aaba3ad7ec5d885ecd7abe86abd7f59fc51ab85e722da5"
+      },
+      {
+        "path": "package.json",
+        "sha256": "e84f9be63682c311d620aac087b73f1f2cb7a209085e8b02dde3bf464a6ddfd4"
+      },
+      {
+        "path": "packages/contracts/package.json",
+        "sha256": "eecf04db00b5b4ee58ed9c72b1110d420413166eadbddcc1d28b705a5ae16216"
+      },
+      {
+        "path": "packages/contracts/src/amount.ts",
+        "sha256": "1a0061a2ceedfbd2b55b096c3dfd887fd8f3659118913436a41c4bb5b5a83daa"
+      },
+      {
+        "path": "packages/contracts/src/common.ts",
+        "sha256": "345c9067724dc1ae9b25bdf276224921d41c24f1e85b67d4764a20c35e0bf8f2"
+      },
+      {
+        "path": "packages/contracts/src/decision.ts",
+        "sha256": "c6d7edc96216cf47ba49d6bd42ab51d332ab72bee778a05ab2652ecf85fd2151"
+      },
+      {
+        "path": "packages/contracts/src/evidence-provider.ts",
+        "sha256": "bd6a0450023aa968f6fd23b87fdcf916868ef0accf0f59c355345415d8d852b6"
+      },
+      {
+        "path": "packages/contracts/src/evidence.ts",
+        "sha256": "15e6349477cc926db1fdbeacae46538b9546c8bb32fe71b469215e3393c258e5"
+      },
+      {
+        "path": "packages/contracts/src/expectation-baseline.ts",
+        "sha256": "33542b85eb3f8c6421f7da2bb113356263e05bb4a046278713b2f7dce2b105ae"
+      },
+      {
+        "path": "packages/contracts/src/generic-evidence.ts",
+        "sha256": "d5be98fa949eb4fdfe0e2ef65254d7a47ac3ade23ea213caa2d21041a9f20cc8"
+      },
+      {
+        "path": "packages/contracts/src/index.ts",
+        "sha256": "71ab4f44ece9200f9400628baf7d646e771a091c42dd4a0e5a257ba754be4293"
+      },
+      {
+        "path": "packages/contracts/src/intent.ts",
+        "sha256": "4a0cc16bfc96db909e2448b022d15c7928c6fc9a92e9035b27640fcc138ffe5e"
+      },
+      {
+        "path": "packages/contracts/src/normalization.ts",
+        "sha256": "f61521d17f7e73979fb2907788e50811a6e5d0bbad4ed0b67012c7592c3c461f"
+      },
+      {
+        "path": "packages/contracts/src/p0-run-result.ts",
+        "sha256": "f28b3b9553d304735be6e80f200d9e0a6a1e5a36caf87764953f238124b510ed"
+      },
+      {
+        "path": "packages/contracts/src/quote.ts",
+        "sha256": "51702c5ea8ee32330742eaa7ea1e1935cb265a7c5fe7dce78611ff71c96fc4d1"
+      },
+      {
+        "path": "packages/contracts/src/registry.ts",
+        "sha256": "66fa8a8d2dcd0bbd5039477803d3efc69d56d2768526c52f445b7e4579478b68"
+      },
+      {
+        "path": "packages/contracts/src/replay.ts",
+        "sha256": "07fa22ff24dcd17a78007dcc50e869115f1b56940669188f86ac8e3e571ab88d"
+      },
+      {
+        "path": "packages/contracts/src/rerun.ts",
+        "sha256": "2c796e4be12bac62a9353543e10a9e9adb0ff0989c2f143726f74da230580589"
+      },
+      {
+        "path": "packages/contracts/src/route.ts",
+        "sha256": "a4de9e7640aa8b14e113cdbeb4d08804c1045dc7a86076966b2f2be8eb45f5c4"
+      },
+      {
+        "path": "packages/contracts/src/run.ts",
+        "sha256": "a00964794782c583d1281abf3a852641e4173b98fcb7802967821deb3ed2d6eb"
+      },
+      {
+        "path": "packages/contracts/src/serialization.ts",
+        "sha256": "fcc9993eac149cf8ced90b7d217e9ae0d78cb3264a2034eecbabd60c8561f9db"
+      },
+      {
+        "path": "packages/contracts/tsconfig.json",
+        "sha256": "5ed80efde27f927157aaba3ad7ec5d885ecd7abe86abd7f59fc51ab85e722da5"
+      },
+      {
+        "path": "pnpm-lock.yaml",
+        "sha256": "280ff0ad08ebb03be22bd25351845c1138e13810c35fefc54aba5333e290d34c"
+      },
+      {
+        "path": "pnpm-workspace.yaml",
+        "sha256": "36307fe58b9bd69b9cacf14e0dad5161e718d5c4d03492959260765331c155ac"
+      },
+      {
+        "path": "scripts/provider-probes/native-rpc-canonical-exercise.ts",
+        "sha256": "e040694debc2e58315ea7b4668273a2012b4d180d36685903d6e7e97fd4f1870"
+      },
+      {
+        "path": "scripts/provider-probes/native-rpc-source-provenance.ts",
+        "sha256": "79392d0e51f3e4a79bbcef2bec57b4a360ae9accf651e57a2875c21c32381447"
+      },
+      {
+        "path": "tsconfig.base.json",
+        "sha256": "fa7563407cb2d95982e81e4335f46fc2ca7d5bd4e84e5195685a5e4ff05f2438"
+      }
+    ],
+    "manifestSha256": "c7a9c8a025249e548cb592c8fcf668adbee706b2ce72c190c78b9d9540247bea"
+  },
+  "source": {
+    "fixture": "fixtures/provider-registry/be-063/camelot-sepolia-real-2026-09-18T08-47-56-715Z/capture.json",
+    "fixtureSha256": "85147b852e1e4b514af64241fede641f6a2b6db4f2056f0ab44d04164125cf23",
+    "runner": "scripts/provider-probes/native-rpc-canonical-exercise.ts",
+    "runnerSha256": "e040694debc2e58315ea7b4668273a2012b4d180d36685903d6e7e97fd4f1870",
+    "acceptedClassification": "QUALIFIED_REAL"
+  },
+  "execution": {
+    "providerId": "native-rpc-arbitrum",
+    "providerVersion": "native-rpc-provider-v1",
+    "mode": "LIVE",
+    "runId": "be-078-canonical-20260921121321371",
+    "chainId": 421614,
+    "protocol": "camelot-v3",
+    "blockContext": {
+      "blockNumber": "310131879",
+      "blockHash": "0x715bfaca417a25ed4d317748ecf0cfbd0ad38d4e14c2e1c0fb42ac0c8e60feff"
+    },
+    "transaction": {
+      "from": "0xeb7c5322f0997ee70f4bbd3ae7e428072c9af396",
+      "to": "0x171B925C51565F5D2a7d8C494ba3188D304EFD93",
+      "data": "0xbc651188000000000000000000000000980b62da83eff3d4576c647993b0c1d7faf17c73000000000000000000000000b893e3334d4bd6c5ba8277fd559e99ed683a9fc7000000000000000000000000eb7c5322f0997ee70f4bbd3ae7e428072c9af396000000000000000000000000000000000000000000000000000000006aad08be00000000000000000000000000000000000000000000000000038d7ea4c680000000000000000000000000000000000000000000000000000037dcf4d127fe8b0000000000000000000000000000000000000000000000000000000000000000",
+      "value": "0x38d7ea4c68000"
+    }
+  },
+  "gasEstimateComparison": {
+    "historicalGasUnits": "272052",
+    "observedGasUnits": "272052",
+    "differenceGasUnits": "0"
+  },
+  "providerResult": {
+    "provider": {
+      "providerId": "native-rpc-arbitrum",
+      "providerVersion": "native-rpc-provider-v1",
+      "observedAt": "2026-09-21T12:13:23.952Z"
+    },
+    "status": "success",
+    "responseEvidence": {
+      "kind": "redacted_snapshot",
+      "redactionProfile": "native-rpc-method-results-v1",
+      "snapshot": {
+        "providerId": "native-rpc-arbitrum",
+        "runId": "be-078-canonical-20260921121321371",
+        "mode": "LIVE",
+        "status": "success",
+        "methods": {
+          "eth_chainId": "0x66eee",
+          "eth_call": "0x00000000000000000000000000000000000000000000000000386d6911545b9f",
+          "eth_estimateGas": "272052"
+        },
+        "freshness": {
+          "status": "not_checked"
+        }
+      }
+    },
+    "candidateFields": [
+      {
+        "candidatePath": "nativeRpc.chainId",
+        "sourcePath": "$.result",
+        "observedShape": "hex_quantity",
+        "nullable": false,
+        "status": "observed",
+        "confidence": "medium",
+        "value": "0x66eee",
+        "reviewStatus": "pending_review"
+      },
+      {
+        "candidatePath": "nativeRpc.blockContext.blockNumber",
+        "sourcePath": "$.result.number",
+        "observedShape": "decimal_string",
+        "nullable": false,
+        "status": "observed",
+        "confidence": "medium",
+        "value": "310131879",
+        "reviewStatus": "pending_review"
+      },
+      {
+        "candidatePath": "nativeRpc.blockContext.blockHash",
+        "sourcePath": "$.result.hash",
+        "observedShape": "hex_string",
+        "nullable": false,
+        "status": "observed",
+        "confidence": "medium",
+        "value": "0x715bfaca417a25ed4d317748ecf0cfbd0ad38d4e14c2e1c0fb42ac0c8e60feff",
+        "reviewStatus": "pending_review"
+      },
+      {
+        "candidatePath": "nativeRpc.ethCall.returnData",
+        "sourcePath": "$.result",
+        "observedShape": "hex_string",
+        "nullable": false,
+        "status": "observed",
+        "confidence": "medium",
+        "value": "0x00000000000000000000000000000000000000000000000000386d6911545b9f",
+        "reviewStatus": "pending_review"
+      },
+      {
+        "candidatePath": "nativeRpc.estimateGas.gasUnits",
+        "sourcePath": "$.result",
+        "observedShape": "decimal_string",
+        "nullable": false,
+        "status": "observed",
+        "confidence": "medium",
+        "value": "272052",
+        "reviewStatus": "pending_review"
+      },
+      {
+        "candidatePath": "nativeRpc.preparedExecution",
+        "observedShape": "prepared_execution",
+        "nullable": false,
+        "status": "observed",
+        "confidence": "medium",
+        "value": {
+          "chainId": 421614,
+          "protocol": "camelot-v3",
+          "quote": {
+            "estimatedAmountOut": "0.015882896725531551",
+            "source": "quote",
+            "blockNumber": "310131879",
+            "runtimeVersion": "arbitrum-camelot-v3",
+            "runtimeRevision": "native-rpc"
+          },
+          "gasEstimate": "272052",
+          "finality": "unknown"
+        },
+        "reviewStatus": "pending_review"
+      }
+    ],
+    "capabilities": ["simulate", "eth_call", "estimateGas", "pinned-block"]
+  }
+}

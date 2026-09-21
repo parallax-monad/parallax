@@ -130,11 +130,6 @@
         "reviewStatus": "pending_review"
       }
     ],
-    "capabilities": [
-      "simulate",
-      "eth_call",
-      "estimateGas",
-      "pinned-block"
-    ]
+    "capabilities": ["simulate", "eth_call", "estimateGas", "pinned-block"]
   }
 }
