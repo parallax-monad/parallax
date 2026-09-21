@@ -1,16 +1,13 @@
 import {
   convertAtomicAmountToHuman,
+  type ExpectationBaseline,
   type GenericEvidence,
   genericEvidenceSchema,
   type NormalizedSwapIntent,
   runResultSchema,
 } from "@parallax/contracts";
 import { economicFailStopResult } from "@parallax/orchestrator/application/action-gate-fixtures";
-import type {
-  CallerConstraint,
-  ConstraintEvidence,
-  QuoteContext,
-} from "@parallax/risk";
+import type { CallerConstraint, ConstraintEvidence } from "@parallax/risk";
 import { describe, expect, it, vi } from "vitest";
 import canonicalRealCamelotCapture from "../../../../fixtures/provider-registry/be-063/camelot-sepolia-real-2026-09-18T08-47-56-715Z/capture.json";
 import { createBackendApp } from "../bootstrap/backend.js";
@@ -897,6 +894,65 @@ describe("Arbitrum production composition skeleton", () => {
       economicBoundary: { availability: "unavailable" },
     });
   });
+
+  it("publishes provider-neutral P0 diagnosis at POST /api/check", async () => {
+    const runtime = arbitrumRuntime();
+    const composition = createArbitrumProductionComposition(
+      p0CompositionOptions({
+        runtime,
+        providerEvidenceMapper: ({ normalizedIntent }) => {
+          const evidence = p0VerifiedEvidence(
+            normalizedIntent as NormalizedSwapIntent,
+          );
+          return genericEvidenceSchema.parse({
+            ...evidence,
+            providerData: { rawRpcResponse: { secret: "must-not-leak" } },
+          });
+        },
+      }),
+    );
+    const app = createBackendApp({
+      runtime,
+      composition: composition as unknown as BackendCompositionRuntime,
+    });
+
+    const response = await app.fetch(
+      new Request("https://api.example.test/api/check", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          chainId: 421614,
+          protocol: "camelot-v3",
+          sender: normalizedIntent.sender,
+          tokenIn: { kind: "native" },
+          tokenOut: { kind: "erc20", address: arbitrumTokenAddress },
+          amountIn: "0.000000000000001",
+          expectationBaseline: p0ExpectationBaseline,
+          economicBoundary: {
+            availability: "unavailable",
+            source: "unavailable",
+          },
+        }),
+      }),
+    );
+    const result = runResultSchema.parse(await response.json());
+
+    expect(response.status).toBe(200);
+    expect(result).toMatchObject({
+      status: "completed",
+      p0: {
+        expectationBaseline: {
+          status: "AVAILABLE",
+          amountOutAtomic: "490000",
+          blockNumber: "41",
+        },
+        quoteFidelity: { status: "VERIFIED" },
+        cause: { status: "NOT_VERIFIED" },
+        evidenceState: "VERIFIED",
+      },
+      providerEvidence: { providerData: {} },
+    });
+  });
 });
 
 const p0IntentAmountInAtomic = "1000";
@@ -1005,17 +1061,20 @@ function p0VerifiedEvidence(
   });
 }
 
-const p0SelectedQuote: QuoteContext = {
+const p0ExpectationBaseline: ExpectationBaseline = {
   chainId: 421614,
   protocol: "camelot-v3",
-  tokenIn: "native",
-  tokenOut: arbitrumTokenAddress,
-  amountInAtomic: p0IntentAmountInAtomic,
-  amountOutAtomic: "490000",
-  quoteId: "selected-baseline",
-  provenance: "quote-adapter:v1",
-  blockNumber: "41",
-  observedAt: "2026-08-31T00:00:00.000Z",
+  tokenIn: { kind: "native" },
+  tokenOut: { kind: "erc20", address: arbitrumTokenAddress },
+  amountIn: "0.000000000000001",
+  quote: {
+    estimatedAmountOut: "0.49",
+    source: "quote",
+    blockNumber: "41",
+    fetchedAt: "2026-08-31T00:00:00.000Z",
+    runtimeVersion: "quote-adapter",
+    runtimeRevision: "v1",
+  },
 };
 
 const p0Constraints: readonly CallerConstraint[] = [
@@ -1083,6 +1142,7 @@ async function runP0Check(
   composition: ReturnType<typeof createArbitrumProductionComposition>,
   runId: string,
   intent: NormalizedSwapIntent = normalizedIntent,
+  expectationBaseline: ExpectationBaseline | null = p0ExpectationBaseline,
 ) {
   const pipeline = new BackendPipeline({ runtime: composition });
   return pipeline.executeNormalized(intent, {
@@ -1091,6 +1151,9 @@ async function runP0Check(
     chainId: 421614,
     protocol: "camelot-v3",
     capability: "simulate",
+    ...(expectationBaseline === null
+      ? {}
+      : { decisionContext: { expectationBaseline } }),
   });
 }
 
@@ -1106,12 +1169,22 @@ describe("Arbitrum composition P0 Risk wiring", () => {
       }),
     );
 
-    const execution = await runP0Check(composition, "p0-no-baseline");
+    const execution = await runP0Check(
+      composition,
+      "p0-no-baseline",
+      normalizedIntent,
+      null,
+    );
 
     expect(execution.decisionOutput).toMatchObject({
       status: "completed",
       verdict: "UNKNOWN",
       summary: "Live check could not establish a trustworthy result",
+      p0: {
+        expectationBaseline: { status: "MISSING" },
+        quoteFidelity: { status: "UNKNOWN", reason: "MISSING_BASELINE" },
+        cause: { status: "NOT_VERIFIED" },
+      },
     });
     expect(
       (execution.decisionOutput as { readonly verdict: string }).verdict,
@@ -1128,7 +1201,6 @@ describe("Arbitrum composition P0 Risk wiring", () => {
         providerEvidenceMapper: ({ normalizedIntent }) =>
           p0VerifiedEvidence(normalizedIntent as NormalizedSwapIntent),
         p0Risk: {
-          selectedQuote: p0SelectedQuote,
           constraints: p0Constraints,
           constraintEvidence: p0ConstraintEvidence,
         },
@@ -1143,10 +1215,50 @@ describe("Arbitrum composition P0 Risk wiring", () => {
       status: "completed",
       verdict: "STOP",
       summary: "Live check completed with verdict STOP",
+      p0: {
+        expectationBaseline: {
+          status: "AVAILABLE",
+          amountInAtomic: p0IntentAmountInAtomic,
+          amountOutAtomic: "490000",
+          blockNumber: "41",
+        },
+        quoteFidelity: { status: "VERIFIED" },
+        cause: { status: "NOT_VERIFIED" },
+        constraints: [{ status: "FAIL" }],
+        evidenceState: "VERIFIED",
+      },
     });
     expect(runResultSchema.safeParse(execution.decisionOutput).success).toBe(
       true,
     );
+  });
+
+  it("fails closed when the selected quote is for another exact-input amount", async () => {
+    const composition = createArbitrumProductionComposition(
+      p0CompositionOptions({
+        providerEvidenceMapper: ({ normalizedIntent }) =>
+          p0VerifiedEvidence(normalizedIntent as NormalizedSwapIntent),
+      }),
+    );
+
+    const execution = await runP0Check(
+      composition,
+      "p0-incompatible-baseline",
+      normalizedIntent,
+      {
+        ...p0ExpectationBaseline,
+        amountIn: "0.000000000000002",
+      },
+    );
+
+    expect(execution.decisionOutput).toMatchObject({
+      status: "completed",
+      verdict: "UNKNOWN",
+      p0: {
+        expectationBaseline: { status: "AVAILABLE" },
+        quoteFidelity: { status: "UNKNOWN", reason: "INCOMPATIBLE" },
+      },
+    });
   });
 
   it("runs bounded remediation through a terminal child Run before recording VERIFIED", async () => {
@@ -1157,7 +1269,6 @@ describe("Arbitrum composition P0 Risk wiring", () => {
         providerEvidenceMapper: ({ normalizedIntent }) =>
           p0VerifiedEvidence(normalizedIntent as NormalizedSwapIntent),
         p0Risk: {
-          selectedQuote: p0SelectedQuote,
           constraints: p0Constraints,
           constraintEvidence: p0ConstraintEvidence,
           remediation: {
@@ -1180,6 +1291,17 @@ describe("Arbitrum composition P0 Risk wiring", () => {
     );
 
     const execution = await runP0Check(composition, "p0-remediation");
+
+    expect(execution.decisionOutput).toMatchObject({
+      p0: {
+        remediation: {
+          status: "VERIFIED",
+          parentRunId: "p0-remediation",
+          childRunId: expect.any(String),
+          verificationBlock: "42",
+        },
+      },
+    });
     const result = runResultSchema.parse(execution.decisionOutput);
     expect(result).toMatchObject({
       status: "completed",
@@ -1196,7 +1318,6 @@ describe("Arbitrum composition P0 Risk wiring", () => {
       p0CompositionOptions({
         providerEvidenceMapper: () => p0VerifiedEvidence(),
         p0Risk: {
-          selectedQuote: p0SelectedQuote,
           constraints: p0Constraints,
           constraintEvidence: p0ConstraintEvidence,
           remediation: {
@@ -1233,7 +1354,6 @@ describe("Arbitrum composition P0 Risk wiring", () => {
         providerEvidenceMapper: ({ normalizedIntent }) =>
           p0VerifiedEvidence(normalizedIntent as NormalizedSwapIntent),
         p0Risk: {
-          selectedQuote: p0SelectedQuote,
           constraints: p0Constraints,
           constraintEvidence: p0ConstraintEvidence,
           remediation: {
@@ -1277,7 +1397,6 @@ describe("Arbitrum composition P0 Risk wiring", () => {
           });
         },
         p0Risk: {
-          selectedQuote: p0SelectedQuote,
           constraints: p0Constraints,
           constraintEvidence: p0ConstraintEvidence,
           remediation: {
@@ -1357,7 +1476,6 @@ describe("Arbitrum composition P0 Risk wiring", () => {
           });
         },
         p0Risk: {
-          selectedQuote: p0SelectedQuote,
           constraints: p0Constraints,
           constraintEvidence: p0ConstraintEvidence,
           remediation: {
@@ -1394,6 +1512,7 @@ describe("Arbitrum composition P0 Risk wiring", () => {
           tokenIn: { kind: "native" },
           tokenOut: { kind: "erc20", address: arbitrumTokenAddress },
           amountIn: "0.000000000000001",
+          expectationBaseline: p0ExpectationBaseline,
           economicBoundary: {
             availability: "available",
             minimumReceived: "0.6",
@@ -1428,7 +1547,6 @@ describe("Arbitrum composition P0 Risk wiring", () => {
           decide: async (input) => ({ custom: "decision", input }),
         },
         p0Risk: {
-          selectedQuote: p0SelectedQuote,
           constraints: p0Constraints,
           constraintEvidence: p0ConstraintEvidence,
         },

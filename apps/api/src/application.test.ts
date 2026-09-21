@@ -1202,6 +1202,38 @@ describe("CheckApplicationService", () => {
     });
   });
 
+  it("hands the caller-selected quote baseline to the live Check flow", async () => {
+    const expectationBaseline = {
+      chainId: 143,
+      protocol: "kuru" as const,
+      tokenIn: mon,
+      tokenOut: usdc,
+      amountIn: "1.5",
+      quote: {
+        estimatedAmountOut: "5.25",
+        source: "quote" as const,
+        blockNumber: "92820000",
+        fetchedAt: createdAt,
+        runtimeVersion: providerEvidenceRuntime.runtimeVersion,
+        runtimeRevision: providerEvidenceRuntime.runtimeRevision,
+      },
+    };
+    let receivedBaseline: unknown;
+    const service = createService({
+      async check(input) {
+        receivedBaseline = input.expectationBaseline;
+        return providerAwareRouteResult(input.runId, input.intent);
+      },
+    });
+
+    const response = await service.check(
+      publicRequest({ expectationBaseline }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(receivedBaseline).toEqual(expectationBaseline);
+  });
+
   it("accepts a LIVE providerEvidence runtime that differs from the Moss runtime", async () => {
     // Provider-neutral composition Evidence carries its own runtime authority
     // (e.g. arbitrum-camelot-v3 / native-rpc). The configured Moss runtime is

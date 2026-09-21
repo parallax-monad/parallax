@@ -4,11 +4,16 @@ import {
   CAMELOT_V3_PROTOCOL_ID,
   type CheckSwapRequest,
   convertAtomicAmountToHuman,
+  convertHumanAmountToAtomic,
+  type ExpectationBaseline,
+  expectationBaselineSchema,
   failedRunResultSchema,
   type GenericEvidence,
   genericEvidenceSchema,
   type NormalizedSwapIntent,
   normalizedSwapIntentSchema,
+  type P0RunResult,
+  p0RunResultSchema,
   type QuoteRequest,
   type RunResult,
   runDiffSchema,
@@ -85,14 +90,13 @@ export type ArbitrumNormalizationInput = CheckSwapRequest | QuoteRequest;
 /**
  * Backend-internal P0 Risk seam for the Arbitrum composition.
  *
- * It is deliberately not part of the public Check request: the selected quote /
- * Expectation Baseline is an independent input, and the current execution quote
- * is never promoted to it. When no `selectedQuote` is supplied the P0 gate fails
- * closed to `UNKNOWN`. Only constraints explicitly declared here are evaluated;
- * the Intent Economic Boundary never becomes one.
+ * The caller-selected quote reaches this seam as an independent Check context;
+ * the current execution quote is never promoted to the Expectation Baseline.
+ * When no valid baseline is supplied the P0 gate fails closed to `UNKNOWN`.
+ * Only explicitly declared constraints are evaluated; the Intent Economic
+ * Boundary never becomes one.
  */
 export type ArbitrumP0RiskContext = {
-  readonly selectedQuote?: QuoteContext;
   readonly constraints?: readonly CallerConstraint[];
   readonly constraintEvidence?: readonly ConstraintEvidence[];
   readonly verifiedRemediation?: VerifiedCandidate;
@@ -309,12 +313,21 @@ export function createArbitrumProductionComposition(
           pipelineContext,
           evidence,
         );
-        const projected = applyBackendP0Verdict(
-          projectGenericEvidenceToRunResult(
+        const projectedRun = runResultSchema.parse({
+          ...projectGenericEvidenceToRunResult(
             pipelineContext.runId,
             pipelineContext.intent,
             evidence,
           ),
+          p0: projectArbitrumP0RunResult(
+            pipelineContext.intent,
+            projection.risk,
+            projection.selectedQuote,
+            projection.solver,
+          ),
+        });
+        const projected = applyBackendP0Verdict(
+          projectedRun,
           projection.risk.verdict,
         );
         return projectVerifiedArbitrumRemediation(
@@ -362,6 +375,9 @@ type ArbitrumDecisionContext = {
   readonly blockContext: BlockContext;
   readonly quote: unknown;
   readonly providerResult: ProviderEvaluationResult;
+  readonly decisionContext?: {
+    readonly expectationBaseline?: ExpectationBaseline;
+  };
   readonly executeProviderPath?: (input: {
     readonly runId: string;
     readonly intent: NormalizedSwapIntent;
@@ -404,6 +420,157 @@ function arbitrumCurrentQuote(
   }
 }
 
+/**
+ * Converts the caller-selected quote into the Risk-owned baseline context.
+ * Identity and provenance are derived only from the provider-neutral quote
+ * contract and exact trusted token decimals; malformed or unconvertible input
+ * is omitted so the P0 gate remains UNKNOWN.
+ */
+function arbitrumSelectedQuote(
+  options: ArbitrumProductionCompositionOptions,
+  pipeline: ArbitrumDecisionContext,
+): QuoteContext | undefined {
+  const parsed = expectationBaselineSchema.safeParse(
+    pipeline.decisionContext?.expectationBaseline,
+  );
+  if (!parsed.success) return undefined;
+
+  const baseline = parsed.data;
+  const quote = baseline.quote;
+  if (quote.fetchedAt === undefined) return undefined;
+
+  try {
+    const amountIn = convertHumanAmountToAtomic(
+      baseline.amountIn,
+      tokenDecimals(options.runtime, baseline.tokenIn, baseline.chainId),
+    );
+    const amountOut = convertHumanAmountToAtomic(
+      quote.estimatedAmountOut,
+      tokenDecimals(options.runtime, baseline.tokenOut, baseline.chainId),
+    );
+    if (!amountIn.success || !amountOut.success) return undefined;
+
+    const identity = {
+      chainId: baseline.chainId,
+      protocol: baseline.protocol,
+      tokenIn: assetKey(baseline.tokenIn),
+      tokenOut: assetKey(baseline.tokenOut),
+      amountInAtomic: amountIn.amountAtomic,
+      amountOutAtomic: amountOut.amountAtomic,
+      blockNumber: quote.blockNumber,
+      observedAt: quote.fetchedAt,
+      runtimeVersion: quote.runtimeVersion,
+      runtimeRevision: quote.runtimeRevision,
+    };
+    return {
+      chainId: identity.chainId,
+      protocol: identity.protocol,
+      tokenIn: identity.tokenIn,
+      tokenOut: identity.tokenOut,
+      amountInAtomic: identity.amountInAtomic,
+      amountOutAtomic: identity.amountOutAtomic,
+      quoteId: fingerprint([
+        identity.chainId,
+        identity.protocol,
+        identity.tokenIn,
+        identity.tokenOut,
+        identity.amountInAtomic,
+        identity.amountOutAtomic,
+        identity.blockNumber,
+        identity.observedAt,
+        identity.runtimeVersion,
+        identity.runtimeRevision,
+      ]),
+      provenance: `source=quote;runtime=${identity.runtimeVersion}@${identity.runtimeRevision}`,
+      blockNumber: identity.blockNumber,
+      observedAt: identity.observedAt,
+    };
+  } catch {
+    return undefined;
+  }
+}
+
+function projectArbitrumP0RunResult(
+  intent: NormalizedSwapIntent,
+  risk: ReturnType<typeof evaluateBackendP0Risk>,
+  selectedQuote: QuoteContext | undefined,
+  solver: SolverResult | undefined,
+): P0RunResult {
+  const boundary = intent.economicBoundary;
+  const transactionProtection = {
+    status: risk.base.economicBoundary,
+    ...(boundary.availability === "available"
+      ? {
+          minimumReceivedAtomic: boundary.minimumReceivedAtomic,
+          source: boundary.source,
+        }
+      : { source: boundary.source }),
+  };
+  const expectationBaseline =
+    selectedQuote === undefined
+      ? { status: "MISSING" as const }
+      : {
+          status: "AVAILABLE" as const,
+          chainId: selectedQuote.chainId,
+          protocol: selectedQuote.protocol,
+          tokenIn: selectedQuote.tokenIn,
+          tokenOut: selectedQuote.tokenOut,
+          amountInAtomic: selectedQuote.amountInAtomic,
+          amountOutAtomic: selectedQuote.amountOutAtomic,
+          quoteId: selectedQuote.quoteId,
+          blockNumber: selectedQuote.blockNumber,
+          observedAt: selectedQuote.observedAt,
+          provenance: selectedQuote.provenance,
+        };
+
+  return p0RunResultSchema.parse({
+    expectationBaseline,
+    quoteFidelity: risk.quoteFidelity,
+    cause: { status: "NOT_VERIFIED" },
+    constraints: risk.constraints,
+    evidenceState: risk.evidenceState,
+    transactionProtection,
+    remediation: projectRemediation(solver),
+  });
+}
+
+function projectRemediation(
+  solver: SolverResult | undefined,
+): P0RunResult["remediation"] {
+  if (solver === undefined) return { status: "NOT_RUN" };
+  if (solver.status === "PROPOSED") {
+    return { status: "UNVERIFIED", evaluations: solver.evaluations };
+  }
+  if (solver.status === "NO_VALID_CANDIDATE") {
+    return {
+      status: "NO_VALID_CANDIDATE",
+      evaluations: solver.evaluations,
+    };
+  }
+  if (solver.status === "UNKNOWN") {
+    return {
+      status: "UNKNOWN",
+      reason: solver.reason,
+      evaluations: solver.evaluations,
+    };
+  }
+
+  const candidate = solver.candidate;
+  const verification = candidate.verification;
+  return {
+    status: "VERIFIED",
+    parentRunId: verification.parentRunId,
+    childRunId: verification.childRunId,
+    amountInAtomic: candidate.amountInAtomic,
+    amountOutAtomic: candidate.amountOutAtomic,
+    quoteId: candidate.quoteId,
+    verificationBlock: verification.verificationBlock,
+    verificationTime: verification.verificationTime,
+    provenance: verification.provenance,
+    checkedScope: [...verification.checkedScope],
+  };
+}
+
 type ArbitrumProviderExecution = BackendPipelineProviderExecution<
   NormalizedSwapIntent,
   ChainAdapter<ArbitrumTransaction>,
@@ -412,6 +579,7 @@ type ArbitrumProviderExecution = BackendPipelineProviderExecution<
 
 type ArbitrumP0Decision = {
   readonly risk: ReturnType<typeof evaluateBackendP0Risk>;
+  readonly selectedQuote?: QuoteContext;
   readonly solver?: SolverResult;
 };
 
@@ -426,6 +594,7 @@ async function evaluateArbitrumP0Decision(
   evidence: GenericEvidence,
 ): Promise<ArbitrumP0Decision> {
   const currentQuote = arbitrumCurrentQuote(options, pipeline, evidence);
+  const selectedQuote = arbitrumSelectedQuote(options, pipeline);
   const baseInput = {
     parentRunId: pipeline.runId,
     intent: pipeline.intent,
@@ -434,24 +603,28 @@ async function evaluateArbitrumP0Decision(
       ? { currentQuote: currentQuote.quote }
       : {}),
     ...(options.p0Risk ?? {}),
+    ...(selectedQuote === undefined ? {} : { selectedQuote }),
   };
   const risk = evaluateBackendP0Risk(baseInput);
   const remediation = options.p0Risk?.remediation;
   if (
     remediation === undefined ||
-    options.p0Risk?.selectedQuote === undefined ||
+    selectedQuote === undefined ||
     pipeline.executeProviderPath === undefined ||
     backendEvidenceState(evidence) !== "VERIFIED" ||
     (risk.verdict !== "STOP" && risk.verdict !== "ADJUST")
   ) {
-    return { risk };
+    return {
+      risk,
+      ...(selectedQuote === undefined ? {} : { selectedQuote }),
+    };
   }
 
   let solver: SolverResult;
   try {
     solver = await solveSelectedTargetOutput({
       parentRunId: pipeline.runId,
-      selected: options.p0Risk.selectedQuote,
+      selected: selectedQuote,
       startingAmountInAtomic: pipeline.intent.amountInAtomic,
       maxAmountInAtomic: remediation.maxAmountInAtomic,
       initialStepAtomic: remediation.initialStepAtomic,
@@ -467,6 +640,7 @@ async function evaluateArbitrumP0Decision(
   } catch {
     return {
       risk,
+      selectedQuote,
       solver: {
         status: "UNKNOWN",
         reason: "EVALUATOR_FAILURE",
@@ -475,12 +649,13 @@ async function evaluateArbitrumP0Decision(
     };
   }
 
-  if (solver.status !== "VERIFIED") return { risk, solver };
+  if (solver.status !== "VERIFIED") return { risk, selectedQuote, solver };
   return {
     risk: evaluateBackendP0Risk({
       ...baseInput,
       verifiedRemediation: solver.candidate,
     }),
+    selectedQuote,
     solver,
   };
 }

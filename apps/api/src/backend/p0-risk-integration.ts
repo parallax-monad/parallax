@@ -406,10 +406,9 @@ const RESTRICTED_SUMMARY: Record<"UNKNOWN" | "STOP", string> = {
  * `STOP` must never rewrite an interrupted check into a protocol-risk result.
  * A verified `ADJUST` is published only after the existing
  * ActionEvaluation/ActionGate attestation has been attached by the
- * composition. The public P0-facing projection therefore remains the existing
- * provider-neutral Run fields (Verdict, Rule Results, Scope, Quote, Evidence,
- * and Actions); Risk-internal quote-fidelity and constraint records are not
- * invented as a second public contract here.
+ * composition. This helper only merges the verdict; the Arbitrum composition
+ * separately projects its reviewed P0 diagnosis summary through the optional
+ * `RunResult.p0` field.
  */
 export function applyBackendP0Verdict(
   projected: RunResult,
