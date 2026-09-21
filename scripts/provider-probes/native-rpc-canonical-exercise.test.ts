@@ -1,9 +1,20 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { createCanonicalNativeRpcEvaluationInput } from "../../apps/api/src/backend/native-rpc-canonical-exercise.js";
 import { createNativeRpcProvider } from "../../apps/api/src/backend/native-rpc-provider.js";
 import { evaluateProviderAdapter } from "../../apps/api/src/backend/provider-adapter.js";
 import canonicalCapture from "../../fixtures/provider-registry/be-063/camelot-sepolia-real-2026-09-18T08-47-56-715Z/capture.json";
-import { validateCanonicalProviderResult } from "./native-rpc-canonical-exercise.js";
+import {
+  assertAcceptedSourceFixture,
+  validateCanonicalProviderResult,
+} from "./native-rpc-canonical-exercise.js";
+
+const acceptedSourceBytes = readFileSync(
+  new URL(
+    "../../fixtures/provider-registry/be-063/camelot-sepolia-real-2026-09-18T08-47-56-715Z/capture.json",
+    import.meta.url,
+  ),
+);
 
 const evaluation = createCanonicalNativeRpcEvaluationInput(
   canonicalCapture,
@@ -34,6 +45,24 @@ async function evaluate(gas = "0x426b5") {
 }
 
 describe("canonical exercise result validation", () => {
+  it("rejects a same-path tampered source before it can become canonical PASS", () => {
+    const tamperedSource = Buffer.from(
+      acceptedSourceBytes
+        .toString("utf8")
+        .replace(
+          '"source": "https://docs.camelot.exchange/contracts/arbitrum/sepolia-testnet/"',
+          '"source": "https://docs.camelot.exchange/contracts/arbitrum/sepolia-testnet/altered"',
+        ),
+    );
+
+    // The source remains valid JSON and the canonical transaction fields remain
+    // internally consistent; only its accepted source identity has changed.
+    expect(() => JSON.parse(tamperedSource.toString("utf8"))).not.toThrow();
+    expect(() => assertAcceptedSourceFixture(tamperedSource)).toThrow(
+      /accepted BE-063 source fixture/,
+    );
+  });
+
   it("accepts a different positive gas estimate and retains both observations", async () => {
     const result = await evaluate();
     expect(result.status).toBe("success");

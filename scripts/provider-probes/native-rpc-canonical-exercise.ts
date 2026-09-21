@@ -17,6 +17,9 @@ import {
 const OFFICIAL_RPC = "https://sepolia-rollup.arbitrum.io/rpc";
 const SOURCE_CAPTURE =
   "fixtures/provider-registry/be-063/camelot-sepolia-real-2026-09-18T08-47-56-715Z/capture.json";
+/** SHA-256 of the BE-063 capture accepted by #77. */
+export const ACCEPTED_BE063_SOURCE_FIXTURE_SHA256 =
+  "85147b852e1e4b514af64241fede641f6a2b6db4f2056f0ab44d04164125cf23";
 const SCRIPT_PATH = fileURLToPath(import.meta.url);
 const REPO_ROOT = resolve(dirname(SCRIPT_PATH), "../..");
 const endpointOverride = process.env.ARBITRUM_SEPOLIA_RPC_URL;
@@ -48,6 +51,19 @@ function assertEndpoint(): void {
 
 function hash(value: string | Uint8Array): string {
   return createHash("sha256").update(value).digest("hex");
+}
+
+/**
+ * Prevents a same-path replacement of the accepted BE-063 evidence from being
+ * promoted to a canonical BE-078 PASS. Internal consistency checks remain
+ * necessary, but they cannot establish source identity on their own.
+ */
+export function assertAcceptedSourceFixture(fixtureBytes: Uint8Array): void {
+  if (hash(fixtureBytes) !== ACCEPTED_BE063_SOURCE_FIXTURE_SHA256) {
+    throw new Error(
+      "Canonical Native RPC exercise requires the accepted BE-063 source fixture",
+    );
+  }
 }
 
 function object(value: unknown, label: string): Record<string, unknown> {
@@ -173,6 +189,7 @@ async function main(): Promise<void> {
   assertEndpoint();
   const sourceProvenance = captureSourceProvenance(REPO_ROOT);
   const fixtureBytes = readFileSync(join(REPO_ROOT, SOURCE_CAPTURE));
+  assertAcceptedSourceFixture(fixtureBytes);
   const capture = JSON.parse(
     fixtureBytes.toString("utf8"),
   ) as CanonicalNativeRpcCapture;
