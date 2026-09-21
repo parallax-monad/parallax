@@ -1,0 +1,140 @@
+{
+  "schemaVersion": "be-078-native-rpc-canonical-exercise-v1",
+  "status": "PASS",
+  "real": true,
+  "readOnly": true,
+  "endpointClass": "environment-supplied",
+  "capturedAt": "2026-09-21T11:54:00.618Z",
+  "repositoryHeadAtCapture": "b80ed6088088fa936a71cb50ae5c879443d3151c",
+  "source": {
+    "fixture": "fixtures/provider-registry/be-063/camelot-sepolia-real-2026-09-18T08-47-56-715Z/capture.json",
+    "fixtureSha256": "85147b852e1e4b514af64241fede641f6a2b6db4f2056f0ab44d04164125cf23",
+    "runner": "scripts/provider-probes/native-rpc-canonical-exercise.ts",
+    "runnerSha256": "70db81c482f407d262ed9402f7409d9c45ce25c4fbc6db963ee514640ad97fb1",
+    "acceptedClassification": "QUALIFIED_REAL"
+  },
+  "execution": {
+    "providerId": "native-rpc-arbitrum",
+    "providerVersion": "native-rpc-provider-v1",
+    "mode": "LIVE",
+    "runId": "be-078-canonical-20260921115358002",
+    "chainId": 421614,
+    "protocol": "camelot-v3",
+    "blockContext": {
+      "blockNumber": "310131879",
+      "blockHash": "0x715bfaca417a25ed4d317748ecf0cfbd0ad38d4e14c2e1c0fb42ac0c8e60feff",
+      "observedAt": "2026-09-18T08:47:42.000Z"
+    },
+    "transaction": {
+      "from": "0xeb7c5322f0997ee70f4bbd3ae7e428072c9af396",
+      "to": "0x171B925C51565F5D2a7d8C494ba3188D304EFD93",
+      "data": "0xbc651188000000000000000000000000980b62da83eff3d4576c647993b0c1d7faf17c73000000000000000000000000b893e3334d4bd6c5ba8277fd559e99ed683a9fc7000000000000000000000000eb7c5322f0997ee70f4bbd3ae7e428072c9af396000000000000000000000000000000000000000000000000000000006aad08be00000000000000000000000000000000000000000000000000038d7ea4c680000000000000000000000000000000000000000000000000000037dcf4d127fe8b0000000000000000000000000000000000000000000000000000000000000000",
+      "value": "0x38d7ea4c68000"
+    }
+  },
+  "providerResult": {
+    "provider": {
+      "providerId": "native-rpc-arbitrum",
+      "providerVersion": "native-rpc-provider-v1",
+      "observedAt": "2026-09-21T11:54:00.617Z"
+    },
+    "status": "success",
+    "responseEvidence": {
+      "kind": "redacted_snapshot",
+      "redactionProfile": "native-rpc-method-results-v1",
+      "snapshot": {
+        "providerId": "native-rpc-arbitrum",
+        "runId": "be-078-canonical-20260921115358002",
+        "mode": "LIVE",
+        "status": "success",
+        "methods": {
+          "eth_chainId": "0x66eee",
+          "eth_call": "0x00000000000000000000000000000000000000000000000000386d6911545b9f",
+          "eth_estimateGas": "272052"
+        },
+        "freshness": {
+          "status": "not_checked"
+        }
+      }
+    },
+    "candidateFields": [
+      {
+        "candidatePath": "nativeRpc.chainId",
+        "sourcePath": "$.result",
+        "observedShape": "hex_quantity",
+        "nullable": false,
+        "status": "observed",
+        "confidence": "medium",
+        "value": "0x66eee",
+        "reviewStatus": "pending_review"
+      },
+      {
+        "candidatePath": "nativeRpc.blockContext.blockNumber",
+        "sourcePath": "$.result.number",
+        "observedShape": "decimal_string",
+        "nullable": false,
+        "status": "observed",
+        "confidence": "medium",
+        "value": "310131879",
+        "reviewStatus": "pending_review"
+      },
+      {
+        "candidatePath": "nativeRpc.blockContext.blockHash",
+        "sourcePath": "$.result.hash",
+        "observedShape": "hex_string",
+        "nullable": false,
+        "status": "observed",
+        "confidence": "medium",
+        "value": "0x715bfaca417a25ed4d317748ecf0cfbd0ad38d4e14c2e1c0fb42ac0c8e60feff",
+        "reviewStatus": "pending_review"
+      },
+      {
+        "candidatePath": "nativeRpc.ethCall.returnData",
+        "sourcePath": "$.result",
+        "observedShape": "hex_string",
+        "nullable": false,
+        "status": "observed",
+        "confidence": "medium",
+        "value": "0x00000000000000000000000000000000000000000000000000386d6911545b9f",
+        "reviewStatus": "pending_review"
+      },
+      {
+        "candidatePath": "nativeRpc.estimateGas.gasUnits",
+        "sourcePath": "$.result",
+        "observedShape": "decimal_string",
+        "nullable": false,
+        "status": "observed",
+        "confidence": "medium",
+        "value": "272052",
+        "reviewStatus": "pending_review"
+      },
+      {
+        "candidatePath": "nativeRpc.preparedExecution",
+        "observedShape": "prepared_execution",
+        "nullable": false,
+        "status": "observed",
+        "confidence": "medium",
+        "value": {
+          "chainId": 421614,
+          "protocol": "camelot-v3",
+          "quote": {
+            "estimatedAmountOut": "0.015882896725531551",
+            "source": "quote",
+            "blockNumber": "310131879",
+            "runtimeVersion": "arbitrum-camelot-v3",
+            "runtimeRevision": "native-rpc"
+          },
+          "gasEstimate": "272052",
+          "finality": "unknown"
+        },
+        "reviewStatus": "pending_review"
+      }
+    ],
+    "capabilities": [
+      "simulate",
+      "eth_call",
+      "estimateGas",
+      "pinned-block"
+    ]
+  }
+}

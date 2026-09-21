@@ -10,6 +10,7 @@
     "test": "vitest run --exclude src/server.integration.test.ts",
     "test:acceptance": "vitest run src/p0-acceptance.test.ts",
     "test:integration": "vitest run --config vitest.integration.config.ts src/server.integration.test.ts src/postgres-run-store.integration.test.ts",
+    "probe:native-rpc-canonical": "node --env-file-if-exists=../../.env --import=tsx/esm ../../scripts/provider-probes/native-rpc-canonical-exercise.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
