@@ -18,6 +18,8 @@ const selected: QuoteContext = {
   amountInAtomic: "10000",
   amountOutAtomic: "4812",
   quoteId: "selected-quote",
+  runtimeVersion: "arbitrum-camelot-v3",
+  runtimeRevision: "native-rpc",
   provenance: "quote-adapter:v1",
   blockNumber: "100",
   observedAt: "2026-09-17T00:00:00Z",
@@ -73,6 +75,32 @@ describe("P0 quote fidelity", () => {
         "VERIFIED",
       ).status,
     ).toBe("UNKNOWN");
+  });
+
+  it.each([
+    ["runtime version", { runtimeVersion: "arbitrum-camelot-v4" }],
+    ["runtime revision", { runtimeRevision: "other-revision" }],
+  ] as const)(
+    "fails closed when the selected and current %s differ",
+    (_label, runtimeIdentity) => {
+      expect(
+        compareQuoteFidelity(
+          { ...selected, ...runtimeIdentity },
+          current,
+          "VERIFIED",
+        ),
+      ).toEqual({ status: "UNKNOWN", reason: "INCOMPATIBLE" });
+    },
+  );
+
+  it("fails closed when either runtime provenance component is missing", () => {
+    expect(
+      compareQuoteFidelity(
+        { ...selected, runtimeRevision: "" },
+        current,
+        "VERIFIED",
+      ),
+    ).toEqual({ status: "UNKNOWN", reason: "INCOMPATIBLE" });
   });
 
   it.each(["INCOMPLETE", "UNAVAILABLE", "STALE", "UNVERIFIED"] as const)(
@@ -463,6 +491,8 @@ describe("P0 verdict gate", () => {
     protocol: "camelot-v3",
     tokenIn: "0xabc",
     tokenOut: "0xdef",
+    runtimeVersion: selected.runtimeVersion,
+    runtimeRevision: selected.runtimeRevision,
     amountInAtomic: "10300",
     amountOutAtomic: "4820",
     quoteId: "candidate-quote",
@@ -814,6 +844,39 @@ describe("P0 verdict gate", () => {
       }).verdict,
     ).toBe("ADJUST");
   });
+
+  it.each([
+    ["runtime version", { runtimeVersion: "different-runtime" }],
+    ["runtime revision", { runtimeRevision: "different-revision" }],
+  ] as const)(
+    "does not let a candidate from another %s support ADJUST",
+    (_label, runtimeIdentity) => {
+      const candidate = {
+        ...verified,
+        ...runtimeIdentity,
+      } as unknown as VerifiedCandidate;
+      expect(
+        evaluateP0Risk(genericEvidence(), {
+          ...gateInput,
+          verifiedRemediation: candidate,
+        }).verdict,
+      ).toBe("STOP");
+    },
+  );
+
+  it.each(["runtimeVersion", "runtimeRevision"] as const)(
+    "does not let a candidate missing %s support ADJUST",
+    (identityField) => {
+      const candidate = { ...verified } as unknown as Record<string, unknown>;
+      delete candidate[identityField];
+      expect(
+        evaluateP0Risk(genericEvidence(), {
+          ...gateInput,
+          verifiedRemediation: candidate as unknown as VerifiedCandidate,
+        }).verdict,
+      ).toBe("STOP");
+    },
+  );
 
   it("binds the candidate to the current parent Run, not to any parent identity", () => {
     // Same parent as the current Run: the candidate remains eligible.

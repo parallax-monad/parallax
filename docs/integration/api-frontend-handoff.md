@@ -159,6 +159,40 @@ Notes:
 }
 ```
 
+### Arbitrum P0 selected quote / Expectation Baseline
+
+`POST /api/check` may include the quote the user selected before starting the
+Check. Send the quote response together with the exact original quote request
+context; Backend compares it with the current Check and fails closed when the
+intent, quote time, or required provenance is not comparable. The selected
+quote's `runtimeVersion` and `runtimeRevision` must match the current Run's
+provider Evidence runtime identity; a missing or mismatched identity yields
+`p0.quoteFidelity.status = UNKNOWN` with reason `INCOMPATIBLE`.
+
+```json
+"expectationBaseline": {
+  "chainId": 421614,
+  "protocol": "camelot-v3",
+  "tokenIn": { "kind": "native" },
+  "tokenOut": { "kind": "erc20", "address": "0x…" },
+  "amountIn": "0.001",
+  "quote": {
+    "estimatedAmountOut": "4.812",
+    "source": "quote",
+    "blockNumber": "12345",
+    "fetchedAt": "2026-09-20T07:32:22.000Z",
+    "runtimeVersion": "arbitrum-camelot-v3",
+    "runtimeRevision": "native-rpc"
+  }
+}
+```
+
+This quote records the user's selected expectation. It is **not** an implicit
+Economic Constraint or tolerance. If it is absent, incomplete, or not
+comparable—or if required current Evidence is stale/unverifiable—
+`p0.quoteFidelity` remains `UNKNOWN`; Backend must not emit
+`QUOTE_OUTPUT_DEGRADED` from missing or unverifiable evidence.
+
 ### HTTP 200 Run responses
 
 Body is a `RunResult`. Two terminal shapes:
@@ -197,6 +231,15 @@ Body is a `RunResult`. Two terminal shapes:
 2. **`status: "integration_error"`** — `systemStatus: "INTEGRATION_ERROR"`,
    `verdict: "UNKNOWN"`, structured `error` on the Run (`code`, `stage`,
    `message`, `retryable`).
+
+The Arbitrum composition adds an optional provider-neutral `p0` projection to
+the existing RunResult. It publishes Expectation Baseline identity, Quote
+Fidelity, currently unverified Cause status, explicit constraint results,
+Evidence State, Transaction Protection evaluation, and remediation lifecycle
+status. Existing RunResult `scope`, `providerEvidence` provenance,
+`recommendedActions`, `parentRunId`, and `diff` remain the sources for checked
+scope, safe provider/source facts, and before/after linkage. Provider-specific
+raw payloads remain redacted from the HTTP response.
 
 Illustrative completed skeleton (fields truncated):
 

@@ -122,6 +122,8 @@ export type BackendPipelineInput<RawInput> = {
   readonly chainId: number;
   readonly protocol: string;
   readonly capability?: string;
+  /** Narrow, application-owned context delivered only to Decision. */
+  readonly decisionContext?: unknown;
 };
 
 export type BackendPipelineExecution<
@@ -325,7 +327,9 @@ export class BackendPipeline<
     );
     const decisionOutput = await this.dependencies.runtime.decide(
       this.buildDecisionInput({ coreOutput, context }),
-      context,
+      input.decisionContext === undefined
+        ? context
+        : { ...context, decisionContext: input.decisionContext },
     );
     const buildReceipt = this.dependencies.buildReceipt;
     const receiptLifecycle = createReceiptLifecycle({
@@ -495,6 +499,13 @@ export function createBackendCheckFlow<
           chainId: input.intent.chainId,
           protocol: input.intent.protocol,
           capability: options.capability,
+          ...(input.expectationBaseline === undefined
+            ? {}
+            : {
+                decisionContext: {
+                  expectationBaseline: input.expectationBaseline,
+                },
+              }),
         },
       );
       return withProviderEvidence(

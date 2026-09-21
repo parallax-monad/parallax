@@ -1,4 +1,7 @@
-import type { NormalizedSwapIntent } from "@parallax/contracts";
+import type {
+  ExpectationBaseline,
+  NormalizedSwapIntent,
+} from "@parallax/contracts";
 import {
   BackendControlError,
   isBackendControlError,
@@ -13,6 +16,7 @@ export type {
 export type AgentFlowCheckInput = {
   runId: string;
   intent: NormalizedSwapIntent;
+  expectationBaseline?: ExpectationBaseline;
   tokenInDecimals: number;
   tokenOutDecimals: number;
   moss: MossIntegrationConfig;

@@ -167,7 +167,11 @@ export class CheckApplicationService {
       return storeErrorResponse();
     }
 
-    const invoked = await this.invokeAgentFlowCheck(runId, normalized.intent);
+    const invoked = await this.invokeAgentFlowCheck(
+      runId,
+      normalized.intent,
+      parsedRequest.data.expectationBaseline,
+    );
     if (!invoked.ok) {
       const unsupported = isUnsupportedCheckError(invoked.error);
       return this.recordFailure(
@@ -393,11 +397,15 @@ export class CheckApplicationService {
   private async invokeAgentFlowCheck(
     runId: string,
     intent: Parameters<AgentFlowPort["check"]>[0]["intent"],
+    expectationBaseline?: Parameters<
+      AgentFlowPort["check"]
+    >[0]["expectationBaseline"],
   ): Promise<{ ok: true; candidate: unknown } | { ok: false; error: unknown }> {
     try {
       const candidate = await this.dependencies.agentFlow.check({
         runId,
         intent,
+        ...(expectationBaseline === undefined ? {} : { expectationBaseline }),
         tokenInDecimals: tokenDecimals(
           this.dependencies.runtime,
           intent.tokenIn,
