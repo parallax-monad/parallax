@@ -46,3 +46,33 @@ This is a read-only provider exercise. A PASS confirms only the concrete Provide
 verified chain/block, pinned `eth_call`, and pinned gas estimate. It does not claim a
 receipt, state diff, Risk verdict, signed transaction, broadcast, or full Backend Demo
 Gate acceptance.
+
+## Independent assembled Backend Golden Path exercise
+
+The assembled Backend/API path is exercised separately by:
+
+```bash
+pnpm --filter @parallax/api probe:backend-golden-path
+```
+
+The runner requires the exact local `origin/main` HEAD, uses the accepted BE-063
+baseline as an explicit Expectation Baseline, starts an injected production Arbitrum
+composition, and performs a real read-only `POST /api/check` followed by
+`GET /api/runs/:runId`. It records the submitted request, baseline identity, Provider
+Evidence summary, public Run round-trip hashes, redaction checks, and a SHA-256 manifest
+of the loaded Backend/runtime source. The manifest is checked again after execution so
+local runtime edits cannot be mistaken for exact-main evidence. No signing, broadcasting,
+custody, or raw RPC payload is captured.
+
+`EXERCISE_COMPLETE_REVIEW_REQUIRED` means the assembled HTTP/pipeline path completed
+and its public boundaries passed the runner assertions; it is not an automatic Product
+Gate approval. With the current Native RPC surface, incomplete receipt/outcome/state
+Evidence is expected to remain fail-closed: `quoteFidelity=UNKNOWN`,
+`evidenceState=INCOMPLETE`, and `verdict=UNKNOWN` are recorded as the truthful result.
+Remediation is reported from the actual P0 result; this runner does not configure an
+explicit bounded remediation request, so `NOT_RUN` must not be interpreted as a solver
+failure. The final acceptance still requires Product/owner review of the capture.
+
+Final assembled exercise capture:
+
+- [2026-09-22 read-only exercise](backend-golden-path-20260922032144325/capture.json)
