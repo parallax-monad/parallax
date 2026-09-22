@@ -348,9 +348,9 @@ export function WalletApp({ language }: { language: Language }) {
           keep body text legible over moving particles. */}
       {/* Desktop uses the original viewport calculation; the mobile utility row
           supplies a safe-area-aware height override. */}
-      <div className="wallet-app-frame relative z-10 flex h-[calc(100vh-2.5rem)] flex-col overflow-hidden border border-line bg-ink-elev/85 backdrop-blur-md">
-        <header className="relative flex items-center justify-center px-5 py-3">
-          <span className="text-[15px] font-extrabold tracking-[-0.05em] text-monad-dim">
+      <div className="wallet-app-frame relative z-10 flex h-[calc(100vh-2.5rem)] flex-col overflow-hidden rounded-[24px] border border-white/[0.08] bg-ink-elev/90 backdrop-blur-xl shadow-[0_8px_32px_rgba(0,0,0,0.12),_0_1px_3px_rgba(0,0,0,0.08)]">
+        <header className="relative flex items-center justify-center px-6 py-5 border-b border-white/[0.06]">
+          <span className="text-[22px] font-semibold tracking-[-0.02em] text-monad-dim">
             PARAL<span className="text-white">LAX</span>
           </span>
           {screen !== "home" && (
@@ -361,7 +361,7 @@ export function WalletApp({ language }: { language: Language }) {
                 "Return to wallet home",
                 "返回演示钱包首页",
               )}
-              className="wallet-app-close absolute right-5 text-dim transition-colors hover:text-monad-dim"
+              className="wallet-app-close absolute right-6 rounded-full p-2 text-dim/80 transition-all duration-200 ease-out hover:bg-white/[0.06] hover:text-white active:scale-95"
               onClick={discard}
             >
               <CloseIcon size={20} />

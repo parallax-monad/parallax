@@ -130,7 +130,7 @@ export function WalletSwap({
         onSubmit();
       }}
     >
-      <section className="border border-line bg-ink-rail p-4">
+      <section className="rounded-[16px] border border-white/[0.08] bg-white/[0.02] p-5 backdrop-blur-xl">
         <div className="flex items-baseline justify-between gap-3">
           <span className="text-[12px] font-bold uppercase tracking-[0.08em] text-dim">
             {say(language, { en: "You pay", zh: "你支付" })}
@@ -194,7 +194,7 @@ export function WalletSwap({
         </span>
       </div>
 
-      <section className="border border-line bg-ink-rail p-4">
+      <section className="rounded-[16px] border border-white/[0.08] bg-white/[0.02] p-5 backdrop-blur-xl">
         <span className="text-[12px] font-bold uppercase tracking-[0.08em] text-dim">
           {say(language, { en: "You receive (est.)", zh: "你收到（预估）" })}
         </span>
@@ -273,7 +273,7 @@ export function WalletSwap({
         </p>
       </section>
 
-      <section className="border border-line bg-ink-rail">
+      <section className="rounded-[16px] border border-white/[0.08] bg-white/[0.02] backdrop-blur-xl overflow-hidden">
         <button
           type="button"
           aria-expanded={advancedOpen}
@@ -419,7 +419,7 @@ export function WalletSwap({
       {errors.form && (
         <p
           role="alert"
-          className="border border-risk-high/50 bg-risk-high/10 px-3 py-2.5 text-[13px] leading-[1.5] text-risk-high"
+          className="rounded-[12px] border border-risk-high/30 bg-risk-high/[0.06] px-4 py-3 text-[13px] leading-[1.5] text-risk-high backdrop-blur-xl"
         >
           {say(language, errors.form)}
         </p>

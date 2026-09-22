@@ -53,7 +53,7 @@
     @apply mb-2 block text-[12px] font-bold uppercase tracking-[0.13em] text-accent;
   }
   .card {
-    @apply border border-line bg-ink-elev p-5 transition-colors hover:border-line-strong;
+    @apply rounded-[16px] border border-white/[0.08] bg-white/[0.02] p-6 shadow-[0_2px_12px_rgba(0,0,0,0.08)] backdrop-blur-xl transition-all duration-200 ease-out hover:border-white/[0.12] hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)];
   }
   .hero-webgl-fallback {
     background:
@@ -718,17 +718,17 @@
     @apply text-xs font-bold uppercase tracking-[0.06em];
   }
   .btn {
-    @apply inline-flex cursor-pointer items-center justify-center border border-line-strong bg-ink-elev/80 px-5 py-3 text-[13px] font-extrabold uppercase tracking-[0.08em] text-white transition-colors hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:border-line-strong disabled:hover:text-white;
+    @apply inline-flex cursor-pointer items-center justify-center rounded-[14px] border border-white/[0.12] bg-white/[0.05] px-6 py-3.5 text-[14px] font-medium tracking-[-0.01em] text-white backdrop-blur-xl transition-all duration-200 ease-out hover:border-white/[0.2] hover:bg-white/[0.08] hover:shadow-[0_4px_16px_rgba(0,0,0,0.12)] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-white/[0.12] disabled:hover:bg-white/[0.05] disabled:hover:shadow-none disabled:active:scale-100;
   }
   .btn-primary {
-    @apply border-accent bg-accent text-accent-ink hover:border-accent-bright hover:bg-accent-bright hover:text-white;
+    @apply rounded-[14px] border-accent/50 bg-accent text-white shadow-[0_1px_3px_rgba(0,0,0,0.12),_0_8px_24px_rgba(131,110,249,0.2)] backdrop-blur-none hover:border-accent hover:bg-accent-bright hover:shadow-[0_4px_20px_rgba(131,110,249,0.3)] active:scale-[0.98];
   }
   /* Wallet demo primary. Pinned to the Monad brand swatch rather than `accent`. */
   .btn-monad {
-    @apply border-monad bg-monad text-monad-ink hover:border-monad-bright hover:bg-monad-bright hover:text-white;
+    @apply rounded-[14px] border-monad/50 bg-monad text-monad-ink shadow-[0_1px_3px_rgba(0,0,0,0.12),_0_8px_24px_rgba(131,110,249,0.2)] backdrop-blur-none hover:border-monad hover:bg-monad-bright hover:shadow-[0_4px_20px_rgba(131,110,249,0.3)] active:scale-[0.98];
   }
   .btn-monad-outline {
-    @apply border-monad text-monad-dim hover:border-monad-bright hover:bg-monad/[0.08] hover:text-monad-bright disabled:hover:border-monad disabled:hover:bg-transparent disabled:hover:text-monad-dim;
+    @apply rounded-[14px] border-monad/40 bg-transparent text-monad-dim backdrop-blur-xl hover:border-monad/60 hover:bg-monad/[0.06] hover:text-monad hover:shadow-[0_4px_16px_rgba(131,110,249,0.1)] active:scale-[0.98] disabled:hover:border-monad/40 disabled:hover:bg-transparent disabled:hover:text-monad-dim disabled:hover:shadow-none disabled:active:scale-100;
   }
   .eyebrow-monad {
     @apply mb-2 block text-[12px] font-bold uppercase tracking-[0.13em] text-monad-dim;
@@ -753,7 +753,7 @@
   .field input,
   .field select,
   .field .field-control {
-    @apply flex h-[46px] w-full items-center border border-line-strong bg-ink-rail px-3 text-[15px] text-white outline-none hover:border-accent;
+    @apply flex h-[52px] w-full items-center rounded-[12px] border border-white/[0.1] bg-white/[0.03] px-4 text-[15px] text-white outline-none backdrop-blur-xl transition-all duration-200 ease-out hover:border-white/[0.15] hover:bg-white/[0.05] focus:border-accent/50 focus:bg-white/[0.05] focus:ring-4 focus:ring-accent/[0.08];
   }
   .kv {
     @apply grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-t border-line py-2.5;
