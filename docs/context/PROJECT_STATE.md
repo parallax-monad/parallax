@@ -1,10 +1,10 @@
 # Project State
 
-Last checkpoint: 2026-09-20
+Last checkpoint: 2026-09-22
 
 ## Main checkpoint
 
-`checkpoint_head = bd98013dc956bfa4ff15ff95959f6cb614bf8c9b`
+`checkpoint_head = 1fe17e0bc1292b2a64b196f2dd5182acd17f9145`
 
 This is the known-good main tip at checkpoint time. It is not a claim about current `main`.
 
@@ -19,6 +19,8 @@ Merged before this checkpoint:
 - #77 — hardened real Camelot Sepolia evidence qualification;
 - #80 — receipt-contract review synchronization;
 - #81 — real Arbitrum Golden Path and public re-verification integration;
+- #86 — minimum public P0 diagnosis projection;
+- #87 — accepted canonical transaction exercise through NativeRpcProvider;
 - #82 — project control plane.
 
 ## Product gates
@@ -34,6 +36,9 @@ Merged before this checkpoint:
 - #81 real Arbitrum Golden Path and public re-verification integration is merged at main commit
   `bd98013dc956bfa4ff15ff95959f6cb614bf8c9b` (squash merge); its historical PR head
   `8700726cc43b9e61b8c3f47558211c2a4c07185d` is retained as such and is not an ancestor of `main`.
+- #86 minimum public P0 diagnosis projection is merged at main commit `b80ed60`.
+- #87 accepted canonical transaction exercise through NativeRpcProvider is merged at main
+  commit `1fe17e0bc1292b2a64b196f2dd5182acd17f9145`.
 - #66 is closed; #67 is closed/accepted; #70 is closed/frozen.
 
 ## PR #82 — Project control plane
@@ -47,13 +52,28 @@ Merged before this checkpoint:
 
 ## Issue #78 — final Backend P0 convergence
 
-The merged #81 backbone leaves three acceptance items open:
+The merged #81/#86/#87 baseline now covers the canonical Provider exercise and the minimum
+public P0 projection. The remaining assembled-path evidence is recorded by the live runner:
+
+- capture: `fixtures/provider-registry/be-078/backend-golden-path-20260922032144325/capture.json`;
+- exact `origin/main` / repository head: `1fe17e0bc1292b2a64b196f2dd5182acd17f9145`;
+- HTTP/pipeline, selected baseline identity, live Provider→Evidence→Risk handoff,
+  expectation-only baseline binding, persisted Run round-trip, public redaction, and
+  Backend/runtime source-manifest integrity assertions: complete;
+- Risk result: `evidenceState=INCOMPLETE`, `quoteFidelity=UNKNOWN`, `verdict=UNKNOWN`,
+  `expectedFailClosedUnknown=true`;
+- remediation: `configured=false`, observed P0 status `NOT_RUN`; this is not a solver failure.
+
+The final Product/owner Gate review remains open. These results do not automatically close
+#78 or claim a final Demo Gate PASS.
+
+The original three acceptance items were:
 
 1. independently exercise the accepted canonical transaction through the concrete
    NativeRpcProvider with reproducible real evidence;
 2. close the minimum public P0 RunResult/API projection needed by the first demo;
 3. independently exercise the assembled Backend Golden Path / Demo Gate outside the
-   deterministic component fixtures.
+   deterministic component fixtures — exercised and awaiting final owner review.
 
 Issue #78 owns this final convergence. It must not reopen #67/#70 semantics.
 

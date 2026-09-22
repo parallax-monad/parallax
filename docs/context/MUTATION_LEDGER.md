@@ -74,3 +74,27 @@ historical PR head `8700726cc43b9e61b8c3f47558211c2a4c07185d` explicitly labeled
 
 No runtime, preflight, Product, Contract, Provider, Backend, Risk, or Frontend behavior changed;
 `scripts/agent-preflight.sh` was not modified.
+
+## 2026-09-22 — BE-078 assembled Backend Golden Path exercise
+
+Added the scoped BE-078 live evidence runner and regression assertions. The runner is bound to
+the exact local `origin/main` head, uses the accepted BE-063 baseline, starts the injected
+production Arbitrum composition, and performs a real read-only Backend API check plus persisted
+Run query. It records request/baseline identity, a verified live Provider handoff,
+expectation-only baseline binding, public redaction, persistence round-trip, and a hashed
+Backend/runtime source manifest without storing RPC credentials or raw provider payloads.
+
+Final capture:
+
+- `fixtures/provider-registry/be-078/backend-golden-path-20260922032144325/capture.json`
+- repository head: `1fe17e0bc1292b2a64b196f2dd5182acd17f9145`
+- run result: assembled exercise complete and review-required;
+  `evidenceState=INCOMPLETE`, `quoteFidelity=UNKNOWN`, `verdict=UNKNOWN`, and
+  `expectedFailClosedUnknown=true`;
+- source manifest: 102 runtime files, unchanged during execution;
+- remediation was intentionally not configured by this exercise and was observed as
+  `NOT_RUN`; this is not a solver failure.
+
+No Product/Risk/Contract semantics, Provider implementation, signing, broadcasting, or custody
+behavior changed. The capture does not by itself close #78 or constitute final Product Gate
+approval; owner review remains required.
