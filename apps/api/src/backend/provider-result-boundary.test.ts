@@ -285,6 +285,43 @@ describe("provisional provider result boundary", () => {
     });
   });
 
+  it.each([
+    "unknown",
+    "unsupported",
+    "failed",
+    "timeout",
+    "stale",
+    "invalid",
+  ] as const)(
+    "never approves candidates from a %s provisional result",
+    (status) => {
+      const result = createProvisionalProviderResult({
+        provider: providerContext,
+        status,
+        responseEvidence,
+        candidateFields: [field()],
+      });
+      const changes = detectProvisionalFieldChanges({
+        current: result.candidateFields,
+        provider: providerContext,
+        evidence: responseEvidence,
+        proposedBy: "backend-owner",
+        proposedAt: "2026-09-04T13:04:00.000Z",
+        changeIdPrefix: `control-${status}`,
+        impact: "Control status must remain fail-closed.",
+      });
+      const approved = changes.map((change) =>
+        reviewProvisionalFieldChange(change, {
+          status: "approved",
+          decidedBy: contractOwnerId,
+          decidedAt: "2026-09-04T13:05:00.000Z",
+        }),
+      );
+
+      expect(approvedCandidates(result, approved)).toEqual([]);
+    },
+  );
+
   it("fails closed for partial, stale, foreign, and unrelated approvals", () => {
     const previous = [field()];
     const current = [

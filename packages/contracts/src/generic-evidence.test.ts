@@ -223,6 +223,16 @@ describe("genericEvidenceSchema", () => {
     expect(genericEvidenceSchema.safeParse(consistentMock).success).toBe(true);
   });
 
+  it("rejects Provider evidence when observed chain identity mismatches Intent", () => {
+    const parsed = genericEvidenceSchema.safeParse(
+      evidence({
+        provenance: { ...evidence().provenance, observedChainId: 1 },
+      }),
+    );
+
+    expect(parsed.success).toBe(false);
+  });
+
   it("preserves provider-specific runtime provenance without requiring it", () => {
     const withRuntime = genericEvidenceSchema.safeParse(evidence());
     expect(withRuntime.success).toBe(true);

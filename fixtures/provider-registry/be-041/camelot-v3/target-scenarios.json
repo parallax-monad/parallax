@@ -1,0 +1,18 @@
+{
+  "schemaVersion": "be-041-controlled-target-scenarios-v1",
+  "classification": "CONTROLLED_FIXTURE",
+  "real": false,
+  "chainId": 421614,
+  "protocolId": "camelot-v3",
+  "scenarios": [
+    {
+      "scenarioId": "camelot-v3-arbitrum-sepolia-target",
+      "pair": "unconfigured",
+      "pool": "unconfigured",
+      "quote": "replaceable-seam",
+      "unsignedTransaction": "replaceable-seam",
+      "evidence": "not-recorded"
+    }
+  ],
+  "notice": "Controlled feasibility records only. No real token pair, pool, quote, provider credential, final Evidence schema, or Receipt schema is claimed."
+}

@@ -13,6 +13,7 @@ import type {
   NormalizedSwapIntent,
   RunResult,
 } from "@parallax/contracts";
+import { KuruLiveAgentFlow } from "@parallax/orchestrator/agent-flow";
 import { ReplayApplicationService } from "@parallax/orchestrator/application";
 import {
   economicFailStopResult,
@@ -391,9 +392,10 @@ function createService(
   agentFlow: AgentFlowPort,
   store: RunStore = new InMemoryRunStore(),
   createRunId: () => string = () => "run-1",
+  serviceRuntime: BackendRuntime = runtime,
 ) {
   return new CheckApplicationService({
-    runtime,
+    runtime: serviceRuntime,
     agentFlow,
     store,
     createRunId,
@@ -614,6 +616,42 @@ describe("Backend P0 acceptance matrix", () => {
       },
     });
     expect(await store.get("run-1")).toMatchObject({
+      failure: "UNSUPPORTED",
+    });
+  });
+
+  it("A9 Unsupported: classifies a real unsupported Agent Flow intent", async () => {
+    const store = new InMemoryRunStore();
+    const configuredRuntime: BackendRuntime = {
+      ...runtime,
+      config: {
+        ...runtime.config,
+        moss: { ...runtime.config.moss, runtimePath: "/tmp/moss-runtime" },
+      },
+    };
+    const response = await createService(
+      new KuruLiveAgentFlow(async () => {
+        throw new Error(
+          "the runner must not be called for an unsupported intent",
+        );
+      }),
+      store,
+      undefined,
+      configuredRuntime,
+    ).check(publicRequest({ protocol: "pancake" }));
+
+    expect(response).toMatchObject({
+      status: 502,
+      body: {
+        error: { code: "UNSUPPORTED" },
+        run: {
+          status: "integration_error",
+          error: { code: "UNSUPPORTED", retryable: false },
+        },
+      },
+    });
+    expect(await store.get("run-1")).toMatchObject({
+      status: "failed",
       failure: "UNSUPPORTED",
     });
   });

@@ -43,7 +43,9 @@ export function isActionGateCandidate(result: CompletedRun): boolean {
     result.parentRunId !== undefined ||
     result.intent.economicBoundary.availability !== "available" ||
     result.scope.some((item) => item.status === "unknown") ||
-    result.ruleResults.some((rule) => rule.status === "UNKNOWN")
+    result.ruleResults.some((rule) => rule.status === "UNKNOWN") ||
+    (result.verdict === "ADJUST" &&
+      actionGateVerificationRunIds(result).length > 0)
   ) {
     return false;
   }

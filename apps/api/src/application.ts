@@ -6,6 +6,7 @@ import {
   type EvidenceRef,
   type FailedRunResult,
   failedRunResultSchema,
+  type IntentNormalizationResult,
   type RerunRejectionReason,
   type RunResult,
   runResultSchema,
@@ -21,7 +22,12 @@ import {
   type RerunContext,
   resolveRerun,
 } from "@parallax/orchestrator/application";
-import { normalizeCheckSwapRequest } from "./normalization.js";
+import type { BackendCompositionRuntime } from "./backend/composition.js";
+import { isBackendControlError } from "./backend/control-boundary.js";
+import {
+  coerceIntentNormalizationResult,
+  normalizeCheckSwapRequest,
+} from "./normalization.js";
 import { type AgentFlowPort, isUnsupportedAgentFlowError } from "./ports.js";
 import type { BackendRuntime } from "./runtime-config.js";
 import type { CheckRunFailureCode, CheckRunRecord, RunStore } from "./store.js";
@@ -62,6 +68,7 @@ export type CheckApplicationServiceDependencies = {
   runtime: BackendRuntime;
   store: RunStore;
   agentFlow: AgentFlowPort;
+  composition?: BackendCompositionRuntime;
   createRunId?: () => string;
   createTimestamp?: () => string;
 };
@@ -89,10 +96,31 @@ export class CheckApplicationService {
       });
     }
 
-    const normalized = normalizeCheckSwapRequest(
-      parsedRequest.data,
-      this.dependencies.runtime.tokenRegistry,
-    );
+    let normalized: IntentNormalizationResult;
+    try {
+      const candidate =
+        this.dependencies.composition === undefined
+          ? normalizeCheckSwapRequest(
+              parsedRequest.data,
+              this.dependencies.runtime.tokenRegistry,
+            )
+          : await this.dependencies.composition.normalize(parsedRequest.data);
+      const normalizationResult = coerceIntentNormalizationResult(candidate);
+      if (normalizationResult === undefined) {
+        return errorResponse(400, {
+          code: "NORMALIZATION_FAILED",
+          message: "The check request could not be normalized",
+          issues: { code: "INVALID_NORMALIZATION_RESULT" },
+        });
+      }
+      normalized = normalizationResult;
+    } catch {
+      return errorResponse(400, {
+        code: "NORMALIZATION_FAILED",
+        message: "The check request could not be normalized",
+        issues: { code: "NORMALIZATION_BOUNDARY_ERROR" },
+      });
+    }
     if (!normalized.success) {
       return errorResponse(400, {
         code: "NORMALIZATION_FAILED",
@@ -139,9 +167,13 @@ export class CheckApplicationService {
       return storeErrorResponse();
     }
 
-    const invoked = await this.invokeAgentFlowCheck(runId, normalized.intent);
+    const invoked = await this.invokeAgentFlowCheck(
+      runId,
+      normalized.intent,
+      parsedRequest.data.expectationBaseline,
+    );
     if (!invoked.ok) {
-      const unsupported = isUnsupportedAgentFlowError(invoked.error);
+      const unsupported = isUnsupportedCheckError(invoked.error);
       return this.recordFailure(
         runId,
         unsupported ? "UNSUPPORTED" : "AGENT_FLOW_ERROR",
@@ -151,7 +183,7 @@ export class CheckApplicationService {
         {
           code: unsupported ? "UNSUPPORTED" : "AGENT_FLOW_ERROR",
           message: unsupported
-            ? "Live Agent Flow is not available in this runtime"
+            ? unsupportedCheckMessage(invoked.error)
             : "Agent Flow could not complete the check",
         },
         invoked.error,
@@ -269,7 +301,9 @@ export class CheckApplicationService {
         adjustment.nextIntent,
         childFields,
         childCreatedAt,
-        "AGENT_FLOW_ERROR",
+        isUnsupportedCheckError(invoked.error)
+          ? "UNSUPPORTED"
+          : "AGENT_FLOW_ERROR",
         invoked.error,
       );
       return persisted === "non_terminal"
@@ -363,11 +397,15 @@ export class CheckApplicationService {
   private async invokeAgentFlowCheck(
     runId: string,
     intent: Parameters<AgentFlowPort["check"]>[0]["intent"],
+    expectationBaseline?: Parameters<
+      AgentFlowPort["check"]
+    >[0]["expectationBaseline"],
   ): Promise<{ ok: true; candidate: unknown } | { ok: false; error: unknown }> {
     try {
       const candidate = await this.dependencies.agentFlow.check({
         runId,
         intent,
+        ...(expectationBaseline === undefined ? {} : { expectationBaseline }),
         tokenInDecimals: tokenDecimals(
           this.dependencies.runtime,
           intent.tokenIn,
@@ -502,6 +540,13 @@ function childRunFields(context: RerunContext): ChildRunFields | undefined {
     : undefined;
 }
 
+function isUnsupportedCheckError(error: unknown): boolean {
+  return (
+    isUnsupportedAgentFlowError(error) ||
+    (isBackendControlError(error) && error.status === "unsupported")
+  );
+}
+
 function partialRunResultFrom(error: unknown): FailedRunResult | undefined {
   const candidate = asRecord(error)?.partialRunResult;
   const parsed = failedRunResultSchema.safeParse(candidate);
@@ -560,7 +605,24 @@ function interpretAgentFlowCandidate(
     };
   }
 
-  return { ok: true, result };
+  return { ok: true, result: publicRunResult(result) };
+}
+
+/**
+ * Provider-specific metadata is an internal Evidence concern. Keep the
+ * provider-neutral fields needed by the public Run contract, but do not let a
+ * custom composition or Agent Flow bypass the public redaction boundary by
+ * copying `providerData` into an HTTP response or persisted Run.
+ */
+function publicRunResult(result: RunResult): RunResult {
+  if (result.providerEvidence === undefined) return result;
+  return runResultSchema.parse({
+    ...result,
+    providerEvidence: {
+      ...result.providerEvidence,
+      providerData: {},
+    },
+  });
 }
 
 function failClosedAdjustCandidate(candidate: unknown): unknown | undefined {
@@ -614,7 +676,7 @@ function createIntegrationErrorResult(
     scope: [
       {
         key: "P0-CHECK-SIMULATION-001",
-        label: "Moss simulation",
+        label: integrationScopeLabel(cause),
         status: "unknown",
         reason: "REQUIRED_CHECK_INTERRUPTED",
       },
@@ -632,7 +694,7 @@ function integrationErrorForFailure(
     return {
       code: "UNSUPPORTED",
       stage: "unknown",
-      message: "Live Agent Flow is not available in this runtime",
+      message: unsupportedCheckMessage(cause),
       retryable: false,
     };
   }
@@ -725,6 +787,96 @@ function integrationErrorStage(
   }
 }
 
+function integrationScopeLabel(cause: unknown): string {
+  return isProviderBoundaryFailure(cause)
+    ? "Provider evaluation"
+    : "Moss simulation";
+}
+
+function unsupportedCheckMessage(cause: unknown): string {
+  return isProviderBoundaryFailure(cause)
+    ? "Provider evaluation is not available in this runtime"
+    : "Live Agent Flow is not available in this runtime";
+}
+
+function isProviderBoundaryFailure(cause: unknown): boolean {
+  const fields = asRecord(cause);
+  const name = stringField(fields, "name");
+  return (
+    name === "ProviderAdapterError" ||
+    name === "ProviderRegistryError" ||
+    stringField(fields, "source") === "rpc"
+  );
+}
+
+/**
+ * The runtime identity every authoritative Evidence item of one Run must
+ * carry. It is resolved per Run because the provider-neutral composition path
+ * and the legacy Moss Agent Flow path have different runtime authorities.
+ */
+type AuthoritativeRuntimeIdentity = {
+  readonly runtimeVersion: string;
+  readonly runtimeRevision: string;
+};
+
+/**
+ * Resolves the runtime authority for this Run's authoritative Evidence.
+ *
+ * A RunResult that carries `providerEvidence` comes from the provider-neutral
+ * composition path (e.g. Arbitrum × Camelot × Native RPC): that Evidence's own
+ * provider runtime is the authority, so the configured Moss runtime identity
+ * must never be applied to it. The provider runtime is trusted only when the
+ * projection is LIVE, its source is neither mock, unknown, nor external, and
+ * it carries a non-empty runtime version and revision.
+ *
+ * A `providerEvidence` that cannot establish that trusted runtime identity
+ * resolves to `undefined` and the caller fails closed. Falling back to the
+ * Moss runtime here would accept composition Evidence produced by an unrelated
+ * runtime, which is exactly what this boundary must prevent.
+ *
+ * A legacy RunResult without `providerEvidence` keeps the existing Moss
+ * runtime identity contract unchanged.
+ */
+function expectedAuthoritativeRuntime(
+  result: RunResult,
+  moss: BackendRuntime["config"]["moss"],
+): AuthoritativeRuntimeIdentity | undefined {
+  const providerEvidence = result.providerEvidence;
+  if (providerEvidence === undefined) {
+    return {
+      runtimeVersion: moss.runtimeVersion,
+      runtimeRevision: moss.runtimeRevision,
+    };
+  }
+
+  const provenance = providerEvidence.provenance;
+  if (provenance.mode !== "LIVE") {
+    return undefined;
+  }
+  if (
+    provenance.source === "mock" ||
+    provenance.source === "unknown" ||
+    provenance.source === "external"
+  ) {
+    return undefined;
+  }
+
+  const runtime = provenance.runtime;
+  if (
+    runtime?.runtimeVersion === undefined ||
+    runtime.runtimeVersion.trim() === "" ||
+    runtime.runtimeRevision === undefined ||
+    runtime.runtimeRevision.trim() === ""
+  ) {
+    return undefined;
+  }
+
+  return {
+    runtimeVersion: runtime.runtimeVersion,
+    runtimeRevision: runtime.runtimeRevision,
+  };
+}
+
 /**
  * Checks the Evidence that can establish a live core outcome against the
  * immutable runtime identity used for this request. Action-only and
@@ -733,7 +885,7 @@ function integrationErrorStage(
  */
 function hasMismatchedAuthoritativeRuntime(
   result: RunResult,
-  runtime: BackendRuntime["config"]["moss"],
+  moss: BackendRuntime["config"]["moss"],
 ): boolean {
   const evidenceByKey = new Map(
     result.evidence.map((evidence) => [evidence.key, evidence]),
@@ -783,6 +935,25 @@ function hasMismatchedAuthoritativeRuntime(
     return true;
   }
 
+  // The provider-neutral projection pins its simulation base block on the
+  // Evidence provenance; a Run whose own pinned block disagrees must fail
+  // closed. Native RPC never relaxes pinned-block integrity.
+  const providerSimulationBlock =
+    result.providerEvidence?.provenance.simulationBlock;
+  if (
+    result.status === "completed" &&
+    providerSimulationBlock !== undefined &&
+    providerSimulationBlock !== result.simulatorPinnedBlock
+  ) {
+    return true;
+  }
+
+  const expectedRuntime = expectedAuthoritativeRuntime(result, moss);
+  if (expectedRuntime === undefined) {
+    // providerEvidence exists but cannot establish a trusted runtime identity.
+    return true;
+  }
+
   const visited = new Set<string>();
   const visit = (key: string): boolean => {
     if (visited.has(key)) return false;
@@ -791,8 +962,8 @@ function hasMismatchedAuthoritativeRuntime(
     const evidence = evidenceByKey.get(key);
     if (
       evidence === undefined ||
-      evidence.runtimeVersion !== runtime.runtimeVersion ||
-      evidence.runtimeRevision !== runtime.runtimeRevision
+      evidence.runtimeVersion !== expectedRuntime.runtimeVersion ||
+      evidence.runtimeRevision !== expectedRuntime.runtimeRevision
     ) {
       return true;
     }

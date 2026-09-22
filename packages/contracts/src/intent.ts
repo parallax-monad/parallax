@@ -10,6 +10,7 @@ import {
   protocolSchema,
   runIdSchema,
 } from "./common.js";
+import { expectationBaselineSchema } from "./expectation-baseline.js";
 
 export const recipientSourceSchema = z.enum([
   "explicit",
@@ -101,6 +102,7 @@ export const checkSwapRequestSchema = distinctAssetsSchema(
       tokenIn: assetReferenceSchema,
       tokenOut: assetReferenceSchema,
       amountIn: positiveDecimalSchema,
+      expectationBaseline: expectationBaselineSchema.optional(),
       economicBoundary: checkEconomicBoundarySchema,
     })
     .strict(),

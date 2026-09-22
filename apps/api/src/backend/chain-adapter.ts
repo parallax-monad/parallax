@@ -6,6 +6,12 @@
  * boundary and their chain client.
  */
 
+import {
+  BackendControlError,
+  controlStatusForCode,
+  isBackendControlError,
+} from "./control-boundary.js";
+
 export type ChainOperation =
   | "connect"
   | "getBlockContext"
@@ -59,7 +65,7 @@ export type ChainAdapterErrorInput = {
  * Normalized chain-integration failure. It is intentionally separate from
  * application errors and protocol/risk decisions.
  */
-export class ChainAdapterError extends Error {
+export class ChainAdapterError extends BackendControlError {
   public readonly name = "ChainAdapterError";
   public readonly chainId: number;
   public readonly operation: ChainOperation;
@@ -67,7 +73,13 @@ export class ChainAdapterError extends Error {
   public readonly retryable: boolean;
 
   public constructor(input: ChainAdapterErrorInput) {
-    super(input.message, { cause: input.cause });
+    super({
+      code: input.code,
+      message: input.message,
+      retryable: input.retryable ?? false,
+      status: controlStatusForCode(input.code),
+      cause: input.cause,
+    });
     this.chainId = input.chainId;
     this.operation = input.operation;
     this.code = input.code;
@@ -79,7 +91,7 @@ export function isChainAdapterError(
   error: unknown,
 ): error is ChainAdapterError {
   if (error instanceof ChainAdapterError) return true;
-  if (typeof error !== "object" || error === null) return false;
+  if (!isBackendControlError(error)) return false;
 
   const candidate = error as {
     name?: unknown;
@@ -88,6 +100,7 @@ export function isChainAdapterError(
     code?: unknown;
     message?: unknown;
     retryable?: unknown;
+    status?: unknown;
   };
 
   return (
@@ -96,7 +109,8 @@ export function isChainAdapterError(
     isChainOperation(candidate.operation) &&
     isChainErrorCode(candidate.code) &&
     typeof candidate.message === "string" &&
-    typeof candidate.retryable === "boolean"
+    typeof candidate.retryable === "boolean" &&
+    candidate.status === controlStatusForCode(candidate.code)
   );
 }
 

@@ -44,6 +44,9 @@ If you are implementing a feature, start from its owning specification and accep
 - [Competitive Analysis](./research/competitive-analysis.md) — dated Monad MVP competitive research snapshot.
 - [Market positioning and evidence](./research/market-positioning-and-evidence.md) — market evidence, positioning hypotheses, and claim boundaries.
 - [Arbitrum ecosystem and stack](./research/arbitrum-ecosystem-and-stack.md) — ecosystem rationale and Provider/stack selection research.
+- [BE-011 Provider Owner input package](./research/be-011-provider-input-package.md) — Provider capability evidence inventory and machine-readable fixture index for BE-011. The pre-guard Native RPC capture (`arbitrum-sepolia-public-2026-09-08`) is retained as `HISTORICAL_PRE_GUARD_CAPTURE` and is superseded for canonical qualification.
+- [BE-033 MossProvider handoff](./research/be-033-moss-provider-handoff.md) — Moss-specific capability matrix, provenance/freshness separation, prepared-execution binding, control-state mapping, and fixture index for BE-033/#58. Real evidence is limited to the Monad × Kuru compatibility path; revert/timeout/failure coverage remains explicitly unavailable.
+- [BE-033 Moss field mapping](./research/be-033-moss-field-mapping.md) — Provisional, field-by-field Moss mapping with source path, qualification class, missing-value behavior, opaque-boundary, and unresolved Contract Owner decisions. Not final Evidence Contract semantics.
 
 ## Architecture decisions
 
@@ -56,3 +59,13 @@ If you are implementing a feature, start from its owning specification and accep
 ## Reading boundaries
 
 Code and merged implementation documentation define current implementation truth. The planning set defines the normative plan and acceptance gates; research provides rationale and evidence. Planned capabilities are not implementation or deployment claims unless the code and merged integration documentation verify them.
+
+## Project continuity and agent operations
+
+- [Agent contract](../AGENTS.md)
+- [Runbook](../RUNBOOK.md)
+- [Context recovery](./context/CONTEXT_RECOVERY.md)
+- [Project state](./context/PROJECT_STATE.md)
+- [Decision log](./context/DECISION_LOG.md)
+- [Agent handoff](./context/AGENT_HANDOFF.md)
+- [Mutation ledger](./context/MUTATION_LEDGER.md)

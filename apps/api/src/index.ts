@@ -1,4 +1,17 @@
 export * from "./application.js";
+export * from "./backend/arbitrum-chain-adapter.js";
+export * from "./backend/arbitrum-composition.js";
+export * from "./backend/camelot-v3-feasibility.js";
+export * from "./backend/camelot-v3-protocol-adapter.js";
+export * from "./backend/chain-registry.js";
+export * from "./backend/composition.js";
+export * from "./backend/control-boundary.js";
+export * from "./backend/fake-harness.js";
+
+export * from "./backend/pipeline.js";
+export * from "./backend/protocol-registry.js";
+export * from "./backend/provider-registry.js";
+export * from "./backend/receipt-ports.js";
 export * from "./bootstrap/backend.js";
 export * from "./bootstrap/replay.js";
 export * from "./http.js";

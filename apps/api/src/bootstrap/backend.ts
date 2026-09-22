@@ -1,5 +1,5 @@
 import { type ServerType, serve as serveNode } from "@hono/node-server";
-import { serializeJson } from "@parallax/contracts";
+import { quoteResultSchema, serializeJson } from "@parallax/contracts";
 import { validateMossRuntimePathSync } from "@parallax/moss-bridge";
 import type {
   KuruLiveQuoteRunner,
@@ -15,6 +15,12 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { z } from "zod";
 import { CheckApplicationService } from "../application.js";
+import type { BackendCompositionRuntime } from "../backend/composition.js";
+import {
+  BackendPipeline,
+  createBackendCheckFlow,
+  createBackendQuoteFlow,
+} from "../backend/pipeline.js";
 import { createCheckApp, createQuoteApp } from "../http.js";
 import {
   type AgentFlowPort,
@@ -87,6 +93,7 @@ export class UnavailableQuoteAgentFlow implements QuoteAgentFlowPort {
 
 export type BackendAppDependencies = {
   runtime: BackendRuntime;
+  composition?: BackendCompositionRuntime;
   corsOrigin?: string;
   agentFlow?: AgentFlowPort;
   liveRunner?: KuruLiveRunner;
@@ -114,21 +121,43 @@ export function createBackendApp(
   dependencies: BackendAppDependencies,
 ): BackendApp {
   const ownedStore =
-    dependencies.store === undefined ? new InMemoryRunStore() : undefined;
-  const store = dependencies.store ?? ownedStore;
+    dependencies.store === undefined && dependencies.composition === undefined
+      ? new InMemoryRunStore()
+      : undefined;
+  if (
+    dependencies.store !== undefined &&
+    dependencies.composition !== undefined &&
+    dependencies.store !== dependencies.composition.runStore
+  ) {
+    throw new Error("Backend Store must be the composition RunStore");
+  }
+  const store =
+    dependencies.store ?? dependencies.composition?.runStore ?? ownedStore;
   if (store === undefined) {
     throw new Error("Backend Store was not configured");
   }
   const disposeStore =
     dependencies.disposeStore ??
     (ownedStore === undefined ? undefined : () => ownedStore.close());
+  const agentFlow =
+    dependencies.agentFlow ??
+    (dependencies.composition === undefined
+      ? createConfiguredAgentFlow(dependencies.runtime, dependencies.liveRunner)
+      : createCompositionBackedCheckFlow(dependencies.composition));
+  const quoteFlow =
+    dependencies.quoteFlow ??
+    (dependencies.composition === undefined
+      ? createConfiguredQuoteAgentFlow(
+          dependencies.runtime,
+          dependencies.quoteRunner,
+        )
+      : createCompositionBackedQuoteFlow(dependencies.composition));
   let closePromise: Promise<void> | undefined;
   const checkService = new CheckApplicationService({
     runtime: dependencies.runtime,
     store,
-    agentFlow:
-      dependencies.agentFlow ??
-      createConfiguredAgentFlow(dependencies.runtime, dependencies.liveRunner),
+    composition: dependencies.composition,
+    agentFlow,
   });
   const replayService = new ReplayApplicationService({
     repository:
@@ -137,12 +166,8 @@ export function createBackendApp(
   const runQueryService = new RunQueryApplicationService({ store });
   const quoteService = new QuoteApplicationService({
     runtime: dependencies.runtime,
-    quoteFlow:
-      dependencies.quoteFlow ??
-      createConfiguredQuoteAgentFlow(
-        dependencies.runtime,
-        dependencies.quoteRunner,
-      ),
+    composition: dependencies.composition,
+    quoteFlow,
   });
 
   const app = new Hono();
@@ -198,9 +223,96 @@ function createConfiguredQuoteAgentFlow(
   return new KuruLiveQuoteAgentFlow(quoteRunner);
 }
 
+function createCompositionBackedCheckFlow(
+  composition: BackendCompositionRuntime,
+): AgentFlowPort {
+  const pipeline = new BackendPipeline({ runtime: composition });
+  return createBackendCheckFlow({
+    pipeline,
+    project: (execution) => execution.decisionOutput,
+    capability: "simulate",
+  });
+}
+
+function createCompositionBackedQuoteFlow(
+  composition: BackendCompositionRuntime,
+): QuoteAgentFlowPort {
+  return createBackendQuoteFlow({
+    runtime: composition,
+    project: ({ blockContext, quote }) =>
+      projectCompositionQuote({
+        blockContext,
+        quote,
+      }),
+  });
+}
+
+function projectCompositionQuote(input: {
+  blockContext: { readonly blockNumber: string };
+  quote: unknown;
+}): unknown {
+  const parsedQuoteResult = quoteResultSchema.safeParse(input.quote);
+  if (parsedQuoteResult.success) {
+    if (parsedQuoteResult.data.status === "unavailable") {
+      return parsedQuoteResult.data;
+    }
+
+    return {
+      status: "available",
+      quote: {
+        ...parsedQuoteResult.data.quote,
+        blockNumber: input.blockContext.blockNumber,
+      },
+    };
+  }
+
+  if (!isRecord(input.quote)) {
+    return { status: "unavailable", reason: "QUOTE_UNAVAILABLE" };
+  }
+
+  const estimatedAmountOut =
+    input.quote.estimatedAmountOut ?? input.quote.amountOut;
+  if (typeof estimatedAmountOut !== "string") {
+    return { status: "unavailable", reason: "QUOTE_UNAVAILABLE" };
+  }
+
+  const minimumAmountOut = input.quote.minimumAmountOut;
+  if (minimumAmountOut !== undefined && typeof minimumAmountOut !== "string") {
+    return { status: "unavailable", reason: "QUOTE_UNAVAILABLE" };
+  }
+
+  const runtimeVersion = input.quote.runtimeVersion;
+  const runtimeRevision = input.quote.runtimeRevision;
+  if (
+    typeof runtimeVersion !== "string" ||
+    runtimeVersion.trim() === "" ||
+    typeof runtimeRevision !== "string" ||
+    runtimeRevision.trim() === ""
+  ) {
+    return { status: "unavailable", reason: "QUOTE_UNAVAILABLE" };
+  }
+
+  return {
+    status: "available",
+    quote: {
+      estimatedAmountOut,
+      ...(minimumAmountOut === undefined ? {} : { minimumAmountOut }),
+      source: "quote",
+      blockNumber: input.blockContext.blockNumber,
+      runtimeVersion,
+      runtimeRevision,
+    },
+  };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
 export type BootstrapBackendAppOptions = {
   environment?: unknown;
   tokenRegistry: unknown;
+  composition?: BackendCompositionRuntime;
   corsOrigin?: string;
   agentFlow?: AgentFlowPort;
   liveRunner?: KuruLiveRunner;
@@ -232,10 +344,11 @@ export function bootstrapBackendApp(
   }
 
   const configuredStore =
-    options.store === undefined
+    options.store === undefined && options.composition === undefined
       ? createConfiguredRunStore(environment)
       : undefined;
-  const store = options.store ?? configuredStore;
+  const store =
+    options.store ?? options.composition?.runStore ?? configuredStore;
   if (store === undefined) {
     throw new Error("Backend Store was not configured");
   }
@@ -250,6 +363,7 @@ export function bootstrapBackendApp(
 
   return createBackendApp({
     runtime,
+    composition: options.composition,
     corsOrigin: options.corsOrigin ?? serverEnvironment.CORS_ORIGIN,
     agentFlow: options.agentFlow,
     liveRunner: options.liveRunner,

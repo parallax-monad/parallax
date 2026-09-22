@@ -12,6 +12,7 @@ import {
   type GenericEvidence,
   type GenericProviderFailure,
   type GenericSwapIntent,
+  genericEvidenceSchema,
   type NormalizedSwapIntent,
   type P0ReasonCode,
   type Quote,
@@ -87,12 +88,18 @@ export class LiveAgentFlowError extends Error {
   }
 }
 
+/**
+ * Cross-package unsupported control error. Keep the public fields structural so
+ * the API can classify this error after it crosses the orchestrator boundary.
+ */
 export class UnsupportedKuruAgentFlowError extends Error {
+  public readonly name = "UnsupportedAgentFlowError" as const;
+  public readonly status = "unsupported" as const;
   public readonly code = "UNSUPPORTED" as const;
+  public readonly retryable = false as const;
 
   public constructor(message: string) {
     super(message);
-    this.name = "UnsupportedKuruAgentFlowError";
   }
 }
 
@@ -171,6 +178,39 @@ export class KuruLiveAgentFlow {
     const risk = evaluateEvidence(evidence);
     return buildRunResult(input.runId, input.intent, evidence, risk);
   }
+}
+
+/**
+ * Projects provider-neutral Evidence through the existing public RunResult
+ * boundary. Backend compositions use this when they do not supply a custom
+ * Core/Decision implementation; provider-specific payloads are retained only
+ * inside the internal Provider → Risk boundary and are not serialized into the
+ * public `providerEvidence` projection.
+ */
+export function projectGenericEvidenceToRunResult(
+  runId: string,
+  intent: NormalizedSwapIntent,
+  evidence: GenericEvidence,
+): RunResult {
+  return runResultSchema.parse({
+    ...buildRunResult(runId, intent, evidence, evaluateEvidence(evidence)),
+    providerEvidence: publicGenericEvidence(evidence),
+  });
+}
+
+/**
+ * Public RunResults expose the provider-neutral Generic Evidence contract, not
+ * Provider-owned payloads. `providerData` is intentionally kept empty until a
+ * reviewed public projection exists; copying it wholesale would leak raw RPC
+ * return data and protocol-specific metadata through `/api/check` and child
+ * Runs. The internal Pipeline still retains the original evidence for the
+ * Provider → Risk boundary.
+ */
+function publicGenericEvidence(evidence: GenericEvidence): GenericEvidence {
+  return genericEvidenceSchema.parse({
+    ...evidence,
+    providerData: {},
+  });
 }
 
 /**

@@ -16,7 +16,9 @@ import {
   type SimulatedTokenOutEvidence,
   scopeDisclosureSchema,
 } from "./evidence.js";
+import { genericEvidenceSchema } from "./generic-evidence.js";
 import { normalizedSwapIntentSchema } from "./intent.js";
+import { p0RunResultSchema } from "./p0-run-result.js";
 import { quoteSchema } from "./quote.js";
 import { routeSchema } from "./route.js";
 
@@ -1329,6 +1331,10 @@ export const completedRunResultSchema = runIdentitySchema
     scope: scopeDisclosureSchema,
     route: routeSchema,
     quote: quoteSchema.optional(),
+    /** Provider-neutral P0 diagnosis and re-verification projection. */
+    p0: p0RunResultSchema.optional(),
+    /** Provisional Backend provider evidence; not part of canonical rule input. */
+    providerEvidence: genericEvidenceSchema.optional(),
     diff: runDiffSchema.optional(),
   })
   .strict()
@@ -1428,7 +1434,11 @@ export const failedRunResultSchema = runIdentitySchema
     evidence: z.array(evidenceItemSchema),
     scope: scopeDisclosureSchema,
     quote: quoteSchema.optional(),
+    /** Provider-neutral P0 diagnosis and re-verification projection. */
+    p0: p0RunResultSchema.optional(),
     route: routeSchema.optional(),
+    /** Provisional Backend provider evidence; not part of canonical rule input. */
+    providerEvidence: genericEvidenceSchema.optional(),
   })
   .strict()
   .superRefine((result, context) => {

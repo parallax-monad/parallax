@@ -6,9 +6,15 @@ const atomicAmountPattern = /^(?:0|[1-9]\d*)$/;
 
 export const UINT256_MAX = (1n << 256n) - 1n;
 
+export const ARBITRUM_SEPOLIA_CHAIN_ID = 421614 as const;
+export const CAMELOT_V3_PROTOCOL_ID = "camelot-v3" as const;
+
 export const chainIdSchema = z.number().int().positive();
 
-export const protocolSchema = z.enum(["kuru", "pancake"]);
+export const protocolIdSchema = z.enum(["kuru", "pancake", "camelot-v3"]);
+export const protocolSchema = protocolIdSchema;
+
+export type ProtocolId = z.infer<typeof protocolIdSchema>;
 
 export const runIdSchema = z.string().trim().min(1);
 

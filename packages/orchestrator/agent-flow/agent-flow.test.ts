@@ -172,6 +172,27 @@ function liveAmountOutFlow() {
 }
 
 describe("KuruLiveAgentFlow", () => {
+  it("emits a structured unsupported control error for an unsupported intent", async () => {
+    const flow = new KuruLiveAgentFlow(async () => {
+      throw new Error(
+        "the runner must not be called for an unsupported intent",
+      );
+    });
+
+    await expect(
+      flow.check({
+        ...input("unsupported-1"),
+        intent: { ...intent, protocol: "pancake" },
+      }),
+    ).rejects.toMatchObject({
+      name: "UnsupportedAgentFlowError",
+      status: "unsupported",
+      code: "UNSUPPORTED",
+      message: "Live Kuru Agent Flow supports Monad Kuru checks only",
+      retryable: false,
+    });
+  });
+
   it("returns a quote without requiring simulation provenance", async () => {
     const flow = new KuruLiveQuoteAgentFlow(async (value) => ({
       runId: value.runId,

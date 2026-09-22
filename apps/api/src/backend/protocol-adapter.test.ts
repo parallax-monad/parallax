@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { isBackendControlError } from "./control-boundary.js";
 import {
   isProtocolAdapterError,
   type ProtocolAdapter,
@@ -96,8 +97,10 @@ describe("ProtocolAdapter port", () => {
     });
 
     expect(isProtocolAdapterError(error)).toBe(true);
+    expect(isBackendControlError(error)).toBe(true);
     expect(error.code).toBe("QUOTE_FAILED");
     expect(error.protocol).toBe("test-protocol");
+    expect(error.status).toBe("failed");
   });
 
   it("handles an unsupported protocol explicitly", async () => {
@@ -121,7 +124,9 @@ describe("ProtocolAdapter port", () => {
       (received: unknown) =>
         isProtocolAdapterError(received) &&
         received.code === "UNSUPPORTED_PROTOCOL" &&
-        received.protocol === "unsupported-protocol",
+        received.protocol === "unsupported-protocol" &&
+        isBackendControlError(received) &&
+        received.status === "unsupported",
     );
     await expect(
       adapter.buildTransaction({
@@ -133,5 +138,29 @@ describe("ProtocolAdapter port", () => {
         isProtocolAdapterError(received) &&
         received.code === "UNSUPPORTED_PROTOCOL",
     );
+  });
+
+  it("requires the shared control fields on a cross-runtime protocol error", () => {
+    expect(
+      isProtocolAdapterError({
+        name: "ProtocolAdapterError",
+        code: "QUOTE_FAILED",
+        message: "The protocol quote failed",
+        protocol: "test-protocol",
+      }),
+    ).toBe(false);
+  });
+
+  it("rejects a cross-runtime protocol error with a mismatched control status", () => {
+    expect(
+      isProtocolAdapterError({
+        name: "ProtocolAdapterError",
+        code: "QUOTE_FAILED",
+        message: "The protocol quote failed",
+        protocol: "test-protocol",
+        retryable: false,
+        status: "unsupported",
+      }),
+    ).toBe(false);
   });
 });
