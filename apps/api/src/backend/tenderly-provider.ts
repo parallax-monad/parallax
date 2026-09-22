@@ -122,7 +122,7 @@ function exactTransaction(
   const tx = unsigned.payload;
   if (
     Object.keys(tx).some(
-      (key) => !["from", "to", "data", "value", "gas"].includes(key),
+      (key) => !["from", "to", "data", "value", "gas", "chainId"].includes(key),
     )
   ) {
     throw failure(
@@ -132,6 +132,8 @@ function exactTransaction(
   }
   const value = parseQuantity(tx.value);
   const gas = tx.gas === undefined ? undefined : parseQuantity(tx.gas);
+  const transactionChainId =
+    tx.chainId === undefined ? undefined : parseQuantity(tx.chainId);
   if (
     typeof tx.from !== "string" ||
     !address.test(tx.from) ||
@@ -143,11 +145,13 @@ function exactTransaction(
     value < 0n ||
     (gas !== undefined &&
       (gas <= 0n || gas > BigInt(Number.MAX_SAFE_INTEGER))) ||
-    (tx.gas !== undefined && gas === undefined)
+    (tx.gas !== undefined && gas === undefined) ||
+    (tx.chainId !== undefined &&
+      transactionChainId !== BigInt(ARBITRUM_SEPOLIA_CHAIN_ID))
   ) {
     throw failure(
       "UNKNOWN",
-      "Prepared transaction fields are missing or invalid",
+      "Prepared transaction fields or chain binding are missing or invalid",
     );
   }
   if (tx.from.toLowerCase() !== prepared.intent.sender.toLowerCase()) {

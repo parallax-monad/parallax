@@ -8,6 +8,16 @@ services:
     envVars:
       - key: MONAD_RPC_URL
         sync: false
+      - key: ARBITRUM_RPC_URL
+        sync: false
+      - key: TENDERLY_ACCOUNT_SLUG
+        sync: false
+      - key: TENDERLY_PROJECT_SLUG
+        sync: false
+      - key: TENDERLY_ACCESS_KEY
+        sync: false
+      - key: TENDERLY_TIMEOUT_MS
+        value: "10000"
       - key: PARALLAX_TOKEN_REGISTRY_JSON
         sync: false
       - key: CORS_ORIGIN

@@ -35,6 +35,7 @@ import {
 } from "./fake-harness.js";
 import { NATIVE_RPC_ARBITRUM_PROVIDER_ID } from "./native-rpc-evidence.js";
 import { BackendPipeline } from "./pipeline.js";
+import { TENDERLY_ARBITRUM_PROVIDER_ID } from "./tenderly-provider.js";
 
 const normalizedIntent: NormalizedSwapIntent = {
   chainId: 421614,
@@ -241,6 +242,45 @@ describe("Arbitrum production composition skeleton", () => {
         capability: "simulate",
       }).providerId,
     ).toBe("controlled-arbitrum-provider");
+  });
+
+  it("selects Tenderly as the configured production provider", () => {
+    const runtime = bootstrapBackendRuntime({
+      environment: {
+        ...arbitrumEnvironment,
+        TENDERLY_ACCOUNT_SLUG: "account",
+        TENDERLY_PROJECT_SLUG: "project",
+        TENDERLY_ACCESS_KEY: "test-secret",
+      },
+      tokenRegistry: arbitrumTokenRegistry,
+    });
+    const composition = createArbitrumProductionComposition(
+      arbitrumCompositionOptions(runtime),
+    );
+
+    expect(
+      composition.resolveProvider({
+        intent: normalizedIntent,
+        chainId: 421614,
+        protocol: "camelot-v3",
+        capability: "simulate",
+      }).providerId,
+    ).toBe(TENDERLY_ARBITRUM_PROVIDER_ID);
+  });
+
+  it("keeps Native RPC as the default when Tenderly is not configured", () => {
+    const composition = createArbitrumProductionComposition(
+      arbitrumCompositionOptions(arbitrumRuntime()),
+    );
+
+    expect(
+      composition.resolveProvider({
+        intent: normalizedIntent,
+        chainId: 421614,
+        protocol: "camelot-v3",
+        capability: "simulate",
+      }).providerId,
+    ).toBe(NATIVE_RPC_ARBITRUM_PROVIDER_ID);
   });
 
   it("projects non-success Native RPC evidence through the public check response", async () => {
