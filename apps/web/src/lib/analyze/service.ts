@@ -18,6 +18,7 @@ import type {
 
 export const DEFAULT_SENDER = "0x1111111111111111111111111111111111111111";
 export const MONAD_USDC_ADDRESS = "0x754704Bc059F8C67012fEd69BC8A327a5aafb603";
+export const ARBITRUM_SEPOLIA_USDC_ADDRESS = "0x75faf114eafb1BDbe2F0316DF893fd58CE46AA4d";
 const API_BASE = "";
 const cp = (value: string) => ({ en: value, zh: value });
 const obj = (value: unknown): Record<string, unknown> | undefined =>

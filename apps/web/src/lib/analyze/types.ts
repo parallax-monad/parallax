@@ -31,6 +31,7 @@ export type ActionSuggestion = {
 export type CheckSwapInput = {
   parentRunId?: string;
   sender?: string;
+  chainId?: number;
   protocol: Protocol;
   tokenIn: string;
   tokenOut: string;
@@ -38,6 +39,9 @@ export type CheckSwapInput = {
   minimumReceived?: string;
   minimumReceivedSource?: BoundarySource;
   slippage?: string;
+  expectationBaseline?: {
+    quote: QuotePreview;
+  };
 };
 
 /** `/api/quote` accepts the exact-input pair only, without boundary or rerun fields. */
