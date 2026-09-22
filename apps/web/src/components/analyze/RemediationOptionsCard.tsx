@@ -154,7 +154,7 @@ function RemediationOptionRow({
     return (
       <button
         type="button"
-        className={`w-full border p-4 text-left transition-colors hover:bg-white/5 ${verificationColor}`}
+        className={`w-full rounded-[14px] border-none p-5 text-left backdrop-blur-xl transition-all duration-200 ease-out hover:-translate-y-0.5 hover:shadow-[0_4px_12px_rgba(0,0,0,0.1)] ${verificationColor}`}
         onClick={() => onSelect(option)}
       >
         {content}
@@ -162,5 +162,5 @@ function RemediationOptionRow({
     );
   }
 
-  return <div className={`border p-4 ${verificationColor}`}>{content}</div>;
+  return <div className={`rounded-[14px] border-none p-5 backdrop-blur-xl ${verificationColor}`}>{content}</div>;
 }

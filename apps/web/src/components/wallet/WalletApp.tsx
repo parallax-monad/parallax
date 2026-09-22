@@ -348,7 +348,7 @@ export function WalletApp({ language }: { language: Language }) {
           keep body text legible over moving particles. */}
       {/* Desktop uses the original viewport calculation; the mobile utility row
           supplies a safe-area-aware height override. */}
-      <div className="wallet-app-frame relative z-10 flex h-[calc(100vh-2.5rem)] flex-col overflow-hidden rounded-[24px] border border-white/[0.08] bg-ink-elev/90 backdrop-blur-xl shadow-[0_8px_32px_rgba(0,0,0,0.12),_0_1px_3px_rgba(0,0,0,0.08)]">
+      <div className="wallet-app-frame relative z-10 flex h-[calc(100vh-2.5rem)] flex-col overflow-hidden rounded-[24px] border-none bg-ink-elev/90 backdrop-blur-xl shadow-[0_8px_32px_rgba(0,0,0,0.12),_0_1px_3px_rgba(0,0,0,0.08)] animate-wallet-enter">
         <header className="relative flex items-center justify-center px-6 py-5 border-b border-white/[0.06]">
           <span className="text-[22px] font-semibold tracking-[-0.02em] text-monad-dim">
             PARAL<span className="text-white">LAX</span>
