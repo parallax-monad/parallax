@@ -94,8 +94,8 @@ spike; it is not an accepted implementation baseline.
   Qualification remains parallel and non-blocking for Native RPC P0.
 - #65 is CLOSED / COMPLETE after its recorded provisional Contract mapping review and
   downstream dependency closure; it does not reopen GenericEvidence semantics.
-- #71 is CLOSED / COMPLETE after the Risk-side implementation was delivered; remaining
-  orchestration and public projection belong to #78.
+- #71 is CLOSED / COMPLETE after the Risk-side implementation was delivered; downstream
+  orchestration and public projection were completed under now-closed #78.
 - [Strong / P1 tracker #96](https://github.com/parallax-monad/parallax/issues/96) is
   PLANNED / PREPARED until the final Product P0 Demo Gate; opening it does not activate
   Strong implementation.
