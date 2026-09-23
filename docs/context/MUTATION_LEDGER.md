@@ -113,3 +113,11 @@ Issue #74 was refreshed to keep #73 as the remaining Product P0 critical path an
 merge as an experimental/reference-only Frontend spike. Strong tracker #96 and scoped child
 Issues #90–#95 were opened as PLANNED / PREPARED work; Strong activation remains gated by the
 final #73 Product P0 Demo Gate. No runtime Product/Risk/Contract semantics changed.
+
+## 2026-09-24 — Tenderly qualification blocker reclassified
+
+After checking the available Tenderly account, the #72 blocker was reclassified from missing
+local credentials to external Console/API entitlement: the account cannot self-generate the
+Simulation API Access Token required for real Backend qualification. PR #75 and PR #89 remain
+merged; no token or secret was recorded. Issue #72 stays open and non-blocking for Native-RPC
+P0.

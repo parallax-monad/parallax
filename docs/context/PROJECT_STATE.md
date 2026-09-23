@@ -88,9 +88,10 @@ spike; it is not an accepted implementation baseline.
 
 ## Parallel / deferred work
 
-- #72 remains OPEN for credentialed real Tenderly runtime qualification; merged #75 and #89
-  provide the Provider and Backend wiring baseline, but qualification remains parallel and
-  non-blocking for Native RPC P0.
+- #72 is `IMPLEMENTATION COMPLETE / EXTERNAL API ENTITLEMENT BLOCKED`: merged #75 and #89
+  provide the Provider and Backend wiring baseline, but the available Tenderly account cannot
+  generate the required API Access Token because Console/API entitlement is unavailable.
+  Qualification remains parallel and non-blocking for Native RPC P0.
 - #65 is CLOSED / COMPLETE after its recorded provisional Contract mapping review and
   downstream dependency closure; it does not reopen GenericEvidence semantics.
 - #71 is CLOSED / COMPLETE after the Risk-side implementation was delivered; remaining

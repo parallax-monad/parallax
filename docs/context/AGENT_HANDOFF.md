@@ -9,7 +9,8 @@ Checkpoint: 2026-09-24
 3. Treat #69, #75, #76, #77, #80, #81, #82, #85, #86, #87, #88, and #89 as merged
    baseline work; #65, #71, and #78 are closed/complete; do not reopen #67/#70.
 4. Continue Antony-owned #73 Frontend work toward the final Product P0 Demo Gate. #72 is
-   parallel Tenderly qualification. PR #84 is closed without merge as an experimental
+   parallel Tenderly qualification, currently blocked by external Console/API entitlement
+   on the available account. PR #84 is closed without merge as an experimental
    reference-only spike.
 5. Route new work by risk: routine, scoped, low-risk reversible changes follow the direct lane in `AGENTS.md`; only hard-stop categories need an explicit gate.
 
@@ -31,8 +32,9 @@ Checkpoint: 2026-09-24
   The run truthfully records incomplete Native RPC Evidence as `UNKNOWN`, verifies the live
   Provider handoff and expectation-only baseline, and records an unchanged Backend/runtime
   source manifest. This is not final Product Demo Gate approval.
-- #72: open/credentialed Tenderly runtime qualification; implementation/wiring is merged but
-  no real credentialed qualification is recorded.
+- #72: `IMPLEMENTATION COMPLETE / EXTERNAL API ENTITLEMENT BLOCKED`; implementation/wiring is
+  merged, but the available account cannot generate the required API Access Token. No real
+  credentialed qualification is recorded.
 - #73: open/final Product P0 Frontend and Demo Gate work, owned by Antony
 - #84: closed without merge; experimental Frontend spike/reference only
 - #96: Strong / P1 tracker, planned/prepared until final Product P0 acceptance
