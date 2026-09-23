@@ -6,6 +6,7 @@
  * parameters; this module never imports a concrete provider.
  */
 
+import type { GenericEvidenceMode } from "@parallax/contracts";
 import {
   BackendControlError,
   controlStatusForCode,
@@ -48,6 +49,7 @@ export type ProviderEvaluationInput<Intent = unknown, Input = unknown> = {
  * imply approval of any candidate field.
  */
 export type ProviderEvaluationResult = ProvisionalProviderResult & {
+  readonly mode: GenericEvidenceMode;
   readonly capabilities?: readonly ProviderCapability[];
 };
 
@@ -124,6 +126,8 @@ export type ProviderAdapterRawImplementation<
   Input = unknown,
 > = {
   readonly providerId: string;
+  /** Explicit evidence truthfulness mode for every result from this adapter. */
+  readonly mode?: GenericEvidenceMode;
   readonly capabilities?: readonly ProviderCapability[];
   supports(query: ProviderSupportQuery<Intent>): boolean;
   evaluateRaw(input: ProviderEvaluationInput<Intent, Input>): Promise<unknown>;
@@ -142,6 +146,7 @@ const factoryCreatedAdapters = new WeakMap<
 export interface ProviderAdapter<Intent = unknown, _Input = unknown> {
   readonly [providerAdapterBrand]: true;
   readonly providerId: string;
+  readonly mode: GenericEvidenceMode;
   readonly capabilities?: readonly ProviderCapability[];
 
   supports(query: ProviderSupportQuery<Intent>): boolean;
@@ -196,10 +201,15 @@ function normalizeCapabilities(
   return normalized;
 }
 
+type NormalizedProviderEvaluationResult = Omit<
+  ProviderEvaluationResult,
+  "mode"
+>;
+
 function normalizeAdapterEvaluation(
   adapterProviderId: string,
   output: unknown,
-): ProviderEvaluationResult {
+): NormalizedProviderEvaluationResult {
   const normalized = normalizeProvisionalProviderResult(output);
   if (normalized.provider.providerId !== adapterProviderId) {
     throw new TypeError("provider result does not match adapter providerId");
@@ -229,23 +239,35 @@ export function createProviderAdapter<Intent = unknown, Input = unknown>(
   if (typeof providerId !== "string" || providerId.trim().length === 0) {
     throw new TypeError("adapter.providerId must be a non-empty string");
   }
+  const mode = normalizeEvidenceMode(raw.mode);
   const capabilities = normalizeCapabilities(raw.capabilities);
   const publicCapabilities =
     capabilities === undefined ? undefined : Object.freeze([...capabilities]);
   const adapter = Object.freeze({
     providerId,
+    mode,
     capabilities: publicCapabilities,
     supports: (query: ProviderSupportQuery<Intent>) => raw.supports(query),
   }) as ProviderAdapter<Intent, Input>;
   const evaluate = async (
     input: ProviderEvaluationInput<Intent, Input>,
-  ): Promise<ProviderEvaluationResult> =>
-    normalizeAdapterEvaluation(providerId, await raw.evaluateRaw(input));
+  ): Promise<ProviderEvaluationResult> => ({
+    ...normalizeAdapterEvaluation(providerId, await raw.evaluateRaw(input)),
+    mode,
+  });
   factoryCreatedAdapters.set(
     adapter,
     evaluate as AdapterEvaluation<unknown, unknown>,
   );
   return adapter;
+}
+
+function normalizeEvidenceMode(value: unknown): GenericEvidenceMode {
+  if (value === undefined) return "MOCK";
+  if (value === "LIVE" || value === "RECORDED_REPLAY" || value === "MOCK") {
+    return value;
+  }
+  throw new TypeError("adapter mode must be LIVE, RECORDED_REPLAY, or MOCK");
 }
 
 /** Compatibility entry point; validation is owned by the public adapter. */

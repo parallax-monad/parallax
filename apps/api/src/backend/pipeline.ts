@@ -433,6 +433,7 @@ export class BackendPipeline<
             normalizedIntent: normalized,
             preparedExecution,
             providerResult,
+            mode: providerResult.mode,
           });
     if (providerResult.status !== "success" && providerEvidence === undefined) {
       throw providerResultError(providerResult);

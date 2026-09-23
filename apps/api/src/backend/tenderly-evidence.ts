@@ -29,7 +29,9 @@ export type TenderlyGenericEvidenceInput = {
 export function mapTenderlyProviderResult(
   input: TenderlyGenericEvidenceInput,
 ): GenericEvidence {
-  const mode = input.mode ?? "LIVE";
+  const mode = input.mode ?? input.providerResult.mode ?? "MOCK";
+  const fieldSource = mode === "MOCK" ? "mock" : "external";
+  const fieldReproducibility = reproducibility(mode);
   const candidate = new Map(
     input.providerResult.candidateFields.map((field) => [
       field.candidatePath,
@@ -74,6 +76,8 @@ export function mapTenderlyProviderResult(
   );
   const quote = quoteField(
     input.preparedExecution.quote,
+    fieldSource,
+    fieldReproducibility,
     blockNumber,
     fetchedAt,
   );
@@ -129,7 +133,8 @@ export function mapTenderlyProviderResult(
       ...(failure === undefined ? {} : { failure }),
       errors: jsonField(
         failure === undefined ? [] : [failure],
-        "external",
+        fieldSource,
+        fieldReproducibility,
         blockNumber,
         fetchedAt,
       ),
@@ -144,15 +149,40 @@ export function mapTenderlyProviderResult(
     quote,
     action: arrayField(
       actionValue === null ? null : [actionValue],
-      "external",
+      fieldSource,
+      fieldReproducibility,
       blockNumber,
       fetchedAt,
     ),
-    receipt: jsonField(null, "external", blockNumber, fetchedAt),
-    outcome: jsonField(null, "external", blockNumber, fetchedAt),
-    assetChanges: arrayField(null, "external", blockNumber, fetchedAt),
+    receipt: jsonField(
+      null,
+      fieldSource,
+      fieldReproducibility,
+      blockNumber,
+      fetchedAt,
+    ),
+    outcome: jsonField(
+      null,
+      fieldSource,
+      fieldReproducibility,
+      blockNumber,
+      fetchedAt,
+    ),
+    assetChanges: arrayField(
+      null,
+      fieldSource,
+      fieldReproducibility,
+      blockNumber,
+      fetchedAt,
+    ),
     assetChangeAssessment: "UNKNOWN",
-    warnings: arrayField([], "external", blockNumber, fetchedAt),
+    warnings: arrayField(
+      [],
+      fieldSource,
+      fieldReproducibility,
+      blockNumber,
+      fetchedAt,
+    ),
     simulation: {
       value: {
         expectedTransactions: 1,
@@ -174,13 +204,19 @@ export function mapTenderlyProviderResult(
       limitation:
         "Tenderly asset and balance payloads remain behind the reviewed provider mapping boundary",
     },
-    blockNumber: stringField(blockNumber, "external", blockNumber, fetchedAt),
+    blockNumber: stringField(
+      blockNumber,
+      fieldSource,
+      fieldReproducibility,
+      blockNumber,
+      fetchedAt,
+    ),
     capabilities: input.providerResult.capabilities ?? [],
     provenance: {
       observedChainId: input.intent.chainId,
       fetchedAt,
       mode,
-      source: "external",
+      source: fieldSource,
       simulationBlock: blockNumber,
     },
     checkedScope,
@@ -241,9 +277,18 @@ function toGenericIntent(
   };
 }
 
-function quoteField(quote: unknown, blockNumber: string, fetchedAt: string) {
+type TenderlyFieldSource = "external" | "mock";
+type TenderlyFieldReproducibility = "REPRODUCIBLE" | "NOT_REPRODUCIBLE";
+
+function quoteField(
+  quote: unknown,
+  source: TenderlyFieldSource,
+  reproducibility: TenderlyFieldReproducibility,
+  blockNumber: string,
+  fetchedAt: string,
+) {
   if (!isRecord(quote))
-    return jsonField(null, "external", blockNumber, fetchedAt);
+    return jsonField(null, source, reproducibility, blockNumber, fetchedAt);
   const estimatedAmountOut = quote.estimatedAmountOut;
   const minimumAmountOut = quote.minimumAmountOut;
   if (
@@ -253,15 +298,15 @@ function quoteField(quote: unknown, blockNumber: string, fetchedAt: string) {
       (typeof minimumAmountOut !== "string" ||
         !/^\d+(?:\.\d+)?$/.test(minimumAmountOut)))
   ) {
-    return jsonField(null, "external", blockNumber, fetchedAt);
+    return jsonField(null, source, reproducibility, blockNumber, fetchedAt);
   }
   return {
     value: {
       estimatedAmountOut,
       ...(minimumAmountOut === undefined ? {} : { minimumAmountOut }),
     },
-    source: "quote" as const,
-    reproducibility: "REPRODUCIBLE" as const,
+    source: source === "mock" ? ("mock" as const) : ("quote" as const),
+    reproducibility,
     blockNumber,
     fetchedAt,
   };
@@ -269,14 +314,15 @@ function quoteField(quote: unknown, blockNumber: string, fetchedAt: string) {
 
 function jsonField(
   value: ProvisionalJsonValue | null,
-  source: "external",
+  source: TenderlyFieldSource,
+  reproducibility: TenderlyFieldReproducibility,
   blockNumber: string,
   fetchedAt: string,
 ) {
   return {
     value,
     source,
-    reproducibility: "REPRODUCIBLE" as const,
+    reproducibility,
     blockNumber,
     fetchedAt,
   };
@@ -284,13 +330,15 @@ function jsonField(
 
 function arrayField(
   value: readonly ProvisionalJsonValue[] | null,
-  source: "external",
+  source: TenderlyFieldSource,
+  reproducibility: TenderlyFieldReproducibility,
   blockNumber: string,
   fetchedAt: string,
 ) {
   return jsonField(
     value === null ? null : [...value],
     source,
+    reproducibility,
     blockNumber,
     fetchedAt,
   );
@@ -298,11 +346,18 @@ function arrayField(
 
 function stringField(
   value: string,
-  source: "external",
+  source: TenderlyFieldSource,
+  reproducibility: TenderlyFieldReproducibility,
   blockNumber: string,
   fetchedAt: string,
 ) {
-  return jsonField(value, source, blockNumber, fetchedAt);
+  return jsonField(value, source, reproducibility, blockNumber, fetchedAt);
+}
+
+function reproducibility(
+  mode: GenericEvidenceMode,
+): TenderlyFieldReproducibility {
+  return mode === "MOCK" ? "NOT_REPRODUCIBLE" : "REPRODUCIBLE";
 }
 
 function jsonValueOrNull(value: unknown): ProvisionalJsonValue | null {

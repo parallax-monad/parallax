@@ -204,6 +204,32 @@ describe("CamelotV3ProtocolAdapter", () => {
     expect(calls).toHaveLength(1);
   });
 
+  it("uses the normalized token registry decimals for quote and transaction output", async () => {
+    const amountOut = 2n * 10n ** 6n;
+    const adapter = new CamelotV3ProtocolAdapter({
+      rpcClient: {
+        request: async () => quoteResponse(amountOut),
+      },
+      tokenOutDecimals: () => 6,
+    });
+    const canonicalIntent = {
+      ...intent,
+      amountInAtomic: "1000000000000000",
+      tokenOut: { kind: "erc20" as const, address: CAMELOT_SEPOLIA_USDC },
+    };
+    const blockContext = { blockNumber: "42" };
+    const quote = await adapter.quote(canonicalIntent, { blockContext });
+    const transaction = await adapter.buildTransaction(canonicalIntent, {
+      blockContext,
+      quote,
+    });
+
+    expect(quote).toMatchObject({ estimatedAmountOut: "2" });
+    expect(calldataWord(transaction.payload.data, 5)).toBe(
+      ((amountOut * 99n) / 100n).toString(16).padStart(64, "0"),
+    );
+  });
+
   it("binds quote and transaction construction to the supplied pinned block", async () => {
     const calls: Array<{ method: string; params: readonly unknown[] }> = [];
     const rpcClient: ArbitrumRpcClient = {

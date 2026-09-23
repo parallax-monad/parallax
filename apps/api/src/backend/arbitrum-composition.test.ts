@@ -283,6 +283,40 @@ describe("Arbitrum production composition skeleton", () => {
     ).toBe(NATIVE_RPC_ARBITRUM_PROVIDER_ID);
   });
 
+  it("binds the production Camelot adapter to trusted token decimals", async () => {
+    const amountOut = 2n * 10n ** 6n;
+    const composition = createArbitrumProductionComposition({
+      runtime: arbitrumRuntime(),
+      runStore: new InMemoryRunStore(),
+      rpcClient: {
+        request: async () =>
+          `0x${amountOut.toString(16).padStart(64, "0")}${"0".repeat(64)}`,
+      },
+      providers: [],
+      core: { evaluate: async (input) => input },
+      decision: { decide: async (input) => input },
+    });
+    const productionIntent: NormalizedSwapIntent = {
+      ...normalizedIntent,
+      amountInAtomic: "1000000000000000000",
+      tokenOut: { kind: "erc20", address: arbitrumTokenAddress },
+    };
+    const protocol = composition.resolveProtocol(421614, "camelot-v3");
+    const blockContext = { blockNumber: "42" };
+    const quote = await protocol.quote(productionIntent, { blockContext });
+    const transaction = await protocol.buildTransaction(productionIntent, {
+      blockContext,
+      quote,
+    });
+
+    expect(quote).toMatchObject({ estimatedAmountOut: "2" });
+    const calldata = String(transaction.payload.data);
+    const amountOutMinimum = BigInt(
+      `0x${calldata.slice(2 + 8 + 5 * 64, 2 + 8 + 6 * 64)}`,
+    );
+    expect(amountOutMinimum).toBe(1_980_000n);
+  });
+
   it("projects non-success Native RPC evidence through the public check response", async () => {
     const runtime = arbitrumRuntime();
     const provider = createFakeProviderAdapter<NormalizedSwapIntent>({
@@ -291,6 +325,7 @@ describe("Arbitrum production composition skeleton", () => {
       chainId: 421614,
       protocol: "camelot-v3",
       capabilities: ["simulate", "eth_call", "estimateGas", "pinned-block"],
+      mode: "LIVE",
       supports: () => true,
       result: {
         provider: {

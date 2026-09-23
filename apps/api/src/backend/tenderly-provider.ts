@@ -1,3 +1,4 @@
+import type { GenericEvidenceMode } from "@parallax/contracts";
 import {
   ARBITRUM_SEPOLIA_CHAIN_ID,
   CAMELOT_V3_PROTOCOL_ID,
@@ -31,6 +32,7 @@ export type TenderlyProviderOptions = {
   readonly fetchImplementation?: typeof fetch;
   readonly timeoutMs?: number;
   readonly now?: () => Date;
+  readonly mode?: GenericEvidenceMode;
 };
 
 type TenderlyRequest = {
@@ -373,9 +375,11 @@ export function createTenderlyProvider<
     );
   }
   const fetcher = options.fetchImplementation ?? fetch;
+  const mode = options.mode ?? "LIVE";
   const endpoint = `https://api.tenderly.co/api/v1/account/${options.accountSlug}/project/${options.projectSlug}/simulate`;
   return createProviderAdapter<Intent, TenderlyPreparedExecution<Intent>>({
     providerId: TENDERLY_ARBITRUM_PROVIDER_ID,
+    mode,
     capabilities: ["simulate", "execution-result", "gas-used", "pinned-block"],
     supports: ({ chainId, protocol }) =>
       chainId === ARBITRUM_SEPOLIA_CHAIN_ID &&

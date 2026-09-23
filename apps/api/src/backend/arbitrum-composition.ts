@@ -218,7 +218,8 @@ export function createArbitrumProductionComposition(
       ...(options.rpcClient === undefined
         ? { rpcUrl: arbitrumConfig.rpcUrl }
         : { rpcClient: options.rpcClient }),
-      tokenOutDecimals: 18,
+      tokenOutDecimals: (intent) =>
+        tokenDecimals(options.runtime, intent.tokenOut, intent.chainId),
       runtimeVersion: "arbitrum-camelot-v3",
       runtimeRevision: "native-rpc",
     });
@@ -280,6 +281,7 @@ export function createArbitrumProductionComposition(
           ),
           preparedExecution:
             input.preparedExecution as TenderlyPreparedExecution<NormalizedSwapIntent>,
+          mode: input.mode,
           providerResult: input.providerResult,
         });
       }
@@ -303,6 +305,7 @@ export function createArbitrumProductionComposition(
         ),
         preparedExecution:
           input.preparedExecution as NativeRpcPreparedExecution<NormalizedSwapIntent>,
+        mode: input.mode,
         providerResult: input.providerResult,
       });
     });

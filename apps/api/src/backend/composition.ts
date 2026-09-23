@@ -1,3 +1,4 @@
+import type { GenericEvidenceMode } from "@parallax/contracts";
 import type { RunStore } from "../store.js";
 import type { ChainAdapter } from "./chain-adapter.js";
 import type { ChainRegistry } from "./chain-registry.js";
@@ -24,6 +25,7 @@ export type BackendProviderEvidenceMapper = (input: {
   readonly normalizedIntent: unknown;
   readonly preparedExecution: unknown;
   readonly providerResult: ProviderEvaluationResult;
+  readonly mode: GenericEvidenceMode;
 }) => BackendOperationResult<unknown>;
 
 export type NormalizationFunction<Input = unknown, Output = unknown> = (

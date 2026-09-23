@@ -1,6 +1,7 @@
 import {
   convertAtomicAmountToHuman,
   convertHumanAmountToAtomic,
+  type GenericEvidenceMode,
   type NormalizedSwapIntent,
 } from "@parallax/contracts";
 import { describe, expect, it } from "vitest";
@@ -93,8 +94,10 @@ function result(
     reference: "fixture://native-rpc",
   },
   capabilities: readonly string[] = NATIVE_RPC_CAPABILITIES,
+  mode: GenericEvidenceMode = "MOCK",
 ): ProviderEvaluationResult {
   return {
+    mode,
     provider: {
       providerId: NATIVE_RPC_ARBITRUM_PROVIDER_ID,
       observedAt: "2026-09-10T00:01:00.000Z",
@@ -529,6 +532,7 @@ describe("Backend Native RPC evidence seam", () => {
           snapshot: { mode: "LIVE" },
         },
         ["eth_call", "estimateGas"],
+        "LIVE",
       ),
     });
 
