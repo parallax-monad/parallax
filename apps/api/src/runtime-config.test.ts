@@ -26,6 +26,15 @@ const environment = {
   MOSS_RUNTIME_REVISION: "moss-commit-123",
 };
 
+const tenderlyEnvironment = {
+  ...environment,
+  ARBITRUM_RPC_URL: "https://arbitrum.example.test",
+  TENDERLY_ACCOUNT_SLUG: "account",
+  TENDERLY_PROJECT_SLUG: "project",
+  TENDERLY_ACCESS_KEY: "test-secret",
+  TENDERLY_TIMEOUT_MS: "15000",
+};
+
 describe("backend runtime config", () => {
   it("defaults the RunStore backend to process-local memory", () => {
     expect(parseRunStoreEnvironment({})).toEqual({
@@ -101,6 +110,51 @@ describe("backend runtime config", () => {
       symbol: "MON",
       decimals: 18,
     });
+  });
+
+  it("keeps complete Tenderly configuration explicit and out of token metadata", () => {
+    const runtime = bootstrapBackendRuntime({
+      environment: tenderlyEnvironment,
+      tokenRegistry: tokenRegistryConfig,
+    });
+
+    expect(runtime.config.arbitrum).toMatchObject({
+      chainId: 421614,
+      rpcUrl: "https://arbitrum.example.test",
+    });
+    expect(runtime.config.tenderly).toEqual({
+      accountSlug: "account",
+      projectSlug: "project",
+      accessKey: "test-secret",
+      timeoutMs: 15000,
+    });
+  });
+
+  it("rejects partial Tenderly credentials before application bootstrap", () => {
+    expect(() =>
+      bootstrapBackendRuntime({
+        environment: {
+          ...environment,
+          TENDERLY_ACCOUNT_SLUG: "account",
+          ARBITRUM_RPC_URL: "https://arbitrum.example.test",
+        },
+        tokenRegistry: tokenRegistryConfig,
+      }),
+    ).toThrow(/TENDERLY_PROJECT_SLUG/);
+  });
+
+  it("requires an Arbitrum RPC endpoint for configured Tenderly", () => {
+    expect(() =>
+      bootstrapBackendRuntime({
+        environment: {
+          ...environment,
+          TENDERLY_ACCOUNT_SLUG: "account",
+          TENDERLY_PROJECT_SLUG: "project",
+          TENDERLY_ACCESS_KEY: "test-secret",
+        },
+        tokenRegistry: tokenRegistryConfig,
+      }),
+    ).toThrow(/ARBITRUM_RPC_URL/);
   });
 
   it("fails closed when required production settings are absent", () => {

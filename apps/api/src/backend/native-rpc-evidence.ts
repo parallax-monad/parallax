@@ -114,7 +114,10 @@ export function toNativeRpcGenericEvidence(
   input: NativeRpcGenericEvidenceInput,
 ): GenericEvidence {
   const mode =
-    input.mode ?? providerModeFromResult(input.providerResult) ?? "MOCK";
+    input.mode ??
+    input.providerResult.mode ??
+    providerModeFromResult(input.providerResult) ??
+    "MOCK";
   const source = mode === "MOCK" ? "mock" : "rpc";
   const candidate = new Map(
     input.providerResult.candidateFields.map((field) => [

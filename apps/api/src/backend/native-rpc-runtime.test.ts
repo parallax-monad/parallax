@@ -976,6 +976,7 @@ describe("NativeRpcProvider", () => {
     });
     expect(Object.keys(provider.adapter)).toEqual([
       "providerId",
+      "mode",
       "capabilities",
       "supports",
     ]);

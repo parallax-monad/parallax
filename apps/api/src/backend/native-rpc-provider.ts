@@ -113,7 +113,7 @@ export class NativeRpcProvider<Intent extends NativeRpcIntent = NativeRpcIntent>
     Intent,
     NativeRpcPreparedExecution<Intent>
   >;
-  private readonly mode: NativeRpcProviderMode;
+  public readonly mode: NativeRpcProviderMode;
   private readonly providerVersion: string;
   private readonly now: () => string;
   private readonly checkFreshness: boolean;
@@ -611,6 +611,7 @@ export class NativeRpcProvider<Intent extends NativeRpcIntent = NativeRpcIntent>
     });
     return {
       ...result,
+      mode: this.mode,
       capabilities: this.capabilities,
     };
   }

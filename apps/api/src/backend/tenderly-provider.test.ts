@@ -176,6 +176,32 @@ describe("TenderlyProvider", () => {
     expect(result.status).toBe("success");
   });
 
+  it("accepts the Camelot chainId binding without forwarding it as a Tenderly field", async () => {
+    const chainBoundPrepared = {
+      ...prepared,
+      unsignedTransaction: {
+        ...prepared.unsignedTransaction,
+        payload: {
+          ...(prepared.unsignedTransaction.payload as Record<string, unknown>),
+          chainId: "0x66eee",
+        },
+      },
+    } as TenderlyPreparedExecution;
+    const fetcher = vi.fn(
+      async (_url: RequestInfo | URL, options?: RequestInit) => {
+        expect(JSON.parse(String(options?.body))).not.toHaveProperty("chainId");
+        return Response.json(response());
+      },
+    ) as typeof fetch;
+
+    const result = await evaluateProviderAdapter(adapter(fetcher), {
+      ...input,
+      input: chainBoundPrepared,
+    });
+
+    expect(result.status).toBe("success");
+  });
+
   it("accepts a semantically equivalent cloned input intent", async () => {
     const result = await evaluateProviderAdapter(
       adapter(vi.fn(async () => Response.json(response())) as typeof fetch),
@@ -230,6 +256,21 @@ describe("TenderlyProvider", () => {
             data: "0x1234",
             value: "0",
             nonce: "1",
+          },
+        },
+      },
+    ],
+    [
+      "mismatched transaction chainId",
+      {
+        unsignedTransaction: {
+          kind: "unsigned",
+          payload: {
+            from: sender,
+            to: target,
+            data: "0x1234",
+            value: "0",
+            chainId: "0x1",
           },
         },
       },

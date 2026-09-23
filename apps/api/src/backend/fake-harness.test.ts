@@ -100,6 +100,7 @@ describe("fake Backend adapter harness", () => {
     expect(isFactoryCreatedProviderAdapter(adapter)).toBe(true);
     expect(Object.keys(adapter)).toEqual([
       "providerId",
+      "mode",
       "capabilities",
       "supports",
     ]);
@@ -122,6 +123,7 @@ describe("fake Backend adapter harness", () => {
     });
 
     expect(result).toMatchObject({
+      mode: "MOCK",
       provider: { providerId: "fixture-provider" },
       status: "success",
       responseEvidence: {

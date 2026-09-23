@@ -21,21 +21,68 @@ const rpcUrlSchema = z
     "Moss RPC URL must use HTTP or HTTPS",
   );
 
-export const backendEnvironmentSchema = z.object({
-  MONAD_RPC_URL: rpcUrlSchema,
-  ARBITRUM_RPC_URL: z.preprocess(
-    (value) =>
-      typeof value === "string" && value.trim() === "" ? undefined : value,
-    rpcUrlSchema.optional(),
-  ),
-  MOSS_RUNTIME_PATH: z.preprocess(
-    (value) =>
-      typeof value === "string" && value.trim() === "" ? undefined : value,
-    z.string().trim().min(1).optional(),
-  ),
-  MOSS_RUNTIME_VERSION: z.string().trim().min(1),
-  MOSS_RUNTIME_REVISION: z.string().trim().min(1),
-});
+const optionalEnvironmentString = z.preprocess(
+  (value) =>
+    typeof value === "string" && value.trim() === "" ? undefined : value,
+  z.string().trim().min(1).optional(),
+);
+
+const optionalEnvironmentPositiveInteger = z.preprocess(
+  (value) =>
+    typeof value === "string" && value.trim() === "" ? undefined : value,
+  z.coerce.number().int().positive().max(60_000).optional(),
+);
+
+export const backendEnvironmentSchema = z
+  .object({
+    MONAD_RPC_URL: rpcUrlSchema,
+    ARBITRUM_RPC_URL: z.preprocess(
+      (value) =>
+        typeof value === "string" && value.trim() === "" ? undefined : value,
+      rpcUrlSchema.optional(),
+    ),
+    MOSS_RUNTIME_PATH: optionalEnvironmentString,
+    MOSS_RUNTIME_VERSION: z.string().trim().min(1),
+    MOSS_RUNTIME_REVISION: z.string().trim().min(1),
+    TENDERLY_ACCOUNT_SLUG: optionalEnvironmentString,
+    TENDERLY_PROJECT_SLUG: optionalEnvironmentString,
+    TENDERLY_ACCESS_KEY: optionalEnvironmentString,
+    TENDERLY_TIMEOUT_MS: optionalEnvironmentPositiveInteger,
+  })
+  .superRefine((environment, context) => {
+    const tenderlyValues = [
+      environment.TENDERLY_ACCOUNT_SLUG,
+      environment.TENDERLY_PROJECT_SLUG,
+      environment.TENDERLY_ACCESS_KEY,
+    ];
+    const tenderlyConfigured = tenderlyValues.some(
+      (value) => value !== undefined,
+    );
+    if (!tenderlyConfigured) return;
+
+    const tenderlyFields = [
+      ["TENDERLY_ACCOUNT_SLUG", environment.TENDERLY_ACCOUNT_SLUG],
+      ["TENDERLY_PROJECT_SLUG", environment.TENDERLY_PROJECT_SLUG],
+      ["TENDERLY_ACCESS_KEY", environment.TENDERLY_ACCESS_KEY],
+    ] as const;
+    for (const [field, value] of tenderlyFields) {
+      if (value === undefined) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: [field],
+          message: `${field} is required when Tenderly integration is configured`,
+        });
+      }
+    }
+    if (environment.ARBITRUM_RPC_URL === undefined) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["ARBITRUM_RPC_URL"],
+        message:
+          "ARBITRUM_RPC_URL is required when Tenderly integration is configured",
+      });
+    }
+  });
 
 const tokenRegistryEnvironmentSchema = z.object({
   PARALLAX_TOKEN_REGISTRY_JSON: z.preprocess(
@@ -126,6 +173,15 @@ export const arbitrumIntegrationConfigSchema = z
   })
   .strict();
 
+export const tenderlyIntegrationConfigSchema = z
+  .object({
+    accountSlug: z.string().trim().min(1),
+    projectSlug: z.string().trim().min(1),
+    accessKey: z.string().trim().min(1),
+    timeoutMs: z.number().int().positive().max(60_000).optional(),
+  })
+  .strict();
+
 export const backendRuntimeConfigSchema = z
   .object({
     tokenRegistry: tokenRegistryConfigSchema,
@@ -133,12 +189,16 @@ export const backendRuntimeConfigSchema = z
     // Optional for backward-compatible Monad-only schema consumers. The
     // bootstrap function always includes the explicit Arbitrum descriptor.
     arbitrum: arbitrumIntegrationConfigSchema.optional(),
+    tenderly: tenderlyIntegrationConfigSchema.optional(),
   })
   .strict();
 
 export type MossIntegrationConfig = z.infer<typeof mossIntegrationConfigSchema>;
 export type ArbitrumIntegrationConfig = z.infer<
   typeof arbitrumIntegrationConfigSchema
+>;
+export type TenderlyIntegrationConfig = z.infer<
+  typeof tenderlyIntegrationConfigSchema
 >;
 export type BackendRuntimeConfig = z.infer<typeof backendRuntimeConfigSchema>;
 
@@ -182,6 +242,10 @@ export function bootstrapBackendRuntime(
   input: BackendBootstrapInput,
 ): BackendRuntime {
   const environment = backendEnvironmentSchema.parse(input.environment);
+  const tenderlyConfigured =
+    environment.TENDERLY_ACCOUNT_SLUG !== undefined &&
+    environment.TENDERLY_PROJECT_SLUG !== undefined &&
+    environment.TENDERLY_ACCESS_KEY !== undefined;
   const config = backendRuntimeConfigSchema.parse({
     tokenRegistry: input.tokenRegistry,
     moss: {
@@ -199,6 +263,18 @@ export function bootstrapBackendRuntime(
         ? {}
         : { rpcUrl: environment.ARBITRUM_RPC_URL }),
     },
+    ...(tenderlyConfigured
+      ? {
+          tenderly: {
+            accountSlug: environment.TENDERLY_ACCOUNT_SLUG,
+            projectSlug: environment.TENDERLY_PROJECT_SLUG,
+            accessKey: environment.TENDERLY_ACCESS_KEY,
+            ...(environment.TENDERLY_TIMEOUT_MS === undefined
+              ? {}
+              : { timeoutMs: environment.TENDERLY_TIMEOUT_MS }),
+          },
+        }
+      : {}),
   }) as BackendRuntimeConfig;
 
   return {

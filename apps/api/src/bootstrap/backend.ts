@@ -15,6 +15,15 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { z } from "zod";
 import { CheckApplicationService } from "../application.js";
+import {
+  type BackendApplicationRoute,
+  validateBackendApplicationRoutes,
+} from "../backend/application-routing.js";
+import type {
+  ArbitrumNormalizationInput,
+  ArbitrumProductionComposition,
+} from "../backend/arbitrum-composition.js";
+import { createArbitrumProductionComposition } from "../backend/arbitrum-composition.js";
 import type { BackendCompositionRuntime } from "../backend/composition.js";
 import {
   BackendPipeline,
@@ -34,6 +43,7 @@ import { createRunQueryApp } from "../routes/runs.js";
 import { RunQueryApplicationService } from "../run-query.js";
 import { createConfiguredRunStore } from "../run-store-factory.js";
 import {
+  ARBITRUM_SEPOLIA_CHAIN_ID,
   type BackendRuntime,
   bootstrapBackendRuntime,
 } from "../runtime-config.js";
@@ -94,6 +104,7 @@ export class UnavailableQuoteAgentFlow implements QuoteAgentFlowPort {
 export type BackendAppDependencies = {
   runtime: BackendRuntime;
   composition?: BackendCompositionRuntime;
+  routes?: readonly BackendApplicationRoute[];
   corsOrigin?: string;
   agentFlow?: AgentFlowPort;
   liveRunner?: KuruLiveRunner;
@@ -121,7 +132,9 @@ export function createBackendApp(
   dependencies: BackendAppDependencies,
 ): BackendApp {
   const ownedStore =
-    dependencies.store === undefined && dependencies.composition === undefined
+    dependencies.store === undefined &&
+    dependencies.composition === undefined &&
+    (dependencies.routes === undefined || dependencies.routes.length === 0)
       ? new InMemoryRunStore()
       : undefined;
   if (
@@ -132,10 +145,14 @@ export function createBackendApp(
     throw new Error("Backend Store must be the composition RunStore");
   }
   const store =
-    dependencies.store ?? dependencies.composition?.runStore ?? ownedStore;
+    dependencies.store ??
+    dependencies.composition?.runStore ??
+    dependencies.routes?.[0]?.composition.runStore ??
+    ownedStore;
   if (store === undefined) {
     throw new Error("Backend Store was not configured");
   }
+  validateBackendApplicationRoutes(dependencies.routes, store);
   const disposeStore =
     dependencies.disposeStore ??
     (ownedStore === undefined ? undefined : () => ownedStore.close());
@@ -157,6 +174,7 @@ export function createBackendApp(
     runtime: dependencies.runtime,
     store,
     composition: dependencies.composition,
+    routes: dependencies.routes,
     agentFlow,
   });
   const replayService = new ReplayApplicationService({
@@ -167,6 +185,7 @@ export function createBackendApp(
   const quoteService = new QuoteApplicationService({
     runtime: dependencies.runtime,
     composition: dependencies.composition,
+    routes: dependencies.routes,
     quoteFlow,
   });
 
@@ -313,6 +332,8 @@ export type BootstrapBackendAppOptions = {
   environment?: unknown;
   tokenRegistry: unknown;
   composition?: BackendCompositionRuntime;
+  /** Optional injected Arbitrum composition for deterministic integration tests. */
+  arbitrumComposition?: ArbitrumProductionComposition;
   corsOrigin?: string;
   agentFlow?: AgentFlowPort;
   liveRunner?: KuruLiveRunner;
@@ -344,11 +365,16 @@ export function bootstrapBackendApp(
   }
 
   const configuredStore =
-    options.store === undefined && options.composition === undefined
+    options.store === undefined &&
+    options.composition === undefined &&
+    options.arbitrumComposition === undefined
       ? createConfiguredRunStore(environment)
       : undefined;
   const store =
-    options.store ?? options.composition?.runStore ?? configuredStore;
+    options.store ??
+    options.composition?.runStore ??
+    options.arbitrumComposition?.runStore ??
+    configuredStore;
   if (store === undefined) {
     throw new Error("Backend Store was not configured");
   }
@@ -361,9 +387,53 @@ export function bootstrapBackendApp(
       ? undefined
       : () => configuredStore.checkReady());
 
+  let arbitrumComposition = options.arbitrumComposition;
+  if (
+    arbitrumComposition === undefined &&
+    options.composition === undefined &&
+    runtime.config.arbitrum?.rpcUrl !== undefined
+  ) {
+    if (store === undefined) {
+      throw new Error("Backend Store was not configured");
+    }
+    arbitrumComposition = createArbitrumProductionComposition({
+      runtime,
+      runStore: store,
+      providerEnvironment: "production",
+    });
+  }
+  if (
+    arbitrumComposition !== undefined &&
+    store !== arbitrumComposition.runStore
+  ) {
+    throw new Error("Arbitrum composition must use the Backend RunStore");
+  }
+  const routes =
+    arbitrumComposition === undefined
+      ? undefined
+      : [
+          {
+            chainId: ARBITRUM_SEPOLIA_CHAIN_ID,
+            composition: {
+              runStore: arbitrumComposition.runStore,
+              normalize: (input: unknown) =>
+                arbitrumComposition.normalize(
+                  input as ArbitrumNormalizationInput,
+                ),
+            },
+            agentFlow: createCompositionBackedCheckFlow(
+              arbitrumComposition as unknown as BackendCompositionRuntime,
+            ),
+            quoteFlow: createCompositionBackedQuoteFlow(
+              arbitrumComposition as unknown as BackendCompositionRuntime,
+            ),
+          } satisfies BackendApplicationRoute,
+        ];
+
   return createBackendApp({
     runtime,
     composition: options.composition,
+    routes,
     corsOrigin: options.corsOrigin ?? serverEnvironment.CORS_ORIGIN,
     agentFlow: options.agentFlow,
     liveRunner: options.liveRunner,

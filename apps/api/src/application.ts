@@ -22,6 +22,10 @@ import {
   type RerunContext,
   resolveRerun,
 } from "@parallax/orchestrator/application";
+import {
+  type BackendApplicationRoute,
+  findBackendApplicationRoute,
+} from "./backend/application-routing.js";
 import type { BackendCompositionRuntime } from "./backend/composition.js";
 import { isBackendControlError } from "./backend/control-boundary.js";
 import {
@@ -69,6 +73,7 @@ export type CheckApplicationServiceDependencies = {
   store: RunStore;
   agentFlow: AgentFlowPort;
   composition?: BackendCompositionRuntime;
+  routes?: readonly BackendApplicationRoute[];
   createRunId?: () => string;
   createTimestamp?: () => string;
 };
@@ -96,15 +101,22 @@ export class CheckApplicationService {
       });
     }
 
+    const route = findBackendApplicationRoute(
+      this.dependencies.routes,
+      parsedRequest.data.chainId,
+    );
+    const composition = route?.composition ?? this.dependencies.composition;
+    const agentFlow = route?.agentFlow ?? this.dependencies.agentFlow;
+
     let normalized: IntentNormalizationResult;
     try {
       const candidate =
-        this.dependencies.composition === undefined
+        composition === undefined
           ? normalizeCheckSwapRequest(
               parsedRequest.data,
               this.dependencies.runtime.tokenRegistry,
             )
-          : await this.dependencies.composition.normalize(parsedRequest.data);
+          : await composition.normalize(parsedRequest.data);
       const normalizationResult = coerceIntentNormalizationResult(candidate);
       if (normalizationResult === undefined) {
         return errorResponse(400, {
@@ -168,6 +180,7 @@ export class CheckApplicationService {
     }
 
     const invoked = await this.invokeAgentFlowCheck(
+      agentFlow,
       runId,
       normalized.intent,
       parsedRequest.data.expectationBaseline,
@@ -292,6 +305,10 @@ export class CheckApplicationService {
     }
 
     const invoked = await this.invokeAgentFlowCheck(
+      findBackendApplicationRoute(
+        this.dependencies.routes,
+        baseline.intent.chainId,
+      )?.agentFlow ?? this.dependencies.agentFlow,
       childRunId,
       adjustment.nextIntent,
     );
@@ -395,6 +412,7 @@ export class CheckApplicationService {
   }
 
   private async invokeAgentFlowCheck(
+    agentFlow: AgentFlowPort,
     runId: string,
     intent: Parameters<AgentFlowPort["check"]>[0]["intent"],
     expectationBaseline?: Parameters<
@@ -402,7 +420,7 @@ export class CheckApplicationService {
     >[0]["expectationBaseline"],
   ): Promise<{ ok: true; candidate: unknown } | { ok: false; error: unknown }> {
     try {
-      const candidate = await this.dependencies.agentFlow.check({
+      const candidate = await agentFlow.check({
         runId,
         intent,
         ...(expectationBaseline === undefined ? {} : { expectationBaseline }),
@@ -826,8 +844,9 @@ type AuthoritativeRuntimeIdentity = {
  * composition path (e.g. Arbitrum × Camelot × Native RPC): that Evidence's own
  * provider runtime is the authority, so the configured Moss runtime identity
  * must never be applied to it. The provider runtime is trusted only when the
- * projection is LIVE, its source is neither mock, unknown, nor external, and
- * it carries a non-empty runtime version and revision.
+ * projection is LIVE, its source is neither mock nor unknown (or is the
+ * explicitly bound Tenderly external provider), and it carries a non-empty
+ * runtime version and revision.
  *
  * A `providerEvidence` that cannot establish that trusted runtime identity
  * resolves to `undefined` and the caller fails closed. Falling back to the
@@ -853,10 +872,15 @@ function expectedAuthoritativeRuntime(
   if (provenance.mode !== "LIVE") {
     return undefined;
   }
+  if (provenance.source === "mock" || provenance.source === "unknown") {
+    return undefined;
+  }
+  // Tenderly is the one explicitly bound external provider in the current
+  // composition. Its adapter carries the protocol runtime identity into the
+  // provider-neutral provenance; other external projections remain rejected.
   if (
-    provenance.source === "mock" ||
-    provenance.source === "unknown" ||
-    provenance.source === "external"
+    provenance.source === "external" &&
+    providerEvidence.provider.providerId !== "tenderly-arbitrum"
   ) {
     return undefined;
   }
