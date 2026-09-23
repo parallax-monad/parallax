@@ -35,7 +35,10 @@ import {
 } from "./fake-harness.js";
 import { NATIVE_RPC_ARBITRUM_PROVIDER_ID } from "./native-rpc-evidence.js";
 import { BackendPipeline } from "./pipeline.js";
-import { TENDERLY_ARBITRUM_PROVIDER_ID } from "./tenderly-provider.js";
+import {
+  createTenderlyProvider,
+  TENDERLY_ARBITRUM_PROVIDER_ID,
+} from "./tenderly-provider.js";
 
 const normalizedIntent: NormalizedSwapIntent = {
   chainId: 421614,
@@ -566,6 +569,124 @@ describe("Arbitrum production composition skeleton", () => {
         }),
       ]),
     );
+  });
+
+  it("accepts a bound LIVE Tenderly result through the public Arbitrum Check route", async () => {
+    const blockHash = `0x${"cd".repeat(32)}`;
+    const target = "0x2222222222222222222222222222222222222222";
+    const runtime = arbitrumRuntime();
+    const tenderlyProvider = createTenderlyProvider({
+      accountSlug: "account",
+      projectSlug: "project",
+      accessKey: "test-secret",
+      fetchImplementation: vi.fn(async (_url, init) => {
+        const request = JSON.parse(String(init?.body)) as {
+          readonly from: string;
+          readonly to: string;
+          readonly input: string;
+          readonly value: string;
+          readonly network_id: string;
+          readonly block_number: number;
+          readonly gas?: number;
+        };
+        return Response.json({
+          transaction: {
+            ...request,
+            block_hash: blockHash,
+            gas: request.gas ?? 21000,
+            status: true,
+            gas_used: 19000,
+            transaction_info: { asset_changes: [], balance_changes: [] },
+          },
+          simulation: {
+            ...request,
+            gas: request.gas ?? 21000,
+            status: true,
+          },
+        });
+      }) as typeof fetch,
+      now: () => new Date("2026-09-17T00:00:00Z"),
+    });
+    const composition = createArbitrumProductionComposition({
+      runtime,
+      runStore: new InMemoryRunStore(),
+      chainAdapter: createFakeChainAdapter({
+        chainId: 421614,
+        blockNumber: "42",
+        blockHash,
+        observedAt: "2026-09-17T00:00:00Z",
+        gasUnits: "21000",
+        finality: { status: "finalized" },
+      }),
+      protocolAdapter: createCamelotV3ProtocolAdapter({
+        quote: async () => ({
+          estimatedAmountOut: "0.5",
+          minimumAmountOut: "0.4",
+          blockNumber: "42",
+          runtimeVersion: "arbitrum-camelot-v3",
+          runtimeRevision: "tenderly",
+        }),
+        buildTransaction: async () => ({
+          from: normalizedIntent.sender,
+          to: target,
+          data: "0x1234",
+          value: "0x0",
+          gas: "0x5208",
+          chainId: "0x66eee",
+        }),
+      }),
+      providers: [tenderlyProvider],
+    });
+    const app = createBackendApp({
+      runtime,
+      composition: composition as unknown as BackendCompositionRuntime,
+    });
+
+    const response = await app.fetch(
+      new Request("https://api.example.test/api/check", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          chainId: 421614,
+          protocol: "camelot-v3",
+          sender: normalizedIntent.sender,
+          tokenIn: { kind: "native" },
+          tokenOut: { kind: "erc20", address: arbitrumTokenAddress },
+          amountIn: "1",
+          economicBoundary: {
+            availability: "unavailable",
+            source: "unavailable",
+          },
+        }),
+      }),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body).toMatchObject({
+      status: "completed",
+      providerEvidence: {
+        provider: {
+          providerId: TENDERLY_ARBITRUM_PROVIDER_ID,
+          status: "SUCCESS",
+        },
+        provenance: {
+          mode: "LIVE",
+          source: "external",
+          simulationBlock: "42",
+          runtime: {
+            runtimeVersion: "arbitrum-camelot-v3",
+            runtimeRevision: "tenderly",
+          },
+        },
+        checkedScope: expect.arrayContaining([
+          "tenderly.execution",
+          "tenderly.gas",
+          "tenderly.pinned-block",
+        ]),
+        providerData: {},
+      },
+    });
   });
 
   it("does not label a Native RPC provider failure as Moss simulation", async () => {

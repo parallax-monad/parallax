@@ -844,8 +844,9 @@ type AuthoritativeRuntimeIdentity = {
  * composition path (e.g. Arbitrum × Camelot × Native RPC): that Evidence's own
  * provider runtime is the authority, so the configured Moss runtime identity
  * must never be applied to it. The provider runtime is trusted only when the
- * projection is LIVE, its source is neither mock, unknown, nor external, and
- * it carries a non-empty runtime version and revision.
+ * projection is LIVE, its source is neither mock nor unknown (or is the
+ * explicitly bound Tenderly external provider), and it carries a non-empty
+ * runtime version and revision.
  *
  * A `providerEvidence` that cannot establish that trusted runtime identity
  * resolves to `undefined` and the caller fails closed. Falling back to the
@@ -871,10 +872,15 @@ function expectedAuthoritativeRuntime(
   if (provenance.mode !== "LIVE") {
     return undefined;
   }
+  if (provenance.source === "mock" || provenance.source === "unknown") {
+    return undefined;
+  }
+  // Tenderly is the one explicitly bound external provider in the current
+  // composition. Its adapter carries the protocol runtime identity into the
+  // provider-neutral provenance; other external projections remain rejected.
   if (
-    provenance.source === "mock" ||
-    provenance.source === "unknown" ||
-    provenance.source === "external"
+    provenance.source === "external" &&
+    providerEvidence.provider.providerId !== "tenderly-arbitrum"
   ) {
     return undefined;
   }

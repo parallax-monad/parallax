@@ -84,18 +84,31 @@ export function mapTenderlyProviderResult(
   const actionValue = jsonValueOrNull(
     input.preparedExecution.unsignedTransaction.payload,
   );
+  const responseBound = tenderlyResponseBound(input.providerResult);
+  const runtime =
+    mode === "MOCK"
+      ? undefined
+      : runtimeFromQuote(input.preparedExecution.quote);
   const observed = (path: string): boolean =>
     candidate.get(path)?.status === "observed";
   const assetChangesAvailable = observed("tenderly.assetChanges.available");
   const balanceChangesAvailable = observed("tenderly.balanceChanges.available");
   const checkedScope = [
-    ...(observed("tenderly.execution.status") ? ["tenderly.execution"] : []),
-    ...(observed("tenderly.gas.used") ? ["tenderly.gas"] : []),
-    ...(observed("tenderly.block.number") && observed("tenderly.block.hash")
+    ...(responseBound && observed("tenderly.execution.status")
+      ? ["tenderly.execution"]
+      : []),
+    ...(responseBound && observed("tenderly.gas.used") ? ["tenderly.gas"] : []),
+    ...(responseBound &&
+    observed("tenderly.block.number") &&
+    observed("tenderly.block.hash")
       ? ["tenderly.pinned-block"]
       : []),
-    ...(assetChangesAvailable ? ["tenderly.asset-changes-available"] : []),
-    ...(balanceChangesAvailable ? ["tenderly.balance-changes-available"] : []),
+    ...(responseBound && assetChangesAvailable
+      ? ["tenderly.asset-changes-available"]
+      : []),
+    ...(responseBound && balanceChangesAvailable
+      ? ["tenderly.balance-changes-available"]
+      : []),
   ];
   const unknownScope = [
     ...(quote.value === null ? ["quote"] : []),
@@ -218,11 +231,23 @@ export function mapTenderlyProviderResult(
       mode,
       source: fieldSource,
       simulationBlock: blockNumber,
+      ...(runtime === undefined ? {} : { runtime }),
     },
     checkedScope,
     unknownScope,
     providerData,
   });
+}
+
+function tenderlyResponseBound(
+  providerResult: ProviderEvaluationResult,
+): boolean {
+  const responseEvidence = providerResult.responseEvidence;
+  if (responseEvidence.kind !== "redacted_snapshot") return false;
+  return (
+    isRecord(responseEvidence.snapshot) &&
+    responseEvidence.snapshot.blockMatched === true
+  );
 }
 
 function genericProviderStatus(
@@ -358,6 +383,21 @@ function reproducibility(
   mode: GenericEvidenceMode,
 ): TenderlyFieldReproducibility {
   return mode === "MOCK" ? "NOT_REPRODUCIBLE" : "REPRODUCIBLE";
+}
+
+function runtimeFromQuote(quote: unknown) {
+  if (!isRecord(quote)) return undefined;
+  const runtimeVersion = quote.runtimeVersion;
+  const runtimeRevision = quote.runtimeRevision;
+  if (
+    typeof runtimeVersion !== "string" ||
+    runtimeVersion.trim() === "" ||
+    typeof runtimeRevision !== "string" ||
+    runtimeRevision.trim() === ""
+  ) {
+    return undefined;
+  }
+  return { runtimeVersion, runtimeRevision };
 }
 
 function jsonValueOrNull(value: unknown): ProvisionalJsonValue | null {

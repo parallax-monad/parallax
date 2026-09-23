@@ -135,6 +135,63 @@ describe("Tenderly provider-neutral Evidence mapping", () => {
     });
   });
 
+  it("does not promote semantic scopes from a response that is not bound", async () => {
+    const provider = createTenderlyProvider({
+      accountSlug: "account",
+      projectSlug: "project",
+      accessKey: "test-secret",
+      fetchImplementation: vi.fn(async () =>
+        Response.json({
+          transaction: {
+            from: sender,
+            to: target,
+            // Deliberately differs from the prepared transaction.
+            input: "0xabcd",
+            value: "0x",
+            network_id: "421614",
+            block_number: 123,
+            block_hash: blockHash,
+            gas: 21000,
+            status: true,
+            gas_used: 20000,
+            transaction_info: { asset_changes: [], balance_changes: [] },
+          },
+          simulation: {
+            from: sender,
+            to: target,
+            input: "0x1234",
+            value: "0",
+            network_id: "421614",
+            block_number: 123,
+            gas: 21000,
+            status: true,
+          },
+        }),
+      ) as typeof fetch,
+      now: () => new Date("2026-09-17T00:00:00Z"),
+    });
+    const providerResult = await evaluateProviderAdapter(provider, {
+      runId: prepared.runId,
+      intent,
+      chainId: prepared.chainId,
+      protocol: prepared.protocol,
+      input: prepared,
+    });
+
+    expect(providerResult.status).toBe("unknown");
+    const evidence = mapTenderlyProviderResult({
+      intent,
+      tokenInDecimals: 18,
+      tokenOutDecimals: 6,
+      preparedExecution: prepared,
+      providerResult,
+    });
+
+    expect(evidence.provider.status).toBe("UNKNOWN");
+    expect(evidence.checkedScope).toEqual([]);
+    expect(evidence.providerData.tenderly).toMatchObject({ checked: [] });
+  });
+
   it("keeps deterministic fixture evidence mock and non-reproducible", async () => {
     const provider = createTenderlyProvider({
       accountSlug: "account",
