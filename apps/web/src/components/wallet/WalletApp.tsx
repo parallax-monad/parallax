@@ -7,6 +7,7 @@ import {
 } from "@/components/wallet/WalletChecking";
 import { WalletHome } from "@/components/wallet/WalletHome";
 import { CloseIcon } from "@/components/wallet/WalletIcons";
+import { WalletIntro } from "@/components/wallet/WalletIntro";
 import { WalletResult } from "@/components/wallet/WalletResult";
 import { WalletSwap } from "@/components/wallet/WalletSwap";
 import {
@@ -47,7 +48,7 @@ const STAGE_MS = 380;
 
 /**
  * Debounce before asking the backend for a Quote. Typing an amount digit by
- * digit should not fire a live Moss Discover → Load → Quote per keystroke.
+ * digit should not fire a live Moss Discover â?? Load â?? Quote per keystroke.
  */
 const QUOTE_DEBOUNCE_MS = 450;
 const LAST_RUN_ID_KEY = "parallax:last-run-id";
@@ -122,6 +123,7 @@ function backendRunId(result: CheckSwapResult): string | undefined {
 }
 
 export function WalletApp({ language }: { language: Language }) {
+  const [showIntro, setShowIntro] = useState(true);
   const [screen, setScreen] = useState<Screen>("home");
   const screenRef = useRef<Screen>("home");
   // A user-started flow invalidates the mount-time recovery result.
@@ -348,7 +350,10 @@ export function WalletApp({ language }: { language: Language }) {
           keep body text legible over moving particles. */}
       {/* Desktop uses the original viewport calculation; the mobile utility row
           supplies a safe-area-aware height override. */}
-      <div className="wallet-app-frame relative z-10 flex h-[calc(100vh-2.5rem)] flex-col overflow-hidden rounded-[24px] border-none bg-ink-elev/90 backdrop-blur-xl shadow-[0_8px_32px_rgba(0,0,0,0.12),_0_1px_3px_rgba(0,0,0,0.08)] animate-wallet-enter">
+      {showIntro ? (
+        <WalletIntro onComplete={() => setShowIntro(false)} />
+      ) : (
+        <div className="wallet-app-frame relative z-10 flex h-[calc(100vh-2.5rem)] flex-col overflow-hidden rounded-[24px] border-none bg-ink-elev/90 backdrop-blur-xl shadow-[0_8px_32px_rgba(0,0,0,0.12),_0_1px_3px_rgba(0,0,0,0.08)] animate-wallet-enter">
         <header className="relative flex items-center justify-center px-6 py-5 border-b border-white/[0.06]">
           <span className="text-[22px] font-semibold tracking-[-0.02em] text-monad-dim">
             PARAL<span className="text-white">LAX</span>
@@ -359,7 +364,7 @@ export function WalletApp({ language }: { language: Language }) {
               aria-label={pick(
                 language,
                 "Return to wallet home",
-                "返回演示钱包首页",
+                "è¿?å??æ¼?ç¤ºé?±å??é¦?é¡µ",
               )}
               className="wallet-app-close absolute right-6 rounded-full p-2 text-dim/80 transition-all duration-200 ease-out hover:bg-white/[0.06] hover:text-white active:scale-95"
               onClick={discard}
@@ -421,6 +426,7 @@ export function WalletApp({ language }: { language: Language }) {
           </ScreenTransition>
         </div>
       </div>
+      )}
 
       {result && drawerOpen && (
         <EvidenceDrawer
