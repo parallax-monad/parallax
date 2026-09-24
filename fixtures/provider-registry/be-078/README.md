@@ -76,3 +76,34 @@ failure. The final acceptance still requires Product/owner review of the capture
 Final assembled exercise capture:
 
 - [2026-09-22 read-only exercise](backend-golden-path-20260922032144325/capture.json)
+
+## Alternative QuickNode trace capability exercise
+
+Run from the repository root:
+
+```bash
+pnpm --filter @parallax/api probe:quicknode-canonical
+```
+
+This is a read-only Arbitrum Sepolia capability exercise against the accepted BE-063
+Camelot transaction. It first passes the existing NativeRpcProvider canonical checks,
+then observes `debug_traceCall` using `callTracer` and `prestateTracer` with diff mode.
+
+The RPC endpoint is supplied through `ARBITRUM_SEPOLIA_RPC_URL` and is never persisted.
+Raw trace payloads are not stored; only bounded observations and SHA-256 digests are
+written. Supply the endpoint locally and run this probe with Node 22.x; the runner refuses
+other Node versions before making an RPC call. An existing local Node 22 binary can be
+selected through the command's `PATH` without changing the repository or global Node.
+The capture records Node's DNS result order. On a network where the endpoint's IPv4
+route resets connections, `NODE_OPTIONS=--dns-result-order=ipv6first` can select its
+working IPv6 route for this command.
+
+A PASS is alternative endpoint capability evidence only. It does not replace or qualify
+Tenderly, change production Provider selection, alter the Evidence Contract, or claim
+signing, broadcast, custody, Risk acceptance, or Product Demo Gate acceptance.
+
+Observed read-only capture: [2026-09-24 QuickNode capability exercise](quicknode-canonical-2026-09-24T14-28-41-070Z/capture.json).
+It records Node `v22.23.2`, `ipv6first` DNS ordering, the accepted BE-063 fixture digest,
+the pinned block and exact unsigned transaction, canonical Provider observations, and
+bounded call and state-diff trace summaries. The recorded base HEAD had task-local
+changes, so the source manifest and runner digest identify the executed working tree.
