@@ -7,6 +7,7 @@ import {
   type CanonicalNativeRpcCapture,
   createCanonicalNativeRpcEvaluationInput,
 } from "../../apps/api/src/backend/native-rpc-canonical-exercise.js";
+import { createNativeRpcClient } from "../../apps/api/src/backend/native-rpc-client.js";
 import { createNativeRpcProvider } from "../../apps/api/src/backend/native-rpc-provider.js";
 import { evaluateProviderAdapter } from "../../apps/api/src/backend/provider-adapter.js";
 import {
@@ -89,50 +90,11 @@ export function quickNodeEndpoint(): string {
   return value;
 }
 
-async function rpc(
+export function createQuickNodeRpcClient(
   endpoint: string,
-  method: string,
-  params: readonly unknown[],
-  id: number,
-): Promise<unknown> {
-  let response: Response;
-  try {
-    response = await fetch(endpoint, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        jsonrpc: "2.0",
-        id,
-        method,
-        params,
-      }),
-      signal: AbortSignal.timeout(30_000),
-    });
-  } catch {
-    throw new Error(`${method} request failed`);
-  }
-
-  if (!response.ok) {
-    throw new Error(`${method} returned HTTP ${response.status}`);
-  }
-
-  let responseBody: unknown;
-  try {
-    responseBody = await response.json();
-  } catch {
-    throw new Error(`${method} returned invalid JSON`);
-  }
-  const payload = asObject(responseBody, `${method} response`);
-
-  if (payload.error !== undefined) {
-    throw new Error(`${method} returned a JSON-RPC error`);
-  }
-
-  if (!Object.hasOwn(payload, "result")) {
-    throw new Error(`${method} response is missing result`);
-  }
-
-  return payload.result;
+  fetchImplementation?: typeof fetch,
+) {
+  return createNativeRpcClient({ rpcUrl: endpoint, fetchImplementation });
 }
 
 export function validateQuickNodeCallTrace(
@@ -274,9 +236,11 @@ async function main(): Promise<void> {
   const transaction = evaluation.input.unsignedTransaction.payload;
   const blockTag = capture.observations.pinnedBlock.number;
   const expectedBlockHash = capture.observations.pinnedBlock.hash.toLowerCase();
+  const rpcClient = createQuickNodeRpcClient(endpoint);
+  const rpcOptions = { timeoutMs: 30_000 };
 
   const chainId = asHexQuantity(
-    await rpc(endpoint, "eth_chainId", [], 1),
+    await rpcClient.request("eth_chainId", [], rpcOptions),
     "eth_chainId",
   );
 
@@ -285,7 +249,11 @@ async function main(): Promise<void> {
   }
 
   const block = asObject(
-    await rpc(endpoint, "eth_getBlockByNumber", [blockTag, false], 2),
+    await rpcClient.request(
+      "eth_getBlockByNumber",
+      [blockTag, false],
+      rpcOptions,
+    ),
     "pinned block",
   );
 
@@ -298,17 +266,15 @@ async function main(): Promise<void> {
     throw new Error("Pinned block does not match canonical evidence");
   }
 
-  const callTraceRaw = await rpc(
-    endpoint,
+  const callTraceRaw = await rpcClient.request(
     "debug_traceCall",
     [transaction, blockTag, { tracer: "callTracer" }],
-    100,
+    rpcOptions,
   );
 
   const callTraceEvidence = validateQuickNodeCallTrace(callTraceRaw, capture);
 
-  const stateDiffRaw = await rpc(
-    endpoint,
+  const stateDiffRaw = await rpcClient.request(
     "debug_traceCall",
     [
       transaction,
@@ -318,7 +284,7 @@ async function main(): Promise<void> {
         tracerConfig: { diffMode: true },
       },
     ],
-    101,
+    rpcOptions,
   );
 
   const stateDiffEvidence = validateQuickNodeStateDiff(stateDiffRaw, capture);

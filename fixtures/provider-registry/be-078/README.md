@@ -102,8 +102,14 @@ A PASS is alternative endpoint capability evidence only. It does not replace or 
 Tenderly, change production Provider selection, alter the Evidence Contract, or claim
 signing, broadcast, custody, Risk acceptance, or Product Demo Gate acceptance.
 
-Observed read-only capture: [2026-09-24 QuickNode capability exercise](quicknode-canonical-2026-09-24T14-28-41-070Z/capture.json).
+Observed read-only capture: [2026-09-25 QuickNode capability exercise](quicknode-canonical-2026-09-25T03-40-05-885Z/capture.json).
 It records Node `v22.23.2`, `ipv6first` DNS ordering, the accepted BE-063 fixture digest,
 the pinned block and exact unsigned transaction, canonical Provider observations, and
 bounded call and state-diff trace summaries. The recorded base HEAD had task-local
 changes, so the source manifest and runner digest identify the executed working tree.
+The chain ID, block, and both trace calls use the shared fail-closed Native RPC client,
+including JSON-RPC version, response ID, and error-envelope validation.
+
+The [2026-09-24 capture](quicknode-canonical-2026-09-24T14-28-41-070Z/capture.json)
+is retained as historical evidence from before that client change and is superseded by
+the 2026-09-25 capture.
