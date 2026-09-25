@@ -20,29 +20,32 @@ export function WalletHome({
 }) {
   return (
     <div className="flex flex-col gap-5 px-5 pb-6 pt-2">
-      <section>
-        <span className="text-[12px] font-bold uppercase tracking-[0.1em] text-dim">
-          {say(language, { en: "Demo balance", zh: "演示余额" })}
-        </span>
-        <strong className="mt-1 block text-[38px] font-extrabold leading-none tracking-[-0.05em]">
-          {formatUsd(TOTAL_BALANCE_USD)}
-        </strong>
-        <div className="mt-2">
-          <span className="block text-[10px] font-bold uppercase tracking-[0.08em] text-faint">
-            {say(language, { en: "Demo wallet", zh: "演示钱包" })}
+      <section className="text-center">
+          <span className="text-[12px] font-bold uppercase tracking-[0.1em] text-dim">
+            {say(language, { en: "Demo balance", zh: "?????" })}
           </span>
-          <p className="mono mt-1 text-dim">{DEMO_ADDRESS}</p>
-        </div>
-      </section>
+          <strong className="mt-1 block text-[38px] font-extrabold leading-none tracking-[-0.05em]">
+            {formatUsd(TOTAL_BALANCE_USD)}
+          </strong>
+          <div className="mt-2">
+            <span className="block text-[10px] font-bold uppercase tracking-[0.08em] text-faint">
+              {say(language, { en: "Demo wallet", zh: "??????" })}
+            </span>
+            <p className="mono mt-1 truncate text-dim">{DEMO_ADDRESS}</p>
+          </div>
+        </section>
 
-      <button
-        type="button"
-        className="btn btn-monad flex w-full items-center justify-center gap-2 py-4"
-        onClick={onSwap}
-      >
-        <SwapIcon size={20} />
-        {say(language, { en: "Swap", zh: "兑换" })}
-      </button>
+      <div className="flex flex-col items-center gap-3">
+        <button
+          type="button"
+          className="btn btn-monad flex h-[76px] w-[76px] shrink-0 flex-col items-center justify-center gap-2 rounded-2xl px-2 py-2 shadow-[0_8px_20px_rgba(0,0,0,0.16)] transition-transform hover:-translate-y-0.5"
+          onClick={onSwap}
+        >
+          <SwapIcon size={21} />
+          <span className="text-[11px] font-bold leading-none">
+            {say(language, { en: "Swap", zh: "???" })}
+          </span>
+        </button>
 
       {onLoadArbitrumSample && (
         <>
@@ -53,7 +56,7 @@ export function WalletHome({
           >
             {say(language, {
               en: "Load Sample: ADJUST",
-              zh: "样本：调整",
+              zh: "?????",
             })}
           </button>
           <button
@@ -63,7 +66,7 @@ export function WalletHome({
           >
             {say(language, {
               en: "Load Sample: PROCEED",
-              zh: "样本：继续",
+              zh: "?���G??",
             })}
           </button>
           <button
@@ -73,7 +76,7 @@ export function WalletHome({
           >
             {say(language, {
               en: "Load Sample: STOP",
-              zh: "样本：停止",
+              zh: "?���G??",
             })}
           </button>
           <button
@@ -83,7 +86,7 @@ export function WalletHome({
           >
             {say(language, {
               en: "Load Sample: UNKNOWN",
-              zh: "样本：未知",
+              zh: "?���G??",
             })}
           </button>
           <button
@@ -93,36 +96,37 @@ export function WalletHome({
           >
             {say(language, {
               en: "Load Sample: ERROR",
-              zh: "样本：错误",
+              zh: "?���G??",
             })}
           </button>
         </>
       )}
+      </div>
 
       <section
         aria-label={say(language, {
           en: "Parallax notice",
-          zh: "Parallax 说明",
+          zh: "Parallax ???",
         })}
         className="border border-monad/40 bg-monad/[0.08] p-4"
       >
         <strong className="block text-[14px] font-bold text-monad-dim">
           {say(language, {
             en: "This demo checks a supported swap intent before signing",
-            zh: "本演示会在签名前检查一个受支持的兑换意图",
+            zh: "?���G??",
           })}
         </strong>
         <p className="mt-1.5 text-[13px] leading-[1.6] text-dim">
           {say(language, {
             en: "Nothing is signed or broadcast in this demo.",
-            zh: "本演示不会签名，也不会广播。",
+            zh: "?���G??",
           })}
         </p>
       </section>
 
       <section>
         <h2 className="mb-2 text-[13px] font-bold uppercase tracking-[0.1em] text-dim">
-          {say(language, { en: "Tokens", zh: "代币" })}
+          {say(language, { en: "Tokens", zh: "???" })}
         </h2>
         <ul className="m-0 list-none p-0">
           {ASSETS.map((asset) => (

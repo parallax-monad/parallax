@@ -38,7 +38,7 @@ export function WalletIntro({ onComplete }: WalletIntroProps) {
     <div className="wallet-app-frame relative z-10 flex h-[calc(100vh-2.5rem)] flex-col items-center justify-center overflow-hidden rounded-[24px] border-none bg-[#0e1114] shadow-[0_8px_32px_rgba(0,0,0,0.12),_0_1px_3px_rgba(0,0,0,0.08)]">
       <video
         ref={videoRef}
-        className="max-h-full max-w-full rounded-[24px]"
+        className="h-auto max-h-[50%] max-w-[50%] w-auto rounded-[24px]"
         muted
         playsInline
       >
