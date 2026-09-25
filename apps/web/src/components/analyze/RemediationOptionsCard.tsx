@@ -20,7 +20,7 @@ export function RemediationOptionsCard({
   }
 
   return (
-    <section className="card">
+    <section className="pointer-events-none border-none bg-transparent p-0 shadow-none">
       <span className="eyebrow-monad">
         {say(language, {
           en: "Your options",
@@ -154,7 +154,7 @@ function RemediationOptionRow({
     return (
       <button
         type="button"
-        className={`w-full rounded-[14px] border-none p-5 text-left backdrop-blur-xl transition-all duration-200 ease-out hover:-translate-y-0.5 hover:shadow-[0_4px_12px_rgba(0,0,0,0.1)] ${verificationColor}`}
+        className={`pointer-events-auto w-full rounded-[14px] border-none p-5 text-left backdrop-blur-xl transition-all duration-200 ease-out hover:-translate-y-0.5 hover:shadow-[0_4px_12px_rgba(0,0,0,0.1)] ${verificationColor}`}
         onClick={() => onSelect(option)}
       >
         {content}

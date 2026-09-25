@@ -1,4 +1,4 @@
-﻿import { TokenIcon } from "@/components/analyze/TokenIcon";
+import { TokenIcon } from "@/components/analyze/TokenIcon";
 import { SwapIcon } from "@/components/wallet/WalletIcons";
 import {
   ASSETS,

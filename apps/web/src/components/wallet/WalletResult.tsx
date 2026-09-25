@@ -1,4 +1,4 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import { ActionsCard } from "@/components/analyze/ActionsCard";
 import { DiffCard } from "@/components/analyze/DiffCard";
 import { ExecutionEconomicsCard } from "@/components/analyze/ExecutionEconomicsCard";
@@ -109,11 +109,11 @@ function Side({
   muted?: boolean;
 }) {
   return (
-    <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+    <div className="flex min-w-0 flex-1 flex-col items-center gap-1.5 text-center">
       <span className="text-[12px] font-bold uppercase tracking-[0.08em] text-dim">
         {caption}
       </span>
-      <div className="flex items-center gap-2">
+      <div className="flex items-center justify-center gap-2">
         <TokenIcon size={22} symbol={symbol} />
         <span className="text-[13px] font-bold uppercase tracking-[0.06em] text-dim">
           {symbol}
@@ -370,7 +370,7 @@ export function WalletResult({
         {say(language, MODE_EXPLANATION[result.productRunMode])}
       </p>
 
-      <fieldset className="flex flex-wrap items-center gap-x-3 gap-y-1 border border-line bg-ink-rail px-4 py-2.5 text-[12px] font-bold uppercase tracking-[0.04em] text-dim">
+      <fieldset className="flex w-full flex-wrap items-center gap-x-3 gap-y-1 text-[12px] font-bold uppercase tracking-[0.04em] text-dim">
         <legend className="sr-only">
           {say(language, { en: "Check scope", zh: "检查范围" })}
         </legend>
@@ -388,7 +388,7 @@ export function WalletResult({
         </span>
       </fieldset>
 
-      <section className="flex items-stretch gap-2 border border-line bg-ink-rail p-4">
+      <section className="flex w-full min-w-0 items-stretch gap-2">
         <Side
           amount={
             Number.isFinite(amountIn) ? formatAmount(amountIn) : intent.amountIn
@@ -398,7 +398,7 @@ export function WalletResult({
         />
         <span
           aria-hidden="true"
-          className="self-center px-1 text-[18px] text-monad-dim"
+          className="self-center animate-pulse px-1 text-[18px] text-monad-dim"
         >
           →
         </span>
@@ -460,43 +460,6 @@ export function WalletResult({
             timestamp={result.createdAt}
           />
         )}
-
-      <section className="border border-line bg-ink-rail p-4">
-        <strong className="block text-[13px] font-bold uppercase tracking-[0.08em] text-monad-dim">
-          {say(language, {
-            en: "Next step in this result",
-            zh: "本次结果的下一步",
-          })}
-        </strong>
-        {result.productRunMode === "RECORDED_REPLAY" && (
-          <p className="mt-1.5 text-[13px] leading-[1.6] text-dim">
-            {say(language, {
-              en: "Recorded replay presentation; not a live verified transaction recommendation.",
-              zh: "录制回放展示，并非经过实时验证的交易建议。",
-            })}
-          </p>
-        )}
-        {result.recommendedActions.length > 0 && (
-          <ul className="m-0 mt-3 list-none border-t border-line p-0">
-            {result.recommendedActions.map((suggestion) => (
-              <li
-                className="border-b border-line py-2.5 text-[14px] leading-[1.6] text-dim last:border-b-0"
-                key={suggestion.field}
-              >
-                {say(language, suggestion.reason)}
-              </li>
-            ))}
-          </ul>
-        )}
-        {result.recommendedActions.length === 0 && (
-          <p className="mt-2 text-[14px] leading-[1.6] text-white">
-            {say(language, {
-              en: "No public transaction adjustment is available for this result.",
-              zh: "本次结果没有可公开展示的交易调整建议。",
-            })}
-          </p>
-        )}
-      </section>
 
       <div className="mt-1 grid grid-cols-2 gap-2">
         <button type="button" className="btn btn-monad" onClick={onKeep}>
