@@ -98,3 +98,25 @@ Final capture:
 No Product/Risk/Contract semantics, Provider implementation, signing, broadcasting, or custody
 behavior changed. The capture does not by itself close #78 or constitute final Product Gate
 approval; owner review remains required.
+
+## 2026-09-25 — PR #98 QuickNode capability evidence merge
+
+PR #98 was squash-merged into main at `dfee93dc5271b38fa89a2e032bd4f8a97a9719ee`.
+It adds real, unsigned/read-only QuickNode Arbitrum Sepolia canonical capability evidence for
+the accepted BE-063 Camelot V3 transaction on Node `v22.23.2`. Existing NativeRpcProvider
+canonical checks passed; `debug_traceCall` observed `callTracer` and `prestateTracer` diff mode.
+The P1 JSON-RPC response-envelope finding was fixed before merge by routing the chain, block,
+and both trace requests through the existing fail-closed `createNativeRpcClient()`. CI was green;
+Antony819 and brightheartma approved, with brightheartma's approval after the P1 fix.
+
+Final accepted current capture:
+
+- `fixtures/provider-registry/be-078/quicknode-canonical-2026-09-25T03-40-05-885Z/capture.json`.
+
+The earlier `quicknode-canonical-2026-09-24T14-28-41-070Z/capture.json` remains only as
+pre-fix historical/superseded evidence. Classification remains
+`ALTERNATIVE_ENDPOINT_CAPABILITY_EVIDENCE`. Tenderly #72 qualification and production Provider
+selection/wiring are unchanged. #98 neither replaces Tenderly nor completes #72 or #78;
+it does not establish full Moss/Tenderly compatibility or validate `callTracer.withLog` or
+`stateOverrides`. No Product/Contract semantic or Provider-selection decision changed, and
+there was no signing, broadcasting, or custody.

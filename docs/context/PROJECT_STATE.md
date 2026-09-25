@@ -1,10 +1,10 @@
 # Project State
 
-Last checkpoint: 2026-09-22
+Last checkpoint: 2026-09-25
 
 ## Main checkpoint
 
-`checkpoint_head = 1fe17e0bc1292b2a64b196f2dd5182acd17f9145`
+`checkpoint_head = dfee93dc5271b38fa89a2e032bd4f8a97a9719ee`
 
 This is the known-good main tip at checkpoint time. It is not a claim about current `main`.
 
@@ -21,7 +21,8 @@ Merged before this checkpoint:
 - #81 — real Arbitrum Golden Path and public re-verification integration;
 - #86 — minimum public P0 diagnosis projection;
 - #87 — accepted canonical transaction exercise through NativeRpcProvider;
-- #82 — project control plane.
+- #82 — project control plane;
+- #98 — QuickNode canonical trace capability evidence.
 
 ## Product gates
 
@@ -39,6 +40,8 @@ Merged before this checkpoint:
 - #86 minimum public P0 diagnosis projection is merged at main commit `b80ed60`.
 - #87 accepted canonical transaction exercise through NativeRpcProvider is merged at main
   commit `1fe17e0bc1292b2a64b196f2dd5182acd17f9145`.
+- #98 QuickNode Arbitrum Sepolia canonical read-only capability evidence was squash-merged
+  on 2026-09-25 at main commit `dfee93dc5271b38fa89a2e032bd4f8a97a9719ee`.
 - #66 is closed; #67 is closed/accepted; #70 is closed/frozen.
 
 ## PR #82 — Project control plane
@@ -84,6 +87,26 @@ Arbitrum/Camelot mode, consume the stable public API through a provider-neutral
 presentation seam, and run the first integrated demo smoke test without breaking the
 Monad × Kuru baseline. PR #84 is retained as an experimental spike/reference only, not
 an accepted implementation baseline.
+
+## Provider — PR #98 merged alternative QuickNode capability evidence
+
+The final accepted current capture is
+`fixtures/provider-registry/be-078/quicknode-canonical-2026-09-25T03-40-05-885Z/capture.json`.
+The earlier `quicknode-canonical-2026-09-24T14-28-41-070Z/capture.json` is retained only as
+pre-fix historical/superseded evidence.
+
+On Node `v22.23.2`, the real read-only exercise used the canonical BE-063 unsigned Camelot V3
+transaction. Existing NativeRpcProvider canonical checks passed; `debug_traceCall` observed
+`callTracer` and `prestateTracer` with `diffMode=true`. The chain, block, and both trace requests
+use the existing fail-closed `createNativeRpcClient()` JSON-RPC path. Its response-envelope P1
+review finding was fixed before merge. CI passed; Antony819 and brightheartma approved, with
+brightheartma's approval after the P1 fix.
+
+Classification remains `ALTERNATIVE_ENDPOINT_CAPABILITY_EVIDENCE`. Tenderly #72 qualification
+and production Provider selection/wiring remain unchanged. QuickNode is not a Tenderly
+replacement; #72 and #78 are not completed by #98. This evidence does not establish full
+Moss/Tenderly compatibility; `callTracer.withLog` and `stateOverrides` were not validated by
+#98. The exercise was unsigned/read-only, with no signing, broadcasting, or custody.
 
 ## Parallel / deferred work
 

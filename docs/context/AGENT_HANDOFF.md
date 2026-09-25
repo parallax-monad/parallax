@@ -1,12 +1,12 @@
 # Current Agent Handoff
 
-Checkpoint: 2026-09-20
+Checkpoint: 2026-09-25
 
 ## Resume
 
 1. Run `./scripts/agent-preflight.sh --read`.
 2. Fresh-fetch GitHub to obtain current main dynamically. Verify the recorded `checkpoint_head` is an ancestor of current main; do not require equality. Non-ancestry requires explicit reconciliation before `TAKEOVER_READY=YES`.
-3. Treat #69, #76, #77, #80, #81, and #82 as merged baseline work; #65 and #71 are
+3. Treat #69, #76, #77, #80, #81, #82, #87, and #98 as merged baseline work; #65 and #71 are
    closed/complete; do not reopen #67/#70.
 4. Continue #78 final Backend P0 convergence and Antony-owned #73 Frontend integration in
    parallel. PR #84 is an experimental spike/reference only, not an accepted implementation.
@@ -14,12 +14,24 @@ Checkpoint: 2026-09-20
 
 ## Expected checkpoint
 
-- checkpoint_head: `1fe17e0bc1292b2a64b196f2dd5182acd17f9145` (known-good main tip at checkpoint time, not a claim about current main)
+- checkpoint_head: `dfee93dc5271b38fa89a2e032bd4f8a97a9719ee` (known-good main tip at checkpoint time, not a claim about future main; verify ancestry, not equality)
 - #69 merged head: `40a8bace5fb71021798d5a066e63cfa7b5baec20`
 - #81 squash merge / main commit: `bd98013dc956bfa4ff15ff95959f6cb614bf8c9b`
 - #81 historical PR head: `8700726cc43b9e61b8c3f47558211c2a4c07185d` (squash-merged, not an ancestor of main)
 - #86 minimum public P0 diagnosis projection: merged at `b80ed60`
 - #87 canonical NativeRpcProvider exercise: merged at `1fe17e0bc1292b2a64b196f2dd5182acd17f9145`
+- #98 QuickNode Arbitrum Sepolia canonical read-only capability evidence: squash-merged
+  2026-09-25 at `dfee93dc5271b38fa89a2e032bd4f8a97a9719ee`. Final current capture:
+  `fixtures/provider-registry/be-078/quicknode-canonical-2026-09-25T03-40-05-885Z/capture.json`;
+  the 2026-09-24 capture is pre-fix historical/superseded. Node `v22.23.2`, accepted BE-063
+  unsigned Camelot V3 transaction, NativeRpcProvider canonical checks, `callTracer`, and
+  `prestateTracer` diff mode were observed. The probe uses `createNativeRpcClient()` for its
+  fail-closed JSON-RPC path; the P1 finding was fixed before merge. CI passed; Antony819
+  approved, and brightheartma approved after the fix. Classification is
+  `ALTERNATIVE_ENDPOINT_CAPABILITY_EVIDENCE`; Tenderly #72 qualification and production
+  Provider selection/wiring are unchanged. This does not complete #72 or #78, replace
+  Tenderly, establish full Moss/Tenderly compatibility, or validate `callTracer.withLog` or
+  `stateOverrides`. It remains unsigned/read-only, with no signing, broadcasting, or custody.
 - #67: closed/accepted
 - #70: closed/frozen
 - #78: open/final P0 convergence; assembled Backend exercise captured at
