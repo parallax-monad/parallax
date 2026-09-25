@@ -35,7 +35,7 @@ export function WalletHome({
         </div>
       </section>
 
-      <div className="flex flex-col items-center gap-3">
+      <div className="flex w-full flex-wrap items-center justify-center gap-3">
         <button
           type="button"
           aria-label={say(language, { en: "Swap", zh: "兑换" })}
@@ -52,53 +52,68 @@ export function WalletHome({
           <>
             <button
               type="button"
-              className="btn btn-monad-outline w-full"
+              className="btn btn-monad-outline flex h-[76px] w-[76px] shrink-0 flex-col items-center justify-center gap-2 rounded-2xl px-2 py-2"
               onClick={() => onLoadArbitrumSample("ADJUST")}
             >
-              {say(language, {
-                en: "Load Sample: ADJUST",
-                zh: "样本：调整",
-              })}
+              <SwapIcon size={21} />
+              <span className="text-[11px] font-bold leading-none">
+                {say(language, {
+                  en: "ADJUST",
+                  zh: "调整",
+                })}
+              </span>
             </button>
             <button
               type="button"
-              className="btn btn-monad-outline w-full"
+              className="btn btn-monad-outline flex h-[76px] w-[76px] shrink-0 flex-col items-center justify-center gap-2 rounded-2xl px-2 py-2"
               onClick={() => onLoadArbitrumSample("PROCEED")}
             >
-              {say(language, {
-                en: "Load Sample: PROCEED",
-                zh: "样本：继续",
-              })}
+              <SwapIcon size={21} />
+              <span className="text-[11px] font-bold leading-none">
+                {say(language, {
+                  en: "PROCEED",
+                  zh: "继续",
+                })}
+              </span>
             </button>
             <button
               type="button"
-              className="btn btn-monad-outline w-full"
+              className="btn btn-monad-outline flex h-[76px] w-[76px] shrink-0 flex-col items-center justify-center gap-2 rounded-2xl px-2 py-2"
               onClick={() => onLoadArbitrumSample("STOP")}
             >
-              {say(language, {
-                en: "Load Sample: STOP",
-                zh: "样本：停止",
-              })}
+              <SwapIcon size={21} />
+              <span className="text-[11px] font-bold leading-none">
+                {say(language, {
+                  en: "STOP",
+                  zh: "停止",
+                })}
+              </span>
             </button>
             <button
               type="button"
-              className="btn btn-monad-outline w-full"
+              className="btn btn-monad-outline flex h-[76px] w-[76px] shrink-0 flex-col items-center justify-center gap-2 rounded-2xl px-2 py-2"
               onClick={() => onLoadArbitrumSample("UNKNOWN")}
             >
-              {say(language, {
-                en: "Load Sample: UNKNOWN",
-                zh: "样本：未知",
-              })}
+              <SwapIcon size={21} />
+              <span className="text-[11px] font-bold leading-none">
+                {say(language, {
+                  en: "UNKNOWN",
+                  zh: "未知",
+                })}
+              </span>
             </button>
             <button
               type="button"
-              className="btn btn-monad-outline w-full"
+              className="btn btn-monad-outline flex h-[76px] w-[76px] shrink-0 flex-col items-center justify-center gap-2 rounded-2xl px-2 py-2"
               onClick={() => onLoadArbitrumSample("ERROR")}
             >
-              {say(language, {
-                en: "Load Sample: ERROR",
-                zh: "样本：错误",
-              })}
+              <SwapIcon size={21} />
+              <span className="text-[11px] font-bold leading-none">
+                {say(language, {
+                  en: "ERROR",
+                  zh: "错误",
+                })}
+              </span>
             </button>
           </>
         )}
@@ -109,7 +124,7 @@ export function WalletHome({
           en: "Parallax notice",
           zh: "Parallax 说明",
         })}
-        className="border border-monad/40 bg-monad/[0.08] p-4"
+        className="rounded-2xl border border-monad/40 bg-[#0e1114] p-4"
       >
         <strong className="block text-[14px] font-bold text-monad-dim">
           {say(language, {
