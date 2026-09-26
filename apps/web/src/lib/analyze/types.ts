@@ -6,7 +6,7 @@ export type BoundarySource =
   | "demo_preset"
   | "unavailable";
 
-export type Protocol = "kuru" | "pancake" | "camelot";
+export type Protocol = "kuru" | "pancake" | "camelot-v3";
 export type SystemStatus = "OK" | "INTEGRATION_ERROR";
 export type ProductRunMode = "LIVE" | "RECORDED_REPLAY";
 export type Verdict = "PROCEED" | "ADJUST" | "STOP" | "UNKNOWN";

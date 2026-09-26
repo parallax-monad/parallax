@@ -1,4 +1,4 @@
-﻿import { useState } from "react";
+import { useState } from "react";
 import { ActionsCard } from "@/components/analyze/ActionsCard";
 import { DiffCard } from "@/components/analyze/DiffCard";
 import { ExecutionEconomicsCard } from "@/components/analyze/ExecutionEconomicsCard";

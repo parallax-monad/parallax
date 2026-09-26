@@ -187,12 +187,20 @@ export const arbitrumSampleUnknown: CheckSwapResult = {
 
   unknowns: [
     {
-      en: "Simulation engine could not resolve expected output",
-      zh: "模拟引擎无法解析预期输出",
+      id: "simulation-output",
+      label: { en: "Simulation output", zh: "模拟输出" },
+      reason: {
+        en: "Simulation engine could not resolve expected output",
+        zh: "模拟引擎无法解析预期输出",
+      },
     },
     {
-      en: "Price impact data unavailable from provider",
-      zh: "提供商无法获取价格影响数据",
+      id: "price-impact",
+      label: { en: "Price impact", zh: "价格影响" },
+      reason: {
+        en: "Price impact data unavailable from provider",
+        zh: "提供商无法获取价格影响数据",
+      },
     },
   ],
 
@@ -236,8 +244,12 @@ export const arbitrumSampleIntegrationError: CheckSwapResult = {
   notChecked: [],
   unknowns: [
     {
-      en: "Evidence provider returned an unrecoverable error",
-      zh: "证据提供商返回了不可恢复的错误",
+      id: "provider-error",
+      label: { en: "Evidence provider", zh: "证据提供商" },
+      reason: {
+        en: "Evidence provider returned an unrecoverable error",
+        zh: "证据提供商返回了不可恢复的错误",
+      },
     },
   ],
 

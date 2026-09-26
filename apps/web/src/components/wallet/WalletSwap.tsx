@@ -8,8 +8,8 @@ import {
 } from "@/components/wallet/walletData";
 import type { FieldFlag } from "@/lib/analyze/fields";
 import {
+  receiveTokenFor,
   SUPPORTED_TOKENS_IN,
-  SUPPORTED_TOKENS_OUT,
 } from "@/lib/analyze/fixtures";
 import type { FormFieldErrors, FormState } from "@/lib/analyze/form";
 import type { QuoteState } from "@/lib/analyze/types";
@@ -117,6 +117,7 @@ export function WalletSwap({
     flags.find((flag) => flag.field === key);
 
   const balance = balanceOf(form.tokenIn);
+  const receiveToken = receiveTokenFor(form.tokenIn);
   const amountFlag = flagFor("amountIn");
   const amountError = errors.amountIn;
   const slippageError = errors.slippage;
@@ -163,7 +164,9 @@ export function WalletSwap({
             language={language}
             options={SUPPORTED_TOKENS_IN}
             value={form.tokenIn}
-            onSelect={(value) => set("tokenIn", value)}
+            onSelect={(value) =>
+              onChange({ ...form, tokenIn: value, tokenOut: receiveTokenFor(value) })
+            }
           />
         </div>
         <button
@@ -218,9 +221,9 @@ export function WalletSwap({
           </strong>
           <TokenSelect
             language={language}
-            options={SUPPORTED_TOKENS_OUT}
-            value={form.tokenOut}
-            onSelect={(value) => set("tokenOut", value)}
+            options={[receiveToken]}
+            value={receiveToken}
+            onSelect={() => undefined}
           />
         </div>
 
