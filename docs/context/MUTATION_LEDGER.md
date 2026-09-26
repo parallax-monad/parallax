@@ -98,3 +98,26 @@ Final capture:
 No Product/Risk/Contract semantics, Provider implementation, signing, broadcasting, or custody
 behavior changed. The capture does not by itself close #78 or constitute final Product Gate
 approval; owner review remains required.
+
+## 2026-09-24 — P0 completion and Strong-stage control-plane transition
+
+Fresh GitHub state verified `origin/main` and the GitHub API at
+`6f04f84a8c7b2edb995d17c646f03c9d481017cd`. The lineage includes the merged #86 public P0
+projection, #87 canonical NativeRpcProvider exercise, #88 assembled Backend Golden Path
+evidence, #75 Tenderly Provider handoff, and #89 Tenderly Backend wiring. Issue #78 is now
+CLOSED / COMPLETE for Backend P0 convergence; its captured `INCOMPLETE` / `UNKNOWN` result
+remains truthful fail-closed Evidence behavior and is not final Product Demo Gate approval.
+
+Issue #74 was refreshed to keep #73 as the remaining Product P0 critical path and to record
+#72 as parallel, non-blocking credentialed Tenderly qualification. PR #84 was closed without
+merge as an experimental/reference-only Frontend spike. Strong tracker #96 and scoped child
+Issues #90–#95 were opened as PLANNED / PREPARED work; Strong activation remains gated by the
+final #73 Product P0 Demo Gate. No runtime Product/Risk/Contract semantics changed.
+
+## 2026-09-24 — Tenderly qualification blocker reclassified
+
+After checking the available Tenderly account, the #72 blocker was reclassified from missing
+local credentials to external Console/API entitlement: the account cannot self-generate the
+Simulation API Access Token required for real Backend qualification. PR #75 and PR #89 remain
+merged; no token or secret was recorded. Issue #72 stays open and non-blocking for Native-RPC
+P0.
