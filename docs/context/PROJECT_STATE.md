@@ -1,10 +1,10 @@
 # Project State
 
-Last checkpoint: 2026-09-24
+Last checkpoint: 2026-09-26
 
 ## Main checkpoint
 
-`checkpoint_head = 6f04f84a8c7b2edb995d17c646f03c9d481017cd`
+`checkpoint_head = ace5893ed5b4390a0fc6a352b9485f8abe1687a2`
 
 This is the verified current `main` tip at checkpoint time. Future takeovers must still
 fresh-fetch and validate ancestry before relying on this checkpoint.
@@ -27,6 +27,7 @@ Merged before this checkpoint:
 - #89 — Tenderly Backend wiring;
 - #82 — project control plane.
 - #85 — checkpoint ancestry semantics correction.
+- #98 — QuickNode canonical trace capability evidence.
 
 ## Product gates
 
@@ -48,6 +49,8 @@ Merged before this checkpoint:
 - #75 Tenderly Provider handoff is merged at main commit `463f525`.
 - #89 Tenderly Backend wiring is merged at main commit `6f04f84`.
 - #85 checkpoint-control semantics are merged at main commit `a42fc10`.
+- #98 QuickNode Arbitrum Sepolia canonical read-only capability evidence was squash-merged
+  on 2026-09-25 at main commit `dfee93dc5271b38fa89a2e032bd4f8a97a9719ee`.
 - #66 is closed; #67 is closed/accepted; #70 is closed/frozen.
 
 ## PR #82 — Project control plane
@@ -86,12 +89,35 @@ presentation seam, and run the first integrated demo smoke test without breaking
 Monad × Kuru baseline. PR #84 is CLOSED without merge as an experimental/reference-only
 spike; it is not an accepted implementation baseline.
 
+## Provider — PR #98 merged alternative QuickNode capability evidence
+
+The final accepted current capture is
+`fixtures/provider-registry/be-078/quicknode-canonical-2026-09-25T03-40-05-885Z/capture.json`.
+The earlier `quicknode-canonical-2026-09-24T14-28-41-070Z/capture.json` is retained only as
+pre-fix historical/superseded evidence.
+
+On Node `v22.23.2`, the real read-only exercise used the canonical BE-063 unsigned Camelot V3
+transaction. Existing NativeRpcProvider canonical checks passed; `debug_traceCall` observed
+`callTracer` and `prestateTracer` with `diffMode=true`. The chain, block, and both trace requests
+use the existing fail-closed `createNativeRpcClient()` JSON-RPC path. Its response-envelope P1
+review finding was fixed before merge. CI passed; Antony819 and brightheartma approved, with
+brightheartma's approval after the P1 fix.
+
+Classification remains `ALTERNATIVE_ENDPOINT_CAPABILITY_EVIDENCE`. Tenderly #72 qualification
+and production Provider selection/wiring remain unchanged. QuickNode is not a Tenderly
+replacement; #72 and #78 are not completed by #98. This evidence does not establish full
+Moss/Tenderly compatibility; `callTracer.withLog` and `stateOverrides` were not validated by
+#98. The exercise was unsigned/read-only, with no signing, broadcasting, or custody.
+
 ## Parallel / deferred work
 
-- #72 is `IMPLEMENTATION COMPLETE / EXTERNAL API ENTITLEMENT BLOCKED`: merged #75 and #89
-  provide the Provider and Backend wiring baseline, but the available Tenderly account cannot
-  generate the required API Access Token because Console/API entitlement is unavailable.
-  Qualification remains parallel and non-blocking for Native RPC P0.
+- #72 is CLOSED on GitHub; its recorded status remains
+  `IMPLEMENTATION COMPLETE / EXTERNAL API ENTITLEMENT BLOCKED`. Merged #75 and #89 provide the
+  Provider and Backend wiring baseline, but real credentialed Tenderly qualification is not
+  complete: the available Tenderly account cannot generate the required Simulation API Access
+  Token because Console/API entitlement is unavailable. Closure is neither a qualification PASS
+  nor Product Gate completion. Qualification remains parallel, non-blocking, and
+  entitlement-blocked for Native RPC P0.
 - #65 is CLOSED / COMPLETE after its recorded provisional Contract mapping review and
   downstream dependency closure; it does not reopen GenericEvidence semantics.
 - #71 is CLOSED / COMPLETE after the Risk-side implementation was delivered; downstream
