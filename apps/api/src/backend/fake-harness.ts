@@ -1,4 +1,5 @@
 import { isDeepStrictEqual } from "node:util";
+import type { GenericEvidenceMode } from "@parallax/contracts";
 import {
   type BlockContext,
   type ChainAdapter,
@@ -185,6 +186,7 @@ export type FakeProviderFixture<Intent = FakeProviderIntent> = {
   readonly protocol: string;
   readonly capabilities?: readonly string[];
   readonly observedAt?: string;
+  readonly mode?: GenericEvidenceMode;
   readonly candidateFields?: readonly ProvisionalCandidateFieldInput[];
   readonly result?: ProvisionalProviderResultInput;
   readonly supports?: (query: ProviderSupportQuery<Intent>) => boolean;
@@ -201,6 +203,7 @@ function buildFakeProviderAdapter<Intent, Input>(
   const evaluations: ProviderEvaluationInput<Intent, Input>[] = [];
   const adapter = createProviderAdapter<Intent, Input>({
     providerId: fixture.providerId,
+    mode: fixture.mode ?? "MOCK",
     capabilities: fixture.capabilities,
     supports: (query) =>
       fixture.supports?.(query) ??
@@ -210,9 +213,14 @@ function buildFakeProviderAdapter<Intent, Input>(
     evaluateRaw: async (input) => {
       evaluations.push(input);
       if (fixture.result !== undefined) {
-        return { ...fixture.result, capabilities: fixture.capabilities };
+        return {
+          ...fixture.result,
+          mode: fixture.mode ?? "MOCK",
+          capabilities: fixture.capabilities,
+        };
       }
       return {
+        mode: fixture.mode ?? "MOCK",
         provider: {
           providerId: fixture.providerId,
           observedAt: fixture.observedAt ?? "2026-09-01T00:00:00.000Z",

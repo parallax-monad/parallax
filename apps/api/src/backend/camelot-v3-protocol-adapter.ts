@@ -36,6 +36,10 @@ export type CamelotV3TransactionSeam = (
   | UnsignedTransaction<CamelotV3Transaction>
   | Promise<CamelotV3Transaction | UnsignedTransaction<CamelotV3Transaction>>;
 
+export type CamelotV3TokenOutDecimals =
+  | number
+  | ((intent: NormalizedSwapIntent) => number);
+
 export type CamelotV3ProtocolAdapterOptions = {
   /** Controlled feasibility seam; no pool or quote is inferred when absent. */
   readonly quote?: CamelotV3QuoteSeam;
@@ -45,8 +49,8 @@ export type CamelotV3ProtocolAdapterOptions = {
   readonly rpcClient?: ArbitrumRpcClient;
   /** Runtime-configured JSON-RPC URL used when a client is not injected. */
   readonly rpcUrl?: string;
-  /** Output-token decimals used only for the public quote projection. */
-  readonly tokenOutDecimals?: number;
+  /** Output-token decimals used by both quote and transaction projections. */
+  readonly tokenOutDecimals?: CamelotV3TokenOutDecimals;
   readonly runtimeVersion?: string;
   readonly runtimeRevision?: string;
 };
@@ -174,7 +178,7 @@ export class CamelotV3ProtocolAdapter
     intent: NormalizedSwapIntent,
     client: ArbitrumRpcClient,
     metadata: {
-      tokenOutDecimals: number;
+      tokenOutDecimals: CamelotV3TokenOutDecimals;
       runtimeVersion: string;
       runtimeRevision: string;
     },
@@ -197,7 +201,7 @@ export class CamelotV3ProtocolAdapter
     return {
       estimatedAmountOut: convertAtomicAmountToHuman(
         decoded.amountOut.toString(),
-        metadata.tokenOutDecimals,
+        resolveTokenOutDecimals(metadata.tokenOutDecimals, intent),
       ),
       source: "quote",
       ...(options?.blockContext === undefined
@@ -211,7 +215,7 @@ export class CamelotV3ProtocolAdapter
   private async liveTransaction(
     intent: NormalizedSwapIntent,
     metadata: {
-      tokenOutDecimals: number;
+      tokenOutDecimals: CamelotV3TokenOutDecimals;
       runtimeVersion: string;
       runtimeRevision: string;
     },
@@ -219,7 +223,7 @@ export class CamelotV3ProtocolAdapter
   ): Promise<CamelotV3Transaction> {
     const quote = readTransactionQuote(
       options?.quote,
-      metadata.tokenOutDecimals,
+      resolveTokenOutDecimals(metadata.tokenOutDecimals, intent),
     );
     const requestedBlock = options?.blockContext?.blockNumber;
     if (requestedBlock !== undefined && quote.blockNumber !== requestedBlock) {
@@ -379,6 +383,20 @@ function readTransactionQuote(
       ? {}
       : { blockNumber: quote.blockNumber }),
   };
+}
+
+function resolveTokenOutDecimals(
+  configured: CamelotV3TokenOutDecimals,
+  intent: NormalizedSwapIntent,
+): number {
+  const decimals =
+    typeof configured === "function" ? configured(intent) : configured;
+  if (!Number.isInteger(decimals) || decimals < 0 || decimals > 255) {
+    throw new Error(
+      "Camelot tokenOutDecimals must be an integer from 0 to 255",
+    );
+  }
+  return decimals;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

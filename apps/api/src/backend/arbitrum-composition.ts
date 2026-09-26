@@ -84,6 +84,12 @@ import {
   ProviderRegistry,
 } from "./provider-registry.js";
 import type { ReceiptAnchorer, ReceiptSigner } from "./receipt-ports.js";
+import { mapTenderlyProviderResult } from "./tenderly-evidence.js";
+import {
+  createTenderlyProvider,
+  TENDERLY_ARBITRUM_PROVIDER_ID,
+  type TenderlyPreparedExecution,
+} from "./tenderly-provider.js";
 
 export type ArbitrumNormalizationInput = CheckSwapRequest | QuoteRequest;
 
@@ -173,9 +179,10 @@ export type ArbitrumBackendBootstrap = {
  *
  * The chain endpoint and provider implementations remain explicit dependencies.
  * When an Arbitrum RPC endpoint is configured, the composition wires the
- * concrete NativeRpcProvider and Camelot adapter to that endpoint. Callers may
- * still replace either through explicit adapters/providers; without an
- * endpoint, provider selection remains empty and fails closed.
+ * concrete Camelot adapter and selects Tenderly when its explicit credentials
+ * are configured, otherwise NativeRpcProvider. Callers may still replace
+ * either through explicit adapters/providers; without an endpoint, provider
+ * selection remains empty and fails closed.
  */
 export function createArbitrumProductionComposition(
   options: ArbitrumProductionCompositionOptions,
@@ -211,7 +218,8 @@ export function createArbitrumProductionComposition(
       ...(options.rpcClient === undefined
         ? { rpcUrl: arbitrumConfig.rpcUrl }
         : { rpcClient: options.rpcClient }),
-      tokenOutDecimals: 18,
+      tokenOutDecimals: (intent) =>
+        tokenDecimals(options.runtime, intent.tokenOut, intent.chainId),
       runtimeVersion: "arbitrum-camelot-v3",
       runtimeRevision: "native-rpc",
     });
@@ -233,25 +241,56 @@ export function createArbitrumProductionComposition(
     options.providers === undefined
       ? options.rpcClient !== undefined || arbitrumConfig.rpcUrl !== undefined
         ? [
-            createNativeRpcProviderAdapter({
-              ...(options.rpcClient === undefined
-                ? { rpcUrl: arbitrumConfig.rpcUrl }
-                : { client: options.rpcClient }),
-              mode: "LIVE",
-            }),
+            options.runtime.config.tenderly === undefined
+              ? createNativeRpcProviderAdapter({
+                  ...(options.rpcClient === undefined
+                    ? { rpcUrl: arbitrumConfig.rpcUrl }
+                    : { client: options.rpcClient }),
+                  mode: "LIVE",
+                })
+              : createTenderlyProvider({
+                  accountSlug: options.runtime.config.tenderly.accountSlug,
+                  projectSlug: options.runtime.config.tenderly.projectSlug,
+                  accessKey: options.runtime.config.tenderly.accessKey,
+                  ...(options.runtime.config.tenderly.timeoutMs === undefined
+                    ? {}
+                    : { timeoutMs: options.runtime.config.tenderly.timeoutMs }),
+                }),
           ]
         : []
       : [...options.providers];
   const providerEvidenceMapper =
     options.providerEvidenceMapper ??
     ((input) => {
+      const intent = input.normalizedIntent as NormalizedSwapIntent;
+      if (
+        input.providerResult.provider.providerId ===
+        TENDERLY_ARBITRUM_PROVIDER_ID
+      ) {
+        return mapTenderlyProviderResult({
+          intent,
+          tokenInDecimals: tokenDecimals(
+            options.runtime,
+            intent.tokenIn,
+            intent.chainId,
+          ),
+          tokenOutDecimals: tokenDecimals(
+            options.runtime,
+            intent.tokenOut,
+            intent.chainId,
+          ),
+          preparedExecution:
+            input.preparedExecution as TenderlyPreparedExecution<NormalizedSwapIntent>,
+          mode: input.mode,
+          providerResult: input.providerResult,
+        });
+      }
       if (
         input.providerResult.provider.providerId !==
         NATIVE_RPC_ARBITRUM_PROVIDER_ID
       ) {
         return undefined;
       }
-      const intent = input.normalizedIntent as NormalizedSwapIntent;
       return mapNativeRpcProviderResult({
         intent,
         tokenInDecimals: tokenDecimals(
@@ -266,6 +305,7 @@ export function createArbitrumProductionComposition(
         ),
         preparedExecution:
           input.preparedExecution as NativeRpcPreparedExecution<NormalizedSwapIntent>,
+        mode: input.mode,
         providerResult: input.providerResult,
       });
     });

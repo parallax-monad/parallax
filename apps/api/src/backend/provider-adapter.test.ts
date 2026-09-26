@@ -81,6 +81,7 @@ class FakeProvider
           },
         ],
       }),
+      mode: "MOCK",
       capabilities: this.capabilities,
     };
   }
@@ -130,6 +131,7 @@ describe("ProviderAdapter provisional port", () => {
       input: rawInput,
     });
     expect(result).toEqual({
+      mode: "MOCK",
       status: "success",
       provider: {
         providerId: "fake-provider",
@@ -256,6 +258,7 @@ describe("ProviderAdapter provisional port", () => {
     expect(Object.isFrozen(adapter.capabilities)).toBe(true);
     expect(Object.keys(adapter)).toEqual([
       "providerId",
+      "mode",
       "capabilities",
       "supports",
     ]);
@@ -267,7 +270,11 @@ describe("ProviderAdapter provisional port", () => {
       runId: "run-1",
       input: {},
     });
-    expect(result).toEqual({ ...validResult(), capabilities: undefined });
+    expect(result).toEqual({
+      ...validResult(),
+      mode: "MOCK",
+      capabilities: undefined,
+    });
     expect(result).not.toBe(raw);
     expect(
       (result as Record<string, unknown>).rawProviderObject,

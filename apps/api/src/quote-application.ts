@@ -4,6 +4,10 @@ import {
   quoteRequestSchema,
   quoteResultSchema,
 } from "@parallax/contracts";
+import {
+  type BackendApplicationRoute,
+  findBackendApplicationRoute,
+} from "./backend/application-routing.js";
 import type { BackendCompositionRuntime } from "./backend/composition.js";
 import { isBackendControlError } from "./backend/control-boundary.js";
 import {
@@ -37,6 +41,7 @@ export type QuoteApplicationServiceDependencies = {
   runtime: BackendRuntime;
   quoteFlow: QuoteAgentFlowPort;
   composition?: BackendCompositionRuntime;
+  routes?: readonly BackendApplicationRoute[];
   createRunId?: () => string;
 };
 
@@ -60,15 +65,22 @@ export class QuoteApplicationService {
       });
     }
 
+    const route = findBackendApplicationRoute(
+      this.dependencies.routes,
+      parsedRequest.data.chainId,
+    );
+    const composition = route?.composition ?? this.dependencies.composition;
+    const quoteFlow = route?.quoteFlow ?? this.dependencies.quoteFlow;
+
     let normalized: ReturnType<typeof normalizeQuoteRequest>;
     try {
       const candidate =
-        this.dependencies.composition === undefined
+        composition === undefined
           ? normalizeQuoteRequest(
               parsedRequest.data,
               this.dependencies.runtime.tokenRegistry,
             )
-          : await this.dependencies.composition.normalize(parsedRequest.data);
+          : await composition.normalize(parsedRequest.data);
       const normalizationResult = coerceIntentNormalizationResult(candidate);
       if (normalizationResult === undefined) {
         return errorResponse(400, {
@@ -95,7 +107,7 @@ export class QuoteApplicationService {
 
     let candidate: unknown;
     try {
-      candidate = await this.dependencies.quoteFlow.quote({
+      candidate = await quoteFlow.quote({
         runId: this.createRunId(),
         intent: normalized.intent,
         tokenInDecimals: tokenDecimals(
