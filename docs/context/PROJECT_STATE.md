@@ -1,12 +1,13 @@
 # Project State
 
-Last checkpoint: 2026-09-25
+Last checkpoint: 2026-09-26
 
 ## Main checkpoint
 
-`checkpoint_head = dfee93dc5271b38fa89a2e032bd4f8a97a9719ee`
+`checkpoint_head = ace5893ed5b4390a0fc6a352b9485f8abe1687a2`
 
-This is the known-good main tip at checkpoint time. It is not a claim about current `main`.
+This is the verified current `main` tip at checkpoint time. Future takeovers must still
+fresh-fetch and validate ancestry before relying on this checkpoint.
 
 After a fresh fetch, validate that `checkpoint_head` is an ancestor of current `origin/main`;
 equality is neither required nor expected. Non-ancestry means history divergence or rewrite and
@@ -21,7 +22,11 @@ Merged before this checkpoint:
 - #81 — real Arbitrum Golden Path and public re-verification integration;
 - #86 — minimum public P0 diagnosis projection;
 - #87 — accepted canonical transaction exercise through NativeRpcProvider;
-- #82 — project control plane;
+- #88 — assembled Backend Golden Path evidence;
+- #75 — Tenderly Provider handoff;
+- #89 — Tenderly Backend wiring;
+- #82 — project control plane.
+- #85 — checkpoint ancestry semantics correction.
 - #98 — QuickNode canonical trace capability evidence.
 
 ## Product gates
@@ -40,6 +45,10 @@ Merged before this checkpoint:
 - #86 minimum public P0 diagnosis projection is merged at main commit `b80ed60`.
 - #87 accepted canonical transaction exercise through NativeRpcProvider is merged at main
   commit `1fe17e0bc1292b2a64b196f2dd5182acd17f9145`.
+- #88 assembled Backend Golden Path evidence is merged at main commit `bcc40d5`.
+- #75 Tenderly Provider handoff is merged at main commit `463f525`.
+- #89 Tenderly Backend wiring is merged at main commit `6f04f84`.
+- #85 checkpoint-control semantics are merged at main commit `a42fc10`.
 - #98 QuickNode Arbitrum Sepolia canonical read-only capability evidence was squash-merged
   on 2026-09-25 at main commit `dfee93dc5271b38fa89a2e032bd4f8a97a9719ee`.
 - #66 is closed; #67 is closed/accepted; #70 is closed/frozen.
@@ -53,13 +62,14 @@ Merged before this checkpoint:
   proportional gates in `AGENTS.md` (direct lane vs hard-stop lane);
 - no write freeze is in force: only hard-stop-lane changes require an explicit gate.
 
-## Issue #78 — final Backend P0 convergence
+## Issue #78 — Backend P0 convergence
 
-The merged #81/#86/#87 baseline now covers the canonical Provider exercise and the minimum
-public P0 projection. The remaining assembled-path evidence is recorded by the live runner:
+Issue #78 is CLOSED / COMPLETE. The merged #81/#86/#87/#88 baseline covers the canonical
+Provider exercise, minimum public P0 projection, and assembled Backend Golden Path evidence.
+The live runner truthfully recorded:
 
 - capture: `fixtures/provider-registry/be-078/backend-golden-path-20260922032144325/capture.json`;
-- exact `origin/main` / repository head: `1fe17e0bc1292b2a64b196f2dd5182acd17f9145`;
+- exact capture-time `origin/main` / repository head: `1fe17e0bc1292b2a64b196f2dd5182acd17f9145`;
 - HTTP/pipeline, selected baseline identity, live Provider→Evidence→Risk handoff,
   expectation-only baseline binding, persisted Run round-trip, public redaction, and
   Backend/runtime source-manifest integrity assertions: complete;
@@ -67,26 +77,17 @@ public P0 projection. The remaining assembled-path evidence is recorded by the l
   `expectedFailClosedUnknown=true`;
 - remediation: `configured=false`, observed P0 status `NOT_RUN`; this is not a solver failure.
 
-The final Product/owner Gate review remains open. These results do not automatically close
-#78 or claim a final Demo Gate PASS.
-
-The original three acceptance items were:
-
-1. independently exercise the accepted canonical transaction through the concrete
-   NativeRpcProvider with reproducible real evidence;
-2. close the minimum public P0 RunResult/API projection needed by the first demo;
-3. independently exercise the assembled Backend Golden Path / Demo Gate outside the
-   deterministic component fixtures — exercised and awaiting final owner review.
-
-Issue #78 owns this final convergence. It must not reopen #67/#70 semantics.
+This is Backend P0 completion evidence, not final Product Demo Gate approval. The fail-closed
+`INCOMPLETE` / `UNKNOWN` result and remediation `NOT_RUN` state are truthful outcomes when
+required Evidence/configuration is unavailable. Issue #78 did not reopen #67/#70 semantics.
 
 ## Issue #73 — Frontend P0 consumer
 
-Frontend work is an Antony-owned workstream that may proceed in parallel: add the
+Frontend work is the remaining Product P0 critical path and is owned by Antony: add the
 Arbitrum/Camelot mode, consume the stable public API through a provider-neutral
 presentation seam, and run the first integrated demo smoke test without breaking the
-Monad × Kuru baseline. PR #84 is retained as an experimental spike/reference only, not
-an accepted implementation baseline.
+Monad × Kuru baseline. PR #84 is CLOSED without merge as an experimental/reference-only
+spike; it is not an accepted implementation baseline.
 
 ## Provider — PR #98 merged alternative QuickNode capability evidence
 
@@ -110,12 +111,20 @@ Moss/Tenderly compatibility; `callTracer.withLog` and `stateOverrides` were not 
 
 ## Parallel / deferred work
 
-- #72 / PR #75 Tenderly qualification remains parallel and non-blocking for Native RPC P0.
+- #72 is CLOSED on GitHub; its recorded status remains
+  `IMPLEMENTATION COMPLETE / EXTERNAL API ENTITLEMENT BLOCKED`. Merged #75 and #89 provide the
+  Provider and Backend wiring baseline, but real credentialed Tenderly qualification is not
+  complete: the available Tenderly account cannot generate the required Simulation API Access
+  Token because Console/API entitlement is unavailable. Closure is neither a qualification PASS
+  nor Product Gate completion. Qualification remains parallel, non-blocking, and
+  entitlement-blocked for Native RPC P0.
 - #65 is CLOSED / COMPLETE after its recorded provisional Contract mapping review and
   downstream dependency closure; it does not reopen GenericEvidence semantics.
-- #71 is CLOSED / COMPLETE after the Risk-side implementation was delivered; remaining
-  orchestration and public projection belong to #78.
-- Strong-stage expansion waits until #78 and #73 produce a stable first P0 demo.
+- #71 is CLOSED / COMPLETE after the Risk-side implementation was delivered; downstream
+  orchestration and public projection were completed under now-closed #78.
+- [Strong / P1 tracker #96](https://github.com/parallax-monad/parallax/issues/96) is
+  PLANNED / PREPARED until the final Product P0 Demo Gate; opening it does not activate
+  Strong implementation.
 
 ## Recorded P2
 
@@ -126,24 +135,24 @@ Moss/Tenderly compatibility; `callTracer.withLog` and `stateOverrides` were not 
 ## Critical path
 
 ```text
-#78 Backend P0 convergence
-├─ independent canonical NativeRpcProvider real exercise
-├─ minimum public P0 projection
-└─ independent real Backend Golden Path / Demo Gate evidence
+#78 Backend P0 convergence — COMPLETE
+├─ #86 public P0 projection
+├─ #87 canonical NativeRpcProvider exercise
+└─ #88 assembled Backend Golden Path evidence
 
-parallel
+remaining Product P0 critical path
 
 #73 Frontend P0
 ├─ Arbitrum/Camelot mode
 ├─ real API consumer integration
-└─ first integrated demo smoke test
+└─ judge-facing Product Demo Gate
 
         ↓
 
 Final P0 Demo Gate
         ↓
 
-Strong stage
+Strong / P1 activation
 ```
 
 Routine, localized, reversible work in a clear owner boundary may proceed in parallel under

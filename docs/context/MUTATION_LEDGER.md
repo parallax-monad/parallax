@@ -99,6 +99,29 @@ No Product/Risk/Contract semantics, Provider implementation, signing, broadcasti
 behavior changed. The capture does not by itself close #78 or constitute final Product Gate
 approval; owner review remains required.
 
+## 2026-09-24 — P0 completion and Strong-stage control-plane transition
+
+Fresh GitHub state verified `origin/main` and the GitHub API at
+`6f04f84a8c7b2edb995d17c646f03c9d481017cd`. The lineage includes the merged #86 public P0
+projection, #87 canonical NativeRpcProvider exercise, #88 assembled Backend Golden Path
+evidence, #75 Tenderly Provider handoff, and #89 Tenderly Backend wiring. Issue #78 is now
+CLOSED / COMPLETE for Backend P0 convergence; its captured `INCOMPLETE` / `UNKNOWN` result
+remains truthful fail-closed Evidence behavior and is not final Product Demo Gate approval.
+
+Issue #74 was refreshed to keep #73 as the remaining Product P0 critical path and to record
+#72 as parallel, non-blocking credentialed Tenderly qualification. PR #84 was closed without
+merge as an experimental/reference-only Frontend spike. Strong tracker #96 and scoped child
+Issues #90–#95 were opened as PLANNED / PREPARED work; Strong activation remains gated by the
+final #73 Product P0 Demo Gate. No runtime Product/Risk/Contract semantics changed.
+
+## 2026-09-24 — Tenderly qualification blocker reclassified
+
+After checking the available Tenderly account, the #72 blocker was reclassified from missing
+local credentials to external Console/API entitlement: the account cannot self-generate the
+Simulation API Access Token required for real Backend qualification. PR #75 and PR #89 remain
+merged; no token or secret was recorded. Issue #72 stays open and non-blocking for Native-RPC
+P0.
+
 ## 2026-09-25 — PR #98 QuickNode capability evidence merge
 
 PR #98 was squash-merged into main at `dfee93dc5271b38fa89a2e032bd4f8a97a9719ee`.
@@ -120,3 +143,24 @@ selection/wiring are unchanged. #98 neither replaces Tenderly nor completes #72 
 it does not establish full Moss/Tenderly compatibility or validate `callTracer.withLog` or
 `stateOverrides`. No Product/Contract semantic or Provider-selection decision changed, and
 there was no signing, broadcasting, or custody.
+
+## 2026-09-26 — PR #99 reconciled onto the #97 canonical control plane
+
+PR #99 (`codex/pr98-control-plane-sync`) merged `origin/main` at
+`ace5893ed5b4390a0fc6a352b9485f8abe1687a2` (#97) after #98 had already entered main. This was a
+normal merge with no rebase, force push, or history rewrite. Conflicts were limited to
+`docs/context/PROJECT_STATE.md`, `docs/context/AGENT_HANDOFF.md`, and
+`docs/context/MUTATION_LEDGER.md`.
+
+The resolution keeps the #97 control plane as the canonical baseline: #78 Backend P0 convergence
+is complete, the final Product Demo Gate remains pending on #73, #84 stays closed without merge,
+#96 stays PLANNED / PREPARED until Product P0 acceptance, and the fail-closed `UNKNOWN` /
+`INCOMPLETE` semantics plus the #67/#70 frozen boundaries are unchanged. The #98 QuickNode
+increment is retained only as additive `ALTERNATIVE_ENDPOINT_CAPABILITY_EVIDENCE`. No Provider
+selection or wiring, signing, broadcasting, custody, or Product/Contract semantic changed.
+
+Issue #72 was reconciled with its live GitHub state: the issue is CLOSED, while its recorded
+status remains `IMPLEMENTATION COMPLETE / EXTERNAL API ENTITLEMENT BLOCKED`. Real credentialed
+Tenderly qualification was never completed, so closure is not a qualification PASS and not
+Product Gate completion. The 2026-09-24 entry above recording #72 as open is retained as the
+historical state at the time it was written; #72 was not reopened and no credential was recorded.
