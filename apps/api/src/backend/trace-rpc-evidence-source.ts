@@ -23,6 +23,29 @@ export const TRACE_RPC_CAPABILITIES = Object.freeze([
 
 export type TraceRpcEvidenceMode = NativeRpcProviderMode;
 
+export type TraceRpcEvidenceStatus =
+  | "success"
+  | "partial"
+  | "unknown"
+  | "unavailable"
+  | "invalid";
+
+/**
+ * Backend-local freshness declaration.
+ *
+ * The trace source performs no head-lag comparison between the pinned block
+ * and the current chain head, so it cannot truthfully claim "fresh" or
+ * "stale". Freshness is therefore explicitly declared as not checked rather
+ * than inferred or invented.
+ */
+export type TraceRpcFreshness = {
+  readonly status: "not_checked";
+};
+
+const FRESHNESS_NOT_CHECKED: TraceRpcFreshness = Object.freeze({
+  status: "not_checked",
+});
+
 export type TraceRpcClient = {
   request(
     method: string,
@@ -99,13 +122,17 @@ export type TraceRpcBinding = {
 };
 
 export type TraceRpcEvidenceResult = {
-  readonly status: "success" | "partial" | "unavailable" | "invalid";
+  readonly status: TraceRpcEvidenceStatus;
   readonly source: {
     readonly sourceId: typeof TRACE_RPC_EVIDENCE_SOURCE_ID;
     readonly sourceVersion: string;
     readonly mode: TraceRpcEvidenceMode;
     readonly observedAt: string;
   };
+  /**
+   * Explicitly unverified freshness. Never fabricated as fresh or stale.
+   */
+  readonly freshness: TraceRpcFreshness;
   readonly binding?: TraceRpcBinding;
   readonly capabilities: {
     readonly callTracer: TraceCallEvidence;
@@ -373,14 +400,14 @@ export class TraceRpcEvidenceSource<
       Number(callTracer.status === "observed") +
       Number(prestateTracerDiff.status === "observed");
 
+    const unknownCount =
+      Number(callTracer.status === "unknown") +
+      Number(prestateTracerDiff.status === "unknown");
+
     return Object.freeze({
-      status:
-        observedCount === 2
-          ? "success"
-          : observedCount === 1
-            ? "partial"
-            : "unavailable",
+      status: observabilityStatus(observedCount, unknownCount),
       source: this.source(),
+      freshness: FRESHNESS_NOT_CHECKED,
       binding,
       capabilities: {
         callTracer,
@@ -404,6 +431,7 @@ export class TraceRpcEvidenceSource<
     return Object.freeze({
       status: "invalid",
       source: this.source(),
+      freshness: FRESHNESS_NOT_CHECKED,
       ...(binding === undefined ? {} : { binding }),
       capabilities: {
         callTracer: failure,
@@ -432,9 +460,15 @@ export class TraceRpcEvidenceSource<
         ? ["trace-rpc.callTracer", "trace-rpc.prestateTracer.diffMode"]
         : [];
 
+    // Both capabilities inherit the same context failure, so the top-level
+    // status is derived from that same evidence: an UNKNOWN capability must
+    // never be reported as UNAVAILABLE.
+    const unknownCount = failure.status === "unknown" ? 2 : 0;
+
     return Object.freeze({
-      status: "unavailable",
+      status: observabilityStatus(0, unknownCount),
       source: this.source(),
+      freshness: FRESHNESS_NOT_CHECKED,
       binding,
       capabilities: {
         callTracer: failure,
@@ -619,6 +653,37 @@ function normalizeStateDiff(value: unknown): TraceStateDiffEvidence {
     changedAddresses: Object.freeze([...postAddresses].sort()),
     resultFingerprint: sha256Json(value),
   });
+}
+
+/**
+ * Truthful top-level status derivation over the two trace capabilities.
+ *
+ * - every capability observed            -> success
+ * - at least one capability observed     -> partial
+ * - none observed, any of them unknown   -> unknown
+ * - none observed, all of them unavailable -> unavailable
+ *
+ * UNKNOWN is never collapsed into UNAVAILABLE: "unavailable" is reserved for
+ * capabilities the endpoint provably cannot serve (for example an unsupported
+ * method), while "unknown" means the capability could not be interpreted.
+ * Binding or context invalidity is reported separately as "invalid".
+ */
+function observabilityStatus(
+  observedCount: number,
+  unknownCount: number,
+): Extract<
+  TraceRpcEvidenceStatus,
+  "success" | "partial" | "unknown" | "unavailable"
+> {
+  if (observedCount === TRACE_RPC_CAPABILITIES.length) {
+    return "success";
+  }
+
+  if (observedCount > 0) {
+    return "partial";
+  }
+
+  return unknownCount > 0 ? "unknown" : "unavailable";
 }
 
 function classifyCapabilityFailure(error: unknown): TraceCapabilityFailure {

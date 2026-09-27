@@ -430,3 +430,246 @@ describe("TraceRpcEvidenceSource", () => {
     ).toThrow(/exactly one/);
   });
 });
+
+const OBSERVED_CALL = {
+  type: "CALL",
+  from: FROM,
+  to: TO,
+  input: transaction.data,
+  value: transaction.value,
+  gasUsed: "0x5208",
+  output: "0x1234",
+} as const;
+
+const OBSERVED_DIFF = {
+  pre: {
+    [FROM]: {
+      balance: "0x1",
+    },
+  },
+  post: {
+    [CHANGED]: {
+      balance: "0x2",
+    },
+  },
+} as const;
+
+const TRACE_SCOPES = [
+  "trace-rpc.callTracer",
+  "trace-rpc.prestateTracer.diffMode",
+] as const;
+
+/**
+ * Client whose chain/pinned-block context resolves, delegating only the two
+ * trace capabilities to the caller.
+ */
+function traceClient(
+  trace: (tracer: string) => unknown,
+): ReturnType<typeof clientFor> {
+  return clientFor(async (method, params) => {
+    if (method === "eth_chainId") {
+      return `0x${ARBITRUM_SEPOLIA_CHAIN_ID.toString(16)}`;
+    }
+
+    if (method === "eth_getBlockByNumber") {
+      return {
+        number: BLOCK_TAG,
+        hash: BLOCK_HASH,
+      };
+    }
+
+    if (method === "debug_traceCall") {
+      const config = params[2] as {
+        tracer?: string;
+      };
+
+      return trace(config.tracer ?? "");
+    }
+
+    throw new Error(`unexpected method ${method}`);
+  });
+}
+
+function unsupportedMethod(): never {
+  throw new NativeRpcClientError("RPC_ERROR", "method unsupported", -32601);
+}
+
+function sourceFor(client: TraceRpcClient) {
+  return createTraceRpcEvidenceSource({
+    client,
+    mode: "LIVE",
+    now: () => "2026-09-27T06:10:00.000Z",
+  });
+}
+
+describe("TraceRpcEvidenceSource status semantics", () => {
+  it("keeps an all-uninterpretable result UNKNOWN instead of UNAVAILABLE", async () => {
+    const client = traceClient((tracer) =>
+      tracer === "callTracer"
+        ? {
+            ...OBSERVED_CALL,
+            from: TO,
+          }
+        : {},
+    );
+
+    const result = await sourceFor(client).evaluate(evaluationInput());
+
+    expect(result.status).toBe("unknown");
+    expect(result.capabilities.callTracer).toEqual({
+      status: "unknown",
+      reason: "binding_mismatch",
+    });
+    expect(result.capabilities.prestateTracerDiff).toEqual({
+      status: "unknown",
+      reason: "malformed_response",
+    });
+    expect(result.unknownScope).toEqual([...TRACE_SCOPES]);
+    expect(result.unavailableScope).toEqual([]);
+  });
+
+  it("reports UNAVAILABLE only when every capability is provably unavailable", async () => {
+    const result = await sourceFor(
+      traceClient(() => unsupportedMethod()),
+    ).evaluate(evaluationInput());
+
+    expect(result.status).toBe("unavailable");
+    expect(result.capabilities.callTracer).toEqual({
+      status: "unavailable",
+      reason: "method_unsupported",
+    });
+    expect(result.capabilities.prestateTracerDiff).toEqual({
+      status: "unavailable",
+      reason: "method_unsupported",
+    });
+    expect(result.unavailableScope).toEqual([...TRACE_SCOPES]);
+    expect(result.unknownScope).toEqual([]);
+  });
+
+  it("prefers UNKNOWN when unknown and unavailable scopes are mixed", async () => {
+    const client = traceClient((tracer) => {
+      if (tracer === "callTracer") {
+        return {};
+      }
+
+      return unsupportedMethod();
+    });
+
+    const result = await sourceFor(client).evaluate(evaluationInput());
+
+    expect(result.status).toBe("unknown");
+    expect(result.unknownScope).toEqual(["trace-rpc.callTracer"]);
+    expect(result.unavailableScope).toEqual([
+      "trace-rpc.prestateTracer.diffMode",
+    ]);
+    expect(result.checkedScope).toEqual([
+      "trace-rpc.chain",
+      "trace-rpc.pinned-block",
+    ]);
+  });
+
+  it("does not report an uninterpretable context probe as UNAVAILABLE", async () => {
+    const client = clientFor(async (method) => {
+      if (method === "eth_chainId") {
+        return "not-a-hex-quantity";
+      }
+
+      throw new Error("trace must not execute");
+    });
+
+    const result = await sourceFor(client).evaluate(evaluationInput());
+
+    expect(result.status).toBe("unknown");
+    expect(result.unavailableScope).toEqual([]);
+    expect(result.unknownScope).toEqual([...TRACE_SCOPES]);
+    expect(result.checkedScope).toEqual([]);
+    expect(client.request.mock.calls.map((call) => call[0])).toEqual([
+      "eth_chainId",
+    ]);
+  });
+
+  it("still reports a provably unsupported context probe as UNAVAILABLE", async () => {
+    const client = clientFor(async (method) => {
+      if (method === "eth_chainId") {
+        return unsupportedMethod();
+      }
+
+      throw new Error("trace must not execute");
+    });
+
+    const result = await sourceFor(client).evaluate(evaluationInput());
+
+    expect(result.status).toBe("unavailable");
+    expect(result.unavailableScope).toEqual([...TRACE_SCOPES]);
+    expect(result.unknownScope).toEqual([]);
+  });
+
+  it("keeps a partially observed result PARTIAL regardless of failure kind", async () => {
+    const unknownHalf = await sourceFor(
+      traceClient((tracer) => (tracer === "callTracer" ? {} : OBSERVED_DIFF)),
+    ).evaluate(evaluationInput());
+
+    expect(unknownHalf.status).toBe("partial");
+    expect(unknownHalf.capabilities.prestateTracerDiff.status).toBe("observed");
+
+    const unavailableHalf = await sourceFor(
+      traceClient((tracer) =>
+        tracer === "callTracer" ? OBSERVED_CALL : unsupportedMethod(),
+      ),
+    ).evaluate(evaluationInput());
+
+    expect(unavailableHalf.status).toBe("partial");
+    expect(unavailableHalf.capabilities.callTracer.status).toBe("observed");
+  });
+});
+
+describe("TraceRpcEvidenceSource freshness semantics", () => {
+  it("declares freshness explicitly as not_checked on every result path", async () => {
+    const success = await sourceFor(successfulClient()).evaluate(
+      evaluationInput(),
+    );
+
+    const partial = await sourceFor(
+      traceClient((tracer) =>
+        tracer === "callTracer" ? OBSERVED_CALL : unsupportedMethod(),
+      ),
+    ).evaluate(evaluationInput());
+
+    const unknown = await sourceFor(traceClient(() => ({}))).evaluate(
+      evaluationInput(),
+    );
+
+    const unavailable = await sourceFor(
+      traceClient(() => unsupportedMethod()),
+    ).evaluate(evaluationInput());
+
+    const valid = evaluationInput();
+
+    const invalid = await sourceFor(successfulClient()).evaluate({
+      ...valid,
+      input: {
+        ...valid.input,
+        runId: "different-run",
+      },
+    });
+
+    expect([
+      success.status,
+      partial.status,
+      unknown.status,
+      unavailable.status,
+      invalid.status,
+    ]).toEqual(["success", "partial", "unknown", "unavailable", "invalid"]);
+
+    for (const result of [success, partial, unknown, unavailable, invalid]) {
+      expect(result.freshness).toEqual({
+        status: "not_checked",
+      });
+    }
+
+    // Freshness must never be invented as fresh or stale.
+    expect(
+      JSON.stringify([success, partial, unknown, unavailable, invalid]),
+    ).not.toMatch(/"fresh"|"stale"/);
+  });
+});

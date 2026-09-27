@@ -124,6 +124,12 @@ function validateRealQualification(
     throw new Error("TraceRpcEvidenceSource provenance is not LIVE trace-rpc");
   }
 
+  if (result.freshness.status !== "not_checked") {
+    throw new Error(
+      "TraceRpcEvidenceSource freshness must be explicitly not_checked",
+    );
+  }
+
   const binding = result.binding;
 
   if (binding === undefined) {
