@@ -42,8 +42,8 @@ Corrected V2 evidence: [2026-09-21 read-only PASS](native-rpc-canonical-2026-09-
 This capture records the dirty working tree based on `365bcb3`, with 51 source/configuration
 file hashes. Both the observed and historical gas estimates are `272052`.
 
-Current implementation evidence: [2026-09-27 read-only PASS](native-rpc-canonical-2026-09-27T10-29-23-368Z/capture.json).
-This capture was collected against the current uncommitted working tree at `c4eb2f2`;
+Current committed-head evidence: [2026-09-27 read-only PASS](native-rpc-canonical-2026-09-27T13-52-14-713Z/capture.json).
+This capture was collected against committed HEAD `7c1883d` with a clean worktree;
 its source manifest records the implementation files that actually ran, and the
 endpoint value is not persisted. It remains implementation evidence, not a claim
 that the changes are already merged to `main`.
