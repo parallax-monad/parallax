@@ -276,6 +276,19 @@ real credentialed qualification. It is removed from the Final Sprint critical pa
 - Asset 3: NOT STARTED.
 - Arbitrum One: NOT STARTED.
 
+## Current execution ordering
+
+Product P0 work proceeds in parallel:
+
+- Clare / Backend: #100 and #102; #101 is the completed binding slice from PR #113.
+- Antony / Frontend: #73, converging on the reviewed public P0 surface.
+
+After Product P0, the Asset Coverage lane is #103 → #104 → #105. In parallel, the Evidence
+Federation lane is Jie / #106 → Clare / #110 → #91 → Antony / #92. Preparation for #110 may
+proceed once the minimum #106 interface is agreed, but real acceptance requires qualified #106
+Evidence. Then #107 is the separate Verified Remediation gate, followed by #94 as a SHOULD.
+Optional #90/#108/#109 work starts only after the critical gates are stable.
+
 ## Retained accepted-evidence details
 
 These facts remain durable historical/current evidence references and must survive Final Sprint

@@ -130,6 +130,11 @@ the qualified #106 source.
 #103 must not be promoted into production support before its bounded real-chain qualification
 and must not start before #73's prerequisite stage.
 
+Current parallel handoff is Clare on #100/#102 and Antony on #73; #101 is complete through
+PR #113. After Product P0, proceed through #103 → #104 → #105 for Asset Coverage and
+#106 → #110 → #91 → #92 for Evidence Federation, then #107 Verified Remediation and #94
+Minimal SDK as a SHOULD. Optional #90/#108/#109 work remains outside the critical path.
+
 The Asset Coverage order is #73 → #103 → #104 → #105. #103 has a four-hour feasibility
 kill switch; #104 is non-blocking for ETH → USDC P0 but enabling MUST for ERC-20 reverse support;
 #105 is the Asset Coverage PASS proof.
