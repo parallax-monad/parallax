@@ -197,6 +197,66 @@ Still valid:
 Tenderly #72 remains CLOSED with implementation retained and external entitlement blocking
 real credentialed qualification. It is removed from the Final Sprint critical path.
 
+## Retained accepted-evidence details
+
+These facts remain durable historical/current evidence references and must survive Final Sprint
+planning transitions.
+
+### Backend P0 assembled evidence — #78 / #88
+
+Final assembled Backend capture:
+
+`fixtures/provider-registry/be-078/backend-golden-path-20260922032144325/capture.json`
+
+Capture-time repository head:
+
+`1fe17e0bc1292b2a64b196f2dd5182acd17f9145`
+
+The real Backend exercise truthfully recorded:
+
+- `evidenceState=INCOMPLETE`;
+- `quoteFidelity=UNKNOWN`;
+- `verdict=UNKNOWN`;
+- `expectedFailClosedUnknown=true`;
+- remediation `NOT_RUN` because remediation was not configured for that exercise.
+
+This is accepted Backend P0 convergence evidence, not a claim that required Evidence was complete
+and not final Product Demo Gate approval.
+
+### QuickNode trace capability evidence — #98
+
+Final accepted current capture:
+
+`fixtures/provider-registry/be-078/quicknode-canonical-2026-09-25T03-40-05-885Z/capture.json`
+
+The earlier:
+
+`fixtures/provider-registry/be-078/quicknode-canonical-2026-09-24T14-28-41-070Z/capture.json`
+
+is retained only as historical/superseded pre-fix evidence.
+
+The accepted read-only probe used Node `v22.23.2`, the accepted unsigned Camelot V3 prepared
+transaction, the canonical NativeRpcProvider checks, `callTracer`, and
+`prestateTracer(diffMode=true)` through the fail-closed JSON-RPC client.
+
+It did **not** establish:
+
+- `callTracer.withLog` support;
+- `stateOverrides` support;
+- full Tenderly/Moss capability equivalence;
+- a Product-level QuickNode Provider abstraction.
+
+It remains unsigned/read-only and is the evidence baseline feeding #106.
+
+## Recorded P2 carried forward
+
+The following previously recorded P2 items remain open unless a later merged change explicitly
+closes them:
+
+- unpinned `eth_estimateGas`;
+- time-derived transaction deadline;
+- derived protocol-side fallback protection has no dedicated typed public field.
+
 ## Next executable action
 
 Provider-side next executable task:

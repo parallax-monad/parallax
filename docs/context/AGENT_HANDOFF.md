@@ -122,6 +122,21 @@ smallest useful slice
 Request cross-owner review only where normalized shared Evidence, Backend integration,
 Product presentation, or frozen semantics actually cross boundaries.
 
+## Historical integrity / identity note
+
+A prior #69 incident was caused by repository-local Git identity
+`jie <jie@users.noreply.github.com>`, which GitHub mapped to an unrelated `@jie` account.
+
+The affected history was integrity-reviewed and repaired; no evidence supported outsider code
+tampering. Full details remain in `docs/context/MUTATION_LEDGER.md`.
+
+Current agent-assisted writes must continue to use the expected local identity:
+
+`jzhao0 <181855088+jzhao0@users.noreply.github.com>`
+
+and must pass `./scripts/agent-preflight.sh --write`. Do not reuse the historical incorrect
+identity.
+
 ## Context-overflow recovery
 
 If context is lost, ignore chat summaries until this sequence is complete:
