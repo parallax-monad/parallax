@@ -40,6 +40,10 @@ const PRODUCTION_RUNTIME_PREFIXES = [
   "packages/risk/src/",
 ] as const;
 
+function isTestOrContractHarness(path: string): boolean {
+  return /\.(?:test|spec|contract)\.[cm]?[jt]sx?$/.test(path);
+}
+
 function sha256(bytes: string | Buffer): string {
   return createHash("sha256").update(bytes).digest("hex");
 }
@@ -62,7 +66,7 @@ export function captureBackendGoldenPathProvenance(repoRoot: string) {
         .filter(Boolean),
     ),
   ]
-    .filter((path) => !/\.(?:test|spec)\.[cm]?[jt]sx?$/.test(path))
+    .filter((path) => !isTestOrContractHarness(path))
     .sort();
   const changedPaths = git(
     "status",
@@ -74,6 +78,7 @@ export function captureBackendGoldenPathProvenance(repoRoot: string) {
     .split("\n")
     .filter(Boolean)
     .map((line) => line.slice(3))
+    .filter((path) => !isTestOrContractHarness(path))
     .sort();
   const files = paths.map((path) => ({
     path,
@@ -93,8 +98,10 @@ export function captureBackendGoldenPathProvenance(repoRoot: string) {
 export function assertNoProductionRuntimeSourceChanges(
   provenance: ReturnType<typeof captureBackendGoldenPathProvenance>,
 ): void {
-  const changedRuntimePaths = provenance.changedPaths.filter((path) =>
-    PRODUCTION_RUNTIME_PREFIXES.some((prefix) => path.startsWith(prefix)),
+  const changedRuntimePaths = provenance.changedPaths.filter(
+    (path) =>
+      !isTestOrContractHarness(path) &&
+      PRODUCTION_RUNTIME_PREFIXES.some((prefix) => path.startsWith(prefix)),
   );
   if (changedRuntimePaths.length > 0) {
     throw new Error(

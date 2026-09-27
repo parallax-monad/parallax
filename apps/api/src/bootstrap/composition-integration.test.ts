@@ -857,6 +857,7 @@ describe("Backend composition application boundary", () => {
       },
     });
     expect(rerunRunId).toEqual(expect.any(String));
+    expect(rerunRunId).not.toBe(baselineRunId);
     await expect(store.get(baselineRunId)).resolves.toMatchObject({
       status: "completed",
       parentRunId: undefined,
@@ -868,6 +869,43 @@ describe("Backend composition application boundary", () => {
       result: rerunBody,
     });
     expect(evaluations).toHaveLength(3);
+    expect(core).toHaveBeenCalledTimes(3);
+    expect(decision.decide).toHaveBeenCalledTimes(3);
+
+    const evaluationsBeforeHistoryReads = evaluations.length;
+    const [parentReadResponse, childReadResponse] = await Promise.all([
+      app.fetch(
+        new Request(
+          `https://api.example.test/api/runs/${encodeURIComponent(baselineRunId)}`,
+        ),
+      ),
+      app.fetch(
+        new Request(
+          `https://api.example.test/api/runs/${encodeURIComponent(rerunRunId)}`,
+        ),
+      ),
+    ]);
+    const parentRecord = await parentReadResponse.json();
+    const childRecord = await childReadResponse.json();
+
+    expect(parentReadResponse.status).toBe(200);
+    expect(parentRecord).toMatchObject({
+      runId: baselineRunId,
+      status: "completed",
+      result: { runId: baselineRunId, status: "completed" },
+    });
+    expect(childReadResponse.status).toBe(200);
+    expect(childRecord).toMatchObject({
+      runId: rerunRunId,
+      parentRunId: baselineRunId,
+      status: "completed",
+      result: {
+        runId: rerunRunId,
+        parentRunId: baselineRunId,
+        status: "completed",
+      },
+    });
+    expect(evaluations).toHaveLength(evaluationsBeforeHistoryReads);
     expect(core).toHaveBeenCalledTimes(3);
     expect(decision.decide).toHaveBeenCalledTimes(3);
   });

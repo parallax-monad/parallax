@@ -12,7 +12,12 @@ import { NATIVE_RPC_ARBITRUM_PROVIDER_ID } from "../../apps/api/src/backend/nati
 import { startBackendServer } from "../../apps/api/src/bootstrap/backend.js";
 import { bootstrapBackendRuntime } from "../../apps/api/src/runtime-config.js";
 import { InMemoryRunStore } from "../../apps/api/src/store.js";
-import { evaluateBackendGoldenPathAssertions } from "./backend-golden-path-assertions.js";
+import {
+  basicSimulationBindingMatchesRequest,
+  evaluateBackendGoldenPathAssertions,
+  isBasicSimulationCallVerified,
+  summarizeBasicSimulation,
+} from "./backend-golden-path-assertions.js";
 import {
   assertNoProductionRuntimeSourceChanges,
   assertUnchangedBackendGoldenPathSource,
@@ -229,12 +234,14 @@ function p0Summary(value: unknown): ObjectValue | undefined {
     p0.transactionProtection,
     "P0 transaction protection",
   );
+  const basicSimulation = summarizeBasicSimulation(p0.basicSimulation);
   return {
     expectationBaseline: baseline,
     quoteFidelity: fidelity,
     cause: p0.cause,
     constraints: p0.constraints,
     evidenceState: p0.evidenceState,
+    ...(basicSimulation === undefined ? {} : { basicSimulation }),
     transactionProtection: protection,
     remediation: {
       status: remediation.status,
@@ -400,6 +407,27 @@ async function main(): Promise<void> {
     }
 
     const p0 = p0Summary(result.p0);
+    const rawP0 =
+      result.p0 === undefined
+        ? undefined
+        : object(result.p0, "Public P0 result");
+    const basicSimulation = summarizeBasicSimulation(rawP0?.basicSimulation);
+    const basicSimulationCallVerified = isBasicSimulationCallVerified(
+      rawP0?.basicSimulation,
+    );
+    const basicSimulationMatchesRequest = basicSimulationBindingMatchesRequest(
+      rawP0?.basicSimulation,
+      {
+        chainId: scenario.chainId,
+        protocol: scenario.protocol,
+        sender: scenario.sender,
+        // Public normalization defaults an omitted recipient to sender.
+        recipient: scenario.sender,
+        tokenIn: "native",
+        tokenOut: scenario.tokenOut.address,
+        amountInAtomic: scenario.expectedAmountInAtomic,
+      },
+    );
     const providerEvidence = publicEvidenceSummary(result.providerEvidence);
     const resultId =
       typeof result.runId === "string" ? result.runId : undefined;
@@ -487,6 +515,16 @@ async function main(): Promise<void> {
       isDeepStrictEqual(storedResult, result) &&
       persistedProviderEvidence !== undefined &&
       isDeepStrictEqual(persistedProviderEvidence, providerEvidence);
+    const storedP0 =
+      storedResult?.p0 === undefined
+        ? undefined
+        : object(storedResult.p0, "Persisted P0 result");
+    const persistedBasicSimulation = summarizeBasicSimulation(
+      storedP0?.basicSimulation,
+    );
+    const basicSimulationRoundTrip =
+      basicSimulation !== undefined &&
+      isDeepStrictEqual(persistedBasicSimulation, basicSimulation);
     const p0Verdict = result.verdict;
     const publicSurfaceSafe =
       endpointRedacted && noProviderRawPayload && providerDataRedacted;
@@ -499,6 +537,9 @@ async function main(): Promise<void> {
         "started",
       ] as const),
       persistedRunRoundTrip,
+      basicSimulationCallVerified,
+      basicSimulationMatchesRequest,
+      basicSimulationRoundTrip,
       baselineStatus,
       baselineIdentityMatches,
       providerEvidenceReachedP0Risk: providerReachedRisk,
@@ -606,6 +647,45 @@ async function main(): Promise<void> {
         persistedResultMatchesResponse: persistedRunRoundTrip,
         responseResultSha256: hash(JSON.stringify(result)),
         persistedResultSha256: hash(JSON.stringify(storedResult)),
+        publicResponse: {
+          status: result.status,
+          verdict: result.verdict,
+          simulatorPinnedBlock: result.simulatorPinnedBlock,
+          basicSimulation,
+          providerEvidence,
+        },
+        actualExecution: {
+          httpStatus: response.status,
+          quoteStatus:
+            providerEvidence === undefined
+              ? "MISSING"
+              : object(providerEvidence.quote, "Public quote Evidence").status,
+          callStatus:
+            typeof basicSimulation?.call === "object" &&
+            basicSimulation.call !== null
+              ? object(basicSimulation.call, "Basic simulation call").status
+              : "NOT_RECORDED",
+          callExecuted: basicSimulationCallVerified,
+          transactionMatchesRequest: basicSimulationMatchesRequest,
+          gasEstimateStatus:
+            typeof basicSimulation?.gasEstimate === "object" &&
+            basicSimulation.gasEstimate !== null
+              ? object(
+                  basicSimulation.gasEstimate,
+                  "Basic simulation gas estimate",
+                ).status
+              : "NOT_RECORDED",
+          returnDataFingerprint:
+            typeof basicSimulation?.call === "object" &&
+            basicSimulation.call !== null
+              ? object(basicSimulation.call, "Basic simulation call")
+                  .returnDataFingerprint
+              : undefined,
+          blockNumber: basicSimulation?.blockNumber,
+          blockHash: basicSimulation?.blockHash,
+          preparedTransactionFingerprint:
+            basicSimulation?.preparedTransactionFingerprint,
+        },
         verdict: p0Verdict,
         summary: result.summary,
         simulatorPinnedBlock: result.simulatorPinnedBlock,
@@ -623,6 +703,9 @@ async function main(): Promise<void> {
         rpcEndpointRedacted: endpointRedacted,
         rawProviderPayloadAbsent: noProviderRawPayload,
         publicRunQueryRoundTrip: persistedRunRoundTrip,
+        basicSimulationCallVerified,
+        basicSimulationMatchesRequest,
+        basicSimulationRoundTrip,
         publicSurfaceSafe,
         expectedFailClosedUnknown: gateAssertions.expectedFailClosedUnknown,
         quoteFidelityStatus: fidelity?.status,
