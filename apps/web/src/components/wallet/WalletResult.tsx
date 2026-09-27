@@ -203,11 +203,13 @@ export function WalletResult({
       </div>
 
       {hasOptions && (
-        <StepTimeline
-          currentStep={currentStep}
-          language={language}
-          onStepClick={(step) => setCurrentStep(step)}
-        />
+        <div className="sticky top-0 z-30 -mx-5 border-b border-line/50 bg-gradient-to-b from-ink-elev/95 via-ink-elev/80 to-transparent px-5 pb-2 pt-1 backdrop-blur-xl">
+          <StepTimeline
+            currentStep={currentStep}
+            language={language}
+            onStepClick={(step) => setCurrentStep(step)}
+          />
+        </div>
       )}
 
       <p className="text-[12px] leading-[1.6] text-dim">

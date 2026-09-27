@@ -59,15 +59,15 @@ function SwapSummary({
   language: Language;
 }) {
   return (
-    <section className="rounded-[16px] border border-line bg-ink-elev2/50 p-4">
+    <section className="rounded-[12px] border border-line bg-ink-elev2/50 p-3">
       <div className="flex items-center justify-between gap-4">
         <div className="flex min-w-0 flex-1 items-center gap-2">
-          <TokenIcon size={32} symbol={tokenIn} />
+          <TokenIcon size={26} symbol={tokenIn} />
           <div className="min-w-0 flex-1">
             <div className="text-[11px] font-bold uppercase tracking-[0.08em] text-dim">
               {say(language, { en: "You pay", zh: "你支付" })}
             </div>
-            <div className="truncate text-[18px] font-extrabold text-white">
+              <div className="truncate text-[16px] font-extrabold text-white">
               {amountIn} {tokenIn}
             </div>
           </div>
@@ -78,12 +78,12 @@ function SwapSummary({
           </svg>
         </div>
         <div className="flex min-w-0 flex-1 items-center gap-2">
-          <TokenIcon size={32} symbol={tokenOut} />
+          <TokenIcon size={26} symbol={tokenOut} />
           <div className="min-w-0 flex-1">
             <div className="text-[11px] font-bold uppercase tracking-[0.08em] text-dim">
               {say(language, { en: "You receive", zh: "你收到" })}
             </div>
-            <div className="truncate text-[18px] font-extrabold text-white">
+              <div className="truncate text-[16px] font-extrabold text-white">
               {amountOut} {tokenOut}
             </div>
           </div>
@@ -109,7 +109,7 @@ function ScopeSummary({
   const notChecked = result.notChecked.length;
 
   return (
-    <section className="rounded-[16px] border border-line bg-ink-elev2/30 p-4">
+    <section className="rounded-[12px] border border-line bg-ink-elev2/30 p-3">
       <div className="flex items-center justify-between gap-3">
         <div>
           <div className="text-[12px] font-bold uppercase tracking-[0.08em] text-dim">
@@ -186,12 +186,12 @@ export function ResultStep({
   const hasMinimumBoundary = result.minimumReceivedSource !== "unavailable";
 
   return (
-    <div className="flex flex-col gap-4">
-      <section className={`flex items-start gap-3 rounded-[16px] border p-5 ${VERDICT_TONE[verdict]}`}>
-        <VerdictIcon className="mt-0.5 shrink-0" size={36} verdict={verdict} />
+    <div className="flex flex-col gap-2.5">
+    <section className={`flex items-start gap-2.5 rounded-[12px] border p-3.5 ${VERDICT_TONE[verdict]}`}>
+        <VerdictIcon className="mt-0.5 shrink-0" size={30} verdict={verdict} />
         <div className="min-w-0 flex-1">
-          <strong className="block text-[24px] font-extrabold leading-[1.1] tracking-[-0.04em]">{say(language, VERDICT_TITLE[verdict])}</strong>
-          <p className="mt-1.5 text-[15px] leading-[1.5] text-white">{say(language, VERDICT_EXPLANATION[verdict])}</p>
+          <strong className="block text-[20px] font-extrabold leading-[1.1] tracking-[-0.04em]">{say(language, VERDICT_TITLE[verdict])}</strong>
+          <p className="mt-1 text-[13px] leading-[1.4] text-white">{say(language, VERDICT_EXPLANATION[verdict])}</p>
         </div>
       </section>
 
@@ -200,7 +200,7 @@ export function ResultStep({
       {result.quoteFidelity && <QuoteFidelityCard language={language} quoteFidelity={result.quoteFidelity} tokenSymbol={intent.tokenOut} />}
 
       {hasMinimumBoundary && (
-        <section className="rounded-[16px] border border-line bg-ink-elev2/30 p-4">
+        <section className="rounded-[12px] border border-line bg-ink-elev2/30 p-3">
           <div className="text-[12px] font-bold uppercase tracking-[0.08em] text-dim">{say(language, { en: "Minimum received", zh: "最低收到量" })}</div>
           <div className="mt-1 text-[16px] font-bold text-white">
             {say(language, {
@@ -228,7 +228,7 @@ export function ResultStep({
       {hasDiagnosis && <ScopeSummary expanded={scopeOpen} language={language} onToggle={() => setScopeOpen(!scopeOpen)} result={result} />}
       {!hasDiagnosis && <ScopeSummary expanded={scopeOpen} language={language} onToggle={() => setScopeOpen(!scopeOpen)} result={result} />}
 
-      <section className="rounded-[16px] border border-line bg-ink-elev2/30 p-4">
+      <section className="rounded-[12px] border border-line bg-ink-elev2/30 p-3">
         <p className="m-0 text-[13px] leading-[1.6] text-dim">{say(language, RECHECK_COPY)}</p>
       </section>
 

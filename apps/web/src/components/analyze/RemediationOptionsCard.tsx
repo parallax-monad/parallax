@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { type PointerEvent, useState } from "react";
 import type { RemediationOption } from "@/lib/analyze/types";
 import { type Language, say } from "@/lib/i18n";
 
@@ -115,10 +115,19 @@ function RemediationOptionRow({
     option.verificationStatus === "VERIFIED" &&
     option.swapIntent !== undefined &&
     onSelect !== undefined;
+  const [pointer, setPointer] = useState<{ x: number; y: number } | null>(null);
+
+  const handlePointerMove = (event: PointerEvent<HTMLButtonElement>) => {
+    const bounds = event.currentTarget.getBoundingClientRect();
+    setPointer({
+      x: event.clientX - bounds.left,
+      y: event.clientY - bounds.top,
+    });
+  };
   const cardStyle = selected
     ? "border-monad-bright/70 bg-ink-rail shadow-[0_0_0_1px_rgba(123,97,255,0.2),0_8px_24px_rgba(0,0,0,0.2)]"
     : selectable
-      ? "border-line bg-ink-elev2/40 hover:border-monad-dim/50 hover:bg-ink-elev2/70 hover:shadow-[0_4px_16px_rgba(0,0,0,0.14)]"
+      ? "border-line bg-ink-elev2/40 hover:border-risk-low/70 hover:bg-ink-elev2/70 hover:shadow-[0_4px_16px_rgba(0,0,0,0.14)]"
       : "border-line bg-ink-elev2/40";
   const secondaryText = "text-dim";
   const divider = selected ? "border-monad-bright/25" : "border-line";
@@ -199,9 +208,20 @@ function RemediationOptionRow({
         type="button"
         aria-pressed={selected}
         className={`pointer-events-auto w-full rounded-[14px] border p-5 text-left transition-all duration-200 ease-out hover:-translate-y-0.5 ${cardStyle}`}
+        onPointerMove={handlePointerMove}
+        onPointerLeave={() => setPointer(null)}
         onClick={() => onSelectOption(option)}
       >
-        {content}
+        {pointer && (
+          <span
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0 rounded-[14px] opacity-70 transition-opacity duration-150"
+            style={{
+              background: `radial-gradient(234px circle at ${pointer.x}px ${pointer.y}px, rgba(74,222,128,0.16), transparent 70%)`,
+            }}
+          />
+        )}
+        <span className="relative z-10">{content}</span>
       </button>
     );
   }
