@@ -528,3 +528,129 @@ Do not implement against the early draft REST shapes (`/api/analyze`, async jobs
 SSE) from older planning notes. The live public surfaces for P0 Analyze联调 are
 **`POST /api/quote`**, **`POST /api/check`**, **`GET /api/runs/:runId`**, and
 **`GET /api/replay/:id`**.
+
+## 11. Arbitrum Sepolia P0 Backend handoff (#100 / #102)
+
+This addendum records the Backend-owned Arbitrum handoff and is scoped to
+Arbitrum Sepolia (`421614`) × Camelot V3. It does not claim that the Frontend
+integration or the complete P0 Demo Gate is accepted.
+
+### Local configuration
+
+The launcher reads the repository-root `.env` (`pnpm --filter @parallax/api
+start`). For the Arbitrum Native RPC route, set `ARBITRUM_RPC_URL` and include
+the chain and Camelot test USDC metadata in `PARALLAX_TOKEN_REGISTRY_JSON`:
+
+```dotenv
+ARBITRUM_RPC_URL=https://sepolia-rollup.arbitrum.io/rpc
+PARALLAX_TOKEN_REGISTRY_JSON={"chains":[{"chainId":421614,"symbol":"ETH","decimals":18}],"tokens":[{"chainId":421614,"address":"0xb893E3334D4Bd6C5ba8277Fd559e99Ed683A9FC7","symbol":"USDC","decimals":18,"decimalsSource":"onchain_verified","verifiedAtBlock":"310131879"}]}
+CORS_ORIGIN=http://localhost:5173
+RUN_STORE_BACKEND=memory
+HOST=127.0.0.1
+PORT=8787
+```
+
+The current shared Backend runtime validator also requires a valid
+`MONAD_RPC_URL`, `MOSS_RUNTIME_VERSION`, and `MOSS_RUNTIME_REVISION` at startup,
+even when the request is routed to Arbitrum Native RPC. `MOSS_RUNTIME_PATH` is
+not needed for this Arbitrum route. Keep all RPC endpoints local/private where
+appropriate; never put endpoint credentials in browser code, captures, or
+comments. Do not configure Tenderly for the Native RPC path.
+
+`RUN_STORE_BACKEND=memory` is suitable for local/demo use but loses Runs on an
+API process restart. To preserve Runs across restart, configure
+`RUN_STORE_BACKEND=postgres` and a migrated, direct (non-`-pooler`) PostgreSQL
+`DATABASE_URL`. Historical reads never call the RPC, regardless of store type.
+
+### Request from either local client
+
+This minimal request tests the current Arbitrum Check route. A quote result by
+itself is not simulation evidence; the Check response's `p0.basicSimulation`
+is the public record of the prepared transaction's `eth_call` and gas-estimate
+statuses.
+
+macOS / Linux:
+
+```bash
+curl -sS -X POST "http://127.0.0.1:8787/api/check" \
+  -H "content-type: application/json" \
+  --data-raw '{"chainId":421614,"protocol":"camelot-v3","sender":"0xeb7c5322f0997ee70f4bbd3ae7e428072c9af396","tokenIn":{"kind":"native"},"tokenOut":{"kind":"erc20","address":"0xb893E3334D4Bd6C5ba8277Fd559e99Ed683A9FC7"},"amountIn":"0.001","economicBoundary":{"availability":"unavailable","source":"unavailable"}}'
+```
+
+Windows PowerShell:
+
+```powershell
+$body = @{
+  chainId = 421614
+  protocol = "camelot-v3"
+  sender = "0xeb7c5322f0997ee70f4bbd3ae7e428072c9af396"
+  tokenIn = @{ kind = "native" }
+  tokenOut = @{
+    kind = "erc20"
+    address = "0xb893E3334D4Bd6C5ba8277Fd559e99Ed683A9FC7"
+  }
+  amountIn = "0.001"
+  economicBoundary = @{
+    availability = "unavailable"
+    source = "unavailable"
+  }
+} | ConvertTo-Json -Depth 8 -Compress
+
+Invoke-RestMethod -Method Post `
+  -Uri "http://127.0.0.1:8787/api/check" `
+  -ContentType "application/json" `
+  -Body $body
+```
+
+For the UI's preselected quote flow, obtain a fresh `/api/quote` first and pass
+that quote with its matching request context as `expectationBaseline` to
+`/api/check`. Do not reuse a dated quote as if it were current. The selected
+quote is an expectation baseline, not a user-declared minimum or a guaranteed
+output.
+
+### Reading the response correctly
+
+- HTTP `200` means the Check request produced a terminal Run response; it does
+  **not** mean the Risk Verdict is `PROCEED`.
+- `/api/quote` `AVAILABLE` means only that a quote was obtained. For actual
+  execution evidence, inspect `p0.basicSimulation.call.status`, its
+  `returnDataFingerprint`, `blockNumber`/`blockHash`, and the prepared
+  transaction fingerprint. Read `gasEstimate.status` separately; a failed gas
+  estimate must not erase a successful call or be replaced with an earlier
+  preparation estimate.
+- `verdict: "UNKNOWN"` and `evidenceState: "INCOMPLETE"` are valid fail-closed
+  outcomes. The frontend must show them as unknown/incomplete, not convert
+  them to `STOP`, `PROCEED`, or success locally.
+- `providerEvidence.providerData` is redacted on public responses. Raw RPC
+  return bytes/calldata are not part of the public projection; fingerprints
+  preserve identity without exposing those payloads.
+
+The latest read-only public-RPC capture is
+[`capture.json`](../../fixtures/provider-registry/be-078/backend-golden-path-20260927165600669/capture.json).
+It records source HEAD `acaac6906169f17ca17fa8e81220c1a81996f9d8`, Run
+`631d69e8-5b4d-466e-828e-ccc4227b60cc`, HTTP `200`, quote `AVAILABLE`,
+`eth_call` `SUCCEEDED`, gas estimate `AVAILABLE`, and pinned block
+`313328152`. The current live gate also confirmed
+`transactionMatchesRequest: true`; the response and persisted result matched.
+The public Run still correctly returned `verdict: UNKNOWN` /
+`evidenceState: INCOMPLETE`, so the exercise is
+`EXERCISE_COMPLETE_REVIEW_REQUIRED`, not full P0/Demo Gate acceptance. The
+capture contains redacted public summaries and fingerprints, not endpoint
+credentials or raw RPC result bytes. The exercise is read-only: it does not
+sign or broadcast a transaction.
+
+### History, replay, and explicit re-check
+
+- After receiving a Run ID, recover that same saved Check through
+  `GET /api/runs/:runId`. This reads the RunStore only and must not trigger
+  quote, `eth_call`, `eth_estimateGas`, or any other provider request.
+- A historical Run created before `p0.basicSimulation` existed may omit that
+  object. Treat missing facts as **not recorded**, not as `NOT_RUN`, failure,
+  or success.
+- An explicit re-check is a new `POST /api/check` with `parentRunId` and the
+  existing one-Intent-field change rule. It creates a distinct child Run and
+  performs a new execution; parent and child IDs remain separately readable.
+  A GET/history refresh does not re-check.
+- `GET /api/replay/:id` returns a committed deterministic fixture; it is not a
+  replay of an arbitrary saved Run and is not a substitute for the Arbitrum
+  live Check. Do not infer chain or live status from a fixture response.

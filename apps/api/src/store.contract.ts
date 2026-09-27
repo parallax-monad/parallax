@@ -195,6 +195,39 @@ export function runStoreContract(
     );
 
     contractIt(
+      "keeps pre-basicSimulation Runs as not recorded instead of inventing execution facts",
+      async () => {
+        const store = await createStore();
+        const result = completedResultWithBasicSimulation("legacy-run");
+        if (result.p0 === undefined) {
+          throw new Error("expected a P0 result before removing the new field");
+        }
+        delete result.p0.basicSimulation;
+
+        await store.start("legacy-run", result.intent);
+        await store.complete(result);
+
+        const record = await store.get("legacy-run");
+        if (record?.status !== "completed") {
+          throw new Error("expected a completed legacy Run");
+        }
+        expect(record.result.runId).toBe("legacy-run");
+        expect(record.result.p0).toMatchObject({
+          expectationBaseline: { status: "MISSING" },
+          quoteFidelity: { status: "UNKNOWN", reason: "MISSING_BASELINE" },
+          cause: { status: "NOT_VERIFIED" },
+          evidenceState: "UNAVAILABLE",
+          transactionProtection: {
+            status: "NOT_APPLICABLE",
+            source: "unavailable",
+          },
+          remediation: { status: "NOT_RUN" },
+        });
+        expect(record.result.p0?.basicSimulation).toBeUndefined();
+      },
+    );
+
+    contractIt(
       "preserves a parent Run link across a child lifecycle",
       async () => {
         const store = await createStore();
