@@ -15,9 +15,13 @@ Checkpoint: 2026-09-27
 
 ## Expected main checkpoint
 
-`c4eb2f23b1c41cc4974fdec4d68491cc965e101a`
+`542d5c685d259b5ee6d5aa55098bb2dad900f230`
 
 This is historical checkpoint truth, not a permanent equality requirement.
+
+GitHub Issue #96 is the canonical Final Sprint execution tracker. Linked GitHub Issues are
+implementation/acceptance records; `docs/context/*` is the durable handoff; Notion is supporting
+planning/reference material and must not override GitHub or frozen #70 semantics.
 
 ## Current live execution model
 
@@ -25,7 +29,7 @@ This is historical checkpoint truth, not a permanent equality requirement.
 Final Sprint v3
 
 Product P0
-#100 + #101 + #102
+#100 + #102
         +
        #73
 
@@ -39,7 +43,17 @@ Verified Remediation
 #107
 ```
 
-The four gates are independent acceptance items. Optional work must not become a blocker.
+The four gates are independently reportable. Full Best Case requires all four:
+
+```text
+Product P0 PASS
++ Asset Coverage PASS
++ Evidence Federation PASS
++ Verified Remediation PASS
+```
+
+Optional work must not become a blocker. A kill switch stops investment; it does not lower
+acceptance retroactively.
 
 ## Product P0
 
@@ -53,9 +67,17 @@ Arbitrum Sepolia
 → exact prepared unsigned transaction
 → Native RPC
 → basicSimulation
+→ truthful checked / unknown
 → persisted Run / getRun
 → re-check
 ```
+
+P0 does not require successful `VERIFIED` remediation. A truthful `UNKNOWN` / `INCOMPLETE`
+result with remediation `NOT_RUN` / `UNVERIFIED` / `UNKNOWN` and child verification
+`unknown` / `unavailable` is valid when required Evidence is unavailable.
+
+#101 exact binding is CLOSED / COMPLETED through merged PR #113. #100 and #102 remain open for
+their explicit application-entrypoint and historical-replay acceptance evidence.
 
 The earlier #67 controlled WETH → test-USDC target remains historical accepted evidence.
 Do not erase or rewrite it, but do not use it to override the current #96/#73 final Product P0
@@ -66,7 +88,8 @@ acceptance path.
 `@jzhao0` has these relevant issues:
 
 - #106 — active next task: productionize provider-neutral `TraceRpcEvidenceSource`;
-- #91 — follows #106 and the integrated same-transaction Trace path;
+- #110 — Backend supplementary integration after the minimum #106 interface is agreed;
+- #91 — follows #106/#110 for same-transaction Native vs Trace portability;
 - #103 — real USDC → WETH feasibility, gated by Product P0 #73;
 - #108 — Explorer feasibility, optional/stretch, not active;
 - #109 — additional asset feasibility, optional/stretch, not active.
@@ -106,6 +129,23 @@ the qualified #106 source.
 
 #103 must not be promoted into production support before its bounded real-chain qualification
 and must not start before #73's prerequisite stage.
+
+The Asset Coverage order is #73 → #103 → #104 → #105. #103 has a four-hour feasibility
+kill switch; #104 is non-blocking for ETH → USDC P0 but enabling MUST for ERC-20 reverse support;
+#105 is the Asset Coverage PASS proof.
+
+#110 owns Backend composition, exact context binding, persistence, public projection, and
+historical consistency. It does not block Product P0. Native RPC remains primary; Trace is
+supplementary. No ProviderRegistry rewrite, ranking, scoring, voting, consensus, or fallback.
+
+After P0, #107 is the separate Verified Remediation gate. Its ownership is Backend child Run
+and re-check (`@brightheartma`), Provider/Risk Evidence boundary (`@jzhao0`), Frontend
+presentation (`@antony819`), Product acceptance (`@chin0312`), and Contract review only when
+canonical representation changes (`@rainypilgrimage`). The Frontend states are
+`PROPOSED`, `VERIFIED`, `FAILED`, `UNKNOWN`, and `UNAVAILABLE`.
+
+#94 Minimal SDK is `BEST CASE SHOULD`, after the four gates. #90, #108, and #109 are bounded
+optional/stretch work. #93 and #95 are CLOSED / NOT_PLANNED Final Sprint cuts.
 
 ## Review discipline
 

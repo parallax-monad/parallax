@@ -4,18 +4,19 @@ Last checkpoint: 2026-09-27
 
 ## Main checkpoint
 
-`checkpoint_head = c4eb2f23b1c41cc4974fdec4d68491cc965e101a`
+`checkpoint_head = 542d5c685d259b5ee6d5aa55098bb2dad900f230`
 
 This is the verified `main` tip at this checkpoint. Future takeovers must fresh-fetch and
 verify that this checkpoint is an ancestor of current `main`; equality is not required.
 
 At checkpoint time:
 
-- open PRs: none;
-- review requests for `@jzhao0`: none;
-- PR #99 is merged at `c4eb2f23b1c41cc4974fdec4d68491cc965e101a`;
-- runtime/code state has not moved since #99;
-- live Product execution scope has moved materially through Issues #73, #96, and #100–#110.
+- current `main` includes merged PR #113 at `542d5c685d259b5ee6d5aa55098bb2dad900f230`;
+- PR #111 remains an unmerged documentation branch based on `c4eb2f23b1c41cc4974fdec4d68491cc965e101a`;
+- PR #112 remains the open Trace Provider implementation path;
+- #101 is CLOSED / COMPLETED by PR #113; #100 and #102 remain open for their explicit
+  application-entrypoint and historical-replay acceptance evidence;
+- live Product execution scope is represented by Issues #73, #96, and #100–#110.
 
 ## Final Sprint v3 control-plane transition
 
@@ -34,6 +35,28 @@ Minimal SDK is SHOULD. Explorer, Asset 3, and Arbitrum One remain optional/stret
 
 This transition changes the active execution plan. It does not silently rewrite the frozen
 Product/Risk/Contract semantics recorded under #70.
+
+## Source-of-truth hierarchy
+
+- GitHub Issue #96 is the canonical Final Sprint execution tracker.
+- The linked GitHub execution Issues are the implementation and acceptance records.
+- `docs/context/*` is the durable handoff, recovery, and historical representation.
+- Notion pages are supporting planning/reference material only; they must not override the
+  live GitHub control plane or frozen repository semantics.
+- Issue #70 remains authoritative for the frozen Product/Risk/Contract semantic domain.
+
+Full Best Case is an explicit conjunction, not a single generic status:
+
+```text
+Full Best Case PASS
+= Product P0 PASS
++ Asset Coverage PASS
++ Evidence Federation PASS
++ Verified Remediation PASS
+```
+
+Each gate is independently reportable. A kill switch stops engineering investment; it does
+not retroactively lower the acceptance standard.
 
 ## Frozen semantic boundaries
 
@@ -73,11 +96,15 @@ Active acceptance items:
 
 - #73 — Frontend final Product P0 / Demo Gate, owned by `@antony819`;
 - #100 — `basicSimulation` and partial Native RPC execution facts, owned by `@brightheartma`;
-- #101 — exact Intent → prepared transaction → RPC request binding, owned by `@brightheartma`;
 - #102 — persistence and historical Run semantics, owned by `@brightheartma`.
 
+#101 — exact Intent → prepared transaction → RPC request binding — is CLOSED / COMPLETED by
+merged PR #113 for the native ETH → USDC P0 scope. Its reverse ERC-20 extension remains under
+#105 and does not reopen #101.
+
 P0 does not require successful VERIFIED remediation. A truthful real Native RPC check may
-remain `INCOMPLETE` / `UNKNOWN`, with remediation `NOT_RUN`, `UNVERIFIED`, or `UNKNOWN`.
+remain `INCOMPLETE` / `UNKNOWN`, with remediation `NOT_RUN`, `UNVERIFIED`, or `UNKNOWN`, and
+child verification `unknown` / `unavailable`.
 
 ## Asset Coverage — Best Case gate
 
@@ -94,11 +121,23 @@ Dependency:
 ```
 
 - #103 is Provider-owned by `@jzhao0` and is a bounded real-chain feasibility task.
-- #104 is Backend-owned.
-- #105 composes the qualified reverse path.
+- #104 is Backend-owned, non-blocking for Product P0 but enabling MUST for qualified ERC-20
+  reverse support.
+- #105 composes the qualified reverse path and represents Asset Coverage PASS.
 
 Do not begin production reverse-path integration before #103 qualifies the actual
 transaction semantics. #103 itself remains gated by Product P0 #73.
+
+#103 has a focused four-hour feasibility kill switch. If it cannot qualify the real path:
+
+```text
+STOP reverse-path investment
+Product P0 = retained
+Asset Coverage = NOT COMPLETE
+Full Best Case = NOT COMPLETE
+```
+
+The acceptance standard is not lowered.
 
 ## Evidence Federation — active Best Case lane
 
@@ -130,10 +169,16 @@ Trace RPC is supplementary deeper Evidence only:
 - remain supplementary to Native RPC;
 - introduce no provider ranking, voting, scoring, consensus, or automatic fallback.
 
-#110 is the Backend consumer. Preparation may proceed after the minimum #106 interface is
-agreed; real integration acceptance requires the qualified #106 source.
+#110 is the Backend consumer, owned by `@brightheartma`, covering composition, exact context
+binding, persistence, public projection, and historical consistency. Preparation may proceed
+after the minimum #106 interface is agreed; real integration acceptance requires the qualified
+#106 source. #110 does not block Product P0.
 
 #91 depends on #106 and the integrated same-transaction execution path.
+
+This decomposition does not change the Product architecture. Native RPC remains the primary
+execution baseline and Trace remains supplementary. No ProviderRegistry multi-provider rewrite,
+voting, consensus, ranking, scoring, or automatic fallback is permitted.
 
 ## Verified Remediation — separate Best Case gate
 
@@ -150,6 +195,17 @@ diagnosis
 This is intentionally separate from Product P0 and must not weaken Risk thresholds or
 convert `UNKNOWN` into `VERIFIED`.
 
+Ownership:
+
+- `@brightheartma` — Backend orchestration, child Run, re-check execution, and public projection;
+- `@jzhao0` — Provider/Risk Evidence boundary;
+- `@antony819` — Frontend remediation / child-Run presentation and integration;
+- `@chin0312` — Product acceptance;
+- `@rainypilgrimage` — Contract review only if canonical shared representation changes.
+
+Frontend must distinguish `PROPOSED`, `VERIFIED`, `FAILED`, `UNKNOWN`, and `UNAVAILABLE`.
+Antony does not own Risk logic or remediation generation.
+
 ## Optional / stretch
 
 Do not start these ahead of the active critical path:
@@ -158,7 +214,17 @@ Do not start these ahead of the active critical path:
 - #108 — ExplorerEvidenceSource two-hour feasibility;
 - #109 — one additional verified asset.
 
-#93 Enso and #95 Decision Receipt are cut from the Final Sprint critical path.
+#94 is `BEST CASE SHOULD` and wraps only the public API (`quote()`, `check()`, `getRun()`,
+`recheck()`, and `getAccountState()` only when available). It must not duplicate Risk, Provider,
+QuickNode, or Explorer logic, and its absence does not invalidate any of the four gates.
+
+#90 is `OPTIONAL / BOUNDED STRETCH` with a maximum four-hour read-only feasibility window.
+#108 is `OPTIONAL` with a two-hour ExplorerEvidenceSource feasibility window; Explorer evidence
+does not provide simulation, trace, or state diff. #109 is `OPTIONAL` with a two-hour feasibility
+window for at most one additional asset. None is on the four-gate critical path.
+
+#93 Enso is CLOSED / NOT_PLANNED and #95 Decision Receipt is CLOSED / NOT_PLANNED. Both are
+Final Sprint cuts retained for post-sprint history.
 
 ## Provider owner queue
 
@@ -193,9 +259,22 @@ Still valid:
 - #75 / #89 — Tenderly implementation/wiring;
 - #98 — QuickNode trace capability evidence;
 - #99 — control-plane reconciliation after #98.
+- #113 — basicSimulation, exact binding, and historical Run implementation; merged at the
+  current `main` checkpoint.
 
 Tenderly #72 remains CLOSED with implementation retained and external entitlement blocking
 real credentialed qualification. It is removed from the Final Sprint critical path.
+
+## Current gate status
+
+- Product P0: IN PROGRESS (#73, #100, #102; #101 is complete).
+- Asset Coverage: NOT COMPLETE.
+- Evidence Federation: NOT COMPLETE.
+- Verified Remediation: NOT COMPLETE.
+- Minimal SDK: NOT DONE / SHOULD.
+- Explorer: NOT STARTED.
+- Asset 3: NOT STARTED.
+- Arbitrum One: NOT STARTED.
 
 ## Retained accepted-evidence details
 

@@ -45,3 +45,22 @@ Provider execution ordering is now:
 
 Native RPC remains the primary baseline. Trace Evidence is supplementary and must not become
 provider ranking, voting, consensus, scoring, or automatic fallback.
+
+## 2026-09-27 — Final Sprint v3 durable reconciliation
+
+- GitHub Issue #96 is the authoritative Final Sprint execution tracker; linked GitHub Issues
+  are the implementation/acceptance records, while Notion is supporting reference material only.
+- Full Best Case is the conjunction of Product P0, Asset Coverage, Evidence Federation, and
+  Verified Remediation. These gates remain independently reportable; a kill switch stops
+  investment but does not lower an acceptance standard retroactively.
+- PR #113 merged at `542d5c685d259b5ee6d5aa55098bb2dad900f230`; #101 is CLOSED / COMPLETED.
+  #100 and #102 remain open for their explicit application-entrypoint and historical-replay
+  acceptance evidence.
+- The Evidence Federation decomposition is #106 → #110 → #91 → #92. Native RPC remains the
+  primary baseline, Trace is supplementary, and no ProviderRegistry rewrite, ranking, scoring,
+  voting, consensus, or automatic fallback is introduced.
+- #107 is a separate Verified Remediation gate with Backend, Provider/Risk, Frontend, Product,
+  and conditional Contract ownership as recorded in the durable context.
+- #94 is `BEST CASE SHOULD`; #93 Enso and #95 Receipt UX are CLOSED / NOT_PLANNED Final Sprint
+  cuts retained for post-sprint history.
+- No Product, Risk, Provider, or Contract semantics changed in this documentation sync.

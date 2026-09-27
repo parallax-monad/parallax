@@ -185,3 +185,28 @@ Evidence payload is changed by this documentation sync.
 
 Provider next executable work is recorded as #106. #91 follows #106/integration; #103 remains
 gated by Product P0 #73; #108/#109 remain optional/stretch.
+
+## 2026-09-27 — PR #111 Final Sprint v3 durable documentation sync
+
+Fresh GitHub state advanced `main` to `542d5c685d259b5ee6d5aa55098bb2dad900f230` through
+merged PR #113. PR #113 closes #101 for the native ETH → USDC P0 binding scope; #100 and #102
+remain open for their explicitly recorded application-entrypoint and historical-replay evidence.
+
+The durable context was reconciled to the live Final Sprint v3 control plane:
+
+- #96 is the canonical GitHub execution tracker;
+- GitHub execution Issues govern implementation/acceptance, while Notion is supporting reference
+  material only;
+- the four gates remain Product P0, Asset Coverage, Evidence Federation, and Verified Remediation;
+- #106 → #110 → #91 → #92 is the Evidence Federation decomposition, with Native RPC primary and
+  Trace supplementary;
+- #107 Frontend child-Run presentation ownership is explicit;
+- #94 remains SHOULD;
+- #93 and #95 are CLOSED / NOT_PLANNED Final Sprint cuts;
+- #72 remains CLOSED with implementation retained but credentialed Tenderly qualification
+  externally entitlement-blocked.
+
+Issue #110's conflicting Notion authority sentence was corrected to make #96 and the linked
+GitHub execution Issues authoritative. This PR changes documentation/control-plane truth only;
+no implementation completion, Product/Risk/Provider/Contract semantic change, or runtime/test
+change is claimed.
