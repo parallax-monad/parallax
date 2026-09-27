@@ -1,11 +1,7 @@
+import { useState } from "react";
 import type { RemediationOption } from "@/lib/analyze/types";
 import { type Language, say } from "@/lib/i18n";
 
-/**
- * Multi-Objective Remediation Options
- * Per P0 Economic Diagnosis spec section 9 - shows multiple verified options
- * rather than a single "best" recommendation
- */
 export function RemediationOptionsCard({
   options,
   language,
@@ -15,35 +11,77 @@ export function RemediationOptionsCard({
   language: Language;
   onSelect?: (option: RemediationOption) => void;
 }) {
-  if (options.length === 0) {
-    return null;
-  }
+  const [selectedOptionId, setSelectedOptionId] = useState<string>();
+  const verifiedOptions = options.filter(
+    (option) => option.verificationStatus === "VERIFIED",
+  );
+  const guidanceOptions = options.filter(
+    (option) => option.verificationStatus !== "VERIFIED",
+  );
+
+  if (options.length === 0) return null;
+
+  const renderOption = (option: RemediationOption) => (
+    <RemediationOptionRow
+      key={option.id}
+      language={language}
+      option={option}
+      selected={selectedOptionId === option.id}
+      onSelect={onSelect}
+      onSelectOption={(selected) => {
+        setSelectedOptionId(selected.id);
+        onSelect?.(selected);
+      }}
+    />
+  );
 
   return (
     <section className="pointer-events-none border-none bg-transparent p-0 shadow-none">
       <span className="eyebrow-monad">
-        {say(language, {
-          en: "Your options",
-          zh: "你的选项",
-        })}
+        {say(language, { en: "Your options", zh: "你的选项" })}
       </span>
       <p className="mt-2 text-[14px] leading-[1.6] text-dim">
         {say(language, {
-          en: "Parallax does not assume which objective matters most to you. Tap a verified option to apply it on the swap sheet.",
-          zh: "Parallax 不会假设哪个目标对你最重要。点按已验证选项即可套用到兑换输入。",
+          en: "Choose the objective that best matches what you want to do.",
+          zh: "选择最符合你目标的方案。",
         })}
       </p>
 
-      <div className="mt-4 space-y-4">
-        {options.map((option) => (
-          <RemediationOptionRow
-            key={option.id}
-            language={language}
-            option={option}
-            onSelect={onSelect}
-          />
-        ))}
-      </div>
+      {verifiedOptions.length > 0 && (
+        <div className="mt-5">
+          <div className="text-[12px] font-bold uppercase tracking-[0.08em] text-white">
+            {say(language, {
+              en: "Verified changes",
+              zh: "已验证的变更",
+            })}
+          </div>
+          <p className="mt-1 text-[13px] leading-[1.5] text-dim">
+            {say(language, {
+              en: "These changes were checked and can be applied.",
+              zh: "这些变更已经过检查，可以套用。",
+            })}
+          </p>
+          <div className="mt-3 space-y-4">{verifiedOptions.map(renderOption)}</div>
+        </div>
+      )}
+
+      {guidanceOptions.length > 0 && (
+        <div className="mt-6 border-t border-line pt-5">
+          <div className="text-[12px] font-bold uppercase tracking-[0.08em] text-dim">
+            {say(language, {
+              en: "Wait and re-check",
+              zh: "等待后重新检查",
+            })}
+          </div>
+          <p className="mt-1 text-[13px] leading-[1.5] text-dim">
+            {say(language, {
+              en: "These are guidance only. They cannot be applied directly.",
+              zh: "这些只是参考建议，不能直接套用。",
+            })}
+          </p>
+          <div className="mt-3 space-y-4">{guidanceOptions.map(renderOption)}</div>
+        </div>
+      )}
     </section>
   );
 }
@@ -51,17 +89,20 @@ export function RemediationOptionsCard({
 function RemediationOptionRow({
   option,
   language,
+  selected,
   onSelect,
+  onSelectOption,
 }: {
   option: RemediationOption;
   language: Language;
+  selected: boolean;
   onSelect?: (option: RemediationOption) => void;
+  onSelectOption: (option: RemediationOption) => void;
 }) {
   const verificationColor = {
-    VERIFIED: "text-risk-low border-risk-low/50 bg-risk-low/10",
-    UNVERIFIED: "text-faint border-line bg-ink-rail",
-    CONDITIONAL:
-      "text-risk-moderate border-risk-moderate/50 bg-risk-moderate/10",
+    VERIFIED: "text-risk-low",
+    UNVERIFIED: "text-faint",
+    CONDITIONAL: "text-risk-moderate",
   }[option.verificationStatus];
 
   const verificationLabel = {
@@ -70,35 +111,41 @@ function RemediationOptionRow({
     CONDITIONAL: { en: "Conditional", zh: "条件性" },
   }[option.verificationStatus];
 
-  const selectable = option.swapIntent !== undefined && onSelect !== undefined;
+  const selectable =
+    option.verificationStatus === "VERIFIED" &&
+    option.swapIntent !== undefined &&
+    onSelect !== undefined;
+  const cardStyle = selected
+    ? "border-monad-bright/70 bg-ink-rail shadow-[0_0_0_1px_rgba(123,97,255,0.2),0_8px_24px_rgba(0,0,0,0.2)]"
+    : selectable
+      ? "border-line bg-ink-elev2/40 hover:border-monad-dim/50 hover:bg-ink-elev2/70 hover:shadow-[0_4px_16px_rgba(0,0,0,0.14)]"
+      : "border-line bg-ink-elev2/40";
+  const secondaryText = "text-dim";
+  const divider = selected ? "border-monad-bright/25" : "border-line";
 
   const content = (
     <>
       <div className="flex flex-wrap items-center gap-2">
-        <strong className="text-[15px] font-bold">
-          {say(language, option.objective)}
-        </strong>
-        <span className="pill text-[11px]">
+        <strong className="text-[15px] font-bold">{say(language, option.objective)}</strong>
+        <span className={`rounded-full border px-2 py-0.5 text-[11px] font-bold ${verificationColor}`}>
           {say(language, verificationLabel)}
         </span>
       </div>
 
-      <p className="m-0 mt-2 text-[14px] leading-[1.6]">
+      <p className={`m-0 mt-2 text-[14px] leading-[1.6] ${secondaryText}`}>
         {say(language, option.candidateAdjustment)}
       </p>
 
-      <div className="mt-3 grid grid-cols-1 gap-3 border-t border-current/20 pt-3 sm:grid-cols-2">
+      <div className={`mt-3 grid grid-cols-1 gap-3 border-t pt-3 sm:grid-cols-2 ${divider}`}>
         <div>
-          <span className="block text-[11px] font-bold uppercase tracking-[0.08em] opacity-70">
+          <span className={`block text-[11px] font-bold uppercase tracking-[0.08em] ${secondaryText}`}>
             {say(language, { en: "Change", zh: "变化" })}
           </span>
           <div className="mt-1 flex items-baseline gap-2">
-            <span className="text-[14px] text-dim">
+            <span className={`text-[14px] ${secondaryText}`}>
               {option.quantification.before} {option.quantification.unit}
             </span>
-            <span aria-hidden="true" className="text-dim">
-              →
-            </span>
+            <span aria-hidden="true" className={secondaryText}>→</span>
             <strong className="text-[16px] font-bold">
               {option.quantification.after} {option.quantification.unit}
             </strong>
@@ -106,7 +153,7 @@ function RemediationOptionRow({
         </div>
 
         <div>
-          <span className="block text-[11px] font-bold uppercase tracking-[0.08em] opacity-70">
+          <span className={`block text-[11px] font-bold uppercase tracking-[0.08em] ${secondaryText}`}>
             {say(language, { en: "Predicted outcome", zh: "预测结果" })}
           </span>
           <p className="m-0 mt-1 text-[14px] leading-[1.5]">
@@ -116,36 +163,32 @@ function RemediationOptionRow({
       </div>
 
       {option.tradeOff && (
-        <div className="mt-3 border-t border-current/20 pt-3">
-          <span className="block text-[11px] font-bold uppercase tracking-[0.08em] opacity-70">
+        <div className={`mt-3 border-t pt-3 ${divider}`}>
+          <span className={`block text-[11px] font-bold uppercase tracking-[0.08em] ${secondaryText}`}>
             {say(language, { en: "Trade-off", zh: "权衡" })}
           </span>
-          <p className="m-0 mt-1 text-[13px] leading-[1.6] text-dim">
+          <p className={`m-0 mt-1 text-[13px] leading-[1.6] ${secondaryText}`}>
             {say(language, option.tradeOff)}
           </p>
         </div>
       )}
 
       {option.verificationStatus === "CONDITIONAL" && (
-        <div className="mt-3 border-t border-risk-moderate/30 pt-3">
-          <p className="m-0 text-[12px] leading-[1.5] text-dim">
-            {say(language, {
-              en: "This is conditional guidance, not a verified improvement. Re-check when the condition is met.",
-              zh: "这是条件性指导，不是已验证的改进。条件满足时请重新检查。",
-            })}
-          </p>
-        </div>
+        <p className={`m-0 mt-3 border-t pt-3 text-[12px] leading-[1.5] ${divider} ${secondaryText}`}>
+          {say(language, {
+            en: "Wait until the condition is met, then run the check again.",
+            zh: "等待条件满足后，再重新运行检查。",
+          })}
+        </p>
       )}
 
       {option.verificationStatus === "UNVERIFIED" && (
-        <div className="mt-3 border-t border-line pt-3">
-          <p className="m-0 text-[12px] leading-[1.5] text-dim">
-            {say(language, {
-              en: "This change has not been verified. It remains speculative until evidence supports it.",
-              zh: "此变更尚未验证。在证据支持之前，它仍然是推测性的。",
-            })}
-          </p>
-        </div>
+        <p className={`m-0 mt-3 border-t pt-3 text-[12px] leading-[1.5] ${divider} ${secondaryText}`}>
+          {say(language, {
+            en: "This change has not been verified and cannot be applied.",
+            zh: "此变更尚未验证，不能直接套用。",
+          })}
+        </p>
       )}
     </>
   );
@@ -154,13 +197,14 @@ function RemediationOptionRow({
     return (
       <button
         type="button"
-        className={`pointer-events-auto w-full rounded-[14px] border-none p-5 text-left backdrop-blur-xl transition-all duration-200 ease-out hover:-translate-y-0.5 hover:shadow-[0_4px_12px_rgba(0,0,0,0.1)] ${verificationColor}`}
-        onClick={() => onSelect(option)}
+        aria-pressed={selected}
+        className={`pointer-events-auto w-full rounded-[14px] border p-5 text-left transition-all duration-200 ease-out hover:-translate-y-0.5 ${cardStyle}`}
+        onClick={() => onSelectOption(option)}
       >
         {content}
       </button>
     );
   }
 
-  return <div className={`rounded-[14px] border-none p-5 backdrop-blur-xl ${verificationColor}`}>{content}</div>;
+  return <div className={`rounded-[14px] border p-5 ${cardStyle}`}>{content}</div>;
 }
