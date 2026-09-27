@@ -66,6 +66,7 @@ import {
   mapNativeRpcProviderResult,
   NATIVE_RPC_ARBITRUM_PROVIDER_ID,
   type NativeRpcPreparedExecution,
+  projectNativeRpcBasicSimulation,
 } from "./native-rpc-evidence.js";
 import { createNativeRpcProviderAdapter } from "./native-rpc-provider.js";
 import {
@@ -353,6 +354,7 @@ export function createArbitrumProductionComposition(
           pipelineContext,
           evidence,
         );
+        const basicSimulation = projectArbitrumBasicSimulation(pipelineContext);
         const projectedRun = runResultSchema.parse({
           ...projectGenericEvidenceToRunResult(
             pipelineContext.runId,
@@ -364,6 +366,7 @@ export function createArbitrumProductionComposition(
             projection.risk,
             projection.selectedQuote,
             projection.solver,
+            basicSimulation,
           ),
         });
         const projected = applyBackendP0Verdict(
@@ -414,6 +417,9 @@ type ArbitrumDecisionContext = {
   readonly intent: NormalizedSwapIntent;
   readonly blockContext: BlockContext;
   readonly quote: unknown;
+  readonly unsignedTransaction: ArbitrumProviderExecution["unsignedTransaction"];
+  readonly gasEstimate: ArbitrumProviderExecution["gasEstimate"];
+  readonly finality: ArbitrumProviderExecution["finality"];
   readonly providerResult: ProviderEvaluationResult;
   readonly decisionContext?: {
     readonly expectationBaseline?: ExpectationBaseline;
@@ -537,6 +543,7 @@ function projectArbitrumP0RunResult(
   risk: ReturnType<typeof evaluateBackendP0Risk>,
   selectedQuote: QuoteContext | undefined,
   solver: SolverResult | undefined,
+  basicSimulation: P0RunResult["basicSimulation"] | undefined,
 ): P0RunResult {
   const boundary = intent.economicBoundary;
   const transactionProtection = {
@@ -572,7 +579,36 @@ function projectArbitrumP0RunResult(
     constraints: risk.constraints,
     evidenceState: risk.evidenceState,
     transactionProtection,
+    ...(basicSimulation === undefined ? {} : { basicSimulation }),
     remediation: projectRemediation(solver),
+  });
+}
+
+function projectArbitrumBasicSimulation(
+  pipeline: ArbitrumDecisionContext,
+): P0RunResult["basicSimulation"] {
+  if (
+    pipeline.providerResult.provider.providerId !==
+    NATIVE_RPC_ARBITRUM_PROVIDER_ID
+  ) {
+    return undefined;
+  }
+  const preparedExecution: NativeRpcPreparedExecution<NormalizedSwapIntent> = {
+    runId: pipeline.runId,
+    intent: pipeline.intent,
+    chainId: pipeline.intent.chainId,
+    protocol: pipeline.intent.protocol,
+    blockContext: pipeline.blockContext,
+    quote: pipeline.quote,
+    unsignedTransaction:
+      pipeline.unsignedTransaction as NativeRpcPreparedExecution<NormalizedSwapIntent>["unsignedTransaction"],
+    gasEstimate: pipeline.gasEstimate,
+    finality: pipeline.finality,
+  };
+  return projectNativeRpcBasicSimulation({
+    intent: pipeline.intent,
+    preparedExecution,
+    providerResult: pipeline.providerResult,
   });
 }
 
@@ -787,6 +823,9 @@ async function evaluateArbitrumCandidate(
     intent,
     blockContext: execution.blockContext,
     quote: execution.quote,
+    unsignedTransaction: execution.unsignedTransaction,
+    gasEstimate: execution.gasEstimate,
+    finality: execution.finality,
     providerResult: execution.providerResult,
   };
   const childQuote = arbitrumCurrentQuote(

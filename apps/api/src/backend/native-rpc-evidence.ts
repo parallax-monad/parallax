@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import {
   convertAtomicAmountToHuman,
   type GenericEvidence,
@@ -6,12 +7,14 @@ import {
   type GenericSwapIntent,
   genericEvidenceSchema,
   type NormalizedSwapIntent,
+  type P0BasicSimulation,
+  p0BasicSimulationSchema,
 } from "@parallax/contracts";
 import {
   ARBITRUM_SEPOLIA_CHAIN_ID,
   type ArbitrumTransaction,
 } from "./arbitrum-chain-adapter.js";
-
+import { inspectCamelotV3Transaction } from "./camelot-v3-binding.js";
 import type { BlockContext, GasEstimate } from "./chain-adapter.js";
 import type { ProviderEvaluationResult } from "./provider-adapter.js";
 import type {
@@ -27,6 +30,14 @@ export const NATIVE_RPC_CAPABILITIES = Object.freeze([
   "eth_call",
   "estimateGas",
   "pinned-block",
+] as const);
+export const NATIVE_RPC_UNCHECKED_CAPABILITIES = Object.freeze([
+  "receipt",
+  "outcome",
+  "assetChanges",
+  "state-diff",
+  "logs",
+  "traces",
 ] as const);
 
 export type NativeRpcIntent = {
@@ -194,12 +205,7 @@ export function toNativeRpcGenericEvidence(
   const notChecked = [
     ...(callField === undefined ? ["native-rpc.eth_call"] : []),
     ...(gasField === undefined ? ["native-rpc.estimateGas"] : []),
-    "receipt",
-    "outcome",
-    "assetChanges",
-    "state-diff",
-    "logs",
-    "traces",
+    ...NATIVE_RPC_UNCHECKED_CAPABILITIES,
     ...(freshness.status === "not_checked" ? ["freshness"] : []),
   ];
   const providerData = {
@@ -286,6 +292,236 @@ export function toNativeRpcGenericEvidence(
 }
 
 export const mapNativeRpcProviderResult = toNativeRpcGenericEvidence;
+
+export type NativeRpcBasicSimulationInput = {
+  readonly intent: NormalizedSwapIntent;
+  readonly preparedExecution: NativeRpcPreparedExecution;
+  readonly providerResult: ProviderEvaluationResult;
+};
+
+/**
+ * Projects only provider-neutral Native RPC facts into the public P0 result.
+ * Return data and diagnostic text are intentionally reduced to fingerprints or
+ * fixed semantic reasons; the raw Provider payload remains behind the Evidence
+ * boundary. Missing optional fields mean that an older Run did not record this
+ * hardening slice, rather than that the execution observed NOT_RUN.
+ */
+export function projectNativeRpcBasicSimulation(
+  input: NativeRpcBasicSimulationInput,
+): P0BasicSimulation {
+  const fields = new Map(
+    input.providerResult.candidateFields.map((field) => [
+      field.candidatePath,
+      field,
+    ]),
+  );
+  const callField = fields.get("nativeRpc.ethCall.returnData");
+  const gasField = fields.get("nativeRpc.estimateGas.gasUnits");
+  const blockNumberField = fields.get("nativeRpc.blockContext.blockNumber");
+  const blockHashField = fields.get("nativeRpc.blockContext.blockHash");
+  const revalidatedBlockField = fields.get("nativeRpc.revalidatedBlock");
+  const freshnessField = fields.get("nativeRpc.freshness");
+  const call = callProjection(callField);
+  const gasEstimate = gasProjection(gasField);
+  const blockHash =
+    blockHashField?.status === "observed" && isBlockHash(blockHashField.value)
+      ? blockHashField.value
+      : undefined;
+  const revalidatedBlockHash =
+    revalidatedBlockField?.status === "observed" &&
+    isBlockHash(revalidatedBlockField.value)
+      ? revalidatedBlockField.value
+      : undefined;
+  const transaction = input.preparedExecution.unsignedTransaction
+    .payload as ArbitrumTransaction;
+  const bindingInspection = inspectCamelotV3Transaction(
+    input.intent,
+    input.preparedExecution.quote,
+    transaction,
+  );
+  const blockVerified =
+    blockNumberField?.status === "observed" &&
+    blockHash !== undefined &&
+    revalidatedBlockField?.status === "observed" &&
+    revalidatedBlockHash !== undefined &&
+    revalidatedBlockHash.toLowerCase() === blockHash.toLowerCase();
+  const failureStage = basicSimulationFailureStage({
+    bindingInspection,
+    blockNumberField,
+    blockHashField,
+    revalidatedBlockField,
+    callField,
+    gasField,
+    freshnessField,
+    call,
+    gasEstimate,
+  });
+  const validityAtExecution =
+    call.status === "REVERTED"
+      ? "INVALID"
+      : input.providerResult.status === "success" &&
+          call.status === "SUCCEEDED" &&
+          gasEstimate.status === "AVAILABLE" &&
+          blockVerified &&
+          bindingInspection.ok
+        ? "VALID"
+        : "UNKNOWN";
+  const reason = basicSimulationReason(
+    failureStage,
+    call.status,
+    bindingInspection,
+  );
+
+  return p0BasicSimulationSchema.parse({
+    call: {
+      status: call.status,
+      ...(call.returnDataFingerprint === undefined
+        ? {}
+        : { returnDataFingerprint: call.returnDataFingerprint }),
+    },
+    gasEstimate: {
+      status: gasEstimate.status,
+      ...(gasEstimate.gasUnits === undefined
+        ? {}
+        : { gasUnits: gasEstimate.gasUnits }),
+    },
+    blockNumber: input.preparedExecution.blockContext.blockNumber,
+    ...(blockHash === undefined ? {} : { blockHash }),
+    observedAt: input.providerResult.provider.observedAt,
+    validityAtExecution,
+    preparedTransactionFingerprint: fingerprint(transaction),
+    ...(bindingInspection.ok
+      ? { transactionBinding: bindingInspection.binding }
+      : {}),
+    ...(failureStage === undefined ? {} : { failureStage }),
+    ...(reason === undefined ? {} : { reason }),
+    uncheckedCapabilities: [...NATIVE_RPC_UNCHECKED_CAPABILITIES],
+  });
+}
+
+type ProjectionStatus = {
+  readonly status: P0BasicSimulation["call"]["status"];
+  readonly returnDataFingerprint?: string;
+};
+
+function callProjection(
+  field: ProvisionalCandidateFieldInput | undefined,
+): ProjectionStatus {
+  if (field?.status === "observed" && isHexData(field.value)) {
+    return {
+      status: "SUCCEEDED",
+      returnDataFingerprint: fingerprint(field.value),
+    };
+  }
+  if (field === undefined) return { status: "NOT_RUN" };
+  if (field.semanticNote?.toLowerCase().includes("revert")) {
+    return { status: "REVERTED" };
+  }
+  return { status: "UNAVAILABLE" };
+}
+
+type GasProjection = {
+  readonly status: P0BasicSimulation["gasEstimate"]["status"];
+  readonly gasUnits?: string;
+};
+
+function gasProjection(
+  field: ProvisionalCandidateFieldInput | undefined,
+): GasProjection {
+  if (field?.status === "observed" && isDecimal(field.value)) {
+    return { status: "AVAILABLE", gasUnits: field.value };
+  }
+  return field === undefined
+    ? { status: "NOT_RUN" }
+    : { status: "UNAVAILABLE" };
+}
+
+function basicSimulationFailureStage(input: {
+  readonly bindingInspection: ReturnType<typeof inspectCamelotV3Transaction>;
+  readonly blockNumberField: ProvisionalCandidateFieldInput | undefined;
+  readonly blockHashField: ProvisionalCandidateFieldInput | undefined;
+  readonly revalidatedBlockField: ProvisionalCandidateFieldInput | undefined;
+  readonly callField: ProvisionalCandidateFieldInput | undefined;
+  readonly gasField: ProvisionalCandidateFieldInput | undefined;
+  readonly freshnessField: ProvisionalCandidateFieldInput | undefined;
+  readonly call: ProjectionStatus;
+  readonly gasEstimate: GasProjection;
+}): P0BasicSimulation["failureStage"] {
+  if (!input.bindingInspection.ok) return "PREPARE";
+  if (
+    input.blockNumberField?.status !== "observed" ||
+    input.blockHashField?.status !== "observed" ||
+    input.revalidatedBlockField?.status === "invalid"
+  ) {
+    return "BLOCK";
+  }
+  if (input.call.status !== "SUCCEEDED" && input.call.status !== "NOT_RUN") {
+    return "CALL";
+  }
+  if (input.call.status === "NOT_RUN" && input.callField === undefined) {
+    return "CALL";
+  }
+  if (input.gasEstimate.status === "UNAVAILABLE") return "GAS_ESTIMATE";
+  if (input.revalidatedBlockField?.status !== "observed") return "BLOCK";
+  if (
+    input.freshnessField !== undefined &&
+    input.freshnessField.status !== "observed"
+  ) {
+    return "FRESHNESS";
+  }
+  return undefined;
+}
+
+function basicSimulationReason(
+  stage: P0BasicSimulation["failureStage"],
+  callStatus: P0BasicSimulation["call"]["status"],
+  bindingInspection: ReturnType<typeof inspectCamelotV3Transaction>,
+): string | undefined {
+  if (!bindingInspection.ok) return "Prepared transaction binding is invalid";
+  if (callStatus === "REVERTED") return "Native RPC eth_call reverted";
+  switch (stage) {
+    case "BLOCK":
+      return "Pinned execution block could not be verified before and after evaluation";
+    case "CALL":
+      return "Native RPC eth_call was unavailable";
+    case "GAS_ESTIMATE":
+      return "Native RPC gas estimation was unavailable";
+    case "FRESHNESS":
+      return "Native RPC freshness could not be verified";
+    case "PREPARE":
+      return "Prepared transaction binding is invalid";
+    default:
+      return undefined;
+  }
+}
+
+function fingerprint(value: unknown): string {
+  return `sha256:${createHash("sha256")
+    .update(stableJson(value))
+    .digest("hex")}`;
+}
+
+function stableJson(value: unknown): string {
+  if (value === null || typeof value !== "object") return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(stableJson).join(",")}]`;
+  const record = value as Record<string, unknown>;
+  return `{${Object.keys(record)
+    .sort()
+    .map((key) => `${JSON.stringify(key)}:${stableJson(record[key])}`)
+    .join(",")}}`;
+}
+
+function isDecimal(value: unknown): value is string {
+  return typeof value === "string" && /^\d+$/.test(value);
+}
+
+function isHexData(value: unknown): value is string {
+  return typeof value === "string" && /^0x(?:[0-9a-f]{2})*$/i.test(value);
+}
+
+function isBlockHash(value: unknown): value is string {
+  return typeof value === "string" && /^0x[0-9a-f]{64}$/i.test(value);
+}
 
 function genericProviderStatus(status: NativeRpcStatus): GenericProviderStatus {
   switch (status) {

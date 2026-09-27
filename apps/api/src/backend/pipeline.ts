@@ -603,5 +603,31 @@ function withProviderEvidence(
   ) {
     return projected;
   }
-  return { ...(projected as Record<string, unknown>), providerEvidence };
+  const projectedRecord = projected as Record<string, unknown>;
+  const publicEvidence = Object.hasOwn(projectedRecord, "providerEvidence")
+    ? projectedRecord.providerEvidence
+    : providerEvidence;
+  if (publicEvidence === undefined) return projected;
+  return {
+    ...projectedRecord,
+    providerEvidence: redactPublicProviderEvidence(publicEvidence),
+  };
+}
+
+/**
+ * Provider Evidence may be needed by the internal Core/Decision path, but the
+ * public Run boundary must not expose provider-owned raw payloads. Keep the
+ * provider-neutral envelope and deliberately drop its private providerData
+ * field, matching the orchestrator's public Evidence projection.
+ */
+function redactPublicProviderEvidence(value: unknown): unknown {
+  if (
+    typeof value !== "object" ||
+    value === null ||
+    Array.isArray(value) ||
+    !Object.hasOwn(value, "providerData")
+  ) {
+    return value;
+  }
+  return { ...(value as Record<string, unknown>), providerData: {} };
 }
