@@ -165,6 +165,7 @@ describe("CamelotV3ProtocolAdapter", () => {
     const quote = await adapter.quote(canonicalIntent, { blockContext });
     expect(quote).toEqual({
       estimatedAmountOut: "2",
+      amountOutAtomic: "2000000000000000000",
       source: "quote",
       blockNumber: "42",
       runtimeVersion: "test-runtime",

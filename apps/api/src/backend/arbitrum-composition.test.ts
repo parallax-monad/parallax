@@ -10,7 +10,7 @@ import { economicFailStopResult } from "@parallax/orchestrator/application/actio
 import type { CallerConstraint, ConstraintEvidence } from "@parallax/risk";
 import { describe, expect, it, vi } from "vitest";
 import canonicalRealCamelotCapture from "../../../../fixtures/provider-registry/be-063/camelot-sepolia-real-2026-09-18T08-47-56-715Z/capture.json";
-import { createBackendApp } from "../bootstrap/backend.js";
+import { bootstrapBackendApp, createBackendApp } from "../bootstrap/backend.js";
 import { UnsupportedAgentFlowError } from "../ports.js";
 import { bootstrapBackendRuntime } from "../runtime-config.js";
 import { InMemoryRunStore } from "../store.js";
@@ -901,6 +901,7 @@ describe("Arbitrum production composition skeleton", () => {
       "eth_getBlockByNumber",
       "eth_call",
       "eth_estimateGas",
+      "eth_getBlockByNumber",
     ]);
   });
 
@@ -980,6 +981,104 @@ describe("Arbitrum production composition skeleton", () => {
 
     const publicResult = runResultSchema.parse(execution.decisionOutput);
     expect(publicResult.providerEvidence?.providerData).toEqual({});
+  });
+
+  it("persists the Native RPC P0 facts through POST /api/check and GET /api/runs", async () => {
+    const replay = canonicalRealRpcReplay();
+    const blockNumber = String(
+      BigInt(replay.capture.observations.pinnedBlock.number),
+    );
+    const runtime = bootstrapBackendRuntime({
+      environment: arbitrumEnvironment,
+      tokenRegistry: {
+        chains: [{ chainId: 421614, symbol: "ETH", decimals: 18 }],
+        tokens: [
+          {
+            chainId: 421614,
+            address: CAMELOT_SEPOLIA_USDC,
+            symbol: "USDC",
+            decimals: 18,
+            decimalsSource: "onchain_verified" as const,
+            verifiedAtBlock: blockNumber,
+          },
+        ],
+      },
+    });
+    const composition = createArbitrumProductionComposition({
+      runtime,
+      runStore: new InMemoryRunStore(),
+      rpcClient: replay.client,
+    });
+    const app = bootstrapBackendApp({
+      environment: arbitrumEnvironment,
+      tokenRegistry: {
+        chains: [{ chainId: 421614, symbol: "ETH", decimals: 18 }],
+        tokens: [
+          {
+            chainId: 421614,
+            address: CAMELOT_SEPOLIA_USDC,
+            symbol: "USDC",
+            decimals: 18,
+            decimalsSource: "onchain_verified" as const,
+            verifiedAtBlock: blockNumber,
+          },
+        ],
+      },
+      arbitrumComposition: composition,
+    });
+
+    const response = await app.fetch(
+      new Request("https://api.example.test/api/check", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          chainId: 421614,
+          protocol: "camelot-v3",
+          sender: "0xeb7c5322f0997ee70f4bbd3ae7e428072c9af396",
+          tokenIn: { kind: "native" },
+          tokenOut: { kind: "erc20", address: CAMELOT_SEPOLIA_USDC },
+          amountIn: "0.001",
+          economicBoundary: {
+            availability: "unavailable",
+            source: "unavailable",
+          },
+        }),
+      }),
+    );
+    const body = runResultSchema.parse(await response.json());
+
+    expect(response.status).toBe(200);
+    expect(body).toMatchObject({
+      status: "completed",
+      p0: {
+        basicSimulation: {
+          call: { status: "SUCCEEDED" },
+          gasEstimate: { status: "AVAILABLE" },
+          blockNumber,
+          validityAtExecution: "VALID",
+          transactionBinding: {
+            chainId: 421614,
+            protocol: "camelot-v3",
+            amountInAtomic: "1000000000000000",
+          },
+        },
+      },
+      providerEvidence: { providerData: {} },
+    });
+    const runId = body.runId;
+
+    const storedResponse = await app.fetch(
+      new Request(`https://api.example.test/api/runs/${runId}`),
+    );
+    const storedRecord = (await storedResponse.json()) as {
+      readonly result?: unknown;
+    };
+    const stored = runResultSchema.parse(storedRecord.result);
+
+    expect(storedResponse.status).toBe(200);
+    expect(stored.p0?.basicSimulation).toEqual(body.p0?.basicSimulation);
+    expect(JSON.stringify(stored)).not.toContain("callReturnData");
+    expect(stored.providerEvidence?.providerData).toEqual({});
   });
 
   it("normalizes Arbitrum quotes through the public app and reaches Camelot", async () => {
@@ -1340,6 +1439,9 @@ async function runP0Check(
   intent: NormalizedSwapIntent = normalizedIntent,
   expectationBaseline: ExpectationBaseline | null = p0ExpectationBaseline,
 ) {
+  if ((await composition.runStore.get(runId)) === undefined) {
+    await composition.runStore.start(runId, intent);
+  }
   const pipeline = new BackendPipeline({ runtime: composition });
   return pipeline.executeNormalized(intent, {
     rawInput: normalizedIntent as never,

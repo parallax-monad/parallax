@@ -161,6 +161,7 @@ describe("canonical Native RPC exercise input", () => {
         method: "eth_estimateGas",
         params: [input.input.unsignedTransaction.payload, blockTag],
       },
+      { method: "eth_getBlockByNumber", params: [blockTag, false] },
     ]);
   });
 });

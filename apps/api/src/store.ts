@@ -78,6 +78,9 @@ export class InMemoryRunStore implements RunStore {
     if (this.runs.has(runId)) {
       throw new Error(`Run ${runId} already exists`);
     }
+    if (parentRunId !== undefined && !this.runs.has(parentRunId)) {
+      throw new Error(`Run ${runId} parent does not exist`);
+    }
 
     this.runs.set(
       runId,
@@ -96,6 +99,9 @@ export class InMemoryRunStore implements RunStore {
     const persistedResult = withCreatedAt(result, current.createdAt);
     if (result.parentRunId !== current.parentRunId) {
       throw new Error(`Run ${result.runId} parent does not match its start`);
+    }
+    if (!isDeepStrictEqual(result.intent, current.intent)) {
+      throw new Error(`Run ${result.runId} result does not match its start`);
     }
 
     this.runs.set(

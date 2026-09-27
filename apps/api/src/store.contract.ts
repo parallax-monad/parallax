@@ -2,6 +2,7 @@ import type {
   FailedRunResult,
   NormalizedSwapIntent,
 } from "@parallax/contracts";
+import { economicFailStopResult } from "@parallax/orchestrator/application/action-gate-fixtures";
 import { describe, expect, it } from "vitest";
 import type { RunStore } from "./store.js";
 
@@ -72,6 +73,62 @@ function failureResult(runId: string, parentRunId?: string): FailedRunResult {
   };
 }
 
+function completedResultWithBasicSimulation(runId: string) {
+  const completedIntent: NormalizedSwapIntent = {
+    ...intent,
+    economicBoundary: {
+      availability: "available",
+      minimumReceivedAtomic: "20000",
+      source: "user_declared",
+    },
+  };
+  const result = economicFailStopResult(
+    {
+      sender: intent.sender,
+      mon: intent.tokenIn as Extract<
+        NormalizedSwapIntent["tokenIn"],
+        { kind: "native" }
+      >,
+      usdc: intent.tokenOut as Extract<
+        NormalizedSwapIntent["tokenOut"],
+        { kind: "erc20" }
+      >,
+      simulatorPinnedBlock: "42",
+      runtimeVersion: "native-rpc-runtime",
+      runtimeRevision: "native-rpc-revision",
+    },
+    runId,
+    completedIntent,
+  );
+
+  result.p0 = {
+    expectationBaseline: { status: "MISSING" },
+    quoteFidelity: { status: "UNKNOWN", reason: "MISSING_BASELINE" },
+    cause: { status: "NOT_VERIFIED" },
+    constraints: [],
+    evidenceState: "UNAVAILABLE",
+    transactionProtection: {
+      status: "NOT_APPLICABLE",
+      source: "unavailable",
+    },
+    basicSimulation: {
+      call: {
+        status: "SUCCEEDED",
+        returnDataFingerprint: `sha256:${"a".repeat(64)}`,
+      },
+      gasEstimate: { status: "AVAILABLE", gasUnits: "21000" },
+      blockNumber: "42",
+      blockHash: `0x${"b".repeat(64)}`,
+      observedAt: "2026-09-10T00:01:00.000Z",
+      validityAtExecution: "UNKNOWN",
+      preparedTransactionFingerprint: `sha256:${"c".repeat(64)}`,
+      uncheckedCapabilities: ["receipt", "outcome", "traces"],
+    },
+    remediation: { status: "NOT_RUN" },
+  };
+  return result;
+}
+
 /** Shared behavioral contract for every RunStore implementation. */
 export function runStoreContract(
   implementationName: string,
@@ -112,6 +169,32 @@ export function runStoreContract(
     });
 
     contractIt(
+      "round-trips basicSimulation facts without making them provider-specific",
+      async () => {
+        const store = await createStore();
+        const result = completedResultWithBasicSimulation("basic-simulation");
+
+        await store.start("basic-simulation", result.intent);
+        await store.complete(result);
+
+        const record = await store.get("basic-simulation");
+        expect(record).toMatchObject({
+          status: "completed",
+          result: {
+            p0: {
+              basicSimulation: {
+                call: { status: "SUCCEEDED" },
+                gasEstimate: { status: "AVAILABLE", gasUnits: "21000" },
+                blockNumber: "42",
+                validityAtExecution: "UNKNOWN",
+              },
+            },
+          },
+        });
+      },
+    );
+
+    contractIt(
       "preserves a parent Run link across a child lifecycle",
       async () => {
         const store = await createStore();
@@ -144,6 +227,28 @@ export function runStoreContract(
         ).rejects.toThrow("parent does not match");
       },
     );
+
+    contractIt(
+      "rejects a completed result with a different Intent",
+      async () => {
+        const store = await createStore();
+        await store.start("complete-intent-mismatch", intent);
+        const result = failureResult("complete-intent-mismatch");
+        result.intent = { ...intent, amountInAtomic: "2" };
+
+        await expect(store.complete(result)).rejects.toThrow(
+          "result does not match",
+        );
+      },
+    );
+
+    contractIt("rejects a child Run with an unknown parent", async () => {
+      const store = await createStore();
+
+      await expect(
+        store.start("orphan-child", intent, "missing-parent"),
+      ).rejects.toThrow("parent does not exist");
+    });
 
     contractIt(
       "rejects duplicate starts and repeated terminal transitions",

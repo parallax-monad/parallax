@@ -1,7 +1,12 @@
 import type { NormalizedSwapIntent } from "@parallax/contracts";
 import { describe, expect, it } from "vitest";
 import controlledNativeRpcFixtures from "../../../../fixtures/provider-registry/be-011/native-rpc/controlled-p0-b/fixtures.json";
+import {
+  CAMELOT_SEPOLIA_ROUTER,
+  CAMELOT_SEPOLIA_WETH,
+} from "./camelot-v3-protocol-adapter.js";
 import { NativeRpcClientError } from "./native-rpc-client.js";
+import { projectNativeRpcBasicSimulation } from "./native-rpc-evidence.js";
 import {
   ARBITRUM_SEPOLIA_CHAIN_ID,
   createNativeRpcProvider,
@@ -40,15 +45,31 @@ const prepared: NativeRpcPreparedExecution<NormalizedSwapIntent> = {
   },
   quote: {
     estimatedAmountOut: "0.5",
+    amountOutAtomic: "500000000000000000",
     minimumAmountOut: "0.4",
   },
   unsignedTransaction: {
     kind: "unsigned",
     payload: {
       from: intent.sender,
-      to: "0x2222222222222222222222222222222222222222",
-      data: "0x1234",
-      value: "0x0",
+      to: CAMELOT_SEPOLIA_ROUTER,
+      data: `0xbc651188${[
+        CAMELOT_SEPOLIA_WETH,
+        intent.tokenOut.kind === "erc20" ? intent.tokenOut.address : "",
+        intent.recipient,
+        "1700000000",
+        intent.amountInAtomic,
+        "495000000000000000",
+        "0",
+      ]
+        .map((word) =>
+          /^0x[0-9a-f]{40}$/i.test(word)
+            ? word.slice(2).toLowerCase().padStart(64, "0")
+            : BigInt(word).toString(16).padStart(64, "0"),
+        )
+        .join("")}`,
+      value: "0xde0b6b3a7640000",
+      chainId: "0x66eee",
     },
   },
   gasEstimate: { gasUnits: "21000" },
@@ -271,28 +292,54 @@ describe("NativeRpcProvider", () => {
       },
       {
         method: "eth_call",
-        params: [
-          {
-            from: intent.sender,
-            to: "0x2222222222222222222222222222222222222222",
-            data: "0x1234",
-            value: "0x0",
-          },
-          "0x2a",
-        ],
+        params: [prepared.unsignedTransaction.payload, "0x2a"],
       },
       {
         method: "eth_estimateGas",
-        params: [
-          {
-            from: intent.sender,
-            to: "0x2222222222222222222222222222222222222222",
-            data: "0x1234",
-            value: "0x0",
-          },
-          "0x2a",
-        ],
+        params: [prepared.unsignedTransaction.payload, "0x2a"],
       },
+      {
+        method: "eth_getBlockByNumber",
+        params: ["0x2a", false],
+      },
+    ]);
+  });
+
+  it("preserves a successful call when gas estimation fails", async () => {
+    const client = clientFor({
+      eth_call: "0xabcdef",
+      eth_estimateGas: Object.assign(new Error("execution reverted"), {
+        rpcCode: 3,
+      }),
+    });
+    const provider = createNativeRpcProvider({ client, mode: "MOCK" });
+
+    const result = await evaluateProviderAdapter(provider, {
+      runId: prepared.runId,
+      intent,
+      chainId: prepared.chainId,
+      protocol: prepared.protocol,
+      input: prepared,
+    });
+    const simulation = projectNativeRpcBasicSimulation({
+      intent,
+      preparedExecution: prepared,
+      providerResult: result,
+    });
+
+    expect(result.status).toBe("unknown");
+    expect(simulation).toMatchObject({
+      call: { status: "SUCCEEDED" },
+      gasEstimate: { status: "UNAVAILABLE" },
+      validityAtExecution: "UNKNOWN",
+      failureStage: "GAS_ESTIMATE",
+      reason: "Native RPC gas estimation was unavailable",
+    });
+    expect(client.calls.map(({ method }) => method)).toEqual([
+      "eth_chainId",
+      "eth_getBlockByNumber",
+      "eth_call",
+      "eth_estimateGas",
     ]);
   });
 
@@ -331,8 +378,9 @@ describe("NativeRpcProvider", () => {
       "eth_getBlockByNumber",
       "eth_call",
       "eth_estimateGas",
+      "eth_getBlockByNumber",
     ]);
-    expect(requests.map((request) => request.id)).toEqual([1, 2, 3, 4]);
+    expect(requests.map((request) => request.id)).toEqual([1, 2, 3, 4, 5]);
     expect(requests[2]?.params).toEqual([
       prepared.unsignedTransaction.payload,
       "0x2a",
@@ -341,6 +389,7 @@ describe("NativeRpcProvider", () => {
       prepared.unsignedTransaction.payload,
       "0x2a",
     ]);
+    expect(requests[4]?.params).toEqual(["0x2a", false]);
   });
 
   it.each([
@@ -642,7 +691,6 @@ describe("NativeRpcProvider", () => {
     const provider = createNativeRpcProvider({ client, mode: "MOCK" });
     const payload = {
       ...prepared.unsignedTransaction.payload,
-      value: "0x1",
       gas: "0x5208",
     };
     const result = await evaluateProviderAdapter(provider, {
@@ -660,7 +708,6 @@ describe("NativeRpcProvider", () => {
     expect(client.calls[3]?.params).toEqual([payload, "0x2a"]);
     expect(payload).toEqual({
       ...prepared.unsignedTransaction.payload,
-      value: "0x1",
       gas: "0x5208",
     });
   });
@@ -724,6 +771,57 @@ describe("NativeRpcProvider", () => {
         }),
         expect.objectContaining({
           candidatePath: "nativeRpc.pinnedBlock",
+          status: "invalid",
+        }),
+      ]),
+    );
+  });
+
+  it("fails closed when the pinned block hash changes after RPC evaluation", async () => {
+    const firstHash = `0x${"a".repeat(64)}`;
+    const secondHash = `0x${"b".repeat(64)}`;
+    let blockReads = 0;
+    const calls: Array<{ method: string; params: readonly unknown[] }> = [];
+    const client: NativeRpcClient = {
+      async request(method, params = []) {
+        calls.push({ method, params });
+        if (method === "eth_chainId") return "0x66eee";
+        if (method === "eth_getBlockByNumber") {
+          blockReads += 1;
+          return {
+            number: "0x2a",
+            hash: blockReads === 1 ? firstHash : secondHash,
+          };
+        }
+        if (method === "eth_call") return "0xabcdef";
+        if (method === "eth_estimateGas") return "0x5208";
+        throw new Error(`unexpected ${method}`);
+      },
+    };
+    const provider = createNativeRpcProvider({ client, mode: "MOCK" });
+    const result = await evaluateProviderAdapter(provider, {
+      runId: prepared.runId,
+      intent,
+      chainId: prepared.chainId,
+      protocol: prepared.protocol,
+      input: {
+        ...prepared,
+        blockContext: { ...prepared.blockContext, blockHash: firstHash },
+      },
+    });
+
+    expect(result.status).toBe("unknown");
+    expect(calls.map(({ method }) => method)).toEqual([
+      "eth_chainId",
+      "eth_getBlockByNumber",
+      "eth_call",
+      "eth_estimateGas",
+      "eth_getBlockByNumber",
+    ]);
+    expect(result.candidateFields).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          candidatePath: "nativeRpc.revalidatedBlock",
           status: "invalid",
         }),
       ]),

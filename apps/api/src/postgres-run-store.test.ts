@@ -1,3 +1,5 @@
+import type { NormalizedSwapIntent } from "@parallax/contracts";
+import { economicFailStopResult } from "@parallax/orchestrator/application/action-gate-fixtures";
 import { describe, expect, it, vi } from "vitest";
 import { type PostgresPool, PostgresRunStore } from "./postgres-run-store.js";
 
@@ -20,6 +22,76 @@ const intent = {
 };
 
 describe("PostgresRunStore persisted-record validation", () => {
+  it("reads an older completed row without fabricating basicSimulation", async () => {
+    const legacyIntent: NormalizedSwapIntent = {
+      ...intent,
+      economicBoundary: {
+        availability: "available",
+        minimumReceivedAtomic: "20000",
+        source: "user_declared",
+      },
+    };
+    const result = economicFailStopResult(
+      {
+        sender: intent.sender,
+        mon: intent.tokenIn as Extract<
+          NormalizedSwapIntent["tokenIn"],
+          { kind: "native" }
+        >,
+        usdc: intent.tokenOut as Extract<
+          NormalizedSwapIntent["tokenOut"],
+          { kind: "erc20" }
+        >,
+        simulatorPinnedBlock: "42",
+        runtimeVersion: "legacy-runtime",
+        runtimeRevision: "legacy-revision",
+      },
+      "legacy-run",
+      legacyIntent,
+    );
+    const pool = {
+      async query() {
+        return {
+          rows: [
+            {
+              run_id: "legacy-run",
+              parent_run_id: null,
+              lifecycle_state: "completed",
+              failure_code: null,
+              intent: legacyIntent,
+              result,
+              schema_version: 1,
+              started_at: "2026-08-15T08:00:00.000Z",
+            },
+          ],
+          rowCount: 1,
+          command: "SELECT",
+          oid: 0,
+          fields: [],
+        };
+      },
+      end: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
+    } as PostgresPool;
+    const store = new PostgresRunStore({
+      pool,
+      poolOwnership: "borrowed",
+    });
+
+    const record = await store.get("legacy-run");
+
+    expect(record).toMatchObject({
+      runId: "legacy-run",
+      status: "completed",
+      result: {
+        status: "completed",
+        createdAt: "2026-08-15T08:00:00.000Z",
+      },
+    });
+    expect(
+      record?.status === "completed" ? record.result.p0 : undefined,
+    ).toBeUndefined();
+  });
+
   it("rejects a started row that contains terminal data", async () => {
     const end = vi.fn<() => Promise<void>>().mockResolvedValue(undefined);
     const pool = {

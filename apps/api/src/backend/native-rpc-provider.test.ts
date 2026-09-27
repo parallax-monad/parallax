@@ -8,7 +8,9 @@ import { describe, expect, it } from "vitest";
 import controlledNativeRpcFixtures from "../../../../fixtures/provider-registry/be-011/native-rpc/controlled-p0-b/fixtures.json";
 import type { ArbitrumRpcClient } from "./arbitrum-chain-adapter.js";
 import {
+  CAMELOT_SEPOLIA_ROUTER,
   CAMELOT_SEPOLIA_USDC,
+  CAMELOT_SEPOLIA_WETH,
   CamelotV3ProtocolAdapter,
 } from "./camelot-v3-protocol-adapter.js";
 import {
@@ -16,6 +18,7 @@ import {
   NATIVE_RPC_ARBITRUM_PROVIDER_ID,
   NATIVE_RPC_CAPABILITIES,
   type NativeRpcPreparedExecution,
+  projectNativeRpcBasicSimulation,
   toNativeRpcGenericEvidence,
 } from "./native-rpc-evidence.js";
 import type { ProviderEvaluationResult } from "./provider-adapter.js";
@@ -40,6 +43,29 @@ const intent: NormalizedSwapIntent = {
   },
 };
 
+function abiWord(value: string): string {
+  return /^0x[0-9a-f]{40}$/i.test(value)
+    ? value.slice(2).toLowerCase().padStart(64, "0")
+    : BigInt(value).toString(16).padStart(64, "0");
+}
+
+const preparedData = `0xbc651188${[
+  CAMELOT_SEPOLIA_WETH,
+  (
+    intent.tokenOut as Extract<
+      NormalizedSwapIntent["tokenOut"],
+      { kind: "erc20" }
+    >
+  ).address,
+  intent.recipient,
+  "1700000000",
+  intent.amountInAtomic,
+  "495000000000000000",
+  "0",
+]
+  .map(abiWord)
+  .join("")}`;
+
 const prepared: NativeRpcPreparedExecution = {
   runId: "native-rpc-run",
   intent,
@@ -47,16 +73,22 @@ const prepared: NativeRpcPreparedExecution = {
   protocol: "camelot-v3",
   blockContext: {
     blockNumber: "42",
-    blockHash: "0xblock",
+    blockHash: `0x${"a".repeat(64)}`,
     observedAt: "2026-09-10T00:00:00.000Z",
   },
-  quote: { estimatedAmountOut: "0.5", minimumAmountOut: "0.4" },
+  quote: {
+    estimatedAmountOut: "0.5",
+    amountOutAtomic: "500000000000000000",
+    minimumAmountOut: "0.4",
+  },
   unsignedTransaction: {
     kind: "unsigned",
     payload: {
-      to: "0x2222222222222222222222222222222222222222",
-      data: "0x1234",
-      value: "0x0",
+      from: intent.sender,
+      to: CAMELOT_SEPOLIA_ROUTER,
+      data: preparedData,
+      value: "0xde0b6b3a7640000",
+      chainId: "0x66eee",
     },
   },
   gasEstimate: { gasUnits: "21000" },
@@ -627,6 +659,38 @@ describe("Backend Native RPC evidence seam", () => {
       ]),
     );
     expect(evidence.provenance).not.toHaveProperty("observedChainId");
+  });
+
+  it("projects a successful call and unavailable gas as distinct public facts", () => {
+    const simulation = projectNativeRpcBasicSimulation({
+      intent,
+      preparedExecution: prepared,
+      providerResult: result("unknown", [
+        candidateField("nativeRpc.ethCall.returnData", "0xdeadbeef"),
+        candidateField(
+          "nativeRpc.estimateGas.gasUnits",
+          "gas estimation failed",
+          "missing",
+        ),
+        candidateField("nativeRpc.blockContext.blockNumber", "42"),
+        candidateField("nativeRpc.blockContext.blockHash", "0xblock"),
+        candidateField("nativeRpc.revalidatedBlock", `0x${"a".repeat(64)}`),
+      ]),
+    });
+
+    expect(simulation).toMatchObject({
+      call: { status: "SUCCEEDED" },
+      gasEstimate: { status: "UNAVAILABLE" },
+      blockNumber: "42",
+      validityAtExecution: "UNKNOWN",
+      failureStage: "GAS_ESTIMATE",
+    });
+    expect(simulation).toHaveProperty("preparedTransactionFingerprint");
+    expect(simulation.uncheckedCapabilities).toEqual(
+      expect.arrayContaining(["receipt", "outcome", "traces"]),
+    );
+    expect(JSON.stringify(simulation)).not.toContain("0xdeadbeef");
+    expect(JSON.stringify(simulation)).not.toContain("gas estimation failed");
   });
 
   it("never projects diagnostic text from a non-observed call field as callReturnData", () => {
