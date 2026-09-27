@@ -17,6 +17,7 @@ import {
   ARBITRUM_SEPOLIA_CHAIN_ID,
   NATIVE_RPC_ARBITRUM_PROVIDER_ID,
   NATIVE_RPC_CAPABILITIES,
+  NATIVE_RPC_UNCHECKED_CAPABILITIES,
   type NativeRpcPreparedExecution,
   projectNativeRpcBasicSimulation,
   toNativeRpcGenericEvidence,
@@ -686,6 +687,9 @@ describe("Backend Native RPC evidence seam", () => {
       failureStage: "GAS_ESTIMATE",
     });
     expect(simulation).toHaveProperty("preparedTransactionFingerprint");
+    expect(simulation.uncheckedCapabilities).toEqual([
+      ...NATIVE_RPC_UNCHECKED_CAPABILITIES,
+    ]);
     expect(simulation.uncheckedCapabilities).toEqual(
       expect.arrayContaining(["receipt", "outcome", "traces"]),
     );

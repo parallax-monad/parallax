@@ -1050,6 +1050,7 @@ describe("Arbitrum production composition skeleton", () => {
     expect(response.status).toBe(200);
     expect(body).toMatchObject({
       status: "completed",
+      verdict: "UNKNOWN",
       p0: {
         basicSimulation: {
           call: { status: "SUCCEEDED" },
@@ -1067,6 +1068,7 @@ describe("Arbitrum production composition skeleton", () => {
     });
     const runId = body.runId;
 
+    const rpcCallsBeforeHistoricalRead = replay.calls.length;
     const storedResponse = await app.fetch(
       new Request(`https://api.example.test/api/runs/${runId}`),
     );
@@ -1079,6 +1081,109 @@ describe("Arbitrum production composition skeleton", () => {
     expect(stored.p0?.basicSimulation).toEqual(body.p0?.basicSimulation);
     expect(JSON.stringify(stored)).not.toContain("callReturnData");
     expect(stored.providerEvidence?.providerData).toEqual({});
+    expect(replay.calls).toHaveLength(rpcCallsBeforeHistoricalRead);
+  });
+
+  it("persists partial call-success/gas-failure facts through POST /api/check and GET /api/runs", async () => {
+    const replay = canonicalRealRpcReplay();
+    const blockNumber = String(
+      BigInt(replay.capture.observations.pinnedBlock.number),
+    );
+    const runtime = bootstrapBackendRuntime({
+      environment: arbitrumEnvironment,
+      tokenRegistry: {
+        chains: [{ chainId: 421614, symbol: "ETH", decimals: 18 }],
+        tokens: [
+          {
+            chainId: 421614,
+            address: CAMELOT_SEPOLIA_USDC,
+            symbol: "USDC",
+            decimals: 18,
+            decimalsSource: "onchain_verified" as const,
+            verifiedAtBlock: blockNumber,
+          },
+        ],
+      },
+    });
+    const gasFailureRpc: ArbitrumRpcClient = {
+      async request(method, params = []) {
+        if (method === "eth_estimateGas") {
+          throw new Error("controlled eth_estimateGas failure");
+        }
+        return replay.client.request(method, params);
+      },
+    };
+    const store = new InMemoryRunStore();
+    const composition = createArbitrumProductionComposition({
+      runtime,
+      runStore: store,
+      rpcClient: gasFailureRpc,
+      // Keep the Chain seam successful so the Provider owns the partial
+      // eth_call/gas-estimate result exercised by this regression.
+      chainAdapter: createFakeChainAdapter({
+        chainId: 421614,
+        blockNumber,
+        blockHash: replay.capture.observations.pinnedBlock.hash,
+        gasUnits: "272052",
+        finality: { status: "finalized" },
+      }),
+    });
+    const app = createBackendApp({
+      runtime,
+      composition: composition as unknown as BackendCompositionRuntime,
+    });
+
+    const response = await app.fetch(
+      new Request("https://api.example.test/api/check", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          chainId: 421614,
+          protocol: "camelot-v3",
+          sender: "0xeb7c5322f0997ee70f4bbd3ae7e428072c9af396",
+          tokenIn: { kind: "native" },
+          tokenOut: { kind: "erc20", address: CAMELOT_SEPOLIA_USDC },
+          amountIn: "0.001",
+          economicBoundary: {
+            availability: "unavailable",
+            source: "unavailable",
+          },
+        }),
+      }),
+    );
+    const body = runResultSchema.parse(await response.json());
+
+    expect(response.status).toBe(200);
+    expect(body).toMatchObject({
+      status: "completed",
+      verdict: "UNKNOWN",
+      p0: {
+        basicSimulation: {
+          call: { status: "SUCCEEDED" },
+          gasEstimate: { status: "UNAVAILABLE" },
+          blockNumber,
+          validityAtExecution: "UNKNOWN",
+          failureStage: "GAS_ESTIMATE",
+        },
+      },
+      providerEvidence: { providerData: {} },
+    });
+    expect(JSON.stringify(body)).not.toContain("callReturnData");
+
+    const callsBeforeRead = replay.calls.length;
+    const storedResponse = await app.fetch(
+      new Request(`https://api.example.test/api/runs/${body.runId}`),
+    );
+    const storedRecord = (await storedResponse.json()) as {
+      readonly result?: unknown;
+    };
+    const stored = runResultSchema.parse(storedRecord.result);
+
+    expect(storedResponse.status).toBe(200);
+    expect(stored.p0?.basicSimulation).toEqual(body.p0?.basicSimulation);
+    expect(stored.providerEvidence?.providerData).toEqual({});
+    expect(JSON.stringify(stored)).not.toContain("callReturnData");
+    expect(replay.calls).toHaveLength(callsBeforeRead);
   });
 
   it("normalizes Arbitrum quotes through the public app and reaches Camelot", async () => {

@@ -31,23 +31,32 @@ function quantity(value: bigint): string {
 
 function transaction(
   amountOutMinimum: bigint,
-  tokenInWord = word(CAMELOT_V3_WETH_ADDRESS),
+  overrides: {
+    tokenInWord?: string;
+    tokenOutWord?: string;
+    recipientWord?: string;
+    amountIn?: bigint;
+    value?: string;
+    from?: string;
+    to?: string;
+    selector?: string;
+  } = {},
 ): { from: string; to: string; value: string; chainId: string; data: string } {
   const words = [
-    tokenInWord,
-    word(tokenOut),
-    word(sender),
+    overrides.tokenInWord ?? word(CAMELOT_V3_WETH_ADDRESS),
+    overrides.tokenOutWord ?? word(tokenOut),
+    overrides.recipientWord ?? word(sender),
     quantity(1n),
-    quantity(1000000000000000000n),
+    quantity(overrides.amountIn ?? 1000000000000000000n),
     quantity(amountOutMinimum),
     quantity(0n),
   ];
   return {
-    from: sender,
-    to: CAMELOT_V3_ROUTER_ADDRESS,
-    value: "0xde0b6b3a7640000",
+    from: overrides.from ?? sender,
+    to: overrides.to ?? CAMELOT_V3_ROUTER_ADDRESS,
+    value: overrides.value ?? "0xde0b6b3a7640000",
     chainId: "0x66eee",
-    data: `0xbc651188${words.join("")}`,
+    data: `0x${overrides.selector ?? "bc651188"}${words.join("")}`,
   };
 }
 
@@ -83,12 +92,58 @@ describe("Camelot transaction binding", () => {
   });
 
   it("rejects ABI address words with non-zero high bytes", () => {
-    const malformedAddressWord = `0x${"1".repeat(24)}${CAMELOT_V3_WETH_ADDRESS.slice(2)}`;
+    const malformedAddressWord = `${"1".repeat(24)}${CAMELOT_V3_WETH_ADDRESS.slice(2)}`;
     expect(
       inspectCamelotV3Transaction(
         intent,
         { amountOutAtomic: "1000" },
-        transaction(990n, malformedAddressWord),
+        transaction(990n, { tokenInWord: malformedAddressWord }),
+      ).ok,
+    ).toBe(false);
+  });
+
+  it.each([
+    ["sender", { from: "0x2222222222222222222222222222222222222222" }],
+    ["router", { to: "0x2222222222222222222222222222222222222222" }],
+    [
+      "tokenIn",
+      {
+        tokenInWord: word("0x2222222222222222222222222222222222222222"),
+      },
+    ],
+    [
+      "token pair",
+      {
+        tokenOutWord: word("0x2222222222222222222222222222222222222222"),
+      },
+    ],
+    [
+      "recipient",
+      {
+        recipientWord: word("0x2222222222222222222222222222222222222222"),
+      },
+    ],
+    ["amountIn", { amountIn: 2n }],
+    ["value", { value: "0x0" }],
+  ] as const)(
+    "rejects an Intent binding mismatch for %s",
+    (_field, overrides) => {
+      expect(
+        inspectCamelotV3Transaction(
+          intent,
+          { amountOutAtomic: "1000" },
+          transaction(990n, overrides),
+        ).ok,
+      ).toBe(false);
+    },
+  );
+
+  it("rejects malformed selector or calldata shape", () => {
+    expect(
+      inspectCamelotV3Transaction(
+        intent,
+        { amountOutAtomic: "1000" },
+        transaction(990n, { selector: "deadbeef" }),
       ).ok,
     ).toBe(false);
   });

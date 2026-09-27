@@ -31,6 +31,14 @@ export const NATIVE_RPC_CAPABILITIES = Object.freeze([
   "estimateGas",
   "pinned-block",
 ] as const);
+export const NATIVE_RPC_UNCHECKED_CAPABILITIES = Object.freeze([
+  "receipt",
+  "outcome",
+  "assetChanges",
+  "state-diff",
+  "logs",
+  "traces",
+] as const);
 
 export type NativeRpcIntent = {
   readonly chainId: number;
@@ -197,12 +205,7 @@ export function toNativeRpcGenericEvidence(
   const notChecked = [
     ...(callField === undefined ? ["native-rpc.eth_call"] : []),
     ...(gasField === undefined ? ["native-rpc.estimateGas"] : []),
-    "receipt",
-    "outcome",
-    "assetChanges",
-    "state-diff",
-    "logs",
-    "traces",
+    ...NATIVE_RPC_UNCHECKED_CAPABILITIES,
     ...(freshness.status === "not_checked" ? ["freshness"] : []),
   ];
   const providerData = {
@@ -392,14 +395,7 @@ export function projectNativeRpcBasicSimulation(
       : {}),
     ...(failureStage === undefined ? {} : { failureStage }),
     ...(reason === undefined ? {} : { reason }),
-    uncheckedCapabilities: [
-      "receipt",
-      "outcome",
-      "assetChanges",
-      "state-diff",
-      "logs",
-      "traces",
-    ],
+    uncheckedCapabilities: [...NATIVE_RPC_UNCHECKED_CAPABILITIES],
   });
 }
 
