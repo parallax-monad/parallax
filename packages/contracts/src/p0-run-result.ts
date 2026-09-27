@@ -185,7 +185,45 @@ export const p0BasicSimulationSchema = z
     reason: z.string().trim().min(1).optional(),
     uncheckedCapabilities: z.array(z.string().trim().min(1)).min(1),
   })
-  .strict();
+  .strict()
+  .superRefine((simulation, context) => {
+    if (simulation.validityAtExecution === "VALID") {
+      if (simulation.blockHash === undefined) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["blockHash"],
+          message: "VALID execution requires a verified block hash",
+        });
+      }
+      if (simulation.transactionBinding === undefined) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["transactionBinding"],
+          message: "VALID execution requires transaction binding evidence",
+        });
+      }
+    }
+    if (
+      simulation.call.status === "SUCCEEDED" &&
+      simulation.call.returnDataFingerprint === undefined
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["call", "returnDataFingerprint"],
+        message: "SUCCEEDED call requires a return-data fingerprint",
+      });
+    }
+    if (
+      simulation.gasEstimate.status === "AVAILABLE" &&
+      simulation.gasEstimate.gasUnits === undefined
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["gasEstimate", "gasUnits"],
+        message: "AVAILABLE gas estimate requires gas units",
+      });
+    }
+  });
 
 /**
  * Provider-neutral P0 summary. Detailed evidence and actions continue to use

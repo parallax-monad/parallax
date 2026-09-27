@@ -192,6 +192,10 @@ export function createCanonicalNativeRpcEvaluationInput(
         quoteAmountOut.toString(),
         TOKEN_OUT_DECIMALS,
       ),
+      // Keep the atomic quote identity private to the prepared execution. The
+      // Camelot binding needs it to verify the encoded 99% protection floor;
+      // the public projection redacts this field.
+      amountOutAtomic: quoteAmountOut.toString(),
       source: "quote",
       blockNumber,
       runtimeVersion: "arbitrum-camelot-v3",

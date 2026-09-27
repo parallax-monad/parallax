@@ -741,6 +741,13 @@ function validatePreparedExecution<Intent extends NativeRpcIntent>(
   if (prepared.quote === undefined || prepared.quote === null) {
     return "Native RPC requires a prepared quote";
   }
+  // Validate the unknown-shaped quote before Camelot binding inspection. A
+  // cyclic object or non-JSON scalar must retain the bounded malformed-input
+  // diagnostic; otherwise binding inspection could read an unavailable
+  // amountOutAtomic field first and mask the actual serialization failure.
+  if (toJsonValue(prepared.quote) === undefined) {
+    return "Native RPC requires a JSON-serializable prepared quote";
+  }
   const unsignedTransaction = prepared.unsignedTransaction;
   if (
     !isRecord(unsignedTransaction) ||

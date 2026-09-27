@@ -37,8 +37,9 @@ export type CamelotV3BindingInspection =
 /**
  * Decodes the concrete Camelot exactInputSingle transaction produced by the
  * protocol adapter and checks every Intent-owned field that reaches calldata.
- * The quote's private `amountOutAtomic` is used only when present to verify the
- * protocol's derived 99% floor; public quote projection never exposes it.
+ * The quote's private `amountOutAtomic` is required when no explicit economic
+ * boundary is available so the protocol-derived 99% floor is actually bound;
+ * public quote projection never exposes it.
  */
 export function inspectCamelotV3Transaction(
   intent: NormalizedSwapIntent,
@@ -121,10 +122,12 @@ export function inspectCamelotV3Transaction(
   }
 
   const expectedMinimum = expectedAmountOutMinimum(intent, quote);
-  if (
-    expectedMinimum !== undefined &&
-    amountOutMinimumAtomic !== expectedMinimum
-  ) {
+  if (expectedMinimum === undefined) {
+    return invalid(
+      "Camelot amountOutMinimum cannot be verified without an atomic quote or explicit boundary",
+    );
+  }
+  if (amountOutMinimumAtomic !== expectedMinimum) {
     return invalid(
       "Camelot amountOutMinimum is not bound to protection policy",
     );
@@ -178,6 +181,7 @@ function assetKey(asset: NormalizedSwapIntent["tokenIn"]): string {
 
 function wordAddress(word: string | undefined): string | undefined {
   if (word === undefined || !/^[0-9a-f]{64}$/i.test(word)) return undefined;
+  if (!/^0{24}/i.test(word)) return undefined;
   return `0x${word.slice(-40).toLowerCase()}`;
 }
 
