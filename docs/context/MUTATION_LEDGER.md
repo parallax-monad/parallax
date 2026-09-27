@@ -164,3 +164,24 @@ status remains `IMPLEMENTATION COMPLETE / EXTERNAL API ENTITLEMENT BLOCKED`. Rea
 Tenderly qualification was never completed, so closure is not a qualification PASS and not
 Product Gate completion. The 2026-09-24 entry above recording #72 as open is retained as the
 historical state at the time it was written; #72 was not reopened and no credential was recorded.
+
+
+## 2026-09-27 — Final Sprint v3 control-plane reconciliation
+
+Fresh GitHub state at `main = c4eb2f23b1c41cc4974fdec4d68491cc965e101a` showed that
+the live Product execution plan had moved materially beyond the merged 2026-09-26 context
+checkpoint while runtime code/main had not moved.
+
+Product Owner Issue #96 had been rewritten from a dormant Strong/P1 tracker into the active
+Final Sprint v3 tracker. Issue #73 now defines final Product P0 as the real
+Arbitrum Sepolia × Camelot V3 × ETH → USDC path, with Backend hardening split into
+#100–#102. Best Case work is split into Asset Coverage (#103–#105), Evidence Federation
+(#106/#110/#91/#92), and Verified Remediation (#107).
+
+This control-plane mutation records that live state without claiming implementation completion.
+It preserves the frozen #70 semantic boundaries and the historical #67 evidence record.
+No runtime code, Provider selection, Risk logic, signing, broadcasting, custody, or accepted
+Evidence payload is changed by this documentation sync.
+
+Provider next executable work is recorded as #106. #91 follows #106/integration; #103 remains
+gated by Product P0 #73; #108/#109 remain optional/stretch.
