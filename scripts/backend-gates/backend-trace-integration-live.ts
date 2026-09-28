@@ -38,6 +38,11 @@ type RpcCall = {
   readonly method: string;
   readonly params: readonly unknown[];
 };
+type RepositorySnapshot = {
+  readonly head: string;
+  readonly tree: string;
+  readonly originMain: string;
+};
 
 function sha256(value: string | Uint8Array): string {
   return createHash("sha256").update(value).digest("hex");
@@ -50,13 +55,34 @@ function gitOutput(...args: string[]): string {
   }).trim();
 }
 
-function assertCleanRepository(): void {
+function repositorySnapshot(): RepositorySnapshot {
+  return {
+    head: gitOutput("rev-parse", "HEAD"),
+    tree: gitOutput("rev-parse", "HEAD^{tree}"),
+    originMain: gitOutput("rev-parse", "origin/main"),
+  };
+}
+
+function captureCleanRepository(): RepositorySnapshot {
   const status = gitOutput("status", "--porcelain=v1", "--untracked-files=all");
   if (status !== "") {
     throw new Error(
       "Live Backend Trace qualification requires a clean repository; commit the exact implementation before generating capture evidence",
     );
   }
+  return repositorySnapshot();
+}
+
+function assertRepositoryUnchanged(
+  expected: RepositorySnapshot,
+): RepositorySnapshot {
+  const current = captureCleanRepository();
+  if (current.head !== expected.head || current.tree !== expected.tree) {
+    throw new Error(
+      "Live Backend Trace qualification repository changed during execution; discard the capture and rerun from one exact commit",
+    );
+  }
+  return current;
 }
 
 function recordingRpcClient(rpcUrl: string): {
@@ -250,7 +276,7 @@ function assertTraceIntegration(
 
 async function main(): Promise<void> {
   const rpcUrl = requiredEndpoint();
-  assertCleanRepository();
+  const repositoryAtStart = captureCleanRepository();
   const tokenRegistry = {
     chains: [
       { chainId: ARBITRUM_SEPOLIA_CHAIN_ID, symbol: "ETH", decimals: 18 },
@@ -396,9 +422,7 @@ async function main(): Promise<void> {
     }
 
     const capturedAt = new Date().toISOString();
-    const sourceHead = gitOutput("rev-parse", "HEAD");
-    const sourceTree = gitOutput("rev-parse", "HEAD^{tree}");
-    const originMain = gitOutput("rev-parse", "origin/main");
+    const repositoryAtCapture = assertRepositoryUnchanged(repositoryAtStart);
     const runnerSha256 = sha256(readFileSync(SCRIPT_PATH));
     const traceSummary = redactedTraceSummary(
       record(
@@ -413,11 +437,11 @@ async function main(): Promise<void> {
       real: true,
       readOnly: true,
       capturedAt,
-      repositoryHeadAtCapture: sourceHead,
-      repositoryTreeAtCapture: sourceTree,
+      repositoryHeadAtCapture: repositoryAtCapture.head,
+      repositoryTreeAtCapture: repositoryAtCapture.tree,
       worktreeCleanAtCapture: true,
       baseReference: "origin/main",
-      originMainAtCapture: originMain,
+      originMainAtCapture: repositoryAtStart.originMain,
       endpointClass: "environment-supplied",
       source: {
         runner: relative(REPO_ROOT, SCRIPT_PATH),
