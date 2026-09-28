@@ -19,7 +19,8 @@ import type {
 
 export const DEFAULT_SENDER = "0x1111111111111111111111111111111111111111";
 export const MONAD_USDC_ADDRESS = "0x754704Bc059F8C67012fEd69BC8A327a5aafb603";
-export const ARBITRUM_SEPOLIA_USDC_ADDRESS = "0xb893E3334D4Bd6C5ba8277Fd559e99Ed683A9FC7";
+export const ARBITRUM_SEPOLIA_USDC_ADDRESS =
+  "0xb893E3334D4Bd6C5ba8277Fd559e99Ed683A9FC7";
 const API_BASE = "";
 const cp = (value: string) => ({ en: value, zh: value });
 const obj = (value: unknown): Record<string, unknown> | undefined =>
@@ -39,7 +40,8 @@ function symbol(value: unknown, chainId = 143): string {
   if (
     address === MONAD_USDC_ADDRESS.toLowerCase() ||
     address === ARBITRUM_SEPOLIA_USDC_ADDRESS.toLowerCase()
-  ) return "USDC";
+  )
+    return "USDC";
   return address ? `${address.slice(0, 6)}…${address.slice(-4)}` : "unknown";
 }
 
@@ -49,9 +51,7 @@ function asset(value: string, chainId: number) {
     return {
       kind: "erc20",
       address:
-        chainId === 421614
-          ? ARBITRUM_SEPOLIA_USDC_ADDRESS
-          : MONAD_USDC_ADDRESS,
+        chainId === 421614 ? ARBITRUM_SEPOLIA_USDC_ADDRESS : MONAD_USDC_ADDRESS,
     };
   }
   throw new Error(`Unsupported token: ${value}`);
@@ -370,7 +370,9 @@ function mapRun(
   const route = obj(run?.route);
   const runQuote = obj(run?.quote);
   const chainId = typeof intent?.chainId === "number" ? intent.chainId : 143;
-  const routePath = arr(route?.path).map((item) => symbol(item, chainId)).join(" → ");
+  const routePath = arr(route?.path)
+    .map((item) => symbol(item, chainId))
+    .join(" → ");
   const output = arr(run?.evidence)
     .map(obj)
     .find((item) => item?.kind === "simulated_token_out");

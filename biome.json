@@ -7,13 +7,15 @@
       "!**/dist",
       "!**/coverage",
       "!**/.smoke-live",
-      "!**/.git"
+      "!**/.git",
+      "!apps/web/dummy-non-existing-folder/parallax-demo-day.html"
     ]
   },
   "formatter": {
     "enabled": true,
     "indentStyle": "space",
-    "indentWidth": 2
+    "indentWidth": 2,
+    "lineEnding": "crlf"
   },
   "assist": {
     "enabled": true,

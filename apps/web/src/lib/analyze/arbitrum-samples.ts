@@ -29,7 +29,7 @@ export const arbitrumSampleProceed: CheckSwapResult = {
   },
   simulatedOutput: "0.048",
   minimumReceivedSource: "unavailable",
-  
+
   executionEconomics: {
     referencePrice: "2083.33",
     quotedExecutionPrice: "2083.33",

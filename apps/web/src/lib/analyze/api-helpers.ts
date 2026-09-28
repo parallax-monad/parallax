@@ -6,7 +6,8 @@ export const MONAD_CHAIN_ID = 143;
 export const ARBITRUM_SEPOLIA_CHAIN_ID = 421614;
 
 export const MONAD_USDC_ADDRESS = "0x754704Bc059F8C67012fEd69BC8A327a5aafb603";
-export const ARBITRUM_SEPOLIA_USDC_ADDRESS = "0xb893E3334D4Bd6C5ba8277Fd559e99Ed683A9FC7";
+export const ARBITRUM_SEPOLIA_USDC_ADDRESS =
+  "0xb893E3334D4Bd6C5ba8277Fd559e99Ed683A9FC7";
 
 /**
  * Get the appropriate chain ID based on protocol
@@ -43,18 +44,18 @@ export function getUsdcAddress(chainId: number): string {
  */
 export function symbolToAsset(symbol: string, chainId: number) {
   const nativeSymbol = getNativeTokenSymbol(chainId);
-  
+
   if (symbol === nativeSymbol || symbol === "MON" || symbol === "ETH") {
     return { kind: "native" as const };
   }
-  
+
   if (symbol === "USDC") {
     return {
       kind: "erc20" as const,
       address: getUsdcAddress(chainId),
     };
   }
-  
+
   throw new Error(`Unsupported token: ${symbol} on chain ${chainId}`);
 }
 
@@ -62,21 +63,21 @@ export function symbolToAsset(symbol: string, chainId: number) {
  * Convert asset reference to token symbol
  */
 export function assetToSymbol(asset: unknown, chainId: number): string {
-  const obj = typeof asset === "object" && asset !== null
-    ? (asset as Record<string, unknown>)
-    : undefined;
-    
+  const obj =
+    typeof asset === "object" && asset !== null
+      ? (asset as Record<string, unknown>)
+      : undefined;
+
   if (obj?.kind === "native") {
     return getNativeTokenSymbol(chainId);
   }
-  
-  const address = typeof obj?.address === "string" 
-    ? obj.address.toLowerCase() 
-    : undefined;
-    
+
+  const address =
+    typeof obj?.address === "string" ? obj.address.toLowerCase() : undefined;
+
   if (address === MONAD_USDC_ADDRESS.toLowerCase()) return "USDC";
   if (address === ARBITRUM_SEPOLIA_USDC_ADDRESS.toLowerCase()) return "USDC";
-  
+
   return address ? `${address.slice(0, 6)}…${address.slice(-4)}` : "unknown";
 }
 
