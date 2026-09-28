@@ -182,7 +182,7 @@ describe("TraceRpcEvidenceSource", () => {
       diffMode: true,
       preAddressCount: 1,
       postAddressCount: 1,
-      changedAddresses: [CHANGED.toLowerCase()],
+      changedAddresses: [FROM.toLowerCase(), CHANGED.toLowerCase()],
     });
 
     expect(result.checkedScope).toEqual([
@@ -197,6 +197,42 @@ describe("TraceRpcEvidenceSource", () => {
     const serialized = JSON.stringify(result);
     expect(serialized).not.toContain('"storage":{"0x00":"0x01"}');
     expect(serialized).not.toContain("quiknode");
+  });
+
+  it("includes pre-only addresses in the sorted, deduplicated state-diff summary", async () => {
+    const preOnly = `0x${"AA".repeat(20)}`;
+    const shared = `0x${"BB".repeat(20)}`;
+    const postOnly = `0x${"CC".repeat(20)}`;
+    const client = traceClient((tracer) =>
+      tracer === "callTracer"
+        ? OBSERVED_CALL
+        : {
+            pre: {
+              [preOnly]: { balance: "0xdeadbeef" },
+              [shared]: { balance: "0x1" },
+            },
+            post: {
+              [postOnly]: { balance: "0x2" },
+              [shared.toLowerCase()]: { balance: "0x3" },
+              [shared]: { balance: "0x4" },
+            },
+          },
+    );
+
+    const result = await sourceFor(client).evaluate(evaluationInput());
+
+    expect(result.status).toBe("success");
+    expect(result.capabilities.prestateTracerDiff).toMatchObject({
+      status: "observed",
+      preAddressCount: 2,
+      postAddressCount: 3,
+      changedAddresses: [
+        preOnly.toLowerCase(),
+        shared.toLowerCase(),
+        postOnly.toLowerCase(),
+      ],
+    });
+    expect(JSON.stringify(result)).not.toContain("0xdeadbeef");
   });
 
   it("fails before RPC when outer and prepared execution bindings diverge", async () => {
@@ -220,6 +256,50 @@ describe("TraceRpcEvidenceSource", () => {
       status: "unknown",
       reason: "binding_mismatch",
     });
+    expect(client.request).not.toHaveBeenCalled();
+  });
+
+  it("rejects intent protocol, sender, and transaction chain mismatches before RPC", async () => {
+    const client = successfulClient();
+    const source = createTraceRpcEvidenceSource({ client, mode: "MOCK" });
+    const valid = evaluationInput();
+    const mismatches: TraceRpcEvidenceInput[] = [
+      {
+        ...valid,
+        intent: { ...intent, protocol: "other" },
+        input: {
+          ...valid.input,
+          intent: { ...intent, protocol: "other" },
+        },
+      },
+      {
+        ...valid,
+        intent: { ...intent, sender: TO },
+        input: {
+          ...valid.input,
+          intent: { ...intent, sender: TO },
+        },
+      },
+      {
+        ...valid,
+        input: {
+          ...valid.input,
+          unsignedTransaction: {
+            kind: "unsigned",
+            payload: { ...transaction, chainId: "0x1" },
+          },
+        },
+      },
+    ];
+
+    for (const mismatch of mismatches) {
+      const result = await source.evaluate(mismatch);
+      expect(result.status).toBe("invalid");
+      expect(result.capabilities.callTracer).toEqual({
+        status: "unknown",
+        reason: "binding_mismatch",
+      });
+    }
     expect(client.request).not.toHaveBeenCalled();
   });
 

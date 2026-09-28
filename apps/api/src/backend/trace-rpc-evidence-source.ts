@@ -504,9 +504,14 @@ function validateInput<Intent extends NativeRpcIntent>(
   const outerIntent = input.intent;
   if (
     outerIntent === undefined ||
+    typeof input.runId !== "string" ||
+    input.runId.trim() === "" ||
     input.runId !== prepared.runId ||
     input.chainId !== prepared.chainId ||
+    typeof input.protocol !== "string" ||
+    input.protocol.trim() === "" ||
     input.protocol !== prepared.protocol ||
+    outerIntent.protocol !== input.protocol ||
     !isDeepStrictEqual(outerIntent, prepared.intent)
   ) {
     throw new TraceNormalizationError("binding_mismatch");
@@ -526,6 +531,14 @@ function validateInput<Intent extends NativeRpcIntent>(
   const transaction = normalizeTransaction(
     prepared.unsignedTransaction.payload,
   );
+
+  if (
+    !sameAddress(outerIntent.sender, transaction.from) ||
+    (transaction.chainId !== undefined &&
+      transaction.chainId !== decimalToHex(String(input.chainId)))
+  ) {
+    throw new TraceNormalizationError("binding_mismatch");
+  }
 
   if (!/^(0|[1-9]\d*)$/.test(prepared.blockContext.blockNumber)) {
     throw new TraceNormalizationError("context_unverified");
@@ -650,7 +663,9 @@ function normalizeStateDiff(value: unknown): TraceStateDiffEvidence {
     diffMode: true,
     preAddressCount: preAddresses.length,
     postAddressCount: postAddresses.length,
-    changedAddresses: Object.freeze([...postAddresses].sort()),
+    changedAddresses: Object.freeze(
+      [...new Set([...preAddresses, ...postAddresses])].sort(),
+    ),
     resultFingerprint: sha256Json(value),
   });
 }
