@@ -134,3 +134,22 @@ The old v1 captures were moved out of the repository as recoverable stale eviden
 the current qualification source of truth. This closes the two review findings for the current
 implementation checkpoint without changing Product/Risk/Contract semantics or the unsigned,
 read-only boundary.
+
+## 2026-09-28 — PR-FS-D fingerprint and context-scope review remediation
+
+The follow-up review identified one Spec P1 and one Standards/P2 boundary issue in the Backend
+Trace integration:
+
+- Native and Trace computed different fingerprints for the same prepared transaction because Trace
+  hashed a source-specific `{ kind, payload }` wrapper while Native hashed the transaction payload;
+- Trace context failure results discarded the verified chain scope when the pinned-block request or
+  block-context validation failed.
+
+Commit `cd1793267d4354c21785b878e1f17870e2411418` adds a shared canonical transaction fingerprint,
+requires Native/Trace fingerprint equality in the live gate, preserves `trace-rpc.chain` on
+pinned-block failure, and updates public invariant validation plus regression tests. The exact-head
+read-only gate passed and wrote
+`fixtures/provider-registry/be-110/backend-trace-integration-20260928133255854/capture.json`;
+the capture proves equal fingerprints, exact transaction matching, complete Trace scope, public
+redaction, persisted round-trip, and historical no-requery. No Product/Risk/Contract semantics,
+signing, broadcasting, or custody behavior changed.

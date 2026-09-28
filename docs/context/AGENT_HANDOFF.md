@@ -187,8 +187,10 @@ identity.
 
 ## 2026-09-28 active implementation handoff
 
-- Current merged `main`: `b6d48c5f2223d1888231a5eb7810ec2a04006111` (PR #112).
+- Current merged `main`: `f8cc7beb4f899e0b8283e1e30a67814a4989c73e` (PR #118, with #112 in history).
 - Current branch: `feat/backend-fs-d-trace-integration`.
+- This feature branch is not yet synchronized onto the newer merged `main`; before merge, reconcile
+  current `main` and rerun exact-head CI/review as required by the merge gate.
 - PR-FS-D / #110 now has a Backend-local supplementary evaluator and public projector. The
   qualified Trace source receives the exact prepared unsigned transaction, Run ID, chain,
   protocol, quote, and pinned block context from the same execution that Native evaluates.
@@ -199,18 +201,23 @@ identity.
   fail closed at the projection boundary. Bootstrap rejects an unconsumable Trace source rather
   than silently dropping it, and Action-Gate verification children explicitly suppress
   supplementary Trace evaluation.
-- Validation completed for the implementation and gate: API tests 612/612, repository tests 1303
+- The follow-up review fix is committed at `cd1793267d4354c21785b878e1f17870e2411418`: Native
+  and Trace now share one prepared-transaction fingerprint, the live gate asserts equality, and
+  Trace preserves the observed chain scope when pinned-block context fails. Public projection
+  validation and regression coverage match the stage-aware scope semantics.
+- Validation completed for the implementation and gate: API tests 617/617, repository tests 1308
   passed with 2 skipped, repository typecheck, repository lint, targeted formatting, and
   `git diff --check`; the exact-head live-gate runner also passed Biome and API typecheck.
-  The read-only live Backend Trace gate passed from clean implementation commit `93a1084`
-  (`93a1084c0cfc5a741e8c6d4251290ef86ed6f605`) with Native primary success, exact prepared
-  transaction matching, complete Trace scope, public redaction, persisted round-trip, and
-  historical no-requery assertions. The sanitized v2 capture is at
-  `fixtures/provider-registry/be-110/backend-trace-integration-20260928131317584/capture.json`.
-- The Standards exact-head fix is committed and pushed on this feature branch. The capture records
-  the implementation commit/tree and `origin/main = b6d48c5f2223d1888231a5eb7810ec2a04006111`.
-  This is current qualification evidence for the implementation commit, not a claim that #110
-  has been merged or accepted; no GitHub review mutation has been performed.
+  The read-only live Backend Trace gate passed from clean implementation commit `cd17932`
+  (`cd1793267d4354c21785b878e1f17870e2411418`) with Native primary success, equal Native/Trace
+  transaction fingerprints, exact prepared-transaction matching, complete Trace scope, public
+  redaction, persisted round-trip, and historical no-requery assertions. The current sanitized
+  capture is at
+  `fixtures/provider-registry/be-110/backend-trace-integration-20260928133255854/capture.json`.
+- The capture records the implementation commit/tree and `origin/main =
+  f8cc7beb4f899e0b8283e1e30a67814a4989c73e`. This is current qualification evidence for the
+  implementation commit, not a claim that #110 has been merged or accepted; no GitHub review
+  mutation has been performed.
 
 ## Context-overflow recovery
 

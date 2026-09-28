@@ -181,7 +181,7 @@ binding, persistence, public projection, and historical consistency. The current
 implementation keeps Trace outside `ProviderRegistry`, Core, Decision, and Risk; Native RPC
 remains primary. A read-only live Backend gate now passes against the environment-supplied
 Arbitrum endpoint, with sanitized capture retained at
-`fixtures/provider-registry/be-110/backend-trace-integration-20260928122150385/capture.json`.
+`fixtures/provider-registry/be-110/backend-trace-integration-20260928133255854/capture.json`.
 It is not yet a merged Evidence Federation acceptance, and #110 does not block Product P0.
 
 #91 depends on #106 and the integrated same-transaction execution path.
@@ -366,6 +366,26 @@ exact prepared-transaction match, complete Trace scope, public redaction, persis
 and historical no-requery. The earlier v1 captures are stale and retained outside the repository
 for recovery only. This evidence does not by itself constitute merge or Product/Evidence
 Federation acceptance.
+
+## 2026-09-28 — PR-FS-D fingerprint and context-scope remediation
+
+The follow-up review found that Native and Trace used different prepared-transaction fingerprint
+canonicalizations, and that Trace failure paths dropped the already observed chain scope when the
+pinned-block request or validation failed. The implementation now uses one shared transaction
+fingerprint helper, asserts Native/Trace fingerprint equality in the live gate, and preserves
+`trace-rpc.chain` while marking the pinned block and dependent capabilities unknown or unavailable.
+Public projection validation and regression coverage were updated for the stage-aware scope shape.
+
+The fix is committed at `cd1793267d4354c21785b878e1f17870e2411418`. The exact-head read-only live
+gate passed from that commit and produced the current capture:
+
+`fixtures/provider-registry/be-110/backend-trace-integration-20260928133255854/capture.json`
+
+The capture records `origin/main = f8cc7beb4f899e0b8283e1e30a67814a4989c73e`, Native primary
+success, equal Native/Trace transaction fingerprints, exact prepared-transaction matching,
+complete Trace scope, public redaction, persisted round-trip, and historical no-requery. This
+closes the current implementation review findings without changing Product/Risk/Contract
+semantics or the unsigned/read-only boundary.
 
 ## Recorded P2 carried forward
 

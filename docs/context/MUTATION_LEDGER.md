@@ -255,3 +255,19 @@ passed exact prepared-transaction binding, complete Trace scope, public redactio
 round-trip, and historical no-requery. The two stale v1 captures were moved to
 `/private/tmp/parallax-be-110-stale.nmO38f/` without deletion. No signing, broadcasting, secret,
 merge, or GitHub review mutation occurred.
+
+## 2026-09-28 — PR-FS-D fingerprint and Trace scope remediation
+
+Implementation commit `cd1793267d4354c21785b878e1f17870e2411418` changed only the Backend Trace
+integration boundary and its regression/live-gate coverage. It introduced one shared canonical
+prepared-transaction fingerprint for Native and Trace, added an exact equality assertion to the
+live gate, and preserved observed chain scope on pinned-block context failure. The public Trace
+projection invariant was extended to accept the stage-aware checked/unknown scope shape.
+
+Validation passed with API tests 617/617, repository tests 1308 passed with 2 skipped, repository
+typecheck/lint/format checks, and the read-only live gate. The new sanitized capture is
+`fixtures/provider-registry/be-110/backend-trace-integration-20260928133255854/capture.json`;
+it records equal Native/Trace fingerprints, exact prepared-transaction matching, complete Trace
+scope, public redaction, persisted round-trip, and historical no-requery. This mutation does not
+change Product/Risk/Contract semantics, Provider selection, signing, broadcasting, custody, or
+accepted evidence meaning; no GitHub review mutation was performed.
