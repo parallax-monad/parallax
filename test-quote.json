@@ -1,0 +1,13 @@
+{
+  "chainId": 143,
+  "protocol": "kuru",
+  "sender": "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb0",
+  "tokenIn": {
+    "kind": "erc20",
+    "address": "0x754704Bc059F8C67012fEd69BC8A327a5aafb603"
+  },
+  "tokenOut": {
+    "kind": "native"
+  },
+  "amountIn": "1000000"
+}

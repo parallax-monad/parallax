@@ -1,9 +1,5 @@
 import { type Language, say } from "@/lib/i18n";
 
-/**
- * Names the Moss pipeline in user language: intent → quote → action →
- * simulation → evidence → verdict. No JSON or raw fields surface here.
- */
 const STAGES = [
   { en: "Preparing quote", zh: "准备报价" },
   { en: "Preparing transaction action", zh: "准备交易操作" },
@@ -14,16 +10,9 @@ const STAGES = [
 
 export const WALLET_STAGE_COUNT = STAGES.length;
 
-/** Provenance must stay honest while loading, not only on the result screen. */
 const HEADER = {
-  live: {
-    en: "Parallax · Live backend check",
-    zh: "Parallax · 实时后端检查",
-  },
-  replay: {
-    en: "Parallax · Recorded replay",
-    zh: "Parallax · 录制回放",
-  },
+  live: { en: "Parallax · Live backend check", zh: "Parallax · 实时后端检查" },
+  replay: { en: "Parallax · Recorded replay", zh: "Parallax · 录制回放" },
 };
 
 const TITLE = {
@@ -31,10 +20,7 @@ const TITLE = {
     en: "Checking this swap before you sign.",
     zh: "正在签名前检查这笔兑换。",
   },
-  replay: {
-    en: "Loading a recorded check.",
-    zh: "正在载入一次录制的检查。",
-  },
+  replay: { en: "Loading a recorded check.", zh: "正在载入一次录制的检查。" },
 };
 
 export function WalletChecking({
@@ -55,7 +41,6 @@ export function WalletChecking({
       <h2 className="m-0 text-[24px] font-extrabold leading-[1.15] tracking-[-0.04em]">
         {say(language, TITLE[mode])}
       </h2>
-
       <ol className="m-0 mt-6 list-none p-0">
         {STAGES.map((label, index) => {
           const done = index < stage;

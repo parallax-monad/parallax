@@ -6,7 +6,7 @@ export type BoundarySource =
   | "demo_preset"
   | "unavailable";
 
-export type Protocol = "kuru" | "pancake";
+export type Protocol = "kuru" | "pancake" | "camelot-v3";
 export type SystemStatus = "OK" | "INTEGRATION_ERROR";
 export type ProductRunMode = "LIVE" | "RECORDED_REPLAY";
 export type Verdict = "PROCEED" | "ADJUST" | "STOP" | "UNKNOWN";
@@ -31,6 +31,7 @@ export type ActionSuggestion = {
 export type CheckSwapInput = {
   parentRunId?: string;
   sender?: string;
+  chainId?: number;
   protocol: Protocol;
   tokenIn: string;
   tokenOut: string;
@@ -38,6 +39,9 @@ export type CheckSwapInput = {
   minimumReceived?: string;
   minimumReceivedSource?: BoundarySource;
   slippage?: string;
+  expectationBaseline?: {
+    quote: QuotePreview;
+  };
 };
 
 /** `/api/quote` accepts the exact-input pair only, without boundary or rerun fields. */
@@ -157,4 +161,57 @@ export type CheckSwapResult = {
   simulatorPinnedBlock?: string;
   apiFailure?: ApiFailure;
   rawResponse: unknown;
+  quoteFidelity?: QuoteFidelity;
+  remediationOptions?: RemediationOption[];
+  executionEconomics?: ExecutionEconomics;
+};
+
+/** Optional swap-form patch when a user chooses this option. */
+export type RemediationSwapIntent = {
+  amountIn: string;
+  tokenIn?: string;
+  tokenOut?: string;
+};
+
+/** Enhanced remediation option with quantification per P0 Economic spec */
+export type RemediationOption = {
+  id: string;
+  objective: Copy;
+  candidateAdjustment: Copy;
+  quantification: {
+    variable: string;
+    before: string;
+    after: string;
+    unit: string;
+  };
+  predictedOutcome: Copy;
+  tradeOff?: Copy;
+  verificationStatus: "VERIFIED" | "UNVERIFIED" | "CONDITIONAL";
+  evidenceRefs?: string[];
+  swapIntent?: RemediationSwapIntent;
+};
+
+/** Quote fidelity comparison when selected quote differs from current simulation */
+export type QuoteFidelity = {
+  selectedQuote: string;
+  currentSimulation: string;
+  difference: string;
+  relativeDelta: string;
+  observation: Copy;
+  primaryCause: Copy;
+  contributingFactors?: Copy[];
+};
+
+/** Execution economics decomposition */
+export type ExecutionEconomics = {
+  referencePrice?: string;
+  quotedExecutionPrice?: string;
+  effectiveRate?: string;
+  priceImpact?: string;
+  usableLiquidity?: string;
+  protocolFee?: string;
+  commission?: string;
+  gasEstimate?: string;
+  routeInfo?: Copy;
+  allInCost?: string;
 };

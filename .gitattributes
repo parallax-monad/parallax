@@ -1,1 +1,4 @@
 docs/product/prd*.md whitespace=-blank-at-eol
+
+apps/web/** text eol=lf
+apps/web/**/*.mp4 -text

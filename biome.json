@@ -7,7 +7,8 @@
       "!**/dist",
       "!**/coverage",
       "!**/.smoke-live",
-      "!**/.git"
+      "!**/.git",
+      "!apps/web/dummy-non-existing-folder/parallax-demo-day.html"
     ]
   },
   "formatter": {

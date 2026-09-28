@@ -1,22 +1,14 @@
-import { useState } from "react";
-import { ActionsCard } from "@/components/analyze/ActionsCard";
-import { DiffCard } from "@/components/analyze/DiffCard";
+﻿import { useState } from "react";
+import { OptionsStep } from "@/components/analyze/OptionsStep";
+import { ResultStep } from "@/components/analyze/ResultStep";
 import { VerdictIcon } from "@/components/analyze/StatusIcon";
-import { TokenIcon } from "@/components/analyze/TokenIcon";
-import { formatAmount } from "@/components/wallet/walletData";
+import { StepTimeline } from "@/components/analyze/StepTimeline";
 import type {
   CheckSwapResult,
   ProductRunMode,
-  Verdict,
+  RemediationOption,
 } from "@/lib/analyze/types";
 import { type Copy, type Language, say } from "@/lib/i18n";
-
-const VERDICT_TONE: Record<Verdict, string> = {
-  PROCEED: "border-risk-low/50 bg-risk-low/10 text-risk-low",
-  ADJUST: "border-risk-moderate/50 bg-risk-moderate/10 text-risk-moderate",
-  UNKNOWN: "border-risk-elevated/50 bg-risk-elevated/10 text-risk-elevated",
-  STOP: "border-risk-high/50 bg-risk-high/10 text-risk-high",
-};
 
 const MODE_LABEL: Record<ProductRunMode, Copy> = {
   LIVE: { en: "Live check", zh: "实时检查" },
@@ -34,32 +26,7 @@ const MODE_EXPLANATION: Record<ProductRunMode, Copy> = {
   },
 };
 
-/** Plain-language names, since the raw verdict words assume swap literacy. */
-const VERDICT_PLAIN: Record<Verdict, Copy> = {
-  PROCEED: {
-    en: "No blocking evidence found in the checked scope",
-    zh: "已检查范围内未发现阻断证据",
-  },
-  ADJUST: {
-    en: "Adjust the transaction before proceeding",
-    zh: "继续之前请先调整交易",
-  },
-  STOP: { en: "Do not use this transaction path", zh: "请勿使用当前交易路径" },
-  UNKNOWN: { en: "More evidence is required", zh: "需要更多证据" },
-};
-
-/**
- * The keep-going button per verdict. It returns the user to the swap sheet
- * rather than signing, because this MVP never signs or broadcasts.
- */
-const PRIMARY_ACTION: Record<Verdict, Copy> = {
-  PROCEED: { en: "Review swap inputs", zh: "查看兑换输入" },
-  ADJUST: { en: "Review demo adjustment", zh: "查看演示调整" },
-  STOP: { en: "Modify parameters and retry", zh: "修改参数重试" },
-  UNKNOWN: { en: "Review inputs", zh: "查看输入" },
-};
-
-/** Abandoning the intent is the same choice under every verdict. */
+const PRIMARY_ACTION: Copy = { en: "Review swap inputs", zh: "查看兑换输入" };
 const DISCARD_ACTION: Copy = { en: "Discard this swap", zh: "放弃这笔兑换" };
 
 const INTEGRATION_ERROR_COPY = {
@@ -72,57 +39,6 @@ const INTEGRATION_ERROR_COPY = {
   details: { en: "View details", zh: "查看详情" },
 } satisfies Record<string, Copy>;
 
-const NEXT_STEP: Record<Verdict, Copy> = {
-  PROCEED: {
-    en: "No blocking evidence was found within the completed demo checks. Review what was not checked before deciding what to do next. This is not a safety guarantee.",
-    zh: "已完成的演示检查中未发现阻断证据。决定下一步之前，请查看哪些项目尚未检查。这不构成安全保证。",
-  },
-  ADJUST: {
-    en: "This demo illustrates an adjustment state. Review the displayed evidence and change only the supported condition before rerunning.",
-    zh: "本演示展示调整状态。请查看所展示的证据，仅修改有支持的条件后重新运行。",
-  },
-  STOP: {
-    en: "Blocking evidence applies to this demo Intent or path. Review the checked reason before continuing.",
-    zh: "阻断证据适用于此演示交易意图或路径。继续之前请查看已检查的原因。",
-  },
-  UNKNOWN: {
-    en: "The demo could not reach a transaction conclusion because required evidence is missing or incomplete. UNKNOWN is never a pass.",
-    zh: "由于必要证据缺失或不完整，本演示无法形成交易结论。UNKNOWN 绝不代表通过。",
-  },
-};
-
-/** One side of the intent summary, drawn as coin + amount. */
-function Side({
-  caption,
-  amount,
-  symbol,
-  muted = false,
-}: {
-  caption: string;
-  amount: string;
-  symbol: string;
-  muted?: boolean;
-}) {
-  return (
-    <div className="flex min-w-0 flex-1 flex-col gap-1.5">
-      <span className="text-[12px] font-bold uppercase tracking-[0.08em] text-dim">
-        {caption}
-      </span>
-      <div className="flex items-center gap-2">
-        <TokenIcon size={22} symbol={symbol} />
-        <span className="text-[13px] font-bold uppercase tracking-[0.06em] text-dim">
-          {symbol}
-        </span>
-      </div>
-      <strong
-        className={`truncate text-[20px] font-extrabold tracking-[-0.04em] ${muted ? "text-faint" : "text-white"}`}
-      >
-        {amount}
-      </strong>
-    </div>
-  );
-}
-
 export function WalletResult({
   result,
   language,
@@ -130,6 +46,7 @@ export function WalletResult({
   onRetry,
   onDiscard,
   onOpenEvidence,
+  onSelectOption,
 }: {
   result: CheckSwapResult;
   language: Language;
@@ -137,18 +54,10 @@ export function WalletResult({
   onRetry?: () => void;
   onDiscard: () => void;
   onOpenEvidence: () => void;
+  onSelectOption?: (option: RemediationOption) => void;
 }) {
-  const [breakdownOpen, setBreakdownOpen] = useState(false);
-  const { intent, quote, simulatedOutput, verdict } = result;
-  const unresolved = quote.expectedOutput === "unavailable";
-  const amountIn = Number(intent.amountIn);
-  // The boundary rule only fails when the simulated output misses the user's
-  // Minimum Received, so name that gap instead of leaving a bare STOP.
-  const boundaryShortfall = result.ruleResults.some(
-    (item) =>
-      item.group === "economicBoundary" &&
-      item.outcome === "FAIL" &&
-      item.detail.en === "OUTPUT_BELOW_BOUNDARY",
+  const [currentStep, setCurrentStep] = useState<"result" | "options">(
+    "result",
   );
 
   if (result.systemStatus === "INTEGRATION_ERROR") {
@@ -282,26 +191,8 @@ export function WalletResult({
     );
   }
 
-  const scope = {
-    checked: result.checked.length,
-    unknown: result.unknowns.length,
-    notChecked: result.notChecked.length,
-  };
-
-  const evidenceAction =
-    verdict === "UNKNOWN"
-      ? scope.unknown > 0
-        ? { en: "View evidence gaps", zh: "查看证据缺口" }
-        : { en: "Review checked scope", zh: "查看已检查范围" }
-      : verdict === "STOP"
-        ? {
-            en: "Review blocking evidence",
-            zh: "查看阻断证据",
-          }
-        : {
-            en: "Review checked scope",
-            zh: "查看已检查范围",
-          };
+  const hasOptions =
+    result.remediationOptions && result.remediationOptions.length > 0;
 
   return (
     <div className="flex flex-col gap-4 px-5 pb-6 pt-2">
@@ -314,154 +205,38 @@ export function WalletResult({
         </span>
       </div>
 
-      <section
-        className={`flex items-start gap-3 border p-4 ${VERDICT_TONE[verdict]}`}
-      >
-        <VerdictIcon className="mt-0.5 shrink-0" size={30} verdict={verdict} />
-        <div className="min-w-0">
-          <strong className="block text-[22px] font-extrabold leading-[1.1] tracking-[-0.04em]">
-            {say(language, VERDICT_PLAIN[verdict])}
-          </strong>
-          <p className="mt-1.5 text-[14px] leading-[1.6] text-white">
-            {say(language, NEXT_STEP[verdict])}
-          </p>
+      {hasOptions && (
+        <div className="sticky top-0 z-30 -mx-5 border-b border-line/50 bg-gradient-to-b from-ink-elev/95 via-ink-elev/80 to-transparent px-5 pb-2 pt-1 backdrop-blur-xl">
+          <StepTimeline
+            currentStep={currentStep}
+            language={language}
+            onStepClick={(step) => setCurrentStep(step)}
+          />
         </div>
-      </section>
-
-      {boundaryShortfall && (
-        <section className="border border-risk-high/50 bg-risk-high/10 p-4">
-          <strong className="block text-[13px] font-bold uppercase tracking-[0.08em] text-risk-high">
-            {say(language, {
-              en: "Below your Minimum Received",
-              zh: "低于你的最低收到量",
-            })}
-          </strong>
-          <p className="mt-1.5 text-[14px] leading-[1.6] text-white">
-            {say(language, {
-              en: `The simulation returned ${simulatedOutput} ${intent.tokenOut}, which is below the original Minimum Received. A Re-run must preserve that boundary: change another supported parameter, or discard this result and start a new swap to set a different boundary.`,
-              zh: `模拟结果为 ${simulatedOutput} ${intent.tokenOut}，低于原本的最低收到量。重新检查必须保留该边界：请修改其他受支持的参数；如要更改边界，请放弃本次结果并开始新的兑换。`,
-            })}
-          </p>
-          <p className="mt-2 text-[12px] leading-[1.6] text-dim">
-            {say(language, {
-              en: "Minimum Received is fixed for a Re-run. Lowering it requires a new swap because it accepts a worse output rather than improving this transaction.",
-              zh: "重新检查时最低收到量必须保持不变。如要降低它，必须开始新的兑换，因为这只是接受更差的输出，并不会改善当前交易。",
-            })}
-          </p>
-        </section>
       )}
 
       <p className="text-[12px] leading-[1.6] text-dim">
         {say(language, MODE_EXPLANATION[result.productRunMode])}
       </p>
 
-      <fieldset className="flex flex-wrap items-center gap-x-3 gap-y-1 border border-line bg-ink-rail px-4 py-2.5 text-[12px] font-bold uppercase tracking-[0.04em] text-dim">
-        <legend className="sr-only">
-          {say(language, { en: "Check scope", zh: "检查范围" })}
-        </legend>
-        <span>
-          {say(language, { en: "Checked", zh: "已检查" })}: {scope.checked}
-        </span>
-        <span aria-hidden="true">·</span>
-        <span>
-          {say(language, { en: "Unknown", zh: "未知" })}: {scope.unknown}
-        </span>
-        <span aria-hidden="true">·</span>
-        <span>
-          {say(language, { en: "Not checked", zh: "未检查" })}:{" "}
-          {scope.notChecked}
-        </span>
-      </fieldset>
-
-      <section className="flex items-stretch gap-2 border border-line bg-ink-rail p-4">
-        <Side
-          amount={
-            Number.isFinite(amountIn) ? formatAmount(amountIn) : intent.amountIn
-          }
-          caption={say(language, { en: "You pay", zh: "你支付" })}
-          symbol={intent.tokenIn}
+      {currentStep === "result" ? (
+        <ResultStep
+          language={language}
+          result={result}
+          onNext={() => setCurrentStep("options")}
         />
-        <span
-          aria-hidden="true"
-          className="self-center px-1 text-[18px] text-monad-dim"
-        >
-          →
-        </span>
-        <Side
-          amount={
-            unresolved
-              ? say(language, {
-                  en: "Estimate unavailable",
-                  zh: "暂无估算",
-                })
-              : quote.expectedOutput
-          }
-          caption={say(language, {
-            en: "You receive (demo est.)",
-            zh: "你收到（演示估算）",
-          })}
-          muted={unresolved}
-          symbol={intent.tokenOut}
+      ) : (
+        <OptionsStep
+          language={language}
+          result={result}
+          onSelectOption={onSelectOption}
+          onBack={() => setCurrentStep("result")}
         />
-      </section>
-
-      <dl className="m-0">
-        <div className="kv">
-          <span className="kv-label">
-            {say(language, { en: "Route", zh: "路径" })}
-          </span>
-          <span className="text-right text-[14px] text-white">
-            {say(language, quote.route)}
-          </span>
-        </div>
-        <div className="kv">
-          <span className="kv-label">
-            {say(language, { en: "Block", zh: "区块" })}
-          </span>
-          <span className="mono">{quote.blockNumber}</span>
-        </div>
-      </dl>
-
-      <section className="border border-line bg-ink-rail p-4">
-        <strong className="block text-[13px] font-bold uppercase tracking-[0.08em] text-monad-dim">
-          {say(language, {
-            en: "Next step in this result",
-            zh: "本次结果的下一步",
-          })}
-        </strong>
-        {result.productRunMode === "RECORDED_REPLAY" && (
-          <p className="mt-1.5 text-[13px] leading-[1.6] text-dim">
-            {say(language, {
-              en: "Recorded replay presentation; not a live verified transaction recommendation.",
-              zh: "录制回放展示，并非经过实时验证的交易建议。",
-            })}
-          </p>
-        )}
-        {result.recommendedActions.length > 0 && (
-          <ul className="m-0 mt-3 list-none border-t border-line p-0">
-            {result.recommendedActions.map((suggestion) => (
-              <li
-                className="border-b border-line py-2.5 text-[14px] leading-[1.6] text-dim last:border-b-0"
-                key={suggestion.field}
-              >
-                {say(language, suggestion.reason)}
-              </li>
-            ))}
-          </ul>
-        )}
-        {result.recommendedActions.length === 0 && (
-          <p className="mt-2 text-[14px] leading-[1.6] text-white">
-            {say(language, {
-              en: "No public transaction adjustment is available for this result.",
-              zh: "本次结果没有可公开展示的交易调整建议。",
-            })}
-          </p>
-        )}
-      </section>
+      )}
 
       <div className="mt-1 grid grid-cols-2 gap-2">
         <button type="button" className="btn btn-monad" onClick={onKeep}>
-          {say(language, PRIMARY_ACTION[verdict])}
+          {say(language, PRIMARY_ACTION)}
         </button>
         <button
           type="button"
@@ -471,42 +246,6 @@ export function WalletResult({
           {say(language, DISCARD_ACTION)}
         </button>
       </div>
-
-      <button
-        type="button"
-        className="text-[13px] font-bold uppercase tracking-[0.08em] text-dim underline transition-colors hover:text-monad-dim"
-        onClick={onOpenEvidence}
-      >
-        {say(language, evidenceAction)}
-      </button>
-
-      <button
-        type="button"
-        aria-expanded={breakdownOpen}
-        className="text-[13px] font-bold uppercase tracking-[0.08em] text-dim underline transition-colors hover:text-monad-dim"
-        onClick={() => setBreakdownOpen(!breakdownOpen)}
-      >
-        {say(
-          language,
-          breakdownOpen
-            ? { en: "Hide full breakdown", zh: "收起完整分析" }
-            : { en: "Show full breakdown", zh: "展开完整分析" },
-        )}
-      </button>
-
-      {breakdownOpen && (
-        <div className="flex flex-col gap-3">
-          <ActionsCard language={language} result={result} />
-          {result.diff && result.parentRunId && (
-            <DiffCard
-              diff={result.diff}
-              language={language}
-              previousRunId={result.parentRunId}
-              runId={result.runId}
-            />
-          )}
-        </div>
-      )}
 
       <p className="text-center text-[12px] leading-[1.5] text-dim">
         {say(language, {

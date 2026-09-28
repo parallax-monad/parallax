@@ -65,6 +65,24 @@ function UsdcMark({ size }: { size: number }) {
   );
 }
 
+function EthMark({ size }: { size: number }) {
+  return (
+    <svg
+      aria-hidden="true"
+      height={size}
+      viewBox="0 0 24 24"
+      width={size}
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <rect fill="#627EEA" height="24" rx="6" width="24" />
+      <path
+        d="M12 4.5l-5 8.5 5 3 5-3-5-8.5zm0 13l-5-2.5 5 5 5-5-5 2.5z"
+        fill="#FFFFFF"
+      />
+    </svg>
+  );
+}
+
 /** Unknown symbols still get a stable mark, so layout never shifts. */
 function FallbackMark({ symbol, size }: { symbol: string; size: number }) {
   return (
@@ -83,5 +101,6 @@ export function TokenIcon({ symbol, size = 20 }: TokenIconProps) {
 
   if (key === "MON" || key === "WMON") return <MonMark size={size} />;
   if (key === "USDC") return <UsdcMark size={size} />;
+  if (key === "ETH" || key === "WETH") return <EthMark size={size} />;
   return <FallbackMark size={size} symbol={key} />;
 }

@@ -12,13 +12,17 @@ import { type Language, say } from "@/lib/i18n";
 export function WalletHome({
   language,
   onSwap,
+  onLoadArbitrumSample,
 }: {
   language: Language;
   onSwap: () => void;
+  onLoadArbitrumSample?: (
+    verdict: "ADJUST" | "PROCEED" | "STOP" | "UNKNOWN" | "ERROR",
+  ) => void;
 }) {
   return (
     <div className="flex flex-col gap-5 px-5 pb-6 pt-2">
-      <section>
+      <section className="text-center">
         <span className="text-[12px] font-bold uppercase tracking-[0.1em] text-dim">
           {say(language, { en: "Demo balance", zh: "演示余额" })}
         </span>
@@ -29,25 +33,100 @@ export function WalletHome({
           <span className="block text-[10px] font-bold uppercase tracking-[0.08em] text-faint">
             {say(language, { en: "Demo wallet", zh: "演示钱包" })}
           </span>
-          <p className="mono mt-1 text-dim">{DEMO_ADDRESS}</p>
+          <p className="mono mt-1 truncate text-dim">{DEMO_ADDRESS}</p>
         </div>
       </section>
 
-      <button
-        type="button"
-        className="btn btn-monad flex w-full items-center justify-center gap-2 py-4"
-        onClick={onSwap}
-      >
-        <SwapIcon size={20} />
-        {say(language, { en: "Swap", zh: "兑换" })}
-      </button>
+      <div className="flex w-full flex-wrap items-center justify-center gap-3">
+        <button
+          type="button"
+          aria-label={say(language, { en: "Swap", zh: "兑换" })}
+          className="btn btn-monad flex h-[76px] w-[76px] shrink-0 flex-col items-center justify-center gap-2 rounded-2xl px-2 py-2 shadow-[0_8px_20px_rgba(0,0,0,0.16)] transition-transform hover:-translate-y-0.5"
+          onClick={onSwap}
+        >
+          <SwapIcon size={21} />
+          <span className="text-[11px] font-bold leading-none">
+            {say(language, { en: "Swap", zh: "兑换" })}
+          </span>
+        </button>
+
+        {onLoadArbitrumSample && (
+          <>
+            <button
+              type="button"
+              className="btn btn-monad-outline flex h-[76px] w-[76px] shrink-0 flex-col items-center justify-center gap-2 rounded-2xl px-2 py-2"
+              onClick={() => onLoadArbitrumSample("ADJUST")}
+            >
+              <SwapIcon size={21} />
+              <span className="text-[11px] font-bold leading-none">
+                {say(language, {
+                  en: "ADJUST",
+                  zh: "调整",
+                })}
+              </span>
+            </button>
+            <button
+              type="button"
+              className="btn btn-monad-outline flex h-[76px] w-[76px] shrink-0 flex-col items-center justify-center gap-2 rounded-2xl px-2 py-2"
+              onClick={() => onLoadArbitrumSample("PROCEED")}
+            >
+              <SwapIcon size={21} />
+              <span className="text-[11px] font-bold leading-none">
+                {say(language, {
+                  en: "PROCEED",
+                  zh: "继续",
+                })}
+              </span>
+            </button>
+            <button
+              type="button"
+              className="btn btn-monad-outline flex h-[76px] w-[76px] shrink-0 flex-col items-center justify-center gap-2 rounded-2xl px-2 py-2"
+              onClick={() => onLoadArbitrumSample("STOP")}
+            >
+              <SwapIcon size={21} />
+              <span className="text-[11px] font-bold leading-none">
+                {say(language, {
+                  en: "STOP",
+                  zh: "停止",
+                })}
+              </span>
+            </button>
+            <button
+              type="button"
+              className="btn btn-monad-outline flex h-[76px] w-[76px] shrink-0 flex-col items-center justify-center gap-2 rounded-2xl px-2 py-2"
+              onClick={() => onLoadArbitrumSample("UNKNOWN")}
+            >
+              <SwapIcon size={21} />
+              <span className="text-[11px] font-bold leading-none">
+                {say(language, {
+                  en: "UNKNOWN",
+                  zh: "未知",
+                })}
+              </span>
+            </button>
+            <button
+              type="button"
+              className="btn btn-monad-outline flex h-[76px] w-[76px] shrink-0 flex-col items-center justify-center gap-2 rounded-2xl px-2 py-2"
+              onClick={() => onLoadArbitrumSample("ERROR")}
+            >
+              <SwapIcon size={21} />
+              <span className="text-[11px] font-bold leading-none">
+                {say(language, {
+                  en: "ERROR",
+                  zh: "错误",
+                })}
+              </span>
+            </button>
+          </>
+        )}
+      </div>
 
       <section
         aria-label={say(language, {
           en: "Parallax notice",
           zh: "Parallax 说明",
         })}
-        className="border border-monad/40 bg-monad/[0.08] p-4"
+        className="rounded-2xl border border-monad/40 bg-[#0e1114] p-4"
       >
         <strong className="block text-[14px] font-bold text-monad-dim">
           {say(language, {
