@@ -1,0 +1,834 @@
+{
+  "schemaVersion": "be-108-explorer-evidence-feasibility-v1",
+  "status": "PARTIAL",
+  "real": true,
+  "readOnly": true,
+  "capturedAt": "2026-09-28T13:42:15.552Z",
+  "chainId": 421614,
+  "repositoryHeadAtCapture": "f8cc7beb4f899e0b8283e1e30a67814a4989c73e",
+  "sourceProvenance": {
+    "repositoryHead": "f8cc7beb4f899e0b8283e1e30a67814a4989c73e",
+    "worktreeDirty": true,
+    "nodeVersion": "v22.23.2",
+    "files": [
+      {
+        "path": "apps/api/package.json",
+        "sha256": "f92b18ea5e5a91d765c9a2d7475b7fbfce8a81ce91650d73ff7cc6699893453e"
+      },
+      {
+        "path": "apps/api/src/backend/application-routing.ts",
+        "sha256": "aa7c9a9a1369e7c5c328df8924febeb98f7cbe91866d622bc90e71d3c03ba282"
+      },
+      {
+        "path": "apps/api/src/backend/arbitrum-account-state-reader.ts",
+        "sha256": "620da489606a3149e506c3b392a8fe3862860e48ae7a7fac9e70afb0c7a6a8ee"
+      },
+      {
+        "path": "apps/api/src/backend/arbitrum-chain-adapter.ts",
+        "sha256": "701416d6948db20e89f35a9f337fefd360bf725f9cc49e697b64e58bf6367272"
+      },
+      {
+        "path": "apps/api/src/backend/arbitrum-composition.ts",
+        "sha256": "75cd3c58a5e6b365fb25c666f1e13d73035d7090d7bf9fa8cfaa084ea3e6a2eb"
+      },
+      {
+        "path": "apps/api/src/backend/camelot-v3-binding.ts",
+        "sha256": "af62ee09c21cfef9abb361265736bd022da7fa7da3af46f6d6af7c24c28a2fe5"
+      },
+      {
+        "path": "apps/api/src/backend/camelot-v3-feasibility.ts",
+        "sha256": "6f602f5cb4491a22077734e8f77ddb96350233b2af90897cc2cd5acb7bcbc52f"
+      },
+      {
+        "path": "apps/api/src/backend/camelot-v3-protocol-adapter.ts",
+        "sha256": "af5375017d047eedb2d2b81010afac0dc34b2a670e40932e05c3d73430d6b037"
+      },
+      {
+        "path": "apps/api/src/backend/chain-adapter.ts",
+        "sha256": "a484632557b0675cb8adedc3e8a9c0a0585e0c1bf55558dcee1edc98c40f9678"
+      },
+      {
+        "path": "apps/api/src/backend/chain-registry.ts",
+        "sha256": "7248554c233699dd08338e49e23b5578b3df1a00bb802624ed7cfeddffbd1146"
+      },
+      {
+        "path": "apps/api/src/backend/composition.ts",
+        "sha256": "a9ebbac260b75d935a9b9be3702024b309b57147c252f6d56b8329b10cd5001d"
+      },
+      {
+        "path": "apps/api/src/backend/control-boundary.ts",
+        "sha256": "62bafc018619a4841054a8871ac7948dadb934657a64647208ff03d826cb40f5"
+      },
+      {
+        "path": "apps/api/src/backend/evidence-portability.ts",
+        "sha256": "4489604533c5cf598b399c811ebfdb48e7360c302c5ac073586d000f26e01428"
+      },
+      {
+        "path": "apps/api/src/backend/explorer-evidence-source.ts",
+        "sha256": "feaca2fdd581a194bc35d4e54f8f32647bf457e5e7e32228f763e280ebb7b439"
+      },
+      {
+        "path": "apps/api/src/backend/fake-harness.ts",
+        "sha256": "11e53eff026d4f3286162ad4e54e09eca83ad1a1f9efbe67cfcf4f6110616fa5"
+      },
+      {
+        "path": "apps/api/src/backend/native-rpc-canonical-exercise.ts",
+        "sha256": "8934e89ab6e2b9a16fce0e616c7f4cd77d59715f161ab1eef9fd9c33d94fc320"
+      },
+      {
+        "path": "apps/api/src/backend/native-rpc-client.ts",
+        "sha256": "a223781a34a7c1e40cae244575aa71aebe588a24e4e31799492047b04228f2b1"
+      },
+      {
+        "path": "apps/api/src/backend/native-rpc-evidence.ts",
+        "sha256": "68c020158928edca365a94de3a5b0855696292756a9ed77e35b7ab0a4d6322c6"
+      },
+      {
+        "path": "apps/api/src/backend/native-rpc-provider.ts",
+        "sha256": "c415a85b8e69cf9036e8759d9b748a9bd921afe4b16843665c7906defaa69141"
+      },
+      {
+        "path": "apps/api/src/backend/p0-risk-integration.ts",
+        "sha256": "1cf2663744956ede360edd5003371b5b030a8768d2f5f801ef69d7f6a2c6147e"
+      },
+      {
+        "path": "apps/api/src/backend/pipeline.ts",
+        "sha256": "cb490adcfec2e81cc579117c27f6267430d2b15fee79c0d57011135676f286bc"
+      },
+      {
+        "path": "apps/api/src/backend/protocol-adapter.ts",
+        "sha256": "be339cbc3f663b20b352a7bc9cc7f6e14c145579d99ca99327d771cf340dbdf7"
+      },
+      {
+        "path": "apps/api/src/backend/protocol-registry.ts",
+        "sha256": "96abfdfceb59c8e9ac364fee27ab5410a12ba4096cec5d34349e07e6d64c5108"
+      },
+      {
+        "path": "apps/api/src/backend/provider-adapter.ts",
+        "sha256": "41bd89a8988a1ac5dca405a38945a2c30c74fa053bf95ff2494f7965f741e208"
+      },
+      {
+        "path": "apps/api/src/backend/provider-registry.ts",
+        "sha256": "8ad97614e6f235a5aec9edb65aee7bdbd962dcdd6f7c0fb8800c71b5ef3e4189"
+      },
+      {
+        "path": "apps/api/src/backend/provider-result-boundary.ts",
+        "sha256": "9df7190bda6400721d98f793487366a8d4a427c1cef42369404041312d49d7b7"
+      },
+      {
+        "path": "apps/api/src/backend/receipt-ports.ts",
+        "sha256": "1c51c81d8af7a362c6bcdf614ade9c13f901806cf0600a8d4cc48866b3ed4f09"
+      },
+      {
+        "path": "apps/api/src/backend/registry-core.ts",
+        "sha256": "8e0d0b114b685201485f1cf515f6b30e3d4b372762dfcd6b694f16691079e4f4"
+      },
+      {
+        "path": "apps/api/src/backend/registry-errors.ts",
+        "sha256": "504e214a959013762e182ade509295e619f36fc8d6a809f0c02a17eb1754c79b"
+      },
+      {
+        "path": "apps/api/src/backend/tenderly-evidence.ts",
+        "sha256": "152d83c49f03f3b1d33d84931a2c34524cfec3a31cc2b2fc343895f94b711de5"
+      },
+      {
+        "path": "apps/api/src/backend/tenderly-provider.ts",
+        "sha256": "ce5a8b37a6180f3a792602bf11d2b90fb9ddd494deb84b2696aeb0e33a876c2c"
+      },
+      {
+        "path": "apps/api/src/backend/trace-rpc-evidence-source.ts",
+        "sha256": "6c423dc3393929853bd94b036074d05faf6ac631139778598afb6800a66c6bbd"
+      },
+      {
+        "path": "apps/api/tsconfig.json",
+        "sha256": "5ed80efde27f927157aaba3ad7ec5d885ecd7abe86abd7f59fc51ab85e722da5"
+      },
+      {
+        "path": "package.json",
+        "sha256": "e84f9be63682c311d620aac087b73f1f2cb7a209085e8b02dde3bf464a6ddfd4"
+      },
+      {
+        "path": "packages/contracts/package.json",
+        "sha256": "eecf04db00b5b4ee58ed9c72b1110d420413166eadbddcc1d28b705a5ae16216"
+      },
+      {
+        "path": "packages/contracts/src/amount.ts",
+        "sha256": "1a0061a2ceedfbd2b55b096c3dfd887fd8f3659118913436a41c4bb5b5a83daa"
+      },
+      {
+        "path": "packages/contracts/src/common.ts",
+        "sha256": "345c9067724dc1ae9b25bdf276224921d41c24f1e85b67d4764a20c35e0bf8f2"
+      },
+      {
+        "path": "packages/contracts/src/decision.ts",
+        "sha256": "c6d7edc96216cf47ba49d6bd42ab51d332ab72bee778a05ab2652ecf85fd2151"
+      },
+      {
+        "path": "packages/contracts/src/evidence-provider.ts",
+        "sha256": "bd6a0450023aa968f6fd23b87fdcf916868ef0accf0f59c355345415d8d852b6"
+      },
+      {
+        "path": "packages/contracts/src/evidence.ts",
+        "sha256": "15e6349477cc926db1fdbeacae46538b9546c8bb32fe71b469215e3393c258e5"
+      },
+      {
+        "path": "packages/contracts/src/expectation-baseline.ts",
+        "sha256": "33542b85eb3f8c6421f7da2bb113356263e05bb4a046278713b2f7dce2b105ae"
+      },
+      {
+        "path": "packages/contracts/src/generic-evidence.ts",
+        "sha256": "d5be98fa949eb4fdfe0e2ef65254d7a47ac3ade23ea213caa2d21041a9f20cc8"
+      },
+      {
+        "path": "packages/contracts/src/index.ts",
+        "sha256": "71ab4f44ece9200f9400628baf7d646e771a091c42dd4a0e5a257ba754be4293"
+      },
+      {
+        "path": "packages/contracts/src/intent.ts",
+        "sha256": "4a0cc16bfc96db909e2448b022d15c7928c6fc9a92e9035b27640fcc138ffe5e"
+      },
+      {
+        "path": "packages/contracts/src/normalization.ts",
+        "sha256": "f61521d17f7e73979fb2907788e50811a6e5d0bbad4ed0b67012c7592c3c461f"
+      },
+      {
+        "path": "packages/contracts/src/p0-run-result.ts",
+        "sha256": "ec34157506fcad1ea3cf76478e59b3187077ad06af497262d3d90773114bb5b4"
+      },
+      {
+        "path": "packages/contracts/src/quote.ts",
+        "sha256": "51702c5ea8ee32330742eaa7ea1e1935cb265a7c5fe7dce78611ff71c96fc4d1"
+      },
+      {
+        "path": "packages/contracts/src/registry.ts",
+        "sha256": "66fa8a8d2dcd0bbd5039477803d3efc69d56d2768526c52f445b7e4579478b68"
+      },
+      {
+        "path": "packages/contracts/src/replay.ts",
+        "sha256": "07fa22ff24dcd17a78007dcc50e869115f1b56940669188f86ac8e3e571ab88d"
+      },
+      {
+        "path": "packages/contracts/src/rerun.ts",
+        "sha256": "2c796e4be12bac62a9353543e10a9e9adb0ff0989c2f143726f74da230580589"
+      },
+      {
+        "path": "packages/contracts/src/route.ts",
+        "sha256": "a4de9e7640aa8b14e113cdbeb4d08804c1045dc7a86076966b2f2be8eb45f5c4"
+      },
+      {
+        "path": "packages/contracts/src/run.ts",
+        "sha256": "a00964794782c583d1281abf3a852641e4173b98fcb7802967821deb3ed2d6eb"
+      },
+      {
+        "path": "packages/contracts/src/serialization.ts",
+        "sha256": "fcc9993eac149cf8ced90b7d217e9ae0d78cb3264a2034eecbabd60c8561f9db"
+      },
+      {
+        "path": "packages/contracts/tsconfig.json",
+        "sha256": "5ed80efde27f927157aaba3ad7ec5d885ecd7abe86abd7f59fc51ab85e722da5"
+      },
+      {
+        "path": "pnpm-lock.yaml",
+        "sha256": "280ff0ad08ebb03be22bd25351845c1138e13810c35fefc54aba5333e290d34c"
+      },
+      {
+        "path": "pnpm-workspace.yaml",
+        "sha256": "36307fe58b9bd69b9cacf14e0dad5161e718d5c4d03492959260765331c155ac"
+      },
+      {
+        "path": "scripts/provider-probes/native-rpc-canonical-exercise.ts",
+        "sha256": "d907bf047ab99cb26c4d87794fdd9c2b8111271065585024b29cda68dff84597"
+      },
+      {
+        "path": "scripts/provider-probes/native-rpc-source-provenance.ts",
+        "sha256": "79392d0e51f3e4a79bbcef2bec57b4a360ae9accf651e57a2875c21c32381447"
+      },
+      {
+        "path": "tsconfig.base.json",
+        "sha256": "fa7563407cb2d95982e81e4335f46fc2ca7d5bd4e84e5195685a5e4ff05f2438"
+      }
+    ],
+    "manifestSha256": "9d6ea554296fffff6c5dc570e95cf5ae921989e1c3dc46825527026300c02b17"
+  },
+  "runner": {
+    "path": "scripts/provider-probes/explorer-evidence-feasibility.ts",
+    "sha256": "da94430818626e02fc5e9ae7838578fa15d01712239a15451348267b5a587f17",
+    "nodeVersion": "v22.23.2"
+  },
+  "conclusion": {
+    "explorerCanProvide": [
+      "contract-verification",
+      "contract-abi",
+      "deployment",
+      "token-metadata",
+      "transaction",
+      "receipt",
+      "logs",
+      "token-transfers",
+      "provenance"
+    ],
+    "explorerCannotProvide": ["simulation", "trace", "state-diff"],
+    "etherscanV2CredentialedQualification": "BLOCKED_MISSING_API_KEY",
+    "etherscanV2SemanticsQualification": "PARTIAL_DOCUMENTED_ONLY",
+    "liveSemanticsQualification": "KEYLESS_ETHERSCAN_COMPATIBLE_SURFACE_SAME_CHAIN",
+    "productionIntegration": "NOT_STARTED"
+  },
+  "etherscanV2": {
+    "requestTemplate": "https://api.etherscan.io/v2/api?chainid=<chainId>&module=<module>&action=<action>&apikey=<key>",
+    "keylessObserved": {
+      "http": 200,
+      "status": "0",
+      "message": "NOTOK",
+      "resultKind": "string",
+      "resultLength": null,
+      "resultText": "Missing/Invalid API Key",
+      "responseSha256": "15a829feaac786f421a396f1e60977a508a6e29434bd7b62a75a743710cdb150",
+      "rateLimitLimit": null,
+      "rateLimitRemaining": null
+    },
+    "documented": {
+      "apiKeyRequirement": {
+        "statement": "Every request to the Etherscan API needs an API key.",
+        "source": "https://docs.etherscan.io/set-up-your-api-key"
+      },
+      "multichain": {
+        "statement": "All 60+ EVM chains under one key. Set chainid to choose one.",
+        "source": "https://docs.etherscan.io/introduction"
+      },
+      "rateLimits": {
+        "source": "https://docs.etherscan.io/rate-limits",
+        "plans": [
+          {
+            "tier": "Free",
+            "callsPerSecond": 3,
+            "callsPerDay": 100000,
+            "proEndpoints": false,
+            "note": "selected chains only"
+          },
+          {
+            "tier": "Lite",
+            "callsPerSecond": 5,
+            "callsPerDay": 100000,
+            "proEndpoints": false,
+            "note": ""
+          },
+          {
+            "tier": "Standard",
+            "callsPerSecond": 10,
+            "callsPerDay": 200000,
+            "proEndpoints": true,
+            "note": ""
+          },
+          {
+            "tier": "Advanced",
+            "callsPerSecond": 20,
+            "callsPerDay": 500000,
+            "proEndpoints": true,
+            "note": ""
+          },
+          {
+            "tier": "Professional",
+            "callsPerSecond": 30,
+            "callsPerDay": 1000000,
+            "proEndpoints": true,
+            "note": ""
+          },
+          {
+            "tier": "Pro Plus",
+            "callsPerSecond": 30,
+            "callsPerDay": 1500000,
+            "proEndpoints": true,
+            "note": ""
+          },
+          {
+            "tier": "Dedicated/Custom",
+            "callsPerSecond": null,
+            "callsPerDay": null,
+            "proEndpoints": true,
+            "note": "contact us"
+          }
+        ]
+      },
+      "tokenMetadataIsPro": {
+        "statement": "Get Token Info by ContractAddress is a PRO endpoint, available to the Standard Plan and above, throttled to 2 calls/second; the free plan documents tokensupply/tokenbalance only.",
+        "source": "https://docs.etherscan.io/api-reference/endpoint/tokeninfo"
+      }
+    }
+  },
+  "arbiscan": {
+    "explorerArbitrumOne": "https://arbiscan.io/",
+    "explorerArbitrumSepolia": "https://sepolia.arbiscan.io/",
+    "legacyV1Observed": {
+      "http": 200,
+      "status": "0",
+      "message": "NOTOK",
+      "resultKind": "string",
+      "resultLength": null,
+      "resultText": "You are using a deprecated V1 endpoint, switch to Etherscan API V2 using https:/",
+      "responseSha256": "f4492ab132672f9b28c802ee2bb7bbf4d5d6c3ef9199a3019a719925a88d68f4",
+      "rateLimitLimit": null,
+      "rateLimitRemaining": null
+    }
+  },
+  "chainSupport": {
+    "source": "https://api.etherscan.io/v2/chainlist (keyless)",
+    "http": 200,
+    "totalcount": 63,
+    "arbitrumChains": [
+      {
+        "chainname": "Arbitrum One Mainnet",
+        "chainid": "42161",
+        "blockexplorer": "https://arbiscan.io/",
+        "apiurl": "https://api.etherscan.io/v2/api?chainid=42161",
+        "status": 1,
+        "comment": ""
+      },
+      {
+        "chainname": "Arbitrum Sepolia Testnet",
+        "chainid": "421614",
+        "blockexplorer": "https://sepolia.arbiscan.io/",
+        "apiurl": "https://api.etherscan.io/v2/api?chainid=421614",
+        "status": 1,
+        "comment": ""
+      }
+    ]
+  },
+  "rateLimits": {
+    "documented": {
+      "source": "https://docs.etherscan.io/rate-limits",
+      "plans": [
+        {
+          "tier": "Free",
+          "callsPerSecond": 3,
+          "callsPerDay": 100000,
+          "proEndpoints": false,
+          "note": "selected chains only"
+        },
+        {
+          "tier": "Lite",
+          "callsPerSecond": 5,
+          "callsPerDay": 100000,
+          "proEndpoints": false,
+          "note": ""
+        },
+        {
+          "tier": "Standard",
+          "callsPerSecond": 10,
+          "callsPerDay": 200000,
+          "proEndpoints": true,
+          "note": ""
+        },
+        {
+          "tier": "Advanced",
+          "callsPerSecond": 20,
+          "callsPerDay": 500000,
+          "proEndpoints": true,
+          "note": ""
+        },
+        {
+          "tier": "Professional",
+          "callsPerSecond": 30,
+          "callsPerDay": 1000000,
+          "proEndpoints": true,
+          "note": ""
+        },
+        {
+          "tier": "Pro Plus",
+          "callsPerSecond": 30,
+          "callsPerDay": 1500000,
+          "proEndpoints": true,
+          "note": ""
+        },
+        {
+          "tier": "Dedicated/Custom",
+          "callsPerSecond": null,
+          "callsPerDay": null,
+          "proEndpoints": true,
+          "note": "contact us"
+        }
+      ]
+    },
+    "observedSurfaces": [
+      {
+        "surface": "https://arbitrum-sepolia.blockscout.com/api",
+        "keyless": true,
+        "observedLimitHeader": {
+          "http": 429,
+          "status": "0",
+          "message": "Too many requests. Increase limits now at https://dev.blockscout.com",
+          "resultKind": "null",
+          "resultLength": null,
+          "resultText": null,
+          "responseSha256": "cd9b3cea5a1715c125754256d45fb5f650fc2dcd6b2b989db2b09e7695e55b52",
+          "rateLimitLimit": "10",
+          "rateLimitRemaining": "0"
+        }
+      },
+      {
+        "surface": "https://arbitrum-sepolia.blockscout.com/api/v2",
+        "keyless": true,
+        "observedLimitHeader": "180"
+      }
+    ]
+  },
+  "probeSurfaces": [
+    {
+      "id": "etherscan-v2",
+      "role": "target credential-gated Arbiscan / Etherscan V2 API",
+      "api": "https://api.etherscan.io/v2/api",
+      "keyless": false,
+      "credentialAvailable": false
+    },
+    {
+      "id": "etherscan-compatible-live",
+      "role": "live Etherscan-compatible surface on the same chain",
+      "api": "https://arbitrum-sepolia.blockscout.com/api",
+      "keyless": true
+    },
+    {
+      "id": "explorer-rest-live",
+      "role": "live explorer REST surface on the same chain",
+      "api": "https://arbitrum-sepolia.blockscout.com/api/v2",
+      "keyless": true
+    }
+  ],
+  "capabilityMatrix": [
+    {
+      "capability": "contract-verification",
+      "request": {
+        "module": "contract",
+        "action": "getsourcecode"
+      },
+      "verification": "live_verified",
+      "note": "Verified live through the explorer REST contract resource; the Etherscan V2 module/action form is documented and credential-gated.",
+      "etherscanV2Documented": true,
+      "etherscanV2Observed": "auth_required_no_key",
+      "liveCompatibleSurface": {
+        "http": 429,
+        "status": "0",
+        "message": "Too many requests. Increase limits now at https://dev.blockscout.com",
+        "resultKind": "null",
+        "resultLength": null,
+        "resultText": null,
+        "responseSha256": "cd9b3cea5a1715c125754256d45fb5f650fc2dcd6b2b989db2b09e7695e55b52",
+        "rateLimitLimit": "10",
+        "rateLimitRemaining": "0"
+      },
+      "liveRestSurface": {
+        "capability": "contract-verification",
+        "http": 200,
+        "rateLimitLimit": "180",
+        "rateLimitRemaining": "177",
+        "responseSha256": "9ef3ec733f8ddeb4200a3bef00f27aae8aa37aafea7bddcfc9b1a23e3fd1eac2",
+        "items": null,
+        "facts": {
+          "isVerified": "true",
+          "language": "solidity",
+          "compilerVersion": "v0.7.6+commit.7338295f",
+          "verifiedAt": "2026-07-12T13:52:22.161917Z",
+          "abiEntries": 21
+        }
+      },
+      "normalizedFacts": {
+        "contractName": null,
+        "compilerVersion": null,
+        "optimizationUsed": null,
+        "isProxy": null,
+        "sourceFingerprint": null,
+        "verified": false
+      }
+    },
+    {
+      "capability": "contract-abi",
+      "request": {
+        "module": "contract",
+        "action": "getabi"
+      },
+      "verification": "live_verified",
+      "note": "The ABI was observed live through the explorer REST contract resource (21 entries for the Camelot V3 router).",
+      "etherscanV2Documented": true,
+      "etherscanV2Observed": "auth_required_no_key",
+      "liveCompatibleSurface": {
+        "http": 429,
+        "status": "0",
+        "message": "Too many requests. Increase limits now at https://dev.blockscout.com",
+        "resultKind": "null",
+        "resultLength": null,
+        "resultText": null,
+        "responseSha256": "cd9b3cea5a1715c125754256d45fb5f650fc2dcd6b2b989db2b09e7695e55b52",
+        "rateLimitLimit": "10",
+        "rateLimitRemaining": "0"
+      },
+      "liveRestSurface": null,
+      "normalizedFacts": {
+        "abiFingerprint": null,
+        "abiEntryCount": null
+      }
+    },
+    {
+      "capability": "deployment",
+      "request": {
+        "module": "contract",
+        "action": "getcontractcreation"
+      },
+      "verification": "live_verified",
+      "note": "Creator address and creation transaction were observed live through the explorer REST address resource.",
+      "etherscanV2Documented": true,
+      "etherscanV2Observed": "auth_required_no_key",
+      "liveCompatibleSurface": {
+        "http": 429,
+        "status": "0",
+        "message": "Too many requests. Increase limits now at https://dev.blockscout.com",
+        "resultKind": "null",
+        "resultLength": null,
+        "resultText": null,
+        "responseSha256": "cd9b3cea5a1715c125754256d45fb5f650fc2dcd6b2b989db2b09e7695e55b52",
+        "rateLimitLimit": "10",
+        "rateLimitRemaining": "0"
+      },
+      "liveRestSurface": {
+        "capability": "deployment",
+        "http": 200,
+        "rateLimitLimit": "180",
+        "rateLimitRemaining": "176",
+        "responseSha256": "611785b2ffafb7eedfe6a9793e4d01263398307a4ce5400ac5dbfec13e2e1da1",
+        "items": null,
+        "facts": {
+          "isContract": "true",
+          "name": "SwapRouter",
+          "creatorAddress": "0x864ba7d19EcD545C7ef0B901D5e4Cc107C0914e1",
+          "creationTransaction": "0x04c397353eee475f4ee0eb438590bbc421c208f262e8dba4a2be368788b9867d"
+        }
+      },
+      "normalizedFacts": {}
+    },
+    {
+      "capability": "token-metadata",
+      "request": {
+        "module": "token",
+        "action": "getToken"
+      },
+      "verification": "live_verified",
+      "note": "Observed live through the explorer REST token resource. Etherscan V2 / Arbiscan exposes token metadata through the PRO tokeninfo endpoint, available from the Standard plan; the free plan documents tokensupply/tokenbalance only.",
+      "etherscanV2Documented": true,
+      "etherscanV2Observed": "auth_required_no_key",
+      "liveCompatibleSurface": {
+        "http": 429,
+        "status": "0",
+        "message": "Too many requests. Increase limits now at https://dev.blockscout.com",
+        "resultKind": "null",
+        "resultLength": null,
+        "resultText": null,
+        "responseSha256": "cd9b3cea5a1715c125754256d45fb5f650fc2dcd6b2b989db2b09e7695e55b52",
+        "rateLimitLimit": "10",
+        "rateLimitRemaining": "0"
+      },
+      "liveRestSurface": {
+        "capability": "token-metadata",
+        "http": 200,
+        "rateLimitLimit": "180",
+        "rateLimitRemaining": "175",
+        "responseSha256": "494866f0866cd4e7cd88ee82263845c406cc66899c8f86d25c9b0e6f1f1c15dc",
+        "items": null,
+        "facts": {
+          "name": "USDC Sepolia",
+          "symbol": "USDC",
+          "decimals": "18",
+          "type": "ERC-20",
+          "totalSupply": "9000999999999999999999990038829268571024145080618006200260123274555141100"
+        }
+      },
+      "normalizedFacts": {
+        "name": null,
+        "symbol": null,
+        "decimals": null,
+        "type": null,
+        "totalSupply": null
+      }
+    },
+    {
+      "capability": "transaction",
+      "request": {
+        "module": "proxy",
+        "action": "eth_getTransactionByHash"
+      },
+      "verification": "live_verified",
+      "note": "Observed live through the explorer REST transaction resource. The Etherscan-compatible module=proxy form answered HTTP 400 'Unknown module' on the keyless surface used for the probe.",
+      "etherscanV2Documented": true,
+      "etherscanV2Observed": "auth_required_no_key",
+      "liveCompatibleSurface": {
+        "http": 429,
+        "status": "0",
+        "message": "Too many requests. Increase limits now at https://dev.blockscout.com",
+        "resultKind": "null",
+        "resultLength": null,
+        "resultText": null,
+        "responseSha256": "cd9b3cea5a1715c125754256d45fb5f650fc2dcd6b2b989db2b09e7695e55b52",
+        "rateLimitLimit": "10",
+        "rateLimitRemaining": "0"
+      },
+      "liveRestSurface": {
+        "capability": "transaction",
+        "http": 200,
+        "rateLimitLimit": "180",
+        "rateLimitRemaining": "179",
+        "responseSha256": "2346f00d53e798be84cd214290e313f8ac5b49443f956024b8ad6b560365e53f",
+        "items": null,
+        "facts": {
+          "hash": "0xb116ef6ce279668d555498e0e5a836f8ef35f997667e87a75757ec47332a644a",
+          "blockNumber": 310131879,
+          "status": "ok",
+          "result": "success",
+          "gasUsed": "384021"
+        }
+      },
+      "normalizedFacts": {
+        "hash": "0xb116ef6ce279668d555498e0e5a836f8ef35f997667e87a75757ec47332a644a",
+        "blockNumber": 310131879,
+        "status": "ok",
+        "result": "success",
+        "gasUsed": "384021"
+      }
+    },
+    {
+      "capability": "receipt",
+      "request": {
+        "module": "proxy",
+        "action": "eth_getTransactionReceipt"
+      },
+      "verification": "documented_unverified",
+      "note": "Not exercised in either form: the keyless surface does not serve module=proxy, and no dedicated receipt resource was probed. Receipt-equivalent fields (status, gas_used, log count) were observed from the explorer REST transaction and log resources.",
+      "etherscanV2Documented": true,
+      "etherscanV2Observed": "auth_required_no_key",
+      "liveCompatibleSurface": {
+        "http": 429,
+        "status": "0",
+        "message": "Too many requests. Increase limits now at https://dev.blockscout.com",
+        "resultKind": "null",
+        "resultLength": null,
+        "resultText": null,
+        "responseSha256": "cd9b3cea5a1715c125754256d45fb5f650fc2dcd6b2b989db2b09e7695e55b52",
+        "rateLimitLimit": "10",
+        "rateLimitRemaining": "0"
+      },
+      "liveRestSurface": null,
+      "normalizedFacts": {}
+    },
+    {
+      "capability": "logs",
+      "request": {
+        "module": "logs",
+        "action": "getLogs"
+      },
+      "verification": "live_verified",
+      "note": "Observed live through the explorer REST transaction-log resource (4 logs at the accepted pinned block). The module=logs form was not exercised: the keyless surface rate-limited the probe.",
+      "etherscanV2Documented": true,
+      "etherscanV2Observed": "auth_required_no_key",
+      "liveCompatibleSurface": {
+        "http": 429,
+        "status": "0",
+        "message": "Too many requests. Increase limits now at https://dev.blockscout.com",
+        "resultKind": "null",
+        "resultLength": null,
+        "resultText": null,
+        "responseSha256": "cd9b3cea5a1715c125754256d45fb5f650fc2dcd6b2b989db2b09e7695e55b52",
+        "rateLimitLimit": "10",
+        "rateLimitRemaining": "0"
+      },
+      "liveRestSurface": {
+        "capability": "logs",
+        "http": 200,
+        "rateLimitLimit": "180",
+        "rateLimitRemaining": "178",
+        "responseSha256": "46b2e2e5ccad5ab8703a62d765fc6637017c6b5ac0e48975a5e988e177fbee41",
+        "items": 4,
+        "facts": {
+          "logCount": 4,
+          "topic0": "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
+        }
+      },
+      "normalizedFacts": {
+        "logCount": 4,
+        "topic0": "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
+      }
+    },
+    {
+      "capability": "token-transfers",
+      "request": {
+        "module": "account",
+        "action": "tokentx"
+      },
+      "verification": "live_verified",
+      "note": "Observed live through the explorer REST address token-transfer resource (50 transfers for the accepted sender). The module=account form was not exercised: the keyless surface rate-limited the probe.",
+      "etherscanV2Documented": true,
+      "etherscanV2Observed": "auth_required_no_key",
+      "liveCompatibleSurface": {
+        "http": 429,
+        "status": "0",
+        "message": "Too many requests. Increase limits now at https://dev.blockscout.com",
+        "resultKind": "null",
+        "resultLength": null,
+        "resultText": null,
+        "responseSha256": "cd9b3cea5a1715c125754256d45fb5f650fc2dcd6b2b989db2b09e7695e55b52",
+        "rateLimitLimit": "10",
+        "rateLimitRemaining": "0"
+      },
+      "liveRestSurface": {
+        "capability": "token-transfers",
+        "http": 200,
+        "rateLimitLimit": "180",
+        "rateLimitRemaining": "174",
+        "responseSha256": "546f82132a1ececc51567d4e4659fcb383c6f6ca9404547b7a808627dcadbb31",
+        "items": 50,
+        "facts": {
+          "items": 50
+        }
+      },
+      "normalizedFacts": {}
+    },
+    {
+      "capability": "provenance",
+      "request": {
+        "module": "block",
+        "action": "getblocknobytime"
+      },
+      "verification": "live_verified",
+      "note": "Provenance is taken from each response envelope plus block identity; the explorer REST block resource reproduced the accepted pinned block hash.",
+      "etherscanV2Documented": true,
+      "etherscanV2Observed": "auth_required_no_key",
+      "liveCompatibleSurface": null,
+      "liveRestSurface": {
+        "capability": "provenance",
+        "http": 200,
+        "rateLimitLimit": "180",
+        "rateLimitRemaining": "173",
+        "responseSha256": "129a23711ff6c517c2ea11a610fb60d6e4611410ed530c5b5cbe68c44d417d5b",
+        "items": null,
+        "facts": {
+          "height": 310131879,
+          "blockHash": "0x715bfaca417a25ed4d317748ecf0cfbd0ad38d4e14c2e1c0fb42ac0c8e60feff",
+          "timestamp": "2026-09-18T08:47:42.000000Z"
+        }
+      },
+      "normalizedFacts": {
+        "height": 310131879,
+        "blockHash": "0x715bfaca417a25ed4d317748ecf0cfbd0ad38d4e14c2e1c0fb42ac0c8e60feff",
+        "timestamp": "2026-09-18T08:47:42.000000Z"
+      }
+    }
+  ],
+  "scope": {
+    "simulation": false,
+    "trace": false,
+    "stateDiff": false,
+    "providerRanking": false,
+    "providerVoting": false,
+    "automaticFallback": false,
+    "signing": false,
+    "broadcasting": false,
+    "custody": false,
+    "credentialsRead": false,
+    "credentialsPersisted": false,
+    "rawProviderPayloadPersisted": false
+  }
+}
