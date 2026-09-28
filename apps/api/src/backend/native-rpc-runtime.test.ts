@@ -1052,6 +1052,15 @@ describe("NativeRpcProvider", () => {
         }),
       ]),
     );
+    expect(result.responseEvidence).toMatchObject({
+      kind: "redacted_snapshot",
+      snapshot: {
+        methods: {
+          eth_call: "0xabcdef",
+          eth_estimateGas: "21000",
+        },
+      },
+    });
   });
   it("never invokes raw RPC when supports rejects the requested chain or protocol", () => {
     const client = clientFor({});
