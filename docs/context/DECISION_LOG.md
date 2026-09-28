@@ -64,3 +64,48 @@ provider ranking, voting, consensus, scoring, or automatic fallback.
 - #94 is `BEST CASE SHOULD`; #93 Enso and #95 Receipt UX are CLOSED / NOT_PLANNED Final Sprint
   cuts retained for post-sprint history.
 - No Product, Risk, Provider, or Contract semantics changed in this documentation sync.
+
+## 2026-09-28 — #106 completion and PR-FS-D Backend boundary
+
+PR #112 is merged into `main` at `b6d48c5f2223d1888231a5eb7810ec2a04006111`; Issue #106 is
+CLOSED / COMPLETED with the accepted qualification capture retained under
+`fixtures/provider-registry/be-106/trace-rpc-source-qualification-2026-09-28T10-06-13-121Z/`.
+
+PR-FS-D / Issue #110 is being implemented on branch `feat/backend-fs-d-trace-integration`.
+The Backend composition decision is:
+
+- evaluate the qualified `TraceRpcEvidenceSource` only after the primary Native/Tenderly
+  Provider execution has produced the exact prepared transaction;
+- keep supplementary Trace Evidence outside `ProviderRegistry`, Core, Decision, and Risk, so it
+  cannot become a competing Provider, fallback, ranking, vote, or verdict upgrade;
+- project only normalized, allowlisted Trace provenance, binding, capability, and scope facts
+  into the existing public `providerEvidence.providerData.traceRpc` shape;
+- preserve the Native projection when Trace fails, and persist the same normalized facts for
+  `getRun` without re-querying RPC or exposing raw payloads/endpoints.
+
+This is an implementation checkpoint, not an Evidence Federation PASS or a claim that #110 has
+been merged/accepted. Frozen Product/Risk/Contract semantics, the unsigned/read-only boundary,
+and Native-primary behavior remain unchanged.
+
+## 2026-09-28 — PR-FS-D three-round self-review checkpoint
+
+Three Standards/Spec self-review rounds were completed against the current working tree. Each
+round's P1/P2 findings were repaired before the next round. The final boundary fixes include:
+
+- route-level coverage for Trace context mismatch, timeout, unsupported, malformed, and partial
+  outcomes;
+- explicit `primary` versus `verification_child` execution-purpose wiring, with supplementary
+  Trace disabled for Action-Gate children and internal remediation paths;
+- shared public Trace projection with raw output excluded and failure reasons restricted to the
+  normalized allowlist;
+- bootstrap validation that rejects a qualified Trace source when no Arbitrum route can consume
+  it, instead of silently dropping the source; and
+- a read-only live Backend gate proving Native primary success, exact prepared-transaction
+  matching, persisted round-trip, and historical no-requery, with sanitized capture retained at
+  `fixtures/provider-registry/be-110/backend-trace-integration-20260928122150385/capture.json`.
+
+Final working-tree validation is API tests 612/612, repository tests 1303 passed with 2 skipped,
+repository typecheck, lint, targeted formatting, and `git diff --check`. The live run emitted the
+environment's pre-existing `NODE_TLS_REJECT_UNAUTHORIZED=0` warning; this is recorded as a local
+transport-security limitation and does not upgrade the #110 acceptance state. No commit, push,
+merge, or GitHub review mutation was performed.

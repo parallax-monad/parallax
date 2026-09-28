@@ -210,3 +210,31 @@ Issue #110's conflicting Notion authority sentence was corrected to make #96 and
 GitHub execution Issues authoritative. This PR changes documentation/control-plane truth only;
 no implementation completion, Product/Risk/Provider/Contract semantic change, or runtime/test
 change is claimed.
+
+## 2026-09-28 — PR-FS-D Backend supplementary integration in progress
+
+The working tree was prepared from current `main` at `b6d48c5f2223d1888231a5eb7810ec2a04006111`
+on branch `feat/backend-fs-d-trace-integration` after PR #112 merged the qualified #106
+`TraceRpcEvidenceSource`. The implementation mutation is limited to the #110 Backend boundary:
+
+- added an optional Backend-local supplementary evaluator/projector seam;
+- wired the qualified Trace source through the Arbitrum composition without registering a second
+  Provider;
+- bound Trace to the exact prepared unsigned transaction, Run, chain, protocol, and pinned block
+  context used by the primary execution;
+- preserved Native facts and existing Risk verdicts on Trace failure;
+- added normalized public/persisted `traceRpc` projection and historical no-requery coverage;
+- added route-level failure/partial coverage, Action-Gate purpose coverage, public failure-reason
+  allowlisting, bootstrap source-consumption validation, and a sanitized live qualification
+  capture;
+- kept raw RPC payloads, endpoint details, signing, broadcasting, custody, and Product/Risk
+  semantic changes out of scope.
+
+Validation in the working tree: API tests 612/612, repository tests 1303 passed with 2 skipped,
+repository typecheck, targeted formatting, repository lint, and `git diff --check` passed. The
+read-only live Backend Trace gate passed and wrote the sanitized capture at
+`fixtures/provider-registry/be-110/backend-trace-integration-20260928122150385/capture.json`.
+The run emitted the environment's pre-existing `NODE_TLS_REJECT_UNAUTHORIZED=0` warning; this
+is a transport-security limitation of the local test environment, not a qualification claim.
+No commit, push, GitHub review mutation, or secret mutation was performed. #110 remains an
+unmerged implementation checkpoint pending exact-head review and acceptance.

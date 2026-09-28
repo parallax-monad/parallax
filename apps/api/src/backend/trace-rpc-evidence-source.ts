@@ -21,6 +21,13 @@ export const TRACE_RPC_CAPABILITIES = Object.freeze([
   "debug_traceCall.prestateTracer.diffMode",
 ] as const);
 
+export const TRACE_RPC_SCOPES = Object.freeze({
+  chain: "trace-rpc.chain",
+  pinnedBlock: "trace-rpc.pinned-block",
+  callTracer: "trace-rpc.callTracer",
+  prestateTracerDiff: "trace-rpc.prestateTracer.diffMode",
+} as const);
+
 export type TraceRpcEvidenceMode = NativeRpcProviderMode;
 
 export type TraceRpcEvidenceStatus =
@@ -83,6 +90,17 @@ export type TraceCapabilityFailureReason =
   | "malformed_response"
   | "binding_mismatch"
   | "context_unverified";
+
+export const TRACE_RPC_FAILURE_REASONS = Object.freeze([
+  "method_unsupported",
+  "invalid_parameters",
+  "timeout",
+  "cancelled",
+  "rpc_unavailable",
+  "malformed_response",
+  "binding_mismatch",
+  "context_unverified",
+] as const satisfies readonly TraceCapabilityFailureReason[]);
 
 export type TraceCapabilityFailure = {
   readonly status: "unknown" | "unavailable";
@@ -322,6 +340,30 @@ export class TraceRpcEvidenceSource<
     return this.result(binding, callTracer, prestateTracerDiff);
   }
 
+  /**
+   * Builds a normalized supplementary failure for a Backend boundary error.
+   * Unexpected source rejection or malformed source output must not turn the
+   * primary Native check into an application failure.
+   */
+  public failClosed(
+    input: TraceRpcEvidenceInput<Intent>,
+    failure: TraceCapabilityFailure = {
+      status: "unknown",
+      reason: "rpc_unavailable",
+    },
+  ): TraceRpcEvidenceResult {
+    try {
+      const validated = validateInput(input);
+      return this.contextUnavailableResult(failure, validated.binding);
+    } catch (error) {
+      const reason =
+        error instanceof TraceNormalizationError
+          ? error.reason
+          : "binding_mismatch";
+      return this.invalidResult(reason);
+    }
+  }
+
   private async evaluateCallTrace(
     transaction: ArbitrumTransaction,
     blockTag: string,
@@ -371,25 +413,29 @@ export class TraceRpcEvidenceSource<
     prestateTracerDiff: TraceStateDiffEvidence,
   ): TraceRpcEvidenceResult {
     const checkedScope = [
-      "trace-rpc.chain",
-      "trace-rpc.pinned-block",
-      ...(callTracer.status === "observed" ? ["trace-rpc.callTracer"] : []),
+      TRACE_RPC_SCOPES.chain,
+      TRACE_RPC_SCOPES.pinnedBlock,
+      ...(callTracer.status === "observed"
+        ? [TRACE_RPC_SCOPES.callTracer]
+        : []),
       ...(prestateTracerDiff.status === "observed"
-        ? ["trace-rpc.prestateTracer.diffMode"]
+        ? [TRACE_RPC_SCOPES.prestateTracerDiff]
         : []),
     ];
 
     const unknownScope = [
-      ...(callTracer.status === "unknown" ? ["trace-rpc.callTracer"] : []),
+      ...(callTracer.status === "unknown" ? [TRACE_RPC_SCOPES.callTracer] : []),
       ...(prestateTracerDiff.status === "unknown"
-        ? ["trace-rpc.prestateTracer.diffMode"]
+        ? [TRACE_RPC_SCOPES.prestateTracerDiff]
         : []),
     ];
 
     const unavailableScope = [
-      ...(callTracer.status === "unavailable" ? ["trace-rpc.callTracer"] : []),
+      ...(callTracer.status === "unavailable"
+        ? [TRACE_RPC_SCOPES.callTracer]
+        : []),
       ...(prestateTracerDiff.status === "unavailable"
-        ? ["trace-rpc.prestateTracer.diffMode"]
+        ? [TRACE_RPC_SCOPES.prestateTracerDiff]
         : []),
     ];
 
@@ -436,8 +482,8 @@ export class TraceRpcEvidenceSource<
       },
       checkedScope: Object.freeze([]),
       unknownScope: Object.freeze([
-        "trace-rpc.callTracer",
-        "trace-rpc.prestateTracer.diffMode",
+        TRACE_RPC_SCOPES.callTracer,
+        TRACE_RPC_SCOPES.prestateTracerDiff,
       ]),
       unavailableScope: Object.freeze([]),
     });
@@ -449,12 +495,12 @@ export class TraceRpcEvidenceSource<
   ): TraceRpcEvidenceResult {
     const unknown =
       failure.status === "unknown"
-        ? ["trace-rpc.callTracer", "trace-rpc.prestateTracer.diffMode"]
+        ? [TRACE_RPC_SCOPES.callTracer, TRACE_RPC_SCOPES.prestateTracerDiff]
         : [];
 
     const unavailable =
       failure.status === "unavailable"
-        ? ["trace-rpc.callTracer", "trace-rpc.prestateTracer.diffMode"]
+        ? [TRACE_RPC_SCOPES.callTracer, TRACE_RPC_SCOPES.prestateTracerDiff]
         : [];
 
     // Both capabilities inherit the same context failure, so the top-level

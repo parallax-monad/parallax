@@ -1,6 +1,6 @@
 # Current Agent Handoff
 
-Checkpoint: 2026-09-27
+Checkpoint: 2026-09-28
 
 ## Takeover
 
@@ -15,7 +15,7 @@ Checkpoint: 2026-09-27
 
 ## Expected main checkpoint
 
-`542d5c685d259b5ee6d5aa55098bb2dad900f230`
+`b6d48c5f2223d1888231a5eb7810ec2a04006111`
 
 This is historical checkpoint truth, not a permanent equality requirement.
 
@@ -87,16 +87,16 @@ acceptance path.
 
 `@jzhao0` has these relevant issues:
 
-- #106 — active next task: productionize provider-neutral `TraceRpcEvidenceSource`;
-- #110 — Backend supplementary integration after the minimum #106 interface is agreed;
+- #106 — CLOSED / COMPLETED through merged PR #112: provider-neutral `TraceRpcEvidenceSource`;
+- #110 — Backend supplementary integration, currently being implemented by `@brightheartma`;
 - #91 — follows #106/#110 for same-transaction Native vs Trace portability;
 - #103 — real USDC → WETH feasibility, gated by Product P0 #73;
 - #108 — Explorer feasibility, optional/stretch, not active;
 - #109 — additional asset feasibility, optional/stretch, not active.
 
-## #106 execution boundary
+## #106 delivered boundary
 
-Build only the reusable supplementary Trace Evidence source.
+PR #112 delivered only the reusable supplementary Trace Evidence source.
 
 Required:
 
@@ -116,12 +116,12 @@ Do not:
 - modify frozen Risk/Product semantics;
 - sign, broadcast, or custody transactions.
 
-Backend integration belongs to #110.
+Backend integration belongs to #110 and is the current PR-FS-D work.
 
 ## Coordination
 
-#110 may prepare against the minimum agreed #106 interface, but its real acceptance must use
-the qualified #106 source.
+#110 is now being implemented against the qualified #106 source. Its acceptance must use the
+exact prepared Backend execution and retain Native RPC as the primary Provider/Risk path.
 
 #91 is the portability proof after the reusable source/integration exists.
 
@@ -131,8 +131,9 @@ the qualified #106 source.
 and must not start before #73's prerequisite stage.
 
 Current parallel handoff is Clare on #100/#102 and Antony on #73; #101 is complete through
-PR #113. After Product P0, proceed through #103 → #104 → #105 for Asset Coverage and
-#106 → #110 → #91 → #92 for Evidence Federation, then #107 Verified Remediation and #94
+PR #113. The active Backend handoff is PR-FS-D / #110 on branch
+`feat/backend-fs-d-trace-integration`. After Product P0, proceed through #103 → #104 → #105
+for Asset Coverage and #110 → #91 → #92 for the remaining Evidence Federation work, then #107 Verified Remediation and #94
 Minimal SDK as a SHOULD. Optional #90/#108/#109 work remains outside the critical path.
 
 The Asset Coverage order is #73 → #103 → #104 → #105. #103 has a four-hour feasibility
@@ -140,8 +141,10 @@ kill switch; #104 is non-blocking for ETH → USDC P0 but enabling MUST for ERC-
 #105 is the Asset Coverage PASS proof.
 
 #110 owns Backend composition, exact context binding, persistence, public projection, and
-historical consistency. It does not block Product P0. Native RPC remains primary; Trace is
-supplementary. No ProviderRegistry rewrite, ranking, scoring, voting, consensus, or fallback.
+historical consistency. The current implementation evaluates Trace after the primary Provider,
+keeps supplementary Evidence out of Core/Decision/Risk, and projects only normalized allowlisted
+facts into the public RunResult. It does not block Product P0. Native RPC remains primary; Trace
+is supplementary. No ProviderRegistry rewrite, ranking, scoring, voting, consensus, or fallback.
 
 After P0, #107 is the separate Verified Remediation gate. Its ownership is Backend child Run
 and re-check (`@brightheartma`), Provider/Risk Evidence boundary (`@jzhao0`), Frontend
@@ -182,6 +185,28 @@ Current agent-assisted writes must continue to use the expected local identity:
 and must pass `./scripts/agent-preflight.sh --write`. Do not reuse the historical incorrect
 identity.
 
+## 2026-09-28 active implementation handoff
+
+- Current merged `main`: `b6d48c5f2223d1888231a5eb7810ec2a04006111` (PR #112).
+- Current branch: `feat/backend-fs-d-trace-integration`.
+- PR-FS-D / #110 now has a Backend-local supplementary evaluator and public projector. The
+  qualified Trace source receives the exact prepared unsigned transaction, Run ID, chain,
+  protocol, quote, and pinned block context from the same execution that Native evaluates.
+- Trace failures preserve Native facts and expose unknown/unavailable scopes. Trace success does
+  not alter the existing Risk verdict. POST `/api/check` and GET `/api/runs/:runId` expose the
+  same normalized Trace summary without raw RPC payloads or endpoint details, and historical
+  reads do not re-query the source. Public failure reasons are allowlisted; invalid diagnostics
+  fail closed at the projection boundary. Bootstrap rejects an unconsumable Trace source rather
+  than silently dropping it, and Action-Gate verification children explicitly suppress
+  supplementary Trace evaluation.
+- Validation completed in the working tree: API tests 612/612, repository tests 1303 passed with
+  2 skipped, repository typecheck, repository lint, targeted formatting, and `git diff --check`.
+  The read-only live Backend Trace gate passed with Native primary success, exact prepared
+  transaction matching, persisted round-trip, and historical no-requery assertions; the
+  sanitized capture is at
+  `fixtures/provider-registry/be-110/backend-trace-integration-20260928122150385/capture.json`.
+- No commit, push, merge, or GitHub review mutation has been performed for #110.
+
 ## Context-overflow recovery
 
 If context is lost, ignore chat summaries until this sequence is complete:
@@ -197,5 +222,5 @@ preflight --read
 → fresh PR/review/CI state
 ```
 
-For Provider work, default target after this checkpoint is #106 unless live GitHub state
-has superseded it.
+For Provider/Backend work, default target after this checkpoint is #110 unless live GitHub
+state has superseded it.

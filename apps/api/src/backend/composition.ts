@@ -28,6 +28,29 @@ export type BackendProviderEvidenceMapper = (input: {
   readonly mode: GenericEvidenceMode;
 }) => BackendOperationResult<unknown>;
 
+/**
+ * Optional Backend-owned evidence that supplements, but never replaces, the
+ * selected primary Provider result. This seam is deliberately separate from
+ * ProviderRegistry selection so supplementary sources cannot create matching
+ * Provider ambiguity or become an implicit fallback.
+ */
+export type BackendSupplementaryEvidenceEvaluator = (input: {
+  readonly normalizedIntent: unknown;
+  readonly preparedExecution: unknown;
+  readonly providerResult: ProviderEvaluationResult;
+  readonly providerEvidence?: unknown;
+}) => BackendOperationResult<unknown>;
+
+/**
+ * Public projection for an already-normalized supplementary result. The
+ * projector is the only seam allowed to copy supplementary facts into the
+ * public RunResult; the evaluator result remains outside Core/Decision.
+ */
+export type BackendSupplementaryEvidenceProjector = (input: {
+  readonly projected: unknown;
+  readonly supplementaryEvidence: unknown;
+}) => BackendOperationResult<unknown>;
+
 export type NormalizationFunction<Input = unknown, Output = unknown> = (
   input: Input,
 ) => BackendOperationResult<Output>;
@@ -91,6 +114,8 @@ export type BackendCompositionDependencies<
   readonly receiptSigner?: ReceiptSigner;
   readonly receiptAnchorer?: ReceiptAnchorer;
   readonly providerEvidenceMapper?: BackendProviderEvidenceMapper;
+  readonly supplementaryEvidenceEvaluator?: BackendSupplementaryEvidenceEvaluator;
+  readonly supplementaryEvidenceProjector?: BackendSupplementaryEvidenceProjector;
 };
 
 /**
@@ -139,6 +164,12 @@ export class BackendCompositionRuntime<
   public readonly receiptAnchorer: ReceiptAnchorer | undefined;
   public readonly providerEvidenceMapper:
     | BackendProviderEvidenceMapper
+    | undefined;
+  public readonly supplementaryEvidenceEvaluator:
+    | BackendSupplementaryEvidenceEvaluator
+    | undefined;
+  public readonly supplementaryEvidenceProjector:
+    | BackendSupplementaryEvidenceProjector
     | undefined;
 
   public constructor(
@@ -192,6 +223,18 @@ export class BackendCompositionRuntime<
     ) {
       throw new TypeError("providerEvidenceMapper must be a function");
     }
+    if (
+      dependencies.supplementaryEvidenceEvaluator !== undefined &&
+      typeof dependencies.supplementaryEvidenceEvaluator !== "function"
+    ) {
+      throw new TypeError("supplementaryEvidenceEvaluator must be a function");
+    }
+    if (
+      dependencies.supplementaryEvidenceProjector !== undefined &&
+      typeof dependencies.supplementaryEvidenceProjector !== "function"
+    ) {
+      throw new TypeError("supplementaryEvidenceProjector must be a function");
+    }
 
     this.chainRegistry = dependencies.chainRegistry;
     this.protocolRegistry = dependencies.protocolRegistry;
@@ -203,6 +246,10 @@ export class BackendCompositionRuntime<
     this.receiptSigner = dependencies.receiptSigner;
     this.receiptAnchorer = dependencies.receiptAnchorer;
     this.providerEvidenceMapper = dependencies.providerEvidenceMapper;
+    this.supplementaryEvidenceEvaluator =
+      dependencies.supplementaryEvidenceEvaluator;
+    this.supplementaryEvidenceProjector =
+      dependencies.supplementaryEvidenceProjector;
   }
 
   /** Normalizes an untrusted boundary value before Core receives it. */
