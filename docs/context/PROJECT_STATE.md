@@ -16,8 +16,9 @@ At checkpoint time:
   under `fixtures/provider-registry/be-106/`;
 - #101 is CLOSED / COMPLETED by PR #113; #100 and #102 remain open for their explicit
   application-entrypoint and historical-replay acceptance evidence;
-- PR-FS-D / #110 is being implemented on `feat/backend-fs-d-trace-integration` and is not
-  yet merged or accepted;
+- PR-FS-D / #110 is implemented through exact-head commit
+  `93a1084c0cfc5a741e8c6d4251290ef86ed6f605` on `feat/backend-fs-d-trace-integration`; it is
+  not yet merged or accepted;
 - live Product execution scope is represented by Issues #73, #96, and #100–#110.
 
 ## Final Sprint v3 control-plane transition
@@ -348,6 +349,23 @@ It did **not** establish:
 - a Product-level QuickNode Provider abstraction.
 
 It remains unsigned/read-only and is the evidence baseline feeding #106.
+
+## 2026-09-28 — PR-FS-D exact-head P1 remediation
+
+The live Backend Trace gate now binds its capture to one clean repository snapshot: it records
+HEAD/tree before execution and refuses to write qualification evidence if clean status or
+HEAD/tree changes before capture. The fix is committed at
+`93a1084c0cfc5a741e8c6d4251290ef86ed6f605`.
+
+The exact-head read-only live qualification passed at that commit and produced the v2 capture:
+
+`fixtures/provider-registry/be-110/backend-trace-integration-20260928131317584/capture.json`
+
+The capture records `origin/main = b6d48c5f2223d1888231a5eb7810ec2a04006111`, clean worktree,
+exact prepared-transaction match, complete Trace scope, public redaction, persisted round-trip,
+and historical no-requery. The earlier v1 captures are stale and retained outside the repository
+for recovery only. This evidence does not by itself constitute merge or Product/Evidence
+Federation acceptance.
 
 ## Recorded P2 carried forward
 

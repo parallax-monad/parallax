@@ -238,3 +238,20 @@ The run emitted the environment's pre-existing `NODE_TLS_REJECT_UNAUTHORIZED=0` 
 is a transport-security limitation of the local test environment, not a qualification claim.
 No commit, push, GitHub review mutation, or secret mutation was performed. #110 remains an
 unmerged implementation checkpoint pending exact-head review and acceptance.
+
+## 2026-09-28 — PR-FS-D exact-head gate remediation
+
+The Standards review finding was repaired in commit
+`93a1084c0cfc5a741e8c6d4251290ef86ed6f605`: the live runner now captures the clean repository
+HEAD/tree before execution and rechecks them before writing evidence, failing closed if the
+repository changes during the run. The commit was pushed to
+`feat/backend-fs-d-trace-integration`.
+
+The Spec review finding was repaired by rerunning the real read-only Backend Trace gate from that
+exact clean commit. The v2 capture at
+`fixtures/provider-registry/be-110/backend-trace-integration-20260928131317584/capture.json`
+records the implementation HEAD/tree, clean worktree, runner hash, and `origin/main`; the gate
+passed exact prepared-transaction binding, complete Trace scope, public redaction, persisted
+round-trip, and historical no-requery. The two stale v1 captures were moved to
+`/private/tmp/parallax-be-110-stale.nmO38f/` without deletion. No signing, broadcasting, secret,
+merge, or GitHub review mutation occurred.

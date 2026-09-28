@@ -109,3 +109,28 @@ repository typecheck, lint, targeted formatting, and `git diff --check`. The liv
 environment's pre-existing `NODE_TLS_REJECT_UNAUTHORIZED=0` warning; this is recorded as a local
 transport-security limitation and does not upgrade the #110 acceptance state. No commit, push,
 merge, or GitHub review mutation was performed.
+
+## 2026-09-28 — PR-FS-D Standards/Spec P1 remediation
+
+The latest self-review identified two remaining P1 concerns:
+
+- Standards: the live gate checked repository cleanliness at start but read HEAD/tree only after
+  execution, so a repository change during the run could be misattributed to the capture.
+- Spec: the prior v1 live capture predated the final gate fix and was not current exact-head
+  qualification evidence.
+
+The live runner now records a clean repository snapshot before execution and rechecks clean
+status plus HEAD/tree immediately before writing the capture. If the repository changes during
+the run, the gate fails closed and emits no valid qualification capture. Commit
+`93a1084c0cfc5a741e8c6d4251290ef86ed6f605` contains this Standards fix.
+
+The real read-only live gate was rerun from that exact clean commit against the environment-
+supplied Arbitrum endpoint. It passed Native primary success, exact prepared-transaction matching,
+complete Trace scope, public redaction, persisted round-trip, and historical no-requery checks.
+The v2 capture is retained at
+`fixtures/provider-registry/be-110/backend-trace-integration-20260928131317584/capture.json` and
+records the exact implementation HEAD/tree, clean worktree, runner hash, and `origin/main`.
+The old v1 captures were moved out of the repository as recoverable stale evidence and are not
+the current qualification source of truth. This closes the two review findings for the current
+implementation checkpoint without changing Product/Risk/Contract semantics or the unsigned,
+read-only boundary.
