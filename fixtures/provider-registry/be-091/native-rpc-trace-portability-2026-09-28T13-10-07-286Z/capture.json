@@ -1,0 +1,669 @@
+{
+  "schemaVersion": "be-091-evidence-portability-v1",
+  "qualification": {
+    "status": "PASS",
+    "real": true,
+    "readOnly": true
+  },
+  "capturedAt": "2026-09-28T13:10:07.286Z",
+  "repositoryHeadAtCapture": "7e80d06873ca4bfe48f438f8690442277139a375",
+  "sourceProvenance": {
+    "repositoryHead": "7e80d06873ca4bfe48f438f8690442277139a375",
+    "worktreeDirty": false,
+    "nodeVersion": "v22.23.2",
+    "files": [
+      {
+        "path": "apps/api/package.json",
+        "sha256": "f92b18ea5e5a91d765c9a2d7475b7fbfce8a81ce91650d73ff7cc6699893453e"
+      },
+      {
+        "path": "apps/api/src/backend/application-routing.ts",
+        "sha256": "aa7c9a9a1369e7c5c328df8924febeb98f7cbe91866d622bc90e71d3c03ba282"
+      },
+      {
+        "path": "apps/api/src/backend/arbitrum-account-state-reader.ts",
+        "sha256": "620da489606a3149e506c3b392a8fe3862860e48ae7a7fac9e70afb0c7a6a8ee"
+      },
+      {
+        "path": "apps/api/src/backend/arbitrum-chain-adapter.ts",
+        "sha256": "701416d6948db20e89f35a9f337fefd360bf725f9cc49e697b64e58bf6367272"
+      },
+      {
+        "path": "apps/api/src/backend/arbitrum-composition.ts",
+        "sha256": "75cd3c58a5e6b365fb25c666f1e13d73035d7090d7bf9fa8cfaa084ea3e6a2eb"
+      },
+      {
+        "path": "apps/api/src/backend/camelot-v3-binding.ts",
+        "sha256": "af62ee09c21cfef9abb361265736bd022da7fa7da3af46f6d6af7c24c28a2fe5"
+      },
+      {
+        "path": "apps/api/src/backend/camelot-v3-feasibility.ts",
+        "sha256": "6f602f5cb4491a22077734e8f77ddb96350233b2af90897cc2cd5acb7bcbc52f"
+      },
+      {
+        "path": "apps/api/src/backend/camelot-v3-protocol-adapter.ts",
+        "sha256": "af5375017d047eedb2d2b81010afac0dc34b2a670e40932e05c3d73430d6b037"
+      },
+      {
+        "path": "apps/api/src/backend/chain-adapter.ts",
+        "sha256": "a484632557b0675cb8adedc3e8a9c0a0585e0c1bf55558dcee1edc98c40f9678"
+      },
+      {
+        "path": "apps/api/src/backend/chain-registry.ts",
+        "sha256": "7248554c233699dd08338e49e23b5578b3df1a00bb802624ed7cfeddffbd1146"
+      },
+      {
+        "path": "apps/api/src/backend/composition.ts",
+        "sha256": "a9ebbac260b75d935a9b9be3702024b309b57147c252f6d56b8329b10cd5001d"
+      },
+      {
+        "path": "apps/api/src/backend/control-boundary.ts",
+        "sha256": "62bafc018619a4841054a8871ac7948dadb934657a64647208ff03d826cb40f5"
+      },
+      {
+        "path": "apps/api/src/backend/evidence-portability.ts",
+        "sha256": "4489604533c5cf598b399c811ebfdb48e7360c302c5ac073586d000f26e01428"
+      },
+      {
+        "path": "apps/api/src/backend/fake-harness.ts",
+        "sha256": "11e53eff026d4f3286162ad4e54e09eca83ad1a1f9efbe67cfcf4f6110616fa5"
+      },
+      {
+        "path": "apps/api/src/backend/native-rpc-canonical-exercise.ts",
+        "sha256": "8934e89ab6e2b9a16fce0e616c7f4cd77d59715f161ab1eef9fd9c33d94fc320"
+      },
+      {
+        "path": "apps/api/src/backend/native-rpc-client.ts",
+        "sha256": "a223781a34a7c1e40cae244575aa71aebe588a24e4e31799492047b04228f2b1"
+      },
+      {
+        "path": "apps/api/src/backend/native-rpc-evidence.ts",
+        "sha256": "68c020158928edca365a94de3a5b0855696292756a9ed77e35b7ab0a4d6322c6"
+      },
+      {
+        "path": "apps/api/src/backend/native-rpc-provider.ts",
+        "sha256": "c415a85b8e69cf9036e8759d9b748a9bd921afe4b16843665c7906defaa69141"
+      },
+      {
+        "path": "apps/api/src/backend/p0-risk-integration.ts",
+        "sha256": "1cf2663744956ede360edd5003371b5b030a8768d2f5f801ef69d7f6a2c6147e"
+      },
+      {
+        "path": "apps/api/src/backend/pipeline.ts",
+        "sha256": "cb490adcfec2e81cc579117c27f6267430d2b15fee79c0d57011135676f286bc"
+      },
+      {
+        "path": "apps/api/src/backend/protocol-adapter.ts",
+        "sha256": "be339cbc3f663b20b352a7bc9cc7f6e14c145579d99ca99327d771cf340dbdf7"
+      },
+      {
+        "path": "apps/api/src/backend/protocol-registry.ts",
+        "sha256": "96abfdfceb59c8e9ac364fee27ab5410a12ba4096cec5d34349e07e6d64c5108"
+      },
+      {
+        "path": "apps/api/src/backend/provider-adapter.ts",
+        "sha256": "41bd89a8988a1ac5dca405a38945a2c30c74fa053bf95ff2494f7965f741e208"
+      },
+      {
+        "path": "apps/api/src/backend/provider-registry.ts",
+        "sha256": "8ad97614e6f235a5aec9edb65aee7bdbd962dcdd6f7c0fb8800c71b5ef3e4189"
+      },
+      {
+        "path": "apps/api/src/backend/provider-result-boundary.ts",
+        "sha256": "9df7190bda6400721d98f793487366a8d4a427c1cef42369404041312d49d7b7"
+      },
+      {
+        "path": "apps/api/src/backend/receipt-ports.ts",
+        "sha256": "1c51c81d8af7a362c6bcdf614ade9c13f901806cf0600a8d4cc48866b3ed4f09"
+      },
+      {
+        "path": "apps/api/src/backend/registry-core.ts",
+        "sha256": "8e0d0b114b685201485f1cf515f6b30e3d4b372762dfcd6b694f16691079e4f4"
+      },
+      {
+        "path": "apps/api/src/backend/registry-errors.ts",
+        "sha256": "504e214a959013762e182ade509295e619f36fc8d6a809f0c02a17eb1754c79b"
+      },
+      {
+        "path": "apps/api/src/backend/tenderly-evidence.ts",
+        "sha256": "152d83c49f03f3b1d33d84931a2c34524cfec3a31cc2b2fc343895f94b711de5"
+      },
+      {
+        "path": "apps/api/src/backend/tenderly-provider.ts",
+        "sha256": "ce5a8b37a6180f3a792602bf11d2b90fb9ddd494deb84b2696aeb0e33a876c2c"
+      },
+      {
+        "path": "apps/api/src/backend/trace-rpc-evidence-source.ts",
+        "sha256": "6c423dc3393929853bd94b036074d05faf6ac631139778598afb6800a66c6bbd"
+      },
+      {
+        "path": "apps/api/tsconfig.json",
+        "sha256": "5ed80efde27f927157aaba3ad7ec5d885ecd7abe86abd7f59fc51ab85e722da5"
+      },
+      {
+        "path": "package.json",
+        "sha256": "e84f9be63682c311d620aac087b73f1f2cb7a209085e8b02dde3bf464a6ddfd4"
+      },
+      {
+        "path": "packages/contracts/package.json",
+        "sha256": "eecf04db00b5b4ee58ed9c72b1110d420413166eadbddcc1d28b705a5ae16216"
+      },
+      {
+        "path": "packages/contracts/src/amount.ts",
+        "sha256": "1a0061a2ceedfbd2b55b096c3dfd887fd8f3659118913436a41c4bb5b5a83daa"
+      },
+      {
+        "path": "packages/contracts/src/common.ts",
+        "sha256": "345c9067724dc1ae9b25bdf276224921d41c24f1e85b67d4764a20c35e0bf8f2"
+      },
+      {
+        "path": "packages/contracts/src/decision.ts",
+        "sha256": "c6d7edc96216cf47ba49d6bd42ab51d332ab72bee778a05ab2652ecf85fd2151"
+      },
+      {
+        "path": "packages/contracts/src/evidence-provider.ts",
+        "sha256": "bd6a0450023aa968f6fd23b87fdcf916868ef0accf0f59c355345415d8d852b6"
+      },
+      {
+        "path": "packages/contracts/src/evidence.ts",
+        "sha256": "15e6349477cc926db1fdbeacae46538b9546c8bb32fe71b469215e3393c258e5"
+      },
+      {
+        "path": "packages/contracts/src/expectation-baseline.ts",
+        "sha256": "33542b85eb3f8c6421f7da2bb113356263e05bb4a046278713b2f7dce2b105ae"
+      },
+      {
+        "path": "packages/contracts/src/generic-evidence.ts",
+        "sha256": "d5be98fa949eb4fdfe0e2ef65254d7a47ac3ade23ea213caa2d21041a9f20cc8"
+      },
+      {
+        "path": "packages/contracts/src/index.ts",
+        "sha256": "71ab4f44ece9200f9400628baf7d646e771a091c42dd4a0e5a257ba754be4293"
+      },
+      {
+        "path": "packages/contracts/src/intent.ts",
+        "sha256": "4a0cc16bfc96db909e2448b022d15c7928c6fc9a92e9035b27640fcc138ffe5e"
+      },
+      {
+        "path": "packages/contracts/src/normalization.ts",
+        "sha256": "f61521d17f7e73979fb2907788e50811a6e5d0bbad4ed0b67012c7592c3c461f"
+      },
+      {
+        "path": "packages/contracts/src/p0-run-result.ts",
+        "sha256": "ec34157506fcad1ea3cf76478e59b3187077ad06af497262d3d90773114bb5b4"
+      },
+      {
+        "path": "packages/contracts/src/quote.ts",
+        "sha256": "51702c5ea8ee32330742eaa7ea1e1935cb265a7c5fe7dce78611ff71c96fc4d1"
+      },
+      {
+        "path": "packages/contracts/src/registry.ts",
+        "sha256": "66fa8a8d2dcd0bbd5039477803d3efc69d56d2768526c52f445b7e4579478b68"
+      },
+      {
+        "path": "packages/contracts/src/replay.ts",
+        "sha256": "07fa22ff24dcd17a78007dcc50e869115f1b56940669188f86ac8e3e571ab88d"
+      },
+      {
+        "path": "packages/contracts/src/rerun.ts",
+        "sha256": "2c796e4be12bac62a9353543e10a9e9adb0ff0989c2f143726f74da230580589"
+      },
+      {
+        "path": "packages/contracts/src/route.ts",
+        "sha256": "a4de9e7640aa8b14e113cdbeb4d08804c1045dc7a86076966b2f2be8eb45f5c4"
+      },
+      {
+        "path": "packages/contracts/src/run.ts",
+        "sha256": "a00964794782c583d1281abf3a852641e4173b98fcb7802967821deb3ed2d6eb"
+      },
+      {
+        "path": "packages/contracts/src/serialization.ts",
+        "sha256": "fcc9993eac149cf8ced90b7d217e9ae0d78cb3264a2034eecbabd60c8561f9db"
+      },
+      {
+        "path": "packages/contracts/tsconfig.json",
+        "sha256": "5ed80efde27f927157aaba3ad7ec5d885ecd7abe86abd7f59fc51ab85e722da5"
+      },
+      {
+        "path": "pnpm-lock.yaml",
+        "sha256": "280ff0ad08ebb03be22bd25351845c1138e13810c35fefc54aba5333e290d34c"
+      },
+      {
+        "path": "pnpm-workspace.yaml",
+        "sha256": "36307fe58b9bd69b9cacf14e0dad5161e718d5c4d03492959260765331c155ac"
+      },
+      {
+        "path": "scripts/provider-probes/native-rpc-canonical-exercise.ts",
+        "sha256": "d907bf047ab99cb26c4d87794fdd9c2b8111271065585024b29cda68dff84597"
+      },
+      {
+        "path": "scripts/provider-probes/native-rpc-source-provenance.ts",
+        "sha256": "79392d0e51f3e4a79bbcef2bec57b4a360ae9accf651e57a2875c21c32381447"
+      },
+      {
+        "path": "tsconfig.base.json",
+        "sha256": "fa7563407cb2d95982e81e4335f46fc2ca7d5bd4e84e5195685a5e4ff05f2438"
+      }
+    ],
+    "manifestSha256": "0863652010f9a1eeee40f22aeedf2502df9440ec0cfa3eb57827262149d9fc6e"
+  },
+  "source": {
+    "canonicalFixture": "fixtures/provider-registry/be-063/camelot-sepolia-real-2026-09-18T08-47-56-715Z/capture.json",
+    "canonicalFixtureSha256": "85147b852e1e4b514af64241fede641f6a2b6db4f2056f0ab44d04164125cf23",
+    "runner": "scripts/provider-probes/evidence-portability-probe.ts",
+    "runnerSha256": "ccd4ad9ec4ad88ea46fc642e166925e8a413e053f4cd1341a74163e1caeae38e"
+  },
+  "execution": {
+    "runId": "be-091-portability-20260928130957655",
+    "chainId": 421614,
+    "protocol": "camelot-v3",
+    "blockContext": {
+      "blockNumber": "310131879",
+      "blockHash": "0x715bfaca417a25ed4d317748ecf0cfbd0ad38d4e14c2e1c0fb42ac0c8e60feff"
+    },
+    "preparedTransaction": {
+      "from": "0xeb7c5322f0997ee70f4bbd3ae7e428072c9af396",
+      "to": "0x171B925C51565F5D2a7d8C494ba3188D304EFD93",
+      "data": "0xbc651188000000000000000000000000980b62da83eff3d4576c647993b0c1d7faf17c73000000000000000000000000b893e3334d4bd6c5ba8277fd559e99ed683a9fc7000000000000000000000000eb7c5322f0997ee70f4bbd3ae7e428072c9af396000000000000000000000000000000000000000000000000000000006aad08be00000000000000000000000000000000000000000000000000038d7ea4c680000000000000000000000000000000000000000000000000000037dcf4d127fe8b0000000000000000000000000000000000000000000000000000000000000000",
+      "value": "0x38d7ea4c68000"
+    },
+    "preparedTransactionFingerprint": "sha256:8992725c48797658fe41d1ddb5ba15dbf7c3fdc392599c6b52351cd870df2219",
+    "nativeFreshnessCheck": {
+      "enabled": true,
+      "maxBlockLag": 0
+    }
+  },
+  "nativeRpcEvidence": {
+    "provider": {
+      "providerId": "native-rpc-arbitrum",
+      "providerVersion": "native-rpc-provider-v1",
+      "observedAt": "2026-09-28T13:10:05.086Z"
+    },
+    "status": "stale",
+    "responseEvidence": {
+      "kind": "redacted_snapshot",
+      "redactionProfile": "native-rpc-method-results-v1",
+      "snapshot": {
+        "providerId": "native-rpc-arbitrum",
+        "runId": "be-091-portability-20260928130957655",
+        "mode": "LIVE",
+        "status": "stale",
+        "methods": {
+          "eth_chainId": "0x66eee",
+          "eth_call": null,
+          "eth_estimateGas": null
+        },
+        "freshness": {
+          "status": "stale",
+          "pinnedBlock": "310131879",
+          "headBlock": "313616965",
+          "lag": "3485086",
+          "maxBlockLag": 0
+        }
+      }
+    },
+    "candidateFields": [
+      {
+        "candidatePath": "nativeRpc.chainId",
+        "sourcePath": "$.result",
+        "observedShape": "hex_quantity",
+        "nullable": false,
+        "status": "observed",
+        "confidence": "medium",
+        "value": "0x66eee",
+        "reviewStatus": "pending_review"
+      },
+      {
+        "candidatePath": "nativeRpc.blockContext.blockNumber",
+        "sourcePath": "$.result.number",
+        "observedShape": "decimal_string",
+        "nullable": false,
+        "status": "observed",
+        "confidence": "medium",
+        "value": "310131879",
+        "reviewStatus": "pending_review"
+      },
+      {
+        "candidatePath": "nativeRpc.blockContext.blockHash",
+        "sourcePath": "$.result.hash",
+        "observedShape": "hex_string",
+        "nullable": false,
+        "status": "observed",
+        "confidence": "medium",
+        "value": "0x715bfaca417a25ed4d317748ecf0cfbd0ad38d4e14c2e1c0fb42ac0c8e60feff",
+        "reviewStatus": "pending_review"
+      },
+      {
+        "candidatePath": "nativeRpc.ethCall.returnData",
+        "sourcePath": "$.result",
+        "observedShape": "hex_string",
+        "nullable": false,
+        "status": "observed",
+        "confidence": "medium",
+        "value": "0x00000000000000000000000000000000000000000000000000386d6911545b9f",
+        "reviewStatus": "pending_review"
+      },
+      {
+        "candidatePath": "nativeRpc.estimateGas.gasUnits",
+        "sourcePath": "$.result",
+        "observedShape": "decimal_string",
+        "nullable": false,
+        "status": "observed",
+        "confidence": "medium",
+        "value": "272052",
+        "reviewStatus": "pending_review"
+      },
+      {
+        "candidatePath": "nativeRpc.revalidatedBlock",
+        "sourcePath": "$.result.hash",
+        "observedShape": "hex_string",
+        "nullable": false,
+        "status": "observed",
+        "confidence": "medium",
+        "value": "0x715bfaca417a25ed4d317748ecf0cfbd0ad38d4e14c2e1c0fb42ac0c8e60feff",
+        "reviewStatus": "pending_review"
+      },
+      {
+        "candidatePath": "nativeRpc.freshness",
+        "observedShape": "freshness",
+        "nullable": false,
+        "status": "observed",
+        "confidence": "medium",
+        "value": {
+          "status": "stale",
+          "pinnedBlock": "310131879",
+          "headBlock": "313616965",
+          "lag": "3485086",
+          "maxBlockLag": 0
+        },
+        "reviewStatus": "pending_review"
+      }
+    ],
+    "capabilities": [
+      "simulate",
+      "eth_call",
+      "estimateGas",
+      "pinned-block"
+    ],
+    "mode": "LIVE"
+  },
+  "traceRpcEvidence": {
+    "status": "success",
+    "source": {
+      "sourceId": "trace-rpc",
+      "sourceVersion": "trace-rpc-evidence-source-v1",
+      "mode": "LIVE",
+      "observedAt": "2026-09-28T13:10:07.196Z"
+    },
+    "freshness": {
+      "status": "not_checked"
+    },
+    "binding": {
+      "runId": "be-091-portability-20260928130957655",
+      "chainId": 421614,
+      "protocol": "camelot-v3",
+      "transactionFingerprint": "sha256:8992725c48797658fe41d1ddb5ba15dbf7c3fdc392599c6b52351cd870df2219",
+      "blockContext": {
+        "blockNumber": "310131879",
+        "blockHash": "0x715bfaca417a25ed4d317748ecf0cfbd0ad38d4e14c2e1c0fb42ac0c8e60feff"
+      }
+    },
+    "capabilities": {
+      "callTracer": {
+        "status": "observed",
+        "executionStatus": "succeeded",
+        "gasUsed": "0x3bed4",
+        "output": "0x00000000000000000000000000000000000000000000000000386d6911545b9f",
+        "resultFingerprint": "sha256:6917ba373e99f93029bf9e20cb44902986b13968c111cae35b0afbbfa175df47"
+      },
+      "prestateTracerDiff": {
+        "status": "observed",
+        "diffMode": true,
+        "preAddressCount": 7,
+        "postAddressCount": 7,
+        "changedAddresses": [
+          "0x15bf3ea44aad6e17400bc31746e75167d56ba009",
+          "0x3965361ea4f9000ae3cf995f553115b2832d0e2d",
+          "0x980b62da83eff3d4576c647993b0c1d7faf17c73",
+          "0xa4b00000000000000000000000000000000000f6",
+          "0xa4b05fffffffffffffffffffffffffffffffffff",
+          "0xb893e3334d4bd6c5ba8277fd559e99ed683a9fc7",
+          "0xeb7c5322f0997ee70f4bbd3ae7e428072c9af396"
+        ],
+        "resultFingerprint": "sha256:1f44f10a8920518015488d221e7c22510cdb4a126c7a065719cad219c06d2a6a"
+      }
+    },
+    "checkedScope": [
+      "trace-rpc.chain",
+      "trace-rpc.pinned-block",
+      "trace-rpc.callTracer",
+      "trace-rpc.prestateTracer.diffMode"
+    ],
+    "unknownScope": [],
+    "unavailableScope": []
+  },
+  "portability": {
+    "version": "evidence-portability-v1",
+    "binding": {
+      "runId": "be-091-portability-20260928130957655",
+      "chainId": 421614,
+      "protocol": "camelot-v3",
+      "preparedTransactionFingerprint": "sha256:8992725c48797658fe41d1ddb5ba15dbf7c3fdc392599c6b52351cd870df2219",
+      "preparedTransaction": {
+        "from": "0xeb7c5322f0997ee70f4bbd3ae7e428072c9af396",
+        "to": "0x171B925C51565F5D2a7d8C494ba3188D304EFD93",
+        "data": "0xbc651188000000000000000000000000980b62da83eff3d4576c647993b0c1d7faf17c73000000000000000000000000b893e3334d4bd6c5ba8277fd559e99ed683a9fc7000000000000000000000000eb7c5322f0997ee70f4bbd3ae7e428072c9af396000000000000000000000000000000000000000000000000000000006aad08be00000000000000000000000000000000000000000000000000038d7ea4c680000000000000000000000000000000000000000000000000000037dcf4d127fe8b0000000000000000000000000000000000000000000000000000000000000000",
+        "value": "0x38d7ea4c68000"
+      },
+      "blockContext": {
+        "blockNumber": "310131879",
+        "blockHash": "0x715bfaca417a25ed4d317748ecf0cfbd0ad38d4e14c2e1c0fb42ac0c8e60feff"
+      }
+    },
+    "sources": {
+      "nativeRpc": {
+        "sourceId": "native-rpc-arbitrum",
+        "sourceVersion": "native-rpc-provider-v1",
+        "mode": "LIVE",
+        "observedAt": "2026-09-28T13:10:05.086Z",
+        "status": "stale",
+        "capabilities": [
+          "simulate",
+          "eth_call",
+          "estimateGas",
+          "pinned-block"
+        ],
+        "checkedScope": [
+          "portability.call",
+          "portability.gas",
+          "portability.block",
+          "portability.freshness",
+          "portability.provenance"
+        ],
+        "unknownScope": [],
+        "unavailableScope": [
+          "portability.trace",
+          "portability.stateDiff"
+        ]
+      },
+      "traceRpc": {
+        "sourceId": "trace-rpc",
+        "sourceVersion": "trace-rpc-evidence-source-v1",
+        "mode": "LIVE",
+        "observedAt": "2026-09-28T13:10:07.196Z",
+        "status": "success",
+        "capabilities": [],
+        "checkedScope": [
+          "portability.call",
+          "portability.gas",
+          "portability.trace",
+          "portability.stateDiff",
+          "portability.block",
+          "portability.provenance"
+        ],
+        "unknownScope": [],
+        "unavailableScope": [
+          "portability.freshness"
+        ]
+      }
+    },
+    "facts": [
+      {
+        "fact": "call",
+        "nativeRpc": {
+          "state": "checked",
+          "detail": {
+            "returnDataFingerprint": "sha256:d0854056a6e520dd86a6580a29820ce0bef17ee2b2fee2ee54f0c0638a0f4976"
+          }
+        },
+        "traceRpc": {
+          "state": "checked",
+          "detail": {
+            "executionStatus": "succeeded",
+            "gasUsed": "245460",
+            "gasUsedHex": "0x3bed4",
+            "measurement": "debug_traceCall.callTracer.gasUsed",
+            "outputFingerprint": "sha256:d0854056a6e520dd86a6580a29820ce0bef17ee2b2fee2ee54f0c0638a0f4976",
+            "resultFingerprint": "sha256:6917ba373e99f93029bf9e20cb44902986b13968c111cae35b0afbbfa175df47"
+          }
+        },
+        "agreement": "equal"
+      },
+      {
+        "fact": "gas",
+        "nativeRpc": {
+          "state": "checked",
+          "detail": {
+            "gasUnits": "272052",
+            "measurement": "eth_estimateGas"
+          }
+        },
+        "traceRpc": {
+          "state": "checked",
+          "detail": {
+            "gasUnits": "245460",
+            "gasUsedHex": "0x3bed4",
+            "measurement": "debug_traceCall.callTracer.gasUsed"
+          }
+        },
+        "agreement": "different"
+      },
+      {
+        "fact": "trace",
+        "nativeRpc": {
+          "state": "unavailable",
+          "reason": "capability_not_in_source_scope",
+          "detail": {
+            "capability": "traces",
+            "declaredUnchecked": true
+          }
+        },
+        "traceRpc": {
+          "state": "checked",
+          "detail": {
+            "executionStatus": "succeeded",
+            "gasUsed": "245460",
+            "gasUsedHex": "0x3bed4",
+            "measurement": "debug_traceCall.callTracer.gasUsed",
+            "outputFingerprint": "sha256:d0854056a6e520dd86a6580a29820ce0bef17ee2b2fee2ee54f0c0638a0f4976",
+            "resultFingerprint": "sha256:6917ba373e99f93029bf9e20cb44902986b13968c111cae35b0afbbfa175df47"
+          }
+        },
+        "agreement": "not_comparable"
+      },
+      {
+        "fact": "stateDiff",
+        "nativeRpc": {
+          "state": "unavailable",
+          "reason": "capability_not_in_source_scope",
+          "detail": {
+            "capability": "state-diff",
+            "declaredUnchecked": true
+          }
+        },
+        "traceRpc": {
+          "state": "checked",
+          "detail": {
+            "diffMode": true,
+            "preAddressCount": 7,
+            "postAddressCount": 7,
+            "changedAddressCount": 7,
+            "resultFingerprint": "sha256:1f44f10a8920518015488d221e7c22510cdb4a126c7a065719cad219c06d2a6a"
+          }
+        },
+        "agreement": "not_comparable"
+      },
+      {
+        "fact": "block",
+        "nativeRpc": {
+          "state": "checked",
+          "detail": {
+            "blockNumber": "310131879",
+            "blockHash": "0x715bfaca417a25ed4d317748ecf0cfbd0ad38d4e14c2e1c0fb42ac0c8e60feff"
+          }
+        },
+        "traceRpc": {
+          "state": "checked",
+          "detail": {
+            "blockNumber": "310131879",
+            "blockHash": "0x715bfaca417a25ed4d317748ecf0cfbd0ad38d4e14c2e1c0fb42ac0c8e60feff"
+          }
+        },
+        "agreement": "equal"
+      },
+      {
+        "fact": "freshness",
+        "nativeRpc": {
+          "state": "checked",
+          "detail": {
+            "freshnessStatus": "stale",
+            "pinnedBlock": "310131879",
+            "headBlock": "313616965",
+            "lag": "3485086",
+            "maxBlockLag": 0
+          }
+        },
+        "traceRpc": {
+          "state": "unavailable",
+          "reason": "source_did_not_check_freshness",
+          "detail": {
+            "freshnessStatus": "not_checked"
+          }
+        },
+        "agreement": "not_comparable"
+      },
+      {
+        "fact": "provenance",
+        "nativeRpc": {
+          "state": "checked",
+          "detail": {
+            "sourceId": "native-rpc-arbitrum",
+            "sourceVersion": "native-rpc-provider-v1",
+            "mode": "LIVE",
+            "observedAt": "2026-09-28T13:10:05.086Z"
+          }
+        },
+        "traceRpc": {
+          "state": "checked",
+          "detail": {
+            "sourceId": "trace-rpc",
+            "sourceVersion": "trace-rpc-evidence-source-v1",
+            "mode": "LIVE",
+            "observedAt": "2026-09-28T13:10:07.196Z"
+          }
+        },
+        "agreement": "not_comparable"
+      }
+    ],
+    "scope": {
+      "nativeRpcPrimaryBaseline": true,
+      "traceSupplementaryOnly": true,
+      "providerRanking": false,
+      "providerScoring": false,
+      "providerVoting": false,
+      "providerConsensus": false,
+      "automaticFallback": false,
+      "unsignedReadOnly": true
+    }
+  }
+}
