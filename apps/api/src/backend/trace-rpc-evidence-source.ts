@@ -76,6 +76,7 @@ export type TraceRpcEvidenceInput<
 
 export type TraceCapabilityFailureReason =
   | "method_unsupported"
+  | "invalid_parameters"
   | "timeout"
   | "cancelled"
   | "rpc_unavailable"
@@ -292,10 +293,6 @@ export class TraceRpcEvidenceSource<
         return this.invalidResult("context_unverified", validated.binding);
       }
     } catch (error) {
-      if (error instanceof TraceNormalizationError) {
-        return this.invalidResult(error.reason, validated.binding);
-      }
-
       return this.contextUnavailableResult(
         classifyCapabilityFailure(error),
         validated.binding,
@@ -717,16 +714,23 @@ function classifyCapabilityFailure(error: unknown): TraceCapabilityFailure {
       };
     }
 
+    if (error.kind === "RPC_ERROR" && error.rpcCode === -32602) {
+      return {
+        status: "unknown",
+        reason: "invalid_parameters",
+      };
+    }
+
     if (error.kind === "TIMEOUT") {
       return {
-        status: "unavailable",
+        status: "unknown",
         reason: "timeout",
       };
     }
 
     if (error.kind === "ABORTED") {
       return {
-        status: "unavailable",
+        status: "unknown",
         reason: "cancelled",
       };
     }
@@ -743,14 +747,15 @@ function classifyCapabilityFailure(error: unknown): TraceCapabilityFailure {
       };
     }
 
+    // Other RPC and transport failures do not prove this capability is unsupported.
     return {
-      status: "unavailable",
+      status: "unknown",
       reason: "rpc_unavailable",
     };
   }
 
   return {
-    status: "unavailable",
+    status: "unknown",
     reason: "rpc_unavailable",
   };
 }

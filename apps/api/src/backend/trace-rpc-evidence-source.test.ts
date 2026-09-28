@@ -7,6 +7,7 @@ import {
 } from "./native-rpc-evidence.js";
 import {
   createTraceRpcEvidenceSource,
+  type TraceCapabilityFailureReason,
   type TraceRpcClient,
   type TraceRpcEvidenceInput,
 } from "./trace-rpc-evidence-source.js";
@@ -479,10 +480,10 @@ describe("TraceRpcEvidenceSource", () => {
 
     const result = await source.evaluate(evaluationInput());
 
-    expect(result.status).toBe("unavailable");
+    expect(result.status).toBe("unknown");
     expect(JSON.stringify(result)).not.toContain(secretEndpoint);
     expect(result.capabilities.callTracer).toEqual({
-      status: "unavailable",
+      status: "unknown",
       reason: "rpc_unavailable",
     });
   });
@@ -539,6 +540,65 @@ const TRACE_SCOPES = [
   "trace-rpc.prestateTracer.diffMode",
 ] as const;
 
+const SENSITIVE_ERROR =
+  "https://secret.example.invalid/private-token raw state 0xdeadbeef";
+
+const FAILURE_CASES: readonly {
+  readonly name: string;
+  readonly error: () => Error;
+  readonly status: "unknown" | "unavailable";
+  readonly reason: TraceCapabilityFailureReason;
+}[] = [
+  {
+    name: "unsupported method (-32601)",
+    error: () => new NativeRpcClientError("RPC_ERROR", SENSITIVE_ERROR, -32601),
+    status: "unavailable",
+    reason: "method_unsupported",
+  },
+  {
+    name: "invalid parameters (-32602)",
+    error: () => new NativeRpcClientError("RPC_ERROR", SENSITIVE_ERROR, -32602),
+    status: "unknown",
+    reason: "invalid_parameters",
+  },
+  {
+    name: "timeout",
+    error: () => new NativeRpcClientError("TIMEOUT", SENSITIVE_ERROR),
+    status: "unknown",
+    reason: "timeout",
+  },
+  {
+    name: "caller cancellation",
+    error: () => new NativeRpcClientError("ABORTED", SENSITIVE_ERROR),
+    status: "unknown",
+    reason: "cancelled",
+  },
+  {
+    name: "malformed response",
+    error: () => new NativeRpcClientError("INVALID_ENVELOPE", SENSITIVE_ERROR),
+    status: "unknown",
+    reason: "malformed_response",
+  },
+  {
+    name: "other RPC error",
+    error: () => new NativeRpcClientError("RPC_ERROR", SENSITIVE_ERROR, -32000),
+    status: "unknown",
+    reason: "rpc_unavailable",
+  },
+  {
+    name: "transport failure",
+    error: () => new NativeRpcClientError("NETWORK_FAILURE", SENSITIVE_ERROR),
+    status: "unknown",
+    reason: "rpc_unavailable",
+  },
+  {
+    name: "injected client failure",
+    error: () => new Error(SENSITIVE_ERROR),
+    status: "unknown",
+    reason: "rpc_unavailable",
+  },
+];
+
 /**
  * Client whose chain/pinned-block context resolves, delegating only the two
  * trace capabilities to the caller.
@@ -583,6 +643,139 @@ function sourceFor(client: TraceRpcClient) {
 }
 
 describe("TraceRpcEvidenceSource status semantics", () => {
+  describe.each(["eth_chainId", "eth_getBlockByNumber"] as const)(
+    "%s context failures",
+    (probe) => {
+      it.each(FAILURE_CASES)(
+        "classifies $name without overstating coverage",
+        async (failure) => {
+          const client = clientFor(async (method) => {
+            if (method === probe) {
+              throw failure.error();
+            }
+            if (method === "eth_chainId") {
+              return `0x${ARBITRUM_SEPOLIA_CHAIN_ID.toString(16)}`;
+            }
+            if (method === "eth_getBlockByNumber") {
+              return { number: BLOCK_TAG, hash: BLOCK_HASH };
+            }
+            throw new Error("trace must not execute after context failure");
+          });
+
+          const result = await sourceFor(client).evaluate(evaluationInput());
+
+          expect(result.status).toBe(failure.status);
+          expect(result.capabilities.callTracer).toEqual({
+            status: failure.status,
+            reason: failure.reason,
+          });
+          expect(result.capabilities.prestateTracerDiff).toEqual({
+            status: failure.status,
+            reason: failure.reason,
+          });
+          expect(result.unknownScope).toEqual(
+            failure.status === "unknown" ? [...TRACE_SCOPES] : [],
+          );
+          expect(result.unavailableScope).toEqual(
+            failure.status === "unavailable" ? [...TRACE_SCOPES] : [],
+          );
+          expect(result.checkedScope).toEqual([]);
+          expect(client.request.mock.calls.map((call) => call[0])).toEqual(
+            probe === "eth_chainId"
+              ? ["eth_chainId"]
+              : ["eth_chainId", "eth_getBlockByNumber"],
+          );
+          expect(JSON.stringify(result)).not.toContain("private-token");
+          expect(JSON.stringify(result)).not.toContain("0xdeadbeef");
+        },
+      );
+    },
+  );
+
+  it("keeps a malformed pinned block lookup UNKNOWN without exposing its payload", async () => {
+    const client = clientFor(async (method) => {
+      if (method === "eth_chainId") {
+        return `0x${ARBITRUM_SEPOLIA_CHAIN_ID.toString(16)}`;
+      }
+      if (method === "eth_getBlockByNumber") {
+        return { number: BLOCK_TAG, hash: SENSITIVE_ERROR };
+      }
+      throw new Error("trace must not execute after malformed block lookup");
+    });
+
+    const result = await sourceFor(client).evaluate(evaluationInput());
+
+    expect(result.status).toBe("unknown");
+    expect(result.capabilities.callTracer).toEqual({
+      status: "unknown",
+      reason: "malformed_response",
+    });
+    expect(result.capabilities.prestateTracerDiff).toEqual({
+      status: "unknown",
+      reason: "malformed_response",
+    });
+    expect(result.unknownScope).toEqual([...TRACE_SCOPES]);
+    expect(result.unavailableScope).toEqual([]);
+    expect(client.request.mock.calls.map((call) => call[0])).toEqual([
+      "eth_chainId",
+      "eth_getBlockByNumber",
+    ]);
+    expect(JSON.stringify(result)).not.toContain("private-token");
+    expect(JSON.stringify(result)).not.toContain("0xdeadbeef");
+  });
+
+  describe.each(["callTracer", "prestateTracer"] as const)(
+    "%s capability failures",
+    (failedTracer) => {
+      it.each(FAILURE_CASES)(
+        "preserves the observed sibling on $name",
+        async (failure) => {
+          const client = traceClient((tracer) => {
+            if (tracer === failedTracer) {
+              throw failure.error();
+            }
+            return tracer === "callTracer" ? OBSERVED_CALL : OBSERVED_DIFF;
+          });
+
+          const result = await sourceFor(client).evaluate(evaluationInput());
+          const failedScope =
+            failedTracer === "callTracer"
+              ? "trace-rpc.callTracer"
+              : "trace-rpc.prestateTracer.diffMode";
+          const observedScope =
+            failedTracer === "callTracer"
+              ? "trace-rpc.prestateTracer.diffMode"
+              : "trace-rpc.callTracer";
+
+          expect(result.status).toBe("partial");
+          expect(
+            failedTracer === "callTracer"
+              ? result.capabilities.callTracer
+              : result.capabilities.prestateTracerDiff,
+          ).toEqual({ status: failure.status, reason: failure.reason });
+          expect(
+            failedTracer === "callTracer"
+              ? result.capabilities.prestateTracerDiff.status
+              : result.capabilities.callTracer.status,
+          ).toBe("observed");
+          expect(result.checkedScope).toEqual([
+            "trace-rpc.chain",
+            "trace-rpc.pinned-block",
+            observedScope,
+          ]);
+          expect(result.unknownScope).toEqual(
+            failure.status === "unknown" ? [failedScope] : [],
+          );
+          expect(result.unavailableScope).toEqual(
+            failure.status === "unavailable" ? [failedScope] : [],
+          );
+          expect(JSON.stringify(result)).not.toContain("private-token");
+          expect(JSON.stringify(result)).not.toContain("0xdeadbeef");
+        },
+      );
+    },
+  );
+
   it("keeps an all-uninterpretable result UNKNOWN instead of UNAVAILABLE", async () => {
     const client = traceClient((tracer) =>
       tracer === "callTracer"
