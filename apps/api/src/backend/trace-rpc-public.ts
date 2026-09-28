@@ -171,14 +171,19 @@ function isTraceStatusConsistent(result: TraceRpcEvidenceResult): boolean {
   const diffStatus = result.capabilities.prestateTracerDiff.status;
 
   if (result.status === "invalid") {
+    const contextCheckedScope =
+      result.checkedScope.length === 0 ? [] : [TRACE_RPC_SCOPES.chain];
+    const contextUnknownScope = [
+      ...(result.checkedScope.length > 0 ? [TRACE_RPC_SCOPES.pinnedBlock] : []),
+      TRACE_RPC_SCOPES.callTracer,
+      TRACE_RPC_SCOPES.prestateTracerDiff,
+    ];
     return (
       callStatus === "unknown" &&
       diffStatus === "unknown" &&
-      result.checkedScope.length === 0 &&
-      sameScopeList(result.unknownScope, [
-        TRACE_RPC_SCOPES.callTracer,
-        TRACE_RPC_SCOPES.prestateTracerDiff,
-      ]) &&
+      (result.binding !== undefined || result.checkedScope.length === 0) &&
+      sameScopeList(result.checkedScope, contextCheckedScope) &&
+      sameScopeList(result.unknownScope, contextUnknownScope) &&
       result.unavailableScope.length === 0
     );
   }
@@ -223,16 +228,29 @@ function isTraceStatusConsistent(result: TraceRpcEvidenceResult): boolean {
     return true;
   }
 
-  // A context failure happens before chain/pinned-block observation, so the
-  // source legitimately returns no checked scope. This form is only valid
-  // when both capabilities inherit the same failure.
+  // A context failure can happen before chain observation, or after the chain
+  // identity has been observed while the pinned block remains unverified. In
+  // both cases the capabilities inherit the same failure.
+  const contextCheckedScope =
+    result.checkedScope.length === 0 ? [] : [TRACE_RPC_SCOPES.chain];
+  const contextFailureScope = [
+    ...(result.checkedScope.length > 0 ? [TRACE_RPC_SCOPES.pinnedBlock] : []),
+    TRACE_RPC_SCOPES.callTracer,
+    TRACE_RPC_SCOPES.prestateTracerDiff,
+  ];
   return (
     observedCount === 0 &&
     callStatus === diffStatus &&
     (callStatus === "unknown" || callStatus === "unavailable") &&
-    result.checkedScope.length === 0 &&
-    sameScopeList(result.unknownScope, expectedUnknown) &&
-    sameScopeList(result.unavailableScope, expectedUnavailable)
+    sameScopeList(result.checkedScope, contextCheckedScope) &&
+    sameScopeList(
+      result.unknownScope,
+      callStatus === "unknown" ? contextFailureScope : [],
+    ) &&
+    sameScopeList(
+      result.unavailableScope,
+      callStatus === "unavailable" ? contextFailureScope : [],
+    )
   );
 }
 

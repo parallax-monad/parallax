@@ -244,6 +244,21 @@ function assertTraceIntegration(
       "Live Trace gate did not establish valid Native basic simulation",
     );
   }
+  const nativeTransactionFingerprint = stringField(
+    simulation,
+    "preparedTransactionFingerprint",
+    "Public basicSimulation",
+  );
+  const traceTransactionFingerprint = stringField(
+    binding,
+    "transactionFingerprint",
+    "Trace binding",
+  );
+  if (traceTransactionFingerprint !== nativeTransactionFingerprint) {
+    throw new Error(
+      "Trace and Native prepared transaction fingerprints diverged",
+    );
+  }
   if (binding.blockContext === undefined) {
     throw new Error("Live Trace binding omitted block context");
   }

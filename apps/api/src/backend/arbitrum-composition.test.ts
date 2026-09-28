@@ -1243,6 +1243,14 @@ describe("Arbitrum production composition skeleton", () => {
     expect(publicTrace?.binding?.transactionFingerprint).toMatch(
       /^sha256:[0-9a-f]{64}$/,
     );
+    const publicSimulation = body.p0?.basicSimulation as
+      | {
+          readonly preparedTransactionFingerprint?: unknown;
+        }
+      | undefined;
+    expect(publicTrace?.binding?.transactionFingerprint).toBe(
+      publicSimulation?.preparedTransactionFingerprint,
+    );
     const traceCalls = traceReplay.calls.filter(
       ({ method }) => method === "debug_traceCall",
     );
@@ -1399,8 +1407,9 @@ describe("Arbitrum production composition skeleton", () => {
         status: "invalid",
         call: { status: "unknown", reason: "context_unverified" },
         diff: { status: "unknown", reason: "context_unverified" },
-        checkedScope: [],
+        checkedScope: ["trace-rpc.chain"],
         unknownScope: [
+          "trace-rpc.pinned-block",
           "trace-rpc.callTracer",
           "trace-rpc.prestateTracer.diffMode",
         ],

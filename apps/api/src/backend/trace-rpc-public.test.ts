@@ -179,4 +179,36 @@ describe("Trace RPC public projection", () => {
       ],
     });
   });
+
+  it("accepts a context failure after chain identity was observed", () => {
+    const base = evidence();
+    const contextFailure: TraceRpcEvidenceResult = {
+      ...base,
+      status: "unknown",
+      capabilities: {
+        callTracer: { status: "unknown", reason: "malformed_response" },
+        prestateTracerDiff: {
+          status: "unknown",
+          reason: "malformed_response",
+        },
+      },
+      checkedScope: ["trace-rpc.chain"],
+      unknownScope: [
+        "trace-rpc.pinned-block",
+        "trace-rpc.callTracer",
+        "trace-rpc.prestateTracer.diffMode",
+      ],
+      unavailableScope: [],
+    };
+
+    expect(projectTraceRpcEvidence(contextFailure)).toMatchObject({
+      status: "unknown",
+      checkedScope: ["trace-rpc.chain"],
+      unknownScope: [
+        "trace-rpc.pinned-block",
+        "trace-rpc.callTracer",
+        "trace-rpc.prestateTracer.diffMode",
+      ],
+    });
+  });
 });

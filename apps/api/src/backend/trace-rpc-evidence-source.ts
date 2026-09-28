@@ -12,6 +12,7 @@ import {
   type NativeRpcPreparedExecution,
   type NativeRpcProviderMode,
 } from "./native-rpc-evidence.js";
+import { fingerprintPreparedTransaction } from "./prepared-transaction-fingerprint.js";
 import type { ProviderEvaluationInput } from "./provider-adapter.js";
 
 export const TRACE_RPC_EVIDENCE_SOURCE_ID = "trace-rpc" as const;
@@ -308,12 +309,15 @@ export class TraceRpcEvidenceSource<
           observedBlockHash.toLowerCase() !==
             validated.binding.blockContext.blockHash.toLowerCase())
       ) {
-        return this.invalidResult("context_unverified", validated.binding);
+        return this.invalidResult("context_unverified", validated.binding, [
+          TRACE_RPC_SCOPES.chain,
+        ]);
       }
     } catch (error) {
       return this.contextUnavailableResult(
         classifyCapabilityFailure(error),
         validated.binding,
+        [TRACE_RPC_SCOPES.chain],
       );
     }
 
@@ -465,11 +469,17 @@ export class TraceRpcEvidenceSource<
   private invalidResult(
     reason: TraceCapabilityFailureReason,
     binding?: TraceRpcBinding,
+    checkedScope: readonly string[] = [],
   ): TraceRpcEvidenceResult {
     const failure: TraceCapabilityFailure = {
       status: "unknown",
       reason,
     };
+    const unknownScope = [
+      ...(checkedScope.length > 0 ? [TRACE_RPC_SCOPES.pinnedBlock] : []),
+      TRACE_RPC_SCOPES.callTracer,
+      TRACE_RPC_SCOPES.prestateTracerDiff,
+    ];
 
     return Object.freeze({
       status: "invalid",
@@ -480,11 +490,8 @@ export class TraceRpcEvidenceSource<
         callTracer: failure,
         prestateTracerDiff: failure,
       },
-      checkedScope: Object.freeze([]),
-      unknownScope: Object.freeze([
-        TRACE_RPC_SCOPES.callTracer,
-        TRACE_RPC_SCOPES.prestateTracerDiff,
-      ]),
+      checkedScope: Object.freeze([...checkedScope]),
+      unknownScope: Object.freeze(unknownScope),
       unavailableScope: Object.freeze([]),
     });
   }
@@ -492,21 +499,32 @@ export class TraceRpcEvidenceSource<
   private contextUnavailableResult(
     failure: TraceCapabilityFailure,
     binding: TraceRpcBinding,
+    checkedScope: readonly string[] = [],
   ): TraceRpcEvidenceResult {
+    const failedContextScope =
+      checkedScope.length > 0 ? [TRACE_RPC_SCOPES.pinnedBlock] : [];
     const unknown =
       failure.status === "unknown"
-        ? [TRACE_RPC_SCOPES.callTracer, TRACE_RPC_SCOPES.prestateTracerDiff]
+        ? [
+            ...failedContextScope,
+            TRACE_RPC_SCOPES.callTracer,
+            TRACE_RPC_SCOPES.prestateTracerDiff,
+          ]
         : [];
 
     const unavailable =
       failure.status === "unavailable"
-        ? [TRACE_RPC_SCOPES.callTracer, TRACE_RPC_SCOPES.prestateTracerDiff]
+        ? [
+            ...failedContextScope,
+            TRACE_RPC_SCOPES.callTracer,
+            TRACE_RPC_SCOPES.prestateTracerDiff,
+          ]
         : [];
 
     // Both capabilities inherit the same context failure, so the top-level
     // status is derived from that same evidence: an UNKNOWN capability must
     // never be reported as UNAVAILABLE.
-    const unknownCount = failure.status === "unknown" ? 2 : 0;
+    const unknownCount = unknown.length;
 
     return Object.freeze({
       status: observabilityStatus(0, unknownCount),
@@ -517,7 +535,7 @@ export class TraceRpcEvidenceSource<
         callTracer: failure,
         prestateTracerDiff: failure,
       },
-      checkedScope: Object.freeze([]),
+      checkedScope: Object.freeze([...checkedScope]),
       unknownScope: Object.freeze(unknown),
       unavailableScope: Object.freeze(unavailable),
     });
@@ -816,19 +834,6 @@ function normalizeAddressKeys(value: Record<string, unknown>): string[] {
   }
 
   return addresses.map((address) => address.toLowerCase());
-}
-
-function fingerprintPreparedTransaction(
-  transaction: ArbitrumTransaction,
-): string {
-  return `sha256:${createHash("sha256")
-    .update(
-      JSON.stringify({
-        kind: "unsigned",
-        payload: transaction,
-      }),
-    )
-    .digest("hex")}`;
 }
 
 function sha256Json(value: unknown): string {
