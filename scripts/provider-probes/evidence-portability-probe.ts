@@ -42,6 +42,11 @@ import {
  *     scripts/provider-probes/evidence-portability-probe.ts
  *
  * The endpoint is never printed and never persisted.
+ *
+ * The generated capture is written as `JSON.stringify(evidence, null, 2)`, so
+ * run `pnpm exec biome format --write <capture>` before committing it: CI lints
+ * the fixture tree. That formatting pass is byte-insignificant — it must not
+ * change any parsed value.
  */
 
 const CANONICAL_CAPTURE =
