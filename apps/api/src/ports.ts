@@ -16,6 +16,8 @@ export type {
 export type AgentFlowCheckInput = {
   runId: string;
   intent: NormalizedSwapIntent;
+  /** Explicitly identifies Action-Gate verification children to Backend. */
+  executionPurpose?: "primary" | "verification_child";
   expectationBaseline?: ExpectationBaseline;
   tokenInDecimals: number;
   tokenOutDecimals: number;

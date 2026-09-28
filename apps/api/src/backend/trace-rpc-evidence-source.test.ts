@@ -5,6 +5,7 @@ import {
   type NativeRpcIntent,
   type NativeRpcPreparedExecution,
 } from "./native-rpc-evidence.js";
+import { fingerprintPreparedTransaction } from "./prepared-transaction-fingerprint.js";
 import {
   createTraceRpcEvidenceSource,
   type TraceCapabilityFailureReason,
@@ -161,8 +162,8 @@ describe("TraceRpcEvidenceSource", () => {
       observedAt: "2026-09-27T06:10:00.000Z",
     });
 
-    expect(result.binding?.transactionFingerprint).toMatch(
-      /^sha256:[0-9a-f]{64}$/,
+    expect(result.binding?.transactionFingerprint).toBe(
+      fingerprintPreparedTransaction(transaction),
     );
 
     expect(result.binding?.blockContext).toEqual({
@@ -332,6 +333,12 @@ describe("TraceRpcEvidenceSource", () => {
       status: "unknown",
       reason: "context_unverified",
     });
+    expect(result.checkedScope).toEqual(["trace-rpc.chain"]);
+    expect(result.unknownScope).toEqual([
+      "trace-rpc.pinned-block",
+      "trace-rpc.callTracer",
+      "trace-rpc.prestateTracer.diffMode",
+    ]);
 
     expect(client.request.mock.calls.map((call) => call[0])).toEqual([
       "eth_chainId",
@@ -673,13 +680,22 @@ describe("TraceRpcEvidenceSource status semantics", () => {
             status: failure.status,
             reason: failure.reason,
           });
+          const failedScope = [
+            ...(probe === "eth_getBlockByNumber"
+              ? ["trace-rpc.pinned-block"]
+              : []),
+            "trace-rpc.callTracer",
+            "trace-rpc.prestateTracer.diffMode",
+          ];
           expect(result.unknownScope).toEqual(
-            failure.status === "unknown" ? [...TRACE_SCOPES] : [],
+            failure.status === "unknown" ? failedScope : [],
           );
           expect(result.unavailableScope).toEqual(
-            failure.status === "unavailable" ? [...TRACE_SCOPES] : [],
+            failure.status === "unavailable" ? failedScope : [],
           );
-          expect(result.checkedScope).toEqual([]);
+          expect(result.checkedScope).toEqual(
+            probe === "eth_getBlockByNumber" ? ["trace-rpc.chain"] : [],
+          );
           expect(client.request.mock.calls.map((call) => call[0])).toEqual(
             probe === "eth_chainId"
               ? ["eth_chainId"]
@@ -714,7 +730,12 @@ describe("TraceRpcEvidenceSource status semantics", () => {
       status: "unknown",
       reason: "malformed_response",
     });
-    expect(result.unknownScope).toEqual([...TRACE_SCOPES]);
+    expect(result.checkedScope).toEqual(["trace-rpc.chain"]);
+    expect(result.unknownScope).toEqual([
+      "trace-rpc.pinned-block",
+      "trace-rpc.callTracer",
+      "trace-rpc.prestateTracer.diffMode",
+    ]);
     expect(result.unavailableScope).toEqual([]);
     expect(client.request.mock.calls.map((call) => call[0])).toEqual([
       "eth_chainId",

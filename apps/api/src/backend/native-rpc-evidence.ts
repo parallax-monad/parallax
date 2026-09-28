@@ -16,6 +16,7 @@ import {
 } from "./arbitrum-chain-adapter.js";
 import { inspectCamelotV3Transaction } from "./camelot-v3-binding.js";
 import type { BlockContext, GasEstimate } from "./chain-adapter.js";
+import { fingerprintPreparedTransaction } from "./prepared-transaction-fingerprint.js";
 import type { ProviderEvaluationResult } from "./provider-adapter.js";
 import type {
   ProvisionalCandidateFieldInput,
@@ -389,7 +390,7 @@ export function projectNativeRpcBasicSimulation(
     ...(blockHash === undefined ? {} : { blockHash }),
     observedAt: input.providerResult.provider.observedAt,
     validityAtExecution,
-    preparedTransactionFingerprint: fingerprint(transaction),
+    preparedTransactionFingerprint: fingerprintPreparedTransaction(transaction),
     ...(bindingInspection.ok
       ? { transactionBinding: bindingInspection.binding }
       : {}),

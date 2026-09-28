@@ -80,6 +80,8 @@ export type BackendPipelineProviderExecution<
   readonly finality: FinalityStatus;
   readonly providerResult: ProviderEvaluationResult;
   readonly providerEvidence?: unknown;
+  /** Backend-local supplementary Evidence kept outside Core/Decision input. */
+  readonly supplementaryEvidence?: unknown;
 };
 
 /**
@@ -122,8 +124,15 @@ export type BackendPipelineInput<RawInput> = {
   readonly chainId: number;
   readonly protocol: string;
   readonly capability?: string;
+  /** Action-Gate verification children do not need supplementary Trace. */
+  readonly executionPurpose?: AgentFlowCheckInput["executionPurpose"];
   /** Narrow, application-owned context delivered only to Decision. */
   readonly decisionContext?: unknown;
+};
+
+type ProviderExecutionOptions = {
+  /** Remediation child runs re-use the primary Provider path only. */
+  readonly includeSupplementaryEvidence?: boolean;
 };
 
 export type BackendPipelineExecution<
@@ -147,6 +156,8 @@ export type BackendPipelineExecution<
   readonly providerResult: ProviderEvaluationResult;
   /** Optional provisional evidence projection for Backend/API composition. */
   readonly providerEvidence?: unknown;
+  /** Backend-local supplementary Evidence for the public projection seam. */
+  readonly supplementaryEvidence?: unknown;
   readonly coreOutput: CoreOutput;
   readonly decisionOutput: DecisionOutput;
   readonly receiptLifecycle: ReceiptLifecycleHandle;
@@ -214,6 +225,18 @@ export class BackendPipeline<
   ProviderIntent = NormalizedIntent,
   ProviderInput = BackendPipelinePreparedExecution<NormalizedIntent>,
 > {
+  /** Public projection hook used by `createBackendCheckFlow`. */
+  public readonly supplementaryEvidenceProjector: BackendCompositionRuntime<
+    RawInput,
+    NormalizedIntent,
+    CoreOutput,
+    DecisionInput,
+    DecisionOutput,
+    Chain,
+    Protocol,
+    ProviderIntent
+  >["supplementaryEvidenceProjector"];
+
   private readonly buildDecisionInput: NonNullable<
     BackendPipelineDependencies<
       RawInput,
@@ -254,6 +277,8 @@ export class BackendPipeline<
       ProviderInput
     >,
   ) {
+    this.supplementaryEvidenceProjector =
+      dependencies.runtime.supplementaryEvidenceProjector;
     this.buildDecisionInput =
       dependencies.buildDecisionInput ??
       ((input) => input.coreOutput as unknown as DecisionInput);
@@ -296,7 +321,10 @@ export class BackendPipeline<
       unknown
     >
   > {
-    const prepared = await this.prepareProviderExecution(normalized, input);
+    const prepared = await this.prepareProviderExecution(normalized, input, {
+      includeSupplementaryEvidence:
+        input.executionPurpose !== "verification_child",
+    });
 
     const context: BackendPipelineContext<NormalizedIntent, Chain, Protocol> = {
       runId: input.runId,
@@ -313,13 +341,17 @@ export class BackendPipeline<
         ? {}
         : { providerEvidence: prepared.providerEvidence }),
       executeProviderPath: async (candidate) =>
-        this.prepareProviderExecution(candidate.intent, {
-          rawInput: candidate.intent as unknown as RawInput,
-          runId: candidate.runId,
-          chainId: input.chainId,
-          protocol: input.protocol,
-          capability: input.capability,
-        }),
+        this.prepareProviderExecution(
+          candidate.intent,
+          {
+            rawInput: candidate.intent as unknown as RawInput,
+            runId: candidate.runId,
+            chainId: input.chainId,
+            protocol: input.protocol,
+            capability: input.capability,
+          },
+          { includeSupplementaryEvidence: false },
+        ),
     };
     const coreOutput = await this.dependencies.runtime.evaluate(
       normalized,
@@ -363,6 +395,9 @@ export class BackendPipeline<
       ...(prepared.providerEvidence === undefined
         ? {}
         : { providerEvidence: prepared.providerEvidence }),
+      ...(prepared.supplementaryEvidence === undefined
+        ? {}
+        : { supplementaryEvidence: prepared.supplementaryEvidence }),
       coreOutput,
       decisionOutput,
       receiptLifecycle,
@@ -372,6 +407,7 @@ export class BackendPipeline<
   private async prepareProviderExecution(
     normalized: NormalizedIntent,
     input: BackendPipelineInput<RawInput>,
+    options: ProviderExecutionOptions = {},
   ): Promise<
     BackendPipelineProviderExecution<NormalizedIntent, Chain, Protocol>
   > {
@@ -435,6 +471,25 @@ export class BackendPipeline<
             providerResult,
             mode: providerResult.mode,
           });
+    let supplementaryEvidence: unknown;
+    if (
+      options.includeSupplementaryEvidence !== false &&
+      this.dependencies.runtime.supplementaryEvidenceEvaluator !== undefined
+    ) {
+      try {
+        supplementaryEvidence =
+          await this.dependencies.runtime.supplementaryEvidenceEvaluator({
+            normalizedIntent: normalized,
+            preparedExecution,
+            providerResult,
+            ...(providerEvidence === undefined ? {} : { providerEvidence }),
+          });
+      } catch {
+        // Supplementary Evidence is non-critical after the primary Provider
+        // has completed. A rejected source must not discard Native facts.
+        supplementaryEvidence = undefined;
+      }
+    }
     if (providerResult.status !== "success" && providerEvidence === undefined) {
       throw providerResultError(providerResult);
     }
@@ -451,6 +506,7 @@ export class BackendPipeline<
       finality,
       providerResult,
       ...(providerEvidence === undefined ? {} : { providerEvidence }),
+      ...(supplementaryEvidence === undefined ? {} : { supplementaryEvidence }),
     };
   }
 }
@@ -500,6 +556,7 @@ export function createBackendCheckFlow<
           chainId: input.intent.chainId,
           protocol: input.intent.protocol,
           capability: options.capability,
+          executionPurpose: input.executionPurpose,
           ...(input.expectationBaseline === undefined
             ? {}
             : {
@@ -509,10 +566,24 @@ export function createBackendCheckFlow<
               }),
         },
       );
-      return withProviderEvidence(
+      const projected = withProviderEvidence(
         await options.project(execution),
         execution.providerEvidence,
       );
+      if (
+        execution.supplementaryEvidence === undefined ||
+        options.pipeline.supplementaryEvidenceProjector === undefined
+      ) {
+        return projected;
+      }
+      try {
+        return await options.pipeline.supplementaryEvidenceProjector({
+          projected,
+          supplementaryEvidence: execution.supplementaryEvidence,
+        });
+      } catch {
+        return projected;
+      }
     },
   };
 }

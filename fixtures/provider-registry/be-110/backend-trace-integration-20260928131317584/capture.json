@@ -1,0 +1,108 @@
+{
+  "schemaVersion": "be-110-backend-trace-integration-v2",
+  "status": "PASS",
+  "real": true,
+  "readOnly": true,
+  "capturedAt": "2026-09-28T13:13:17.584Z",
+  "repositoryHeadAtCapture": "93a1084c0cfc5a741e8c6d4251290ef86ed6f605",
+  "repositoryTreeAtCapture": "1734971a9db312df029d781101efe63618797ac8",
+  "worktreeCleanAtCapture": true,
+  "baseReference": "origin/main",
+  "originMainAtCapture": "b6d48c5f2223d1888231a5eb7810ec2a04006111",
+  "endpointClass": "environment-supplied",
+  "source": {
+    "runner": "scripts/backend-gates/backend-trace-integration-live.ts",
+    "runnerSha256": "114673cb2163d9b8172c2942fbc958cb31758f6aeaedc4450a805993a5b8611e"
+  },
+  "api": {
+    "checkPath": "POST /api/check",
+    "historicalPath": "GET /api/runs/:runId",
+    "httpStatus": 200,
+    "historicalHttpStatus": 200,
+    "runId": "600f4823-89f4-46d2-b5a3-2c3e4116d21b",
+    "resultStatus": "completed",
+    "persistedResultStatus": "completed",
+    "responseResultSha256": "f5c071cc4554b69faf22b652d21e0154e7d59e5370d26d73513d99e1202e93d0",
+    "persistedResultSha256": "f5c071cc4554b69faf22b652d21e0154e7d59e5370d26d73513d99e1202e93d0",
+    "nativePrimary": {
+      "provider": {
+        "providerId": "native-rpc-arbitrum",
+        "integrationStatus": "OK"
+      },
+      "executionStatus": "SUCCESS",
+      "basicSimulation": {
+        "callStatus": "SUCCEEDED",
+        "gasEstimateStatus": "AVAILABLE",
+        "blockNumber": "313617711",
+        "blockHash": "0xc06fa92eb95517b37a72f454191761f0608837c35ab20c0ec9ea85a2a897037c",
+        "validityAtExecution": "VALID",
+        "preparedTransactionFingerprint": "sha256:59dda881186774a765b06da13e9efdb6f984076c04e36679836aeff047172439"
+      }
+    },
+    "traceSupplementary": {
+      "status": "success",
+      "source": {
+        "sourceId": "trace-rpc",
+        "sourceVersion": "trace-rpc-evidence-source-v1",
+        "mode": "LIVE",
+        "observedAt": "2026-09-28T13:13:17.555Z"
+      },
+      "freshness": {
+        "status": "not_checked"
+      },
+      "binding": {
+        "runId": "600f4823-89f4-46d2-b5a3-2c3e4116d21b",
+        "chainId": 421614,
+        "protocol": "camelot-v3",
+        "transactionFingerprint": "sha256:6f30ef018b7e64854edf187251a227e3f8102487f6e82b3b64bce7c64be74b01",
+        "blockContext": {
+          "blockNumber": "313617711",
+          "blockHash": "0xc06fa92eb95517b37a72f454191761f0608837c35ab20c0ec9ea85a2a897037c",
+          "observedAt": "2026-09-28T13:13:13.765Z"
+        }
+      },
+      "capabilities": {
+        "callTracer": {
+          "status": "observed",
+          "executionStatus": "succeeded",
+          "gasUsed": "0x3c030",
+          "resultFingerprint": "sha256:d38ac571a8da1140e1b1a920910fa57a921b6db7b9710cec4435f2c02493641b"
+        },
+        "prestateTracerDiff": {
+          "status": "observed",
+          "diffMode": true,
+          "preAddressCount": 7,
+          "postAddressCount": 7,
+          "changedAddresses": [
+            "0x15bf3ea44aad6e17400bc31746e75167d56ba009",
+            "0x3965361ea4f9000ae3cf995f553115b2832d0e2d",
+            "0x980b62da83eff3d4576c647993b0c1d7faf17c73",
+            "0xa4b00000000000000000000000000000000000f6",
+            "0xa4b05fffffffffffffffffffffffffffffffffff",
+            "0xb893e3334d4bd6c5ba8277fd559e99ed683a9fc7",
+            "0xeb7c5322f0997ee70f4bbd3ae7e428072c9af396"
+          ],
+          "resultFingerprint": "sha256:5a5afba1e359f89fab2d63a8e0f0b7528fbf3129de729732437cd239e1a1e19a"
+        }
+      },
+      "checkedScope": [
+        "trace-rpc.chain",
+        "trace-rpc.pinned-block",
+        "trace-rpc.callTracer",
+        "trace-rpc.prestateTracer.diffMode"
+      ],
+      "unknownScope": [],
+      "unavailableScope": []
+    }
+  },
+  "assertions": {
+    "nativePrimarySuccessful": true,
+    "exactPreparedTransactionMatch": true,
+    "traceScopeComplete": true,
+    "traceCapabilitiesObserved": true,
+    "publicResponseRedacted": true,
+    "persistedRoundTrip": true,
+    "historicalReadDidNotRequeryNative": true,
+    "historicalReadDidNotRequeryTrace": true
+  }
+}

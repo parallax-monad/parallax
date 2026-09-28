@@ -30,6 +30,145 @@ const normalizedIntent = {
 } as NormalizedSwapIntent;
 
 describe("BackendPipeline", () => {
+  it("evaluates supplementary evidence from the exact prepared execution without passing it to Risk seams", async () => {
+    const fixture = fakeBackendFixture();
+    const chain = createFakeChainAdapter(fixture.chain);
+    const protocol = createFakeProtocolAdapter(fixture.protocol);
+    const provider = createFakeProviderAdapterHarness({
+      ...fixture.provider,
+      supports: (query) =>
+        query.chainId === fixture.chain.chainId &&
+        query.protocol === fixture.protocol.id,
+    });
+    const supplementaryEvidenceEvaluator = vi.fn(
+      async (input: {
+        readonly preparedExecution: unknown;
+        readonly providerResult: unknown;
+      }) => ({
+        source: "supplementary-fixture",
+        runId: (input.preparedExecution as { readonly runId: string }).runId,
+        primaryStatus: (input.providerResult as { readonly status: string })
+          .status,
+      }),
+    );
+    const core = vi.fn(
+      async (_input: NormalizedSwapIntent, context?: unknown) => context,
+    );
+    const decision = vi.fn(async (input: unknown) => input);
+    const runtime = createBackendComposition({
+      chainRegistry: new ChainRegistry([chain]),
+      protocolRegistry: new ProtocolRegistry([
+        {
+          chainId: fixture.chain.chainId,
+          protocol: fixture.protocol.id,
+          adapter: protocol,
+        },
+      ]),
+      providerRegistry: new ProviderRegistry([provider.adapter]),
+      normalization: { normalize: () => normalizedIntent },
+      core: { evaluate: core },
+      decision: { decide: decision },
+      runStore: new InMemoryRunStore(),
+      supplementaryEvidenceEvaluator,
+    });
+    const pipeline = new BackendPipeline({ runtime });
+
+    const result = await pipeline.execute({
+      rawInput: {},
+      runId: "supplementary-run",
+      chainId: fixture.chain.chainId,
+      protocol: fixture.protocol.id,
+    });
+
+    expect(supplementaryEvidenceEvaluator).toHaveBeenCalledWith(
+      expect.objectContaining({
+        preparedExecution: expect.objectContaining({
+          runId: "supplementary-run",
+          chainId: fixture.chain.chainId,
+          protocol: fixture.protocol.id,
+          quote: fixture.protocol.quote,
+          unsignedTransaction: {
+            kind: "unsigned",
+            payload: fixture.protocol.transaction,
+          },
+          blockContext: expect.objectContaining({
+            blockNumber: fixture.chain.blockNumber,
+          }),
+        }),
+        providerResult: expect.objectContaining({ status: "success" }),
+      }),
+    );
+    expect(result.supplementaryEvidence).toEqual({
+      source: "supplementary-fixture",
+      runId: "supplementary-run",
+      primaryStatus: "success",
+    });
+    expect(core).toHaveBeenCalledWith(
+      normalizedIntent,
+      expect.not.objectContaining({ supplementaryEvidence: expect.anything() }),
+    );
+    expect(decision).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.not.objectContaining({ supplementaryEvidence: expect.anything() }),
+    );
+
+    const pipelineContext = core.mock.calls[0]?.[1] as {
+      readonly executeProviderPath?: (input: {
+        readonly runId: string;
+        readonly intent: NormalizedSwapIntent;
+      }) => Promise<{ readonly supplementaryEvidence?: unknown }>;
+    };
+    expect(pipelineContext.executeProviderPath).toBeTypeOf("function");
+    const childExecution = await pipelineContext.executeProviderPath?.({
+      runId: "supplementary-child",
+      intent: normalizedIntent,
+    });
+    expect(childExecution?.supplementaryEvidence).toBeUndefined();
+    expect(supplementaryEvidenceEvaluator).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the primary execution when supplementary evaluation rejects", async () => {
+    const fixture = fakeBackendFixture();
+    const chain = createFakeChainAdapter(fixture.chain);
+    const protocol = createFakeProtocolAdapter(fixture.protocol);
+    const provider = createFakeProviderAdapterHarness({
+      ...fixture.provider,
+      supports: (query) =>
+        query.chainId === fixture.chain.chainId &&
+        query.protocol === fixture.protocol.id,
+    });
+    const supplementaryEvidenceEvaluator = vi.fn(async () => {
+      throw new Error("supplementary source failed");
+    });
+    const runtime = createBackendComposition({
+      chainRegistry: new ChainRegistry([chain]),
+      protocolRegistry: new ProtocolRegistry([
+        {
+          chainId: fixture.chain.chainId,
+          protocol: fixture.protocol.id,
+          adapter: protocol,
+        },
+      ]),
+      providerRegistry: new ProviderRegistry([provider.adapter]),
+      normalization: { normalize: () => normalizedIntent },
+      core: { evaluate: async () => undefined },
+      decision: { decide: async () => undefined },
+      runStore: new InMemoryRunStore(),
+      supplementaryEvidenceEvaluator,
+    });
+
+    const result = await new BackendPipeline({ runtime }).execute({
+      rawInput: {},
+      runId: "supplementary-rejection",
+      chainId: fixture.chain.chainId,
+      protocol: fixture.protocol.id,
+    });
+
+    expect(result.providerResult.status).toBe("success");
+    expect(result.supplementaryEvidence).toBeUndefined();
+    expect(supplementaryEvidenceEvaluator).toHaveBeenCalledTimes(1);
+  });
+
   it("executes the injected Chain, Protocol, Provider, Core, and Decision seams", async () => {
     const fixture = fakeBackendFixture();
     const chain = createFakeChainAdapter(fixture.chain);

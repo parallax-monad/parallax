@@ -35,6 +35,10 @@ import {
   createBackendCheckFlow,
   createBackendQuoteFlow,
 } from "../backend/pipeline.js";
+import {
+  createTraceRpcEvidenceSource,
+  type TraceRpcEvidenceSource,
+} from "../backend/trace-rpc-evidence-source.js";
 import { createCheckApp, createQuoteApp } from "../http.js";
 import {
   type AgentFlowPort,
@@ -348,6 +352,8 @@ export type BootstrapBackendAppOptions = {
   composition?: BackendCompositionRuntime;
   /** Optional injected Arbitrum composition for deterministic integration tests. */
   arbitrumComposition?: ArbitrumProductionComposition;
+  /** Optional qualified Trace source for the Arbitrum Backend route. */
+  traceRpcEvidenceSource?: TraceRpcEvidenceSource;
   corsOrigin?: string;
   agentFlow?: AgentFlowPort;
   liveRunner?: KuruLiveRunner;
@@ -365,12 +371,41 @@ export type BootstrapBackendAppOptions = {
 export function bootstrapBackendApp(
   options: BootstrapBackendAppOptions,
 ): BackendApp {
+  if (
+    options.traceRpcEvidenceSource !== undefined &&
+    (options.composition !== undefined ||
+      options.arbitrumComposition !== undefined)
+  ) {
+    throw new TypeError(
+      "traceRpcEvidenceSource must be configured on the supplied composition",
+    );
+  }
   const environment = options.environment ?? process.env;
   const serverEnvironment = serverEnvironmentSchema.parse(environment);
   const runtime = bootstrapBackendRuntime({
     environment,
     tokenRegistry: options.tokenRegistry,
   });
+  if (
+    options.traceRpcEvidenceSource !== undefined &&
+    options.composition === undefined &&
+    options.arbitrumComposition === undefined &&
+    runtime.config.arbitrum?.rpcUrl === undefined
+  ) {
+    throw new TypeError(
+      "traceRpcEvidenceSource requires an Arbitrum RPC URL or supplied composition",
+    );
+  }
+  const configuredTraceRpcEvidenceSource =
+    options.traceRpcEvidenceSource ??
+    (options.composition === undefined &&
+    options.arbitrumComposition === undefined &&
+    runtime.config.arbitrum?.rpcUrl !== undefined
+      ? createTraceRpcEvidenceSource({
+          rpcUrl: runtime.config.arbitrum.rpcUrl,
+          mode: "LIVE",
+        })
+      : undefined);
   if (runtime.config.moss.runtimePath !== undefined) {
     validateMossRuntimePathSync(runtime.config.moss.runtimePath, {
       runtimeVersion: runtime.config.moss.runtimeVersion,
@@ -414,6 +449,9 @@ export function bootstrapBackendApp(
       runtime,
       runStore: store,
       providerEnvironment: "production",
+      ...(configuredTraceRpcEvidenceSource === undefined
+        ? {}
+        : { traceRpcEvidenceSource: configuredTraceRpcEvidenceSource }),
     });
   }
   if (

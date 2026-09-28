@@ -1,21 +1,24 @@
 # Project State
 
-Last checkpoint: 2026-09-27
+Last checkpoint: 2026-09-28
 
 ## Main checkpoint
 
-`checkpoint_head = 542d5c685d259b5ee6d5aa55098bb2dad900f230`
+`checkpoint_head = b6d48c5f2223d1888231a5eb7810ec2a04006111`
 
 This is the verified `main` tip at this checkpoint. Future takeovers must fresh-fetch and
 verify that this checkpoint is an ancestor of current `main`; equality is not required.
 
 At checkpoint time:
 
-- current `main` includes merged PR #113 at `542d5c685d259b5ee6d5aa55098bb2dad900f230`;
-- PR #111 remains an unmerged documentation branch based on `c4eb2f23b1c41cc4974fdec4d68491cc965e101a`;
-- PR #112 remains the open Trace Provider implementation path;
+- current `main` includes merged PR #112 at `b6d48c5f2223d1888231a5eb7810ec2a04006111`;
+- #106 is CLOSED / COMPLETED by PR #112, with the accepted qualification capture retained
+  under `fixtures/provider-registry/be-106/`;
 - #101 is CLOSED / COMPLETED by PR #113; #100 and #102 remain open for their explicit
   application-entrypoint and historical-replay acceptance evidence;
+- PR-FS-D / #110 is implemented through exact-head commit
+  `93a1084c0cfc5a741e8c6d4251290ef86ed6f605` on `feat/backend-fs-d-trace-integration`; it is
+  not yet merged or accepted;
 - live Product execution scope is represented by Issues #73, #96, and #100–#110.
 
 ## Final Sprint v3 control-plane transition
@@ -169,10 +172,17 @@ Trace RPC is supplementary deeper Evidence only:
 - remain supplementary to Native RPC;
 - introduce no provider ranking, voting, scoring, consensus, or automatic fallback.
 
+#106 is CLOSED / COMPLETED by merged PR #112. Its accepted qualification capture is:
+
+`fixtures/provider-registry/be-106/trace-rpc-source-qualification-2026-09-28T10-06-13-121Z/capture.json`
+
 #110 is the Backend consumer, owned by `@brightheartma`, covering composition, exact context
-binding, persistence, public projection, and historical consistency. Preparation may proceed
-after the minimum #106 interface is agreed; real integration acceptance requires the qualified
-#106 source. #110 does not block Product P0.
+binding, persistence, public projection, and historical consistency. The current PR-FS-D
+implementation keeps Trace outside `ProviderRegistry`, Core, Decision, and Risk; Native RPC
+remains primary. A read-only live Backend gate now passes against the environment-supplied
+Arbitrum endpoint, with sanitized capture retained at
+`fixtures/provider-registry/be-110/backend-trace-integration-20260928133255854/capture.json`.
+It is not yet a merged Evidence Federation acceptance, and #110 does not block Product P0.
 
 #91 depends on #106 and the integrated same-transaction execution path.
 
@@ -232,9 +242,6 @@ For `@jzhao0`:
 
 ```text
 NOW:
-#106 TraceRpcEvidenceSource
-
-AFTER #106 + Backend integration:
 #91 Native RPC + Trace supplementary portability proof
 
 AFTER #73 Product P0:
@@ -261,6 +268,8 @@ Still valid:
 - #99 — control-plane reconciliation after #98.
 - #113 — basicSimulation, exact binding, and historical Run implementation; merged at the
   current `main` checkpoint.
+- #112 — qualified supplementary `TraceRpcEvidenceSource`; merged at the current `main`
+  checkpoint.
 
 Tenderly #72 remains CLOSED with implementation retained and external entitlement blocking
 real credentialed qualification. It is removed from the Final Sprint critical path.
@@ -269,7 +278,7 @@ real credentialed qualification. It is removed from the Final Sprint critical pa
 
 - Product P0: IN PROGRESS (#73, #100, #102; #101 is complete).
 - Asset Coverage: NOT COMPLETE.
-- Evidence Federation: NOT COMPLETE.
+- Evidence Federation: IN PROGRESS / NOT ACCEPTED (#110 Backend integration is being built).
 - Verified Remediation: NOT COMPLETE.
 - Minimal SDK: NOT DONE / SHOULD.
 - Explorer: NOT STARTED.
@@ -285,8 +294,9 @@ Product P0 work proceeds in parallel:
 
 After Product P0, the Asset Coverage lane is #103 → #104 → #105. In parallel, the Evidence
 Federation lane is Jie / #106 → Clare / #110 → #91 → Antony / #92. Preparation for #110 may
-proceed once the minimum #106 interface is agreed, but real acceptance requires qualified #106
-Evidence. Then #107 is the separate Verified Remediation gate, followed by #94 as a SHOULD.
+proceed against the now qualified and closed #106 source; #110 still requires exact-head review
+and merge before #91 can consume the integrated path. Then #107 is the separate Verified
+Remediation gate, followed by #94 as a SHOULD.
 Optional #90/#108/#109 work starts only after the critical gates are stable.
 
 ## Retained accepted-evidence details
@@ -340,6 +350,43 @@ It did **not** establish:
 
 It remains unsigned/read-only and is the evidence baseline feeding #106.
 
+## 2026-09-28 — PR-FS-D exact-head P1 remediation
+
+The live Backend Trace gate now binds its capture to one clean repository snapshot: it records
+HEAD/tree before execution and refuses to write qualification evidence if clean status or
+HEAD/tree changes before capture. The fix is committed at
+`93a1084c0cfc5a741e8c6d4251290ef86ed6f605`.
+
+The exact-head read-only live qualification passed at that commit and produced the v2 capture:
+
+`fixtures/provider-registry/be-110/backend-trace-integration-20260928131317584/capture.json`
+
+The capture records `origin/main = b6d48c5f2223d1888231a5eb7810ec2a04006111`, clean worktree,
+exact prepared-transaction match, complete Trace scope, public redaction, persisted round-trip,
+and historical no-requery. The earlier v1 captures are stale and retained outside the repository
+for recovery only. This evidence does not by itself constitute merge or Product/Evidence
+Federation acceptance.
+
+## 2026-09-28 — PR-FS-D fingerprint and context-scope remediation
+
+The follow-up review found that Native and Trace used different prepared-transaction fingerprint
+canonicalizations, and that Trace failure paths dropped the already observed chain scope when the
+pinned-block request or validation failed. The implementation now uses one shared transaction
+fingerprint helper, asserts Native/Trace fingerprint equality in the live gate, and preserves
+`trace-rpc.chain` while marking the pinned block and dependent capabilities unknown or unavailable.
+Public projection validation and regression coverage were updated for the stage-aware scope shape.
+
+The fix is committed at `cd1793267d4354c21785b878e1f17870e2411418`. The exact-head read-only live
+gate passed from that commit and produced the current capture:
+
+`fixtures/provider-registry/be-110/backend-trace-integration-20260928133255854/capture.json`
+
+The capture records `origin/main = f8cc7beb4f899e0b8283e1e30a67814a4989c73e`, Native primary
+success, equal Native/Trace transaction fingerprints, exact prepared-transaction matching,
+complete Trace scope, public redaction, persisted round-trip, and historical no-requery. This
+closes the current implementation review findings without changing Product/Risk/Contract
+semantics or the unsigned/read-only boundary.
+
 ## Recorded P2 carried forward
 
 The following previously recorded P2 items remain open unless a later merged change explicitly
@@ -351,12 +398,13 @@ closes them:
 
 ## Next executable action
 
-Provider-side next executable task:
+Current next executable task:
 
 ```text
-#106 — Productionize TraceRpcEvidenceSource
+#110 — Backend supplementary Trace integration (PR-FS-D)
 ```
 
-Start with the smallest reusable source/interface slice derived from accepted #98 evidence.
-Do not start #91 before #106 exists, and do not start #103 before Product P0 #73 reaches its
+The implementation is currently on `feat/backend-fs-d-trace-integration`. After the working
+tree is committed and reviewed at its exact head, #91 can consume the integrated same-
+transaction Native + Trace path. Do not start #103 before Product P0 #73 reaches its
 prerequisite gate.

@@ -28,11 +28,16 @@ import {
 } from "./backend/application-routing.js";
 import type { BackendCompositionRuntime } from "./backend/composition.js";
 import { isBackendControlError } from "./backend/control-boundary.js";
+import { projectTraceRpcEvidence } from "./backend/trace-rpc-public.js";
 import {
   coerceIntentNormalizationResult,
   normalizeCheckSwapRequest,
 } from "./normalization.js";
-import { type AgentFlowPort, isUnsupportedAgentFlowError } from "./ports.js";
+import {
+  type AgentFlowCheckInput,
+  type AgentFlowPort,
+  isUnsupportedAgentFlowError,
+} from "./ports.js";
 import type { BackendRuntime } from "./runtime-config.js";
 import type { CheckRunFailureCode, CheckRunRecord, RunStore } from "./store.js";
 import { tokenDecimals } from "./token-decimals.js";
@@ -311,6 +316,8 @@ export class CheckApplicationService {
       )?.agentFlow ?? this.dependencies.agentFlow,
       childRunId,
       adjustment.nextIntent,
+      undefined,
+      "verification_child",
     );
     if (!invoked.ok) {
       const persisted = await this.persistVerificationChildFailure(
@@ -418,11 +425,13 @@ export class CheckApplicationService {
     expectationBaseline?: Parameters<
       AgentFlowPort["check"]
     >[0]["expectationBaseline"],
+    executionPurpose: AgentFlowCheckInput["executionPurpose"] = "primary",
   ): Promise<{ ok: true; candidate: unknown } | { ok: false; error: unknown }> {
     try {
       const candidate = await agentFlow.check({
         runId,
         intent,
+        executionPurpose,
         ...(expectationBaseline === undefined ? {} : { expectationBaseline }),
         tokenInDecimals: tokenDecimals(
           this.dependencies.runtime,
@@ -638,9 +647,86 @@ function publicRunResult(result: RunResult): RunResult {
     ...result,
     providerEvidence: {
       ...result.providerEvidence,
-      providerData: {},
+      providerData: publicProviderData(
+        result.providerEvidence.providerData,
+        result,
+      ),
     },
   });
+}
+
+/**
+ * The Backend Trace integration is the first reviewed public projection of a
+ * supplementary source. Preserve only its normalized allowlist here; all
+ * other Provider-owned metadata remains private, including any raw RPC shape
+ * accidentally placed beside or inside the source result.
+ */
+function publicProviderData(
+  value: Record<string, unknown>,
+  result: RunResult,
+): Record<string, unknown> {
+  const traceRpc = publicTraceRpcEvidence(value.traceRpc, result);
+  return traceRpc === undefined ? {} : { traceRpc };
+}
+
+function publicTraceRpcEvidence(
+  value: unknown,
+  result: RunResult,
+): Record<string, unknown> | undefined {
+  const projected = projectTraceRpcEvidence(value);
+  if (projected === undefined) return undefined;
+
+  const binding = publicTraceBinding(projected.binding, result);
+  if (
+    projected.status !== "invalid" &&
+    (binding === undefined || projected.binding === undefined)
+  ) {
+    return undefined;
+  }
+  if (projected.binding !== undefined && binding === undefined)
+    return undefined;
+  if (binding !== undefined) projected.binding = binding;
+  return projected;
+}
+
+function publicTraceBinding(
+  value: unknown,
+  result: RunResult,
+): Record<string, unknown> | undefined {
+  if (value === undefined) return undefined;
+  const binding = asRecord(value);
+  const blockContext = asRecord(binding?.blockContext);
+  if (
+    binding === undefined ||
+    blockContext === undefined ||
+    typeof binding.runId !== "string" ||
+    typeof binding.chainId !== "number" ||
+    !Number.isSafeInteger(binding.chainId) ||
+    typeof binding.protocol !== "string" ||
+    typeof binding.transactionFingerprint !== "string" ||
+    typeof blockContext.blockNumber !== "string" ||
+    binding.runId !== result.runId ||
+    binding.chainId !== result.intent.chainId ||
+    binding.protocol !== result.intent.protocol
+  ) {
+    return undefined;
+  }
+
+  return {
+    runId: binding.runId,
+    chainId: binding.chainId,
+    protocol: binding.protocol,
+    transactionFingerprint: binding.transactionFingerprint,
+    blockContext: {
+      blockNumber: blockContext.blockNumber,
+      ...(typeof blockContext.blockHash === "string"
+        ? { blockHash: blockContext.blockHash }
+        : {}),
+      ...(typeof blockContext.observedAt === "string"
+        ? { observedAt: blockContext.observedAt }
+        : {}),
+    },
+  };
 }
 
 function failClosedAdjustCandidate(candidate: unknown): unknown | undefined {

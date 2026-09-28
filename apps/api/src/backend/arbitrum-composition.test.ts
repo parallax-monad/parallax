@@ -33,12 +33,17 @@ import {
   createFakeChainAdapter,
   createFakeProviderAdapter,
 } from "./fake-harness.js";
+import { NativeRpcClientError } from "./native-rpc-client.js";
 import { NATIVE_RPC_ARBITRUM_PROVIDER_ID } from "./native-rpc-evidence.js";
 import { BackendPipeline } from "./pipeline.js";
 import {
   createTenderlyProvider,
   TENDERLY_ARBITRUM_PROVIDER_ID,
 } from "./tenderly-provider.js";
+import {
+  createTraceRpcEvidenceSource,
+  type TraceRpcClient,
+} from "./trace-rpc-evidence-source.js";
 
 const normalizedIntent: NormalizedSwapIntent = {
   chainId: 421614,
@@ -206,6 +211,151 @@ function canonicalRealRpcReplay() {
     },
   };
   return { calls, client, capture, quoteRecord };
+}
+
+type TraceRpcReplayOptions = {
+  readonly contextFailure?: "chain_mismatch" | "block_mismatch";
+  readonly capabilityFailure?: "timeout" | "unsupported" | "malformed";
+  readonly failCapability?: "callTracer" | "prestateTracerDiff";
+  readonly failCapabilities?: boolean;
+};
+
+function traceRpcReplay(
+  replay: ReturnType<typeof canonicalRealRpcReplay>,
+  options: TraceRpcReplayOptions = {},
+) {
+  const calls: Array<{ method: string; params: readonly unknown[] }> = [];
+  const client: TraceRpcClient = {
+    async request(method, params = []) {
+      calls.push({ method, params });
+      if (method === "eth_chainId") {
+        if (options.contextFailure === "chain_mismatch") return "0x1";
+        return replay.client.request(method, params);
+      }
+      if (method === "eth_getBlockByNumber") {
+        if (options.contextFailure === "block_mismatch") {
+          return {
+            number: "0x1",
+            hash: replay.capture.observations.pinnedBlock.hash,
+          };
+        }
+        return replay.client.request(method, params);
+      }
+      if (method !== "debug_traceCall") {
+        throw new Error(`unexpected trace fixture RPC method ${method}`);
+      }
+      const config = params[2] as { readonly tracer?: string };
+      const capability =
+        config.tracer === "callTracer" ? "callTracer" : "prestateTracerDiff";
+      const shouldFail =
+        options.failCapabilities === true ||
+        options.failCapability === capability;
+      if (shouldFail && options.capabilityFailure === "timeout") {
+        throw new NativeRpcClientError("TIMEOUT", "controlled trace timeout");
+      }
+      if (shouldFail && options.capabilityFailure === "unsupported") {
+        throw new NativeRpcClientError(
+          "RPC_ERROR",
+          "method unsupported",
+          -32601,
+        );
+      }
+      if (shouldFail && options.capabilityFailure === "malformed") {
+        return {};
+      }
+      if (options.failCapabilities === true) {
+        throw new Error("controlled trace capability failure");
+      }
+
+      const transaction = params[0] as {
+        readonly from?: string;
+        readonly to?: string;
+        readonly data?: string;
+        readonly value?: string;
+      };
+      if (config.tracer === "callTracer") {
+        return {
+          type: "CALL",
+          from: transaction.from,
+          to: transaction.to,
+          input: transaction.data,
+          value: transaction.value,
+          gasUsed: "0x1",
+          output: "0x1234",
+        };
+      }
+      if (config.tracer === "prestateTracer") {
+        return {
+          pre: { [transaction.from ?? ""]: {} },
+          post: { [transaction.to ?? ""]: {} },
+        };
+      }
+      throw new Error("unexpected trace configuration");
+    },
+  };
+  return { calls, client };
+}
+
+function createTraceBackendFixture(options: TraceRpcReplayOptions = {}) {
+  const replay = canonicalRealRpcReplay();
+  const traceReplay = traceRpcReplay(replay, options);
+  const blockNumber = String(
+    BigInt(replay.capture.observations.pinnedBlock.number),
+  );
+  const tokenRegistry = {
+    chains: [{ chainId: 421614, symbol: "ETH", decimals: 18 }],
+    tokens: [
+      {
+        chainId: 421614,
+        address: CAMELOT_SEPOLIA_USDC,
+        symbol: "USDC",
+        decimals: 18,
+        decimalsSource: "onchain_verified" as const,
+        verifiedAtBlock: blockNumber,
+      },
+    ],
+  };
+  const runtime = bootstrapBackendRuntime({
+    environment: arbitrumEnvironment,
+    tokenRegistry,
+  });
+  const store = new InMemoryRunStore();
+  const source = createTraceRpcEvidenceSource({
+    client: traceReplay.client,
+    mode: "RECORDED_REPLAY",
+    now: () => "2026-09-28T12:10:00.000Z",
+  });
+  const composition = createArbitrumProductionComposition({
+    runtime,
+    runStore: store,
+    rpcClient: replay.client,
+    traceRpcEvidenceSource: source,
+  });
+  const app = bootstrapBackendApp({
+    environment: arbitrumEnvironment,
+    tokenRegistry,
+    arbitrumComposition: composition,
+  });
+  return { app, blockNumber, replay, store, traceReplay };
+}
+
+function traceCheckRequest(): Request {
+  return new Request("https://api.example.test/api/check", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      chainId: 421614,
+      protocol: "camelot-v3",
+      sender: "0xeb7c5322f0997ee70f4bbd3ae7e428072c9af396",
+      tokenIn: { kind: "native" },
+      tokenOut: { kind: "erc20", address: CAMELOT_SEPOLIA_USDC },
+      amountIn: "0.001",
+      economicBoundary: {
+        availability: "unavailable",
+        source: "unavailable",
+      },
+    }),
+  });
 }
 
 describe("Arbitrum production composition skeleton", () => {
@@ -982,6 +1132,414 @@ describe("Arbitrum production composition skeleton", () => {
     const publicResult = runResultSchema.parse(execution.decisionOutput);
     expect(publicResult.providerEvidence?.providerData).toEqual({});
   });
+
+  it("invokes qualified Trace supplementary evidence on the exact Backend execution and persists its public projection", async () => {
+    const replay = canonicalRealRpcReplay();
+    const traceReplay = traceRpcReplay(replay);
+    const source = createTraceRpcEvidenceSource({
+      client: traceReplay.client,
+      mode: "RECORDED_REPLAY",
+      now: () => "2026-09-28T12:00:00.000Z",
+    });
+    const blockNumber = String(
+      BigInt(replay.capture.observations.pinnedBlock.number),
+    );
+    const tokenRegistry = {
+      chains: [{ chainId: 421614, symbol: "ETH", decimals: 18 }],
+      tokens: [
+        {
+          chainId: 421614,
+          address: CAMELOT_SEPOLIA_USDC,
+          symbol: "USDC",
+          decimals: 18,
+          decimalsSource: "onchain_verified" as const,
+          verifiedAtBlock: blockNumber,
+        },
+      ],
+    };
+    const runtime = bootstrapBackendRuntime({
+      environment: arbitrumEnvironment,
+      tokenRegistry,
+    });
+    const store = new InMemoryRunStore();
+    const composition = createArbitrumProductionComposition({
+      runtime,
+      runStore: store,
+      rpcClient: replay.client,
+      traceRpcEvidenceSource: source,
+    });
+    const app = bootstrapBackendApp({
+      environment: arbitrumEnvironment,
+      tokenRegistry,
+      arbitrumComposition: composition,
+    });
+
+    const response = await app.fetch(
+      new Request("https://api.example.test/api/check", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          chainId: 421614,
+          protocol: "camelot-v3",
+          sender: "0xeb7c5322f0997ee70f4bbd3ae7e428072c9af396",
+          tokenIn: { kind: "native" },
+          tokenOut: { kind: "erc20", address: CAMELOT_SEPOLIA_USDC },
+          amountIn: "0.001",
+          economicBoundary: {
+            availability: "unavailable",
+            source: "unavailable",
+          },
+        }),
+      }),
+    );
+    const body = runResultSchema.parse(await response.json());
+
+    expect(response.status).toBe(200);
+    expect(body).toMatchObject({
+      status: "completed",
+      verdict: "UNKNOWN",
+      providerEvidence: {
+        provider: { providerId: NATIVE_RPC_ARBITRUM_PROVIDER_ID },
+        providerData: {
+          traceRpc: {
+            status: "success",
+            source: {
+              sourceId: "trace-rpc",
+              sourceVersion: "trace-rpc-evidence-source-v1",
+              mode: "RECORDED_REPLAY",
+              observedAt: "2026-09-28T12:00:00.000Z",
+            },
+            binding: {
+              runId: body.runId,
+              chainId: 421614,
+              protocol: "camelot-v3",
+              blockContext: { blockNumber },
+            },
+            capabilities: {
+              callTracer: {
+                status: "observed",
+                executionStatus: "succeeded",
+                gasUsed: "0x1",
+              },
+              prestateTracerDiff: { status: "observed", diffMode: true },
+            },
+            checkedScope: [
+              "trace-rpc.chain",
+              "trace-rpc.pinned-block",
+              "trace-rpc.callTracer",
+              "trace-rpc.prestateTracer.diffMode",
+            ],
+          },
+        },
+      },
+    });
+    const publicTrace = body.providerEvidence?.providerData.traceRpc as
+      | {
+          readonly binding?: {
+            readonly transactionFingerprint?: unknown;
+          };
+        }
+      | undefined;
+    expect(publicTrace?.binding?.transactionFingerprint).toMatch(
+      /^sha256:[0-9a-f]{64}$/,
+    );
+    const publicSimulation = body.p0?.basicSimulation as
+      | {
+          readonly preparedTransactionFingerprint?: unknown;
+        }
+      | undefined;
+    expect(publicTrace?.binding?.transactionFingerprint).toBe(
+      publicSimulation?.preparedTransactionFingerprint,
+    );
+    const traceCalls = traceReplay.calls.filter(
+      ({ method }) => method === "debug_traceCall",
+    );
+    expect(traceCalls).toHaveLength(2);
+    const nativePreparedCall = replay.calls.find(
+      ({ method, params }) =>
+        method === "eth_call" &&
+        (params[0] as { readonly to?: unknown } | undefined)?.to ===
+          CAMELOT_SEPOLIA_ROUTER,
+    );
+    expect(nativePreparedCall).toBeDefined();
+    for (const traceCall of traceCalls) {
+      expect(traceCall.params[0]).toEqual(nativePreparedCall?.params[0]);
+      expect(traceCall.params[1]).toBe(
+        replay.capture.observations.pinnedBlock.number,
+      );
+    }
+    expect(JSON.stringify(body)).not.toContain("storage");
+    expect(JSON.stringify(body)).not.toContain("ARBITRUM_RPC_URL");
+    expect(JSON.stringify(body)).not.toContain("0x1234");
+
+    const traceCallsBeforeHistoricalRead = traceReplay.calls.length;
+    const nativeCallsBeforeHistoricalRead = replay.calls.length;
+    const storedResponse = await app.fetch(
+      new Request(`https://api.example.test/api/runs/${body.runId}`),
+    );
+    const storedRecord = (await storedResponse.json()) as {
+      readonly result?: unknown;
+    };
+    const stored = runResultSchema.parse(storedRecord.result);
+
+    expect(storedResponse.status).toBe(200);
+    expect(stored.providerEvidence?.providerData.traceRpc).toEqual(
+      body.providerEvidence?.providerData.traceRpc,
+    );
+    expect(JSON.stringify(stored)).not.toContain("0x1234");
+    expect(traceReplay.calls).toHaveLength(traceCallsBeforeHistoricalRead);
+    expect(replay.calls).toHaveLength(nativeCallsBeforeHistoricalRead);
+  });
+
+  it("keeps Native facts and a truthful missing Trace scope when the supplementary source fails", async () => {
+    const replay = canonicalRealRpcReplay();
+    const traceReplay = traceRpcReplay(replay, { failCapabilities: true });
+    const source = createTraceRpcEvidenceSource({
+      client: traceReplay.client,
+      mode: "RECORDED_REPLAY",
+      now: () => "2026-09-28T12:05:00.000Z",
+    });
+    const blockNumber = String(
+      BigInt(replay.capture.observations.pinnedBlock.number),
+    );
+    const tokenRegistry = {
+      chains: [{ chainId: 421614, symbol: "ETH", decimals: 18 }],
+      tokens: [
+        {
+          chainId: 421614,
+          address: CAMELOT_SEPOLIA_USDC,
+          symbol: "USDC",
+          decimals: 18,
+          decimalsSource: "onchain_verified" as const,
+          verifiedAtBlock: blockNumber,
+        },
+      ],
+    };
+    const runtime = bootstrapBackendRuntime({
+      environment: arbitrumEnvironment,
+      tokenRegistry,
+    });
+    const composition = createArbitrumProductionComposition({
+      runtime,
+      runStore: new InMemoryRunStore(),
+      rpcClient: replay.client,
+      traceRpcEvidenceSource: source,
+    });
+    const app = bootstrapBackendApp({
+      environment: arbitrumEnvironment,
+      tokenRegistry,
+      arbitrumComposition: composition,
+    });
+
+    const response = await app.fetch(
+      new Request("https://api.example.test/api/check", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          chainId: 421614,
+          protocol: "camelot-v3",
+          sender: "0xeb7c5322f0997ee70f4bbd3ae7e428072c9af396",
+          tokenIn: { kind: "native" },
+          tokenOut: { kind: "erc20", address: CAMELOT_SEPOLIA_USDC },
+          amountIn: "0.001",
+          economicBoundary: {
+            availability: "unavailable",
+            source: "unavailable",
+          },
+        }),
+      }),
+    );
+    const body = runResultSchema.parse(await response.json());
+
+    expect(response.status).toBe(200);
+    expect(body).toMatchObject({
+      status: "completed",
+      verdict: "UNKNOWN",
+      providerEvidence: {
+        provider: {
+          providerId: NATIVE_RPC_ARBITRUM_PROVIDER_ID,
+          status: "UNKNOWN",
+        },
+        quote: { value: { estimatedAmountOut: "0.015882896725531551" } },
+        providerData: {
+          traceRpc: {
+            status: "unknown",
+            unknownScope: [
+              "trace-rpc.callTracer",
+              "trace-rpc.prestateTracer.diffMode",
+            ],
+            unavailableScope: [],
+          },
+        },
+      },
+    });
+    const publicTrace = body.providerEvidence?.providerData.traceRpc as
+      | {
+          readonly capabilities?: unknown;
+        }
+      | undefined;
+    expect(publicTrace?.capabilities).toEqual({
+      callTracer: { status: "unknown", reason: "rpc_unavailable" },
+      prestateTracerDiff: { status: "unknown", reason: "rpc_unavailable" },
+    });
+  });
+
+  it.each([
+    {
+      name: "a chain context mismatch",
+      options: { contextFailure: "chain_mismatch" },
+      expected: {
+        status: "invalid",
+        call: { status: "unknown", reason: "context_unverified" },
+        diff: { status: "unknown", reason: "context_unverified" },
+        checkedScope: [],
+        unknownScope: [
+          "trace-rpc.callTracer",
+          "trace-rpc.prestateTracer.diffMode",
+        ],
+        unavailableScope: [],
+      },
+    },
+    {
+      name: "a pinned block context mismatch",
+      options: { contextFailure: "block_mismatch" },
+      expected: {
+        status: "invalid",
+        call: { status: "unknown", reason: "context_unverified" },
+        diff: { status: "unknown", reason: "context_unverified" },
+        checkedScope: ["trace-rpc.chain"],
+        unknownScope: [
+          "trace-rpc.pinned-block",
+          "trace-rpc.callTracer",
+          "trace-rpc.prestateTracer.diffMode",
+        ],
+        unavailableScope: [],
+      },
+    },
+    {
+      name: "a capability timeout",
+      options: {
+        capabilityFailure: "timeout",
+        failCapability: "callTracer",
+      },
+      expected: {
+        status: "partial",
+        call: { status: "unknown", reason: "timeout" },
+        diff: { status: "observed" },
+        checkedScope: [
+          "trace-rpc.chain",
+          "trace-rpc.pinned-block",
+          "trace-rpc.prestateTracer.diffMode",
+        ],
+        unknownScope: ["trace-rpc.callTracer"],
+        unavailableScope: [],
+      },
+    },
+    {
+      name: "an unsupported capability method",
+      options: {
+        capabilityFailure: "unsupported",
+        failCapability: "callTracer",
+      },
+      expected: {
+        status: "partial",
+        call: { status: "unavailable", reason: "method_unsupported" },
+        diff: { status: "observed" },
+        checkedScope: [
+          "trace-rpc.chain",
+          "trace-rpc.pinned-block",
+          "trace-rpc.prestateTracer.diffMode",
+        ],
+        unknownScope: [],
+        unavailableScope: ["trace-rpc.callTracer"],
+      },
+    },
+    {
+      name: "a malformed capability response",
+      options: {
+        capabilityFailure: "malformed",
+        failCapability: "callTracer",
+      },
+      expected: {
+        status: "partial",
+        call: { status: "unknown", reason: "malformed_response" },
+        diff: { status: "observed" },
+        checkedScope: [
+          "trace-rpc.chain",
+          "trace-rpc.pinned-block",
+          "trace-rpc.prestateTracer.diffMode",
+        ],
+        unknownScope: ["trace-rpc.callTracer"],
+        unavailableScope: [],
+      },
+    },
+    {
+      name: "both capabilities unavailable",
+      options: {
+        capabilityFailure: "unsupported",
+        failCapabilities: true,
+      },
+      expected: {
+        status: "unavailable",
+        call: { status: "unavailable", reason: "method_unsupported" },
+        diff: { status: "unavailable", reason: "method_unsupported" },
+        checkedScope: ["trace-rpc.chain", "trace-rpc.pinned-block"],
+        unknownScope: [],
+        unavailableScope: [
+          "trace-rpc.callTracer",
+          "trace-rpc.prestateTracer.diffMode",
+        ],
+      },
+    },
+  ] as const)(
+    "keeps the primary Native result for $name",
+    async ({ options, expected }) => {
+      const fixture = createTraceBackendFixture(options);
+      const response = await fixture.app.fetch(traceCheckRequest());
+      const body = runResultSchema.parse(await response.json());
+
+      expect(response.status).toBe(200);
+      expect(body.providerEvidence).toMatchObject({
+        provider: { providerId: NATIVE_RPC_ARBITRUM_PROVIDER_ID },
+        quote: { value: { estimatedAmountOut: "0.015882896725531551" } },
+        providerData: {
+          traceRpc: {
+            status: expected.status,
+            capabilities: {
+              callTracer: expected.call,
+              prestateTracerDiff: expected.diff,
+            },
+            checkedScope: expected.checkedScope,
+            unknownScope: expected.unknownScope,
+            unavailableScope: expected.unavailableScope,
+          },
+        },
+      });
+
+      const publicTrace = body.providerEvidence?.providerData.traceRpc;
+      const traceCallsBeforeHistoricalRead = fixture.traceReplay.calls.length;
+      const nativeCallsBeforeHistoricalRead = fixture.replay.calls.length;
+      const storedResponse = await fixture.app.fetch(
+        new Request(`https://api.example.test/api/runs/${body.runId}`),
+      );
+      const storedRecord = (await storedResponse.json()) as {
+        readonly result?: unknown;
+      };
+      const stored = runResultSchema.parse(storedRecord.result);
+
+      expect(storedResponse.status).toBe(200);
+      expect(stored.providerEvidence?.providerData.traceRpc).toEqual(
+        publicTrace,
+      );
+      expect(fixture.traceReplay.calls).toHaveLength(
+        traceCallsBeforeHistoricalRead,
+      );
+      expect(fixture.replay.calls).toHaveLength(
+        nativeCallsBeforeHistoricalRead,
+      );
+      await fixture.app.close();
+    },
+  );
 
   it("persists the Native RPC P0 facts through POST /api/check and GET /api/runs", async () => {
     const replay = canonicalRealRpcReplay();
