@@ -153,3 +153,22 @@ read-only gate passed and wrote
 the capture proves equal fingerprints, exact transaction matching, complete Trace scope, public
 redaction, persisted round-trip, and historical no-requery. No Product/Risk/Contract semantics,
 signing, broadcasting, or custody behavior changed.
+
+## 2026-09-28 — #107 verified remediation is not reachable under frozen semantics
+
+`feat/verified-remediation-107` proved, with a real read-only Arbitrum Sepolia × Camelot V3 ×
+ETH → USDC exercise and a bounded solver configuration, that no currently reachable live
+scenario can produce a `VERIFIED` remediation child re-check. The finding is recorded as
+evidence insufficiency plus rule structure; no scenario, threshold, or Evidence was
+fabricated to obtain it.
+
+Recorded consequences for sequencing only:
+
+- Verified Remediation remains `NOT COMPLETE`; #107 remains open and is not claimed.
+- The merged remediation mechanism is reachable only through a caller-injected
+  `providerEvidenceMapper`, which is synthetic Evidence and cannot satisfy #107.
+- No Product, Risk, Contract, or Provider semantic is changed by this record. The four
+  decisions that would have to be accepted by their owners are listed in
+  `docs/integration/verified-remediation-107-blocker.md`.
+- Read-only capture and gate: `fixtures/provider-registry/be-107/` and
+  `pnpm --filter @parallax/api probe:verified-remediation`.
