@@ -15,7 +15,7 @@
     }
   },
   "formatter": {
-    "lineEnding": "crlf"
+    "lineEnding": "lf"
   },
   "linter": {
     "rules": {

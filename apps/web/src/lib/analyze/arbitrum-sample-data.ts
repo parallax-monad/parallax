@@ -24,7 +24,7 @@ export const arbitrumSampleSuccess: CheckSwapResult = {
   },
   simulatedOutput: "4.746",
   minimumReceivedSource: "user_declared",
-  
+
   // NEW: Quote Fidelity - showing the quote changed
   quoteFidelity: {
     selectedQuote: "4.812",
