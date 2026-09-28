@@ -4,6 +4,7 @@ import type {
   ReplayApplicationResponse,
 } from "@parallax/orchestrator/application";
 import { Hono } from "hono";
+import { registerApiFallbacks } from "./api-fallbacks.js";
 
 export interface ReplayService {
   replay(id: string): Promise<ReplayApplicationResponse>;
@@ -31,39 +32,16 @@ export function createReplayApp(service: ReplayService): Hono {
     jsonResponse(await service.replay(context.req.param("id"))),
   );
 
-  app.all("/api/replay/:id", () =>
-    jsonResponse(
+  registerApiFallbacks(app, {
+    methodNotAllowed: [
       {
-        status: 405,
-        body: {
-          error: {
-            code: "METHOD_NOT_ALLOWED",
-            message: "Only GET is supported for /api/replay/:id",
-          },
-        },
+        path: "/api/replay/:id",
+        method: "GET",
+        message: "Only GET is supported for /api/replay/:id",
       },
-      { allow: "GET" },
-    ),
-  );
-
-  app.notFound(() =>
-    jsonResponse({
-      status: 404,
-      body: { error: { code: "NOT_FOUND", message: "Route not found" } },
-    }),
-  );
-
-  app.onError(() =>
-    jsonResponse({
-      status: 500,
-      body: {
-        error: {
-          code: "INTERNAL_ERROR",
-          message: "The recorded replay could not be returned",
-        },
-      },
-    }),
-  );
+    ],
+    internalErrorMessage: "The recorded replay could not be returned",
+  });
 
   return app;
 }

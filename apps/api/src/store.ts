@@ -4,6 +4,12 @@ import type {
   NormalizedSwapIntent,
   RunResult,
 } from "@parallax/contracts";
+import {
+  type AccountStateSnapshot,
+  type AccountStateStore,
+  accountStateSnapshotIdSchema,
+  accountStateSnapshotSchema,
+} from "./account-state-model.js";
 
 export const CHECK_RUN_FAILURE_CODES = [
   "UNSUPPORTED",
@@ -56,8 +62,12 @@ export interface RunStore {
 }
 
 /** Process-local backend for local/demo operation; PostgreSQL is configurable for production. */
-export class InMemoryRunStore implements RunStore {
+export class InMemoryRunStore implements RunStore, AccountStateStore {
   private readonly runs = new Map<string, CheckRunRecord>();
+  private readonly accountStateSnapshots = new Map<
+    string,
+    AccountStateSnapshot
+  >();
 
   /** In-memory storage is ready as long as the process is running. */
   public checkReady(): Promise<void> {
@@ -149,6 +159,24 @@ export class InMemoryRunStore implements RunStore {
   public async get(runId: string): Promise<CheckRunRecord | undefined> {
     const record = this.runs.get(runId);
     return record === undefined ? undefined : clone(record);
+  }
+
+  public async saveAccountState(snapshot: AccountStateSnapshot): Promise<void> {
+    const parsed = accountStateSnapshotSchema.parse(snapshot);
+    if (this.accountStateSnapshots.has(parsed.snapshotId)) {
+      throw new Error(
+        `Account-state snapshot ${parsed.snapshotId} already exists`,
+      );
+    }
+    this.accountStateSnapshots.set(parsed.snapshotId, clone(parsed));
+  }
+
+  public async getAccountState(
+    snapshotId: string,
+  ): Promise<AccountStateSnapshot | undefined> {
+    const parsedId = accountStateSnapshotIdSchema.parse(snapshotId);
+    const snapshot = this.accountStateSnapshots.get(parsedId);
+    return snapshot === undefined ? undefined : clone(snapshot);
   }
 
   private requireStarted(

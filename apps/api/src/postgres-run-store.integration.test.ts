@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { accountStateSnapshotSchema } from "./account-state-model.js";
 import { createPostgresPool, PostgresRunStore } from "./postgres-run-store.js";
 import { migratePostgres } from "./storage/migrations.js";
 import { runStoreContract } from "./store.contract.js";
@@ -15,11 +16,13 @@ integration("PostgresRunStore", () => {
     await migratePostgres(databaseUrl);
     pool = createPostgresPool(databaseUrl);
     await pool.query("TRUNCATE TABLE check_runs RESTART IDENTITY CASCADE");
+    await pool.query("TRUNCATE TABLE account_state_snapshots");
   });
 
   beforeEach(async () => {
     if (pool === undefined) return;
     await pool.query("TRUNCATE TABLE check_runs RESTART IDENTITY CASCADE");
+    await pool.query("TRUNCATE TABLE account_state_snapshots");
   });
 
   afterAll(async () => {
@@ -106,6 +109,89 @@ integration("PostgresRunStore", () => {
     } finally {
       await secondPool.end();
     }
+  });
+
+  it("persists and round-trips block-bound account-state snapshots", async () => {
+    if (pool === undefined) return;
+    const store = new PostgresRunStore({ pool, poolOwnership: "borrowed" });
+    const snapshot = accountStateSnapshotSchema.parse({
+      snapshotId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      status: "AVAILABLE",
+      context: {
+        chainId: 421614,
+        protocol: "camelot-v3",
+        sender: "0x1111111111111111111111111111111111111111",
+        recipient: "0x1111111111111111111111111111111111111111",
+        tokenIn: { kind: "native" },
+        tokenOut: {
+          kind: "erc20",
+          address: "0xabcdefabcdefabcdefabcdefabcdefabcdefabcd",
+        },
+        amountInAtomic: "10000000000000000",
+      },
+      block: {
+        status: "VERIFIED",
+        chainId: 421614,
+        blockNumber: "313328152",
+        blockHash: `0x${"a".repeat(64)}`,
+        observedAt: "2026-09-28T10:00:00.000Z",
+      },
+      balances: {
+        inputToken: {
+          account: "0x1111111111111111111111111111111111111111",
+          asset: { kind: "native" },
+          metadata: {
+            symbol: "ETH",
+            decimals: 18,
+            decimalsSource: "chain_config",
+          },
+          explorerUrls: {},
+          status: "AVAILABLE",
+          amountAtomic: "0",
+        },
+        outputToken: {
+          account: "0x1111111111111111111111111111111111111111",
+          asset: {
+            kind: "erc20",
+            address: "0xabcdefabcdefabcdefabcdefabcdefabcdefabcd",
+          },
+          metadata: {
+            symbol: "USDC",
+            decimals: 6,
+            decimalsSource: "onchain_verified",
+            verifiedAtBlock: "100",
+          },
+          explorerUrls: {},
+          status: "AVAILABLE",
+          amountAtomic: "0",
+        },
+        native: {
+          account: "0x1111111111111111111111111111111111111111",
+          asset: { kind: "native" },
+          metadata: {
+            symbol: "ETH",
+            decimals: 18,
+            decimalsSource: "chain_config",
+          },
+          explorerUrls: {},
+          status: "AVAILABLE",
+          amountAtomic: "0",
+        },
+      },
+      allowance: {
+        status: "NOT_APPLICABLE",
+        owner: "0x1111111111111111111111111111111111111111",
+        spender: { status: "NOT_APPLICABLE" },
+        reason: "NATIVE_INPUT",
+        blockNumber: "313328152",
+      },
+    });
+
+    await store.saveAccountState(snapshot);
+
+    await expect(
+      store.getAccountState("AAAAAAAA-AAAA-4AAA-8AAA-AAAAAAAAAAAA"),
+    ).resolves.toEqual(snapshot);
   });
 
   it("surfaces database errors instead of falling back to memory", async () => {

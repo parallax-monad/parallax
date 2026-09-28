@@ -177,7 +177,7 @@ tampering. Full details remain in `docs/context/MUTATION_LEDGER.md`.
 
 Current agent-assisted writes must continue to use the expected local identity:
 
-`jzhao0 <181855088+jzhao0@users.noreply.github.com>`
+`brightheartma <brightheartma@gmail.com>`
 
 and must pass `./scripts/agent-preflight.sh --write`. Do not reuse the historical incorrect
 identity.
