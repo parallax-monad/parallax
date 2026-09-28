@@ -210,3 +210,21 @@ Issue #110's conflicting Notion authority sentence was corrected to make #96 and
 GitHub execution Issues authoritative. This PR changes documentation/control-plane truth only;
 no implementation completion, Product/Risk/Provider/Contract semantic change, or runtime/test
 change is claimed.
+
+## 2026-09-28 — PR #112 / Issue #106 merge checkpoint and #103 gate clarification
+
+PR #112 was normally squash-merged into `main` as
+`b6d48c5f2223d1888231a5eb7810ec2a04006111`; its historical PR head was
+`dc84dd338ac3bd8f86fb7e396609d592f1984314`. Exact-head CI and Vercel passed, review
+threads were resolved, and the final LIVE Trace capture was committed under
+`fixtures/provider-registry/be-106/trace-rpc-source-qualification-2026-09-28T10-06-13-121Z/capture.json`.
+Issue #106 was then closed as COMPLETED without an additional Issue comment. Native RPC remains
+primary; Trace remains supplementary. This checkpoint was deferred until the next authorized
+actual work PR rather than creating a separate context PR.
+
+Issue #104 is CLOSED / COMPLETED via #115. Product Owner Kai subsequently clarified that #73
+is an independent Product P0 acceptance gate, not a prerequisite for parallel #103/#105/#107
+development. #73 remains OPEN and is not claimed PASS; #105 still waits for #103 qualification
+PASS, while #107 has its own real VERIFIED acceptance. This #103 PR carries the minimal durable
+checkpoint and the bounded Provider feasibility record. No signing, approving, broadcasting,
+custody, state override, or accepted-evidence rewrite is authorized by this sequencing update.

@@ -1,6 +1,6 @@
 # Current Agent Handoff
 
-Checkpoint: 2026-09-27
+Checkpoint: 2026-09-28
 
 ## Takeover
 
@@ -15,7 +15,7 @@ Checkpoint: 2026-09-27
 
 ## Expected main checkpoint
 
-`542d5c685d259b5ee6d5aa55098bb2dad900f230`
+`b6d48c5f2223d1888231a5eb7810ec2a04006111`
 
 This is historical checkpoint truth, not a permanent equality requirement.
 
@@ -34,7 +34,7 @@ Product P0
        #73
 
 Asset Coverage
-#103 → #104 → #105
+#103 qualification + #104 completed → #105
 
 Evidence Federation
 #98 → #106 → #110 → #91 → #92
@@ -87,14 +87,14 @@ acceptance path.
 
 `@jzhao0` has these relevant issues:
 
-- #106 — active next task: productionize provider-neutral `TraceRpcEvidenceSource`;
+- #106 — CLOSED / COMPLETED by merged PR #112, historical PR head `dc84dd3`;
 - #110 — Backend supplementary integration after the minimum #106 interface is agreed;
 - #91 — follows #106/#110 for same-transaction Native vs Trace portability;
-- #103 — real USDC → WETH feasibility, gated by Product P0 #73;
+- #103 — active bounded real USDC → WETH feasibility, may develop in parallel with #73;
 - #108 — Explorer feasibility, optional/stretch, not active;
 - #109 — additional asset feasibility, optional/stretch, not active.
 
-## #106 execution boundary
+## #106 completed execution boundary
 
 Build only the reusable supplementary Trace Evidence source.
 
@@ -120,30 +120,33 @@ Backend integration belongs to #110.
 
 ## Coordination
 
-#110 may prepare against the minimum agreed #106 interface, but its real acceptance must use
-the qualified #106 source.
+#110 may consume the qualified #106 source; its own Backend integration and acceptance remain
+separate.
 
 #91 is the portability proof after the reusable source/integration exists.
 
 #92 is the Frontend capability/provenance consumer.
 
-#103 must not be promoted into production support before its bounded real-chain qualification
-and must not start before #73's prerequisite stage.
+#103 must not be promoted into production support before its bounded real-chain qualification.
+#73 remains an independent Product P0 acceptance gate, not a development prerequisite for
+#103/#105/#107 under Kai's 2026-09-28 clarification. #73 OPEN does not mean Product P0 PASS.
 
 Current parallel handoff is Clare on #100/#102 and Antony on #73; #101 is complete through
-PR #113. After Product P0, proceed through #103 → #104 → #105 for Asset Coverage and
-#106 → #110 → #91 → #92 for Evidence Federation, then #107 Verified Remediation and #94
-Minimal SDK as a SHOULD. Optional #90/#108/#109 work remains outside the critical path.
+PR #113. #103 feasibility may run in parallel with #73 acceptance. #104 is complete; #105
+remains blocked until #103 qualification PASS. #106 is complete; #110 → #91 → #92 continue
+the Evidence Federation lane. #107 development may proceed independently but requires its
+own real VERIFIED acceptance. #94 Minimal SDK remains a SHOULD. Optional #90/#108/#109 work
+remains outside the critical path.
 
-The Asset Coverage order is #73 → #103 → #104 → #105. #103 has a four-hour feasibility
-kill switch; #104 is non-blocking for ETH → USDC P0 but enabling MUST for ERC-20 reverse support;
-#105 is the Asset Coverage PASS proof.
+The Asset Coverage order is #103 qualification PASS plus completed #104 → #105. #103 has a
+four-hour feasibility kill switch; #105 is the Asset Coverage PASS proof. #73 is separately
+accepted for Product P0 and does not determine #103 feasibility.
 
 #110 owns Backend composition, exact context binding, persistence, public projection, and
 historical consistency. It does not block Product P0. Native RPC remains primary; Trace is
 supplementary. No ProviderRegistry rewrite, ranking, scoring, voting, consensus, or fallback.
 
-After P0, #107 is the separate Verified Remediation gate. Its ownership is Backend child Run
+#107 is the separate Verified Remediation gate. Its ownership is Backend child Run
 and re-check (`@brightheartma`), Provider/Risk Evidence boundary (`@jzhao0`), Frontend
 presentation (`@antony819`), Product acceptance (`@chin0312`), and Contract review only when
 canonical representation changes (`@rainypilgrimage`). The Frontend states are
@@ -175,12 +178,12 @@ A prior #69 incident was caused by repository-local Git identity
 The affected history was integrity-reviewed and repaired; no evidence supported outsider code
 tampering. Full details remain in `docs/context/MUTATION_LEDGER.md`.
 
-Current agent-assisted writes must continue to use the expected local identity:
+For this Provider workspace, use the verified local Git identity:
 
-`brightheartma <brightheartma@gmail.com>`
+`jzhao0 <181855088+jzhao0@users.noreply.github.com>`.
 
-and must pass `./scripts/agent-preflight.sh --write`. Do not reuse the historical incorrect
-identity.
+Every write must pass `./scripts/agent-preflight.sh --write`. Do not reuse the historical
+incorrect identity.
 
 ## Context-overflow recovery
 
@@ -197,5 +200,8 @@ preflight --read
 → fresh PR/review/CI state
 ```
 
-For Provider work, default target after this checkpoint is #106 unless live GitHub state
-has superseded it.
+For Provider work, the active target after this checkpoint is #103 bounded real feasibility;
+the current branch is `feat/usdc-weth-camelot-feasibility` from
+`b6d48c5f2223d1888231a5eb7810ec2a04006111`. Keep construction, account state, and
+read-only execution results separate. Do not claim #103 PASS from a quote or unsigned tx
+alone; do not start #105 before qualification PASS. No separate context PR is needed.

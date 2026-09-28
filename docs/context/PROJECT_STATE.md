@@ -1,19 +1,19 @@
 # Project State
 
-Last checkpoint: 2026-09-27
+Last checkpoint: 2026-09-28
 
 ## Main checkpoint
 
-`checkpoint_head = 542d5c685d259b5ee6d5aa55098bb2dad900f230`
+`checkpoint_head = b6d48c5f2223d1888231a5eb7810ec2a04006111`
 
 This is the verified `main` tip at this checkpoint. Future takeovers must fresh-fetch and
 verify that this checkpoint is an ancestor of current `main`; equality is not required.
 
 At checkpoint time:
 
-- current `main` includes merged PR #113 at `542d5c685d259b5ee6d5aa55098bb2dad900f230`;
-- PR #111 remains an unmerged documentation branch based on `c4eb2f23b1c41cc4974fdec4d68491cc965e101a`;
-- PR #112 remains the open Trace Provider implementation path;
+- current `main` includes merged PR #112 at `b6d48c5f2223d1888231a5eb7810ec2a04006111`;
+- PR #111, #113, #114, and #115 are also merged;
+- #106 is CLOSED / COMPLETED by #112; #104 is CLOSED / COMPLETED by #115;
 - #101 is CLOSED / COMPLETED by PR #113; #100 and #102 remain open for their explicit
   application-entrypoint and historical-replay acceptance evidence;
 - live Product execution scope is represented by Issues #73, #96, and #100–#110.
@@ -108,16 +108,13 @@ child verification `unknown` / `unavailable`.
 
 ## Asset Coverage — Best Case gate
 
-Dependency:
+Development and acceptance ordering after the Product Owner's 2026-09-28 clarification:
 
 ```text
-#73 Product P0
-        ↓
-#103 real USDC → WETH feasibility
-        ↓
-#104 ERC-20 account-state / allowance
-        ↓
-#105 end-to-end reverse asset flow
+#73 Product P0 acceptance (independent)
+#103 real USDC → WETH feasibility (may develop in parallel)
+#104 ERC-20 account-state / allowance (completed)
+#103 qualification PASS + #104 → #105 end-to-end reverse asset flow
 ```
 
 - #103 is Provider-owned by `@jzhao0` and is a bounded real-chain feasibility task.
@@ -126,7 +123,7 @@ Dependency:
 - #105 composes the qualified reverse path and represents Asset Coverage PASS.
 
 Do not begin production reverse-path integration before #103 qualifies the actual
-transaction semantics. #103 itself remains gated by Product P0 #73.
+transaction semantics. #73 OPEN does not block #103 development or imply Product P0 PASS.
 
 #103 has a focused four-hour feasibility kill switch. If it cannot qualify the real path:
 
@@ -157,7 +154,7 @@ Trace RPC is supplementary deeper Evidence only:
 #92 capability / provenance Product UX
 ```
 
-#106 is owned by `@jzhao0`.
+#106 was owned by `@jzhao0` and is CLOSED / COMPLETED by merged PR #112.
 
 `TraceRpcEvidenceSource` must:
 
@@ -170,9 +167,9 @@ Trace RPC is supplementary deeper Evidence only:
 - introduce no provider ranking, voting, scoring, consensus, or automatic fallback.
 
 #110 is the Backend consumer, owned by `@brightheartma`, covering composition, exact context
-binding, persistence, public projection, and historical consistency. Preparation may proceed
-after the minimum #106 interface is agreed; real integration acceptance requires the qualified
-#106 source. #110 does not block Product P0.
+binding, persistence, public projection, and historical consistency. The qualified #106 source
+is available after PR #112; #110's own real integration acceptance remains separate and does
+not block Product P0.
 
 #91 depends on #106 and the integrated same-transaction execution path.
 
@@ -231,13 +228,13 @@ Final Sprint cuts retained for post-sprint history.
 For `@jzhao0`:
 
 ```text
-NOW:
-#106 TraceRpcEvidenceSource
+COMPLETED:
+#106 TraceRpcEvidenceSource (PR #112)
 
 AFTER #106 + Backend integration:
 #91 Native RPC + Trace supplementary portability proof
 
-AFTER #73 Product P0:
+NOW, in parallel with #73 Product P0 acceptance:
 #103 USDC → WETH real-chain feasibility
 
 NOT ACTIVE:
@@ -259,15 +256,15 @@ Still valid:
 - #75 / #89 — Tenderly implementation/wiring;
 - #98 — QuickNode trace capability evidence;
 - #99 — control-plane reconciliation after #98.
-- #113 — basicSimulation, exact binding, and historical Run implementation; merged at the
-  current `main` checkpoint.
+- #113 — basicSimulation, exact binding, and historical Run implementation; merged before
+  the current `main` checkpoint.
 
 Tenderly #72 remains CLOSED with implementation retained and external entitlement blocking
 real credentialed qualification. It is removed from the Final Sprint critical path.
 
 ## Current gate status
 
-- Product P0: IN PROGRESS (#73, #100, #102; #101 is complete).
+- Product P0: IN PROGRESS (#73, #100, #102; #101 is complete); #73 remains an independent acceptance gate.
 - Asset Coverage: NOT COMPLETE.
 - Evidence Federation: NOT COMPLETE.
 - Verified Remediation: NOT COMPLETE.
@@ -283,10 +280,11 @@ Product P0 work proceeds in parallel:
 - Clare / Backend: #100 and #102; #101 is the completed binding slice from PR #113.
 - Antony / Frontend: #73, converging on the reviewed public P0 surface.
 
-After Product P0, the Asset Coverage lane is #103 → #104 → #105. In parallel, the Evidence
-Federation lane is Jie / #106 → Clare / #110 → #91 → Antony / #92. Preparation for #110 may
-proceed once the minimum #106 interface is agreed, but real acceptance requires qualified #106
-Evidence. Then #107 is the separate Verified Remediation gate, followed by #94 as a SHOULD.
+In parallel with Product P0 acceptance, the Asset Coverage lane is #103 qualification → #105,
+with #104 complete. The Evidence Federation lane is #106 complete → Clare / #110 → #91 →
+Antony / #92. #110 may now consume qualified #106 Evidence, but its own real integration
+acceptance remains separate. #107 development may also proceed in parallel, but its own real
+VERIFIED acceptance must be demonstrated; #73 status alone does not decide it. #94 remains a SHOULD.
 Optional #90/#108/#109 work starts only after the critical gates are stable.
 
 ## Retained accepted-evidence details
@@ -354,9 +352,9 @@ closes them:
 Provider-side next executable task:
 
 ```text
-#106 — Productionize TraceRpcEvidenceSource
+#103 — Qualify real USDC → WETH Camelot V3 feasibility within four hours
 ```
 
-Start with the smallest reusable source/interface slice derived from accepted #98 evidence.
-Do not start #91 before #106 exists, and do not start #103 before Product P0 #73 reaches its
-prerequisite gate.
+Use real pinned Arbitrum Sepolia chain state and keep construction correctness separate from
+the sender's balance/allowance and read-only execution result. Do not start #105 before #103
+qualification PASS. #73 remains open and independent.

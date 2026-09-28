@@ -64,3 +64,16 @@ provider ranking, voting, consensus, scoring, or automatic fallback.
 - #94 is `BEST CASE SHOULD`; #93 Enso and #95 Receipt UX are CLOSED / NOT_PLANNED Final Sprint
   cuts retained for post-sprint history.
 - No Product, Risk, Provider, or Contract semantics changed in this documentation sync.
+
+## 2026-09-28 — Product gate clarification for parallel Final Sprint development
+
+Product Owner Kai's decision, communicated for this #103 work, is: “#73 不卡住所有开发，
+不用当成前置条件。” #73 remains an independent Product P0 **acceptance** gate and does not
+block parallel development of #103, #105, or #107. This updates development sequencing only;
+it does not claim #73 PASS or alter its acceptance criteria.
+
+#105 still requires #103 real USDC → WETH qualification PASS before reverse integration
+acceptance. #107 must meet its own real `VERIFIED` acceptance; neither the open nor closed
+state of #73 determines that result. Issue #96/#103/#105/#107 descriptions may retain the
+earlier prerequisite wording until Product Owner control-plane bookkeeping is updated; this
+record distinguishes the newer communicated decision from those older Issue bodies.
