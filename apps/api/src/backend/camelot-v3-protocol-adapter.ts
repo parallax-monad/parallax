@@ -203,6 +203,10 @@ export class CamelotV3ProtocolAdapter
         decoded.amountOut.toString(),
         resolveTokenOutDecimals(metadata.tokenOutDecimals, intent),
       ),
+      // Internal atomic identity used by the Backend binding check. The
+      // public quote projection intentionally selects only human-readable
+      // quote fields, so this never becomes provider-specific public data.
+      amountOutAtomic: decoded.amountOut.toString(),
       source: "quote",
       ...(options?.blockContext === undefined
         ? {}
@@ -436,7 +440,9 @@ function quantity(value: bigint): string {
 function blockTag(options: ProtocolQuoteOptions | undefined): string {
   const blockNumber = options?.blockContext?.blockNumber;
   if (blockNumber === undefined || !DECIMAL_UINT_PATTERN.test(blockNumber)) {
-    return "latest";
+    throw new Error(
+      "Camelot quote requires an explicit pinned block context; latest is not allowed",
+    );
   }
   return quantity(BigInt(blockNumber));
 }

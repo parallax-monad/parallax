@@ -1,10 +1,60 @@
 import { describe, expect, it } from "vitest";
-import { evaluateBackendGoldenPathAssertions } from "./backend-golden-path-assertions.js";
+import {
+  basicSimulationBindingMatchesRequest,
+  evaluateBackendGoldenPathAssertions,
+  isBasicSimulationCallVerified,
+  summarizeBasicSimulation,
+} from "./backend-golden-path-assertions.js";
+
+const expectedBinding = {
+  chainId: 421614,
+  protocol: "camelot-v3",
+  sender: "0x1111111111111111111111111111111111111111",
+  recipient: "0x1111111111111111111111111111111111111111",
+  tokenIn: "native",
+  tokenOut: "0xabcdefabcdefabcdefabcdefabcdefabcdefabcd",
+  amountInAtomic: "1000000000000000",
+};
+
+function basicSimulation(overrides: Record<string, unknown> = {}) {
+  return {
+    call: {
+      status: "SUCCEEDED",
+      returnDataFingerprint: `sha256:${"a".repeat(64)}`,
+      rawReturnData: "0xprivate",
+    },
+    gasEstimate: {
+      status: "UNAVAILABLE",
+      providerPayload: { rpcUrl: "https://secret.invalid" },
+    },
+    blockNumber: "310131879",
+    blockHash: `0x${"b".repeat(64)}`,
+    observedAt: "2026-09-27T00:00:00.000Z",
+    validityAtExecution: "VALID",
+    preparedTransactionFingerprint: `sha256:${"c".repeat(64)}`,
+    transactionBinding: {
+      ...expectedBinding,
+      amountOutMinimumAtomic: "990000000000000",
+      router: "0x2222222222222222222222222222222222222222",
+      from: expectedBinding.sender,
+      to: "0x2222222222222222222222222222222222222222",
+      value: "0x38d7ea4c68000",
+      dataFingerprint: `sha256:${"d".repeat(64)}`,
+      calldata: "0xprivate",
+    },
+    uncheckedCapabilities: ["receipt"],
+    rawPayload: "0xprivate",
+    ...overrides,
+  };
+}
 
 const completePath = {
   httpStatus: 200,
   runStatus: "completed" as const,
   persistedRunRoundTrip: true,
+  basicSimulationCallVerified: true,
+  basicSimulationMatchesRequest: true,
+  basicSimulationRoundTrip: true,
   baselineStatus: "AVAILABLE" as const,
   baselineIdentityMatches: true,
   providerEvidenceReachedP0Risk: true,
@@ -23,6 +73,63 @@ const completePath = {
 };
 
 describe("Backend Golden Path acceptance assertions", () => {
+  it("records safe call, gas, block, and transaction identity facts", () => {
+    const summary = summarizeBasicSimulation(basicSimulation());
+
+    expect(summary).toMatchObject({
+      call: {
+        status: "SUCCEEDED",
+        returnDataFingerprint: `sha256:${"a".repeat(64)}`,
+      },
+      gasEstimate: { status: "UNAVAILABLE" },
+      blockNumber: "310131879",
+      blockHash: `0x${"b".repeat(64)}`,
+      preparedTransactionFingerprint: `sha256:${"c".repeat(64)}`,
+      transactionBinding: {
+        chainId: 421614,
+        protocol: "camelot-v3",
+        from: "0x1111111111111111111111111111111111111111",
+      },
+    });
+    expect(JSON.stringify(summary)).not.toContain("rawReturnData");
+    expect(JSON.stringify(summary)).not.toContain("providerPayload");
+    expect(JSON.stringify(summary)).not.toContain("calldata");
+    expect(JSON.stringify(summary)).not.toContain("rawPayload");
+    expect(isBasicSimulationCallVerified(summary)).toBe(true);
+    expect(basicSimulationBindingMatchesRequest(summary, expectedBinding)).toBe(
+      true,
+    );
+  });
+
+  it("does not verify an otherwise valid call bound to another request", () => {
+    const changedRequest = basicSimulation({
+      transactionBinding: {
+        ...(basicSimulation().transactionBinding as Record<string, unknown>),
+        amountInAtomic: "2000000000000000",
+        value: "0x71afd498d0000",
+      },
+    });
+
+    expect(isBasicSimulationCallVerified(changedRequest)).toBe(true);
+    expect(
+      basicSimulationBindingMatchesRequest(changedRequest, expectedBinding),
+    ).toBe(false);
+  });
+
+  it("does not verify an HTTP-success-shaped result without a successful call identity", () => {
+    expect(
+      isBasicSimulationCallVerified({
+        call: { status: "UNAVAILABLE" },
+        gasEstimate: { status: "AVAILABLE", gasUnits: "21000" },
+        blockNumber: "42",
+        observedAt: "2026-09-27T00:00:00.000Z",
+        validityAtExecution: "UNKNOWN",
+        preparedTransactionFingerprint: `sha256:${"c".repeat(64)}`,
+        uncheckedCapabilities: ["receipt"],
+      }),
+    ).toBe(false);
+  });
+
   it("accepts a completed path while recording expected fail-closed UNKNOWN", () => {
     const result = evaluateBackendGoldenPathAssertions(completePath);
 
@@ -59,6 +166,36 @@ describe("Backend Golden Path acceptance assertions", () => {
 
     expect(providerGap.integrationExercise).toBe("INCOMPLETE");
     expect(constraintGap.integrationExercise).toBe("INCOMPLETE");
+  });
+
+  it("does not treat HTTP/provider success as proof that eth_call executed", () => {
+    const result = evaluateBackendGoldenPathAssertions({
+      ...completePath,
+      basicSimulationCallVerified: false,
+    });
+
+    expect(result.integrationExercise).toBe("INCOMPLETE");
+    expect(result.gateStatus).toBe("NOT_PASS_INTEGRATION_OR_ACCEPTANCE_GAP");
+  });
+
+  it("does not complete the exercise if execution binding differs from the request", () => {
+    const result = evaluateBackendGoldenPathAssertions({
+      ...completePath,
+      basicSimulationMatchesRequest: false,
+    });
+
+    expect(result.integrationExercise).toBe("INCOMPLETE");
+    expect(result.gateStatus).toBe("NOT_PASS_INTEGRATION_OR_ACCEPTANCE_GAP");
+  });
+
+  it("requires basicSimulation facts to survive the public historical read", () => {
+    const result = evaluateBackendGoldenPathAssertions({
+      ...completePath,
+      basicSimulationRoundTrip: false,
+    });
+
+    expect(result.integrationExercise).toBe("INCOMPLETE");
+    expect(result.gateStatus).toBe("NOT_PASS_INTEGRATION_OR_ACCEPTANCE_GAP");
   });
 
   it("does not classify a different UNKNOWN reason as the expected evidence gap", () => {

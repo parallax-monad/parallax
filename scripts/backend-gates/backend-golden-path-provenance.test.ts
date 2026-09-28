@@ -38,7 +38,11 @@ describe("Backend Golden Path source provenance", () => {
     expect(() =>
       assertNoProductionRuntimeSourceChanges({
         ...before,
-        changedPaths: ["scripts/backend-gates/backend-golden-path-live.ts"],
+        changedPaths: [
+          "scripts/backend-gates/backend-golden-path-live.ts",
+          "apps/api/src/bootstrap/composition-integration.test.ts",
+          "apps/api/src/store.contract.ts",
+        ],
       }),
     ).not.toThrow();
     expect(() =>

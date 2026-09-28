@@ -1,5 +1,7 @@
 import { isDeepStrictEqual } from "node:util";
+import { normalizedSwapIntentSchema } from "@parallax/contracts";
 import type { ArbitrumTransaction } from "./arbitrum-chain-adapter.js";
+import { inspectCamelotV3Transaction } from "./camelot-v3-binding.js";
 import type { ChainOperationOptions } from "./chain-adapter.js";
 import {
   createNativeRpcClient,
@@ -384,7 +386,9 @@ export class NativeRpcProvider<Intent extends NativeRpcIntent = NativeRpcIntent>
           "missing",
           undefined,
           "$.result",
-          classified.message,
+          isExecutionReverted(error)
+            ? "Native RPC eth_call reverted"
+            : classified.message,
         ),
       );
       return this.result(input.runId, classified.status, state, {
@@ -414,6 +418,66 @@ export class NativeRpcProvider<Intent extends NativeRpcIntent = NativeRpcIntent>
         candidate(
           "nativeRpc.estimateGas.gasUnits",
           "decimal_string",
+          "missing",
+          undefined,
+          "$.result",
+          classified.message,
+        ),
+      );
+      return this.result(input.runId, classified.status, state, {
+        failure: classified,
+      });
+    }
+
+    // Re-read the exact pinned block after transaction evaluation. A block
+    // number alone is not enough: the provider may return a different block
+    // hash for the same tag while the request is in flight. The call and gas
+    // facts remain available, but the overall execution becomes UNKNOWN.
+    try {
+      const observed = await this.request("eth_getBlockByNumber", [
+        blockTag,
+        false,
+      ]);
+      if (
+        !isRecord(observed) ||
+        observed.number !== blockTag ||
+        !isBlockHash(observed.hash) ||
+        (input.input.blockContext.blockHash !== undefined &&
+          observed.hash.toLowerCase() !==
+            input.input.blockContext.blockHash.toLowerCase())
+      ) {
+        state.freshness = {
+          status: "unknown",
+          reason: "Pinned block changed during evaluation",
+        };
+        state.fields.push(
+          invalidCandidate(
+            "nativeRpc.revalidatedBlock",
+            "block",
+            "Pinned block changed during evaluation",
+          ),
+        );
+        return this.result(input.runId, "unknown", state);
+      }
+      state.fields.push(
+        candidate(
+          "nativeRpc.revalidatedBlock",
+          "hex_string",
+          "observed",
+          observed.hash,
+          "$.result.hash",
+        ),
+      );
+    } catch (error) {
+      const classified = classifyRpcFailure(error);
+      state.freshness = {
+        status: "unknown",
+        reason: "Pinned block could not be revalidated",
+      };
+      state.fields.push(
+        candidate(
+          "nativeRpc.revalidatedBlock",
+          "block",
           "missing",
           undefined,
           "$.result",
@@ -677,6 +741,13 @@ function validatePreparedExecution<Intent extends NativeRpcIntent>(
   if (prepared.quote === undefined || prepared.quote === null) {
     return "Native RPC requires a prepared quote";
   }
+  // Validate the unknown-shaped quote before Camelot binding inspection. A
+  // cyclic object or non-JSON scalar must retain the bounded malformed-input
+  // diagnostic; otherwise binding inspection could read an unavailable
+  // amountOutAtomic field first and mask the actual serialization failure.
+  if (toJsonValue(prepared.quote) === undefined) {
+    return "Native RPC requires a JSON-serializable prepared quote";
+  }
   const unsignedTransaction = prepared.unsignedTransaction;
   if (
     !isRecord(unsignedTransaction) ||
@@ -710,6 +781,16 @@ function validatePreparedExecution<Intent extends NativeRpcIntent>(
   ) {
     return "Native RPC transaction chainId differs from prepared execution";
   }
+  const parsedIntent = normalizedSwapIntentSchema.safeParse(prepared.intent);
+  if (!parsedIntent.success) {
+    return "Native RPC requires a normalized Camelot V3 intent";
+  }
+  const binding = inspectCamelotV3Transaction(
+    parsedIntent.data,
+    prepared.quote,
+    payload as ArbitrumTransaction,
+  );
+  if (!binding.ok) return binding.reason;
   if (
     !isRecord(prepared.gasEstimate) ||
     !isDecimalQuantity(prepared.gasEstimate.gasUnits)
@@ -857,6 +938,12 @@ function classifyRpcFailure(error: unknown): ClassifiedRpcFailure {
     retryable: false,
     rpcCode: candidate?.rpcCode,
   };
+}
+
+function isExecutionReverted(error: unknown): boolean {
+  return /execution reverted|revert/i.test(
+    error instanceof Error ? error.message : "",
+  );
 }
 
 type ClassifiedRpcFailure = {

@@ -1,5 +1,10 @@
 import { z } from "zod";
-import { chainIdSchema, runIdSchema } from "./common.js";
+import {
+  addressSchema,
+  chainIdSchema,
+  runIdSchema,
+  uint256AmountSchema,
+} from "./common.js";
 
 export const p0EvidenceStateSchema = z.enum([
   "VERIFIED",
@@ -123,6 +128,103 @@ const p0RemediationSchema = z.discriminatedUnion("status", [
     .strict(),
 ]);
 
+const fingerprintSchema = z.string().regex(/^sha256:[0-9a-f]{64}$/);
+
+const p0BasicSimulationBindingSchema = z
+  .object({
+    chainId: chainIdSchema,
+    protocol: z.string().trim().min(1),
+    sender: addressSchema,
+    recipient: addressSchema,
+    tokenIn: z.string().trim().min(1),
+    tokenOut: z.string().trim().min(1),
+    amountInAtomic: uint256AmountSchema,
+    amountOutMinimumAtomic: uint256AmountSchema,
+    router: addressSchema,
+    from: addressSchema,
+    to: addressSchema,
+    value: z.string().regex(/^0x(?:0|[1-9a-f][0-9a-f]*)$/i),
+    dataFingerprint: fingerprintSchema,
+  })
+  .strict();
+
+/**
+ * Provider-neutral facts from the bounded Native RPC basic simulation.
+ *
+ * This is deliberately a partial simulation contract: a successful `eth_call`
+ * and an available gas estimate are independent facts, and neither one is a
+ * receipt, an outcome, or a Risk verdict. The optional field keeps historical
+ * Runs without this hardening slice readable as "not recorded".
+ */
+export const p0BasicSimulationSchema = z
+  .object({
+    call: z
+      .object({
+        status: z.enum(["SUCCEEDED", "REVERTED", "UNAVAILABLE", "NOT_RUN"]),
+        returnDataFingerprint: fingerprintSchema.optional(),
+      })
+      .strict(),
+    gasEstimate: z
+      .object({
+        status: z.enum(["AVAILABLE", "UNAVAILABLE", "NOT_RUN"]),
+        gasUnits: uint256AmountSchema.optional(),
+      })
+      .strict(),
+    blockNumber: z.string().regex(/^\d+$/),
+    blockHash: z
+      .string()
+      .regex(/^0x[0-9a-f]{64}$/i)
+      .optional(),
+    observedAt: z.string().datetime(),
+    validityAtExecution: z.enum(["VALID", "INVALID", "UNKNOWN"]),
+    preparedTransactionFingerprint: fingerprintSchema,
+    transactionBinding: p0BasicSimulationBindingSchema.optional(),
+    failureStage: z
+      .enum(["PREPARE", "BLOCK", "CALL", "GAS_ESTIMATE", "FRESHNESS"])
+      .optional(),
+    reason: z.string().trim().min(1).optional(),
+    uncheckedCapabilities: z.array(z.string().trim().min(1)).min(1),
+  })
+  .strict()
+  .superRefine((simulation, context) => {
+    if (simulation.validityAtExecution === "VALID") {
+      if (simulation.blockHash === undefined) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["blockHash"],
+          message: "VALID execution requires a verified block hash",
+        });
+      }
+      if (simulation.transactionBinding === undefined) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["transactionBinding"],
+          message: "VALID execution requires transaction binding evidence",
+        });
+      }
+    }
+    if (
+      simulation.call.status === "SUCCEEDED" &&
+      simulation.call.returnDataFingerprint === undefined
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["call", "returnDataFingerprint"],
+        message: "SUCCEEDED call requires a return-data fingerprint",
+      });
+    }
+    if (
+      simulation.gasEstimate.status === "AVAILABLE" &&
+      simulation.gasEstimate.gasUnits === undefined
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["gasEstimate", "gasUnits"],
+        message: "AVAILABLE gas estimate requires gas units",
+      });
+    }
+  });
+
 /**
  * Provider-neutral P0 summary. Detailed evidence and actions continue to use
  * the existing RunResult fields; this projection only publishes the P0 Risk
@@ -152,8 +254,10 @@ export const p0RunResultSchema = z
           .optional(),
       })
       .strict(),
+    basicSimulation: p0BasicSimulationSchema.optional(),
     remediation: p0RemediationSchema,
   })
   .strict();
 
 export type P0RunResult = z.infer<typeof p0RunResultSchema>;
+export type P0BasicSimulation = z.infer<typeof p0BasicSimulationSchema>;
