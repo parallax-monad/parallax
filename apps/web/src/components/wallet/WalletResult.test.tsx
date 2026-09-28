@@ -35,10 +35,7 @@ function result(overrides: Partial<CheckSwapResult> = {}): CheckSwapResult {
   };
 }
 
-const render = (
-  value: CheckSwapResult,
-  onSelectOption?: () => void,
-) =>
+const render = (value: CheckSwapResult, onSelectOption?: () => void) =>
   renderToStaticMarkup(
     <WalletResult
       language="en"
@@ -125,7 +122,7 @@ describe("WalletResult", () => {
     expect(html).toContain("Amount supports at most 6 decimal places");
   });
 
-  test("names the shortfall using the simulated output, not the quote estimate", () => {
+  test("renders a stop result without exposing unavailable boundary details", () => {
     const html = render(
       result({
         verdict: "STOP",
@@ -150,11 +147,9 @@ describe("WalletResult", () => {
       }),
     );
 
-    expect(html).toContain("Below your Minimum Received");
-    expect(html).toContain("The simulation returned 0.000223");
-    expect(html).toContain("is below the original Minimum Received");
-    expect(html).toContain("A Re-run must preserve that boundary");
-    expect(html).toContain("rather than improving this transaction");
+    expect(html).toContain("Do not use this path");
+    expect(html).not.toContain("Below your Minimum Received");
+    expect(html).not.toContain("View verified options →");
   });
 
   test("stays quiet about the boundary when the rule passed", () => {
@@ -176,18 +171,20 @@ describe("WalletResult", () => {
     expect(html).not.toContain("Below your Minimum Received");
   });
 
-  test("renders the Arbitrum economic diagnosis sample", () => {
+  test("renders the Arbitrum diagnosis in Result and keeps options on the next step", () => {
     const html = render(arbitrumSampleSuccess, () => undefined);
     expect(html).toContain("Your quote has changed");
     expect(html).toContain("4.812");
     expect(html).toContain("4.746");
     expect(html).toContain("-1.37%");
-    expect(html).toContain("Your options");
-    expect(html).toContain("Keep spending 10,000 USDC");
-    expect(html).toContain("Still receive approximately 4.812 ETH");
-    expect(html).toContain("Wait for the previous economics");
+    expect(html).toContain("Adjust before proceeding");
+    expect(html).toContain("View verified options →");
     expect(html).toContain("Execution economics");
     expect(html).toContain("1.08%");
     expect(html).toContain("Re-check immediately before signing");
+    expect(html).not.toContain("Your options");
+    expect(html).not.toContain("Keep spending 10,000 USDC");
+    expect(html).not.toContain("Still receive approximately 4.812 ETH");
+    expect(html).not.toContain("Wait for the previous economics");
   });
 });

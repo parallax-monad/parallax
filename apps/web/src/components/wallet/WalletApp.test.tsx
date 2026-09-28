@@ -9,6 +9,13 @@ vi.mock("./WalletBackground", () => ({
   WalletBackground: () => null,
 }));
 
+vi.mock("./WalletIntro", () => ({
+  WalletIntro: ({ onComplete }: { onComplete: () => void }) => {
+    onComplete();
+    return null;
+  },
+}));
+
 const RUN_ID = "recovered-run";
 const CREATED_AT = "2026-08-15T08:00:00.000Z";
 
@@ -112,7 +119,7 @@ describe("WalletApp persisted Run recovery", () => {
     expect(container.textContent).toContain("Live check");
 
     const reviewInputs = Array.from(container.querySelectorAll("button")).find(
-      (button) => button.textContent?.includes("Review inputs"),
+      (button) => button.textContent?.includes("Review swap inputs"),
     );
     expect(reviewInputs).toBeDefined();
 
@@ -200,7 +207,7 @@ describe("WalletApp persisted Run recovery", () => {
     });
 
     const sampleButton = Array.from(container.querySelectorAll("button")).find(
-      (button) => button.textContent?.includes("Load Sample: ADJUST"),
+      (button) => button.textContent?.includes("ADJUST"),
     );
     expect(sampleButton).toBeDefined();
 
@@ -209,9 +216,21 @@ describe("WalletApp persisted Run recovery", () => {
     });
 
     expect(container.textContent).toContain("Your quote has changed");
+    expect(container.textContent).toContain("Adjust before proceeding");
+    expect(container.textContent).toContain("View verified options →");
+    expect(container.textContent).toContain("Execution economics");
+
+    const timelineOptionsButton = Array.from(
+      container.querySelectorAll("button"),
+    ).find((button) => button.textContent?.includes("View verified options"));
+    expect(timelineOptionsButton).toBeDefined();
+
+    await act(async () => {
+      timelineOptionsButton?.click();
+    });
+
     expect(container.textContent).toContain("Your options");
     expect(container.textContent).toContain("Keep spending 10,000 USDC");
-    expect(container.textContent).toContain("Execution economics");
   });
 
   test("applies a verified option to the swap sheet", async () => {
@@ -225,12 +244,21 @@ describe("WalletApp persisted Run recovery", () => {
     });
 
     const sampleButton = Array.from(container.querySelectorAll("button")).find(
-      (button) => button.textContent?.includes("Load Sample: ADJUST"),
+      (button) => button.textContent?.includes("ADJUST"),
     );
     expect(sampleButton).toBeDefined();
 
     await act(async () => {
       sampleButton?.click();
+    });
+
+    const timelineOptionsButton = Array.from(
+      container.querySelectorAll("button"),
+    ).find((button) => button.textContent?.includes("View verified options"));
+    expect(timelineOptionsButton).toBeDefined();
+
+    await act(async () => {
+      timelineOptionsButton?.click();
     });
 
     const applyButtons = Array.from(container.querySelectorAll("button")).filter(
