@@ -16,10 +16,10 @@ import {
 } from "pg";
 import { z } from "zod";
 import {
-  accountStateSnapshotIdSchema,
-  accountStateSnapshotSchema,
   type AccountStateSnapshot,
   type AccountStateStore,
+  accountStateSnapshotIdSchema,
+  accountStateSnapshotSchema,
 } from "./account-state-model.js";
 import {
   CHECK_RUN_FAILURE_CODES,
@@ -295,15 +295,23 @@ export class PostgresRunStore implements RunStore, AccountStateStore {
     const row = result.rows[0];
     if (row === undefined) return undefined;
     const parsedRow = rawAccountStateSnapshotRowSchema.parse(row);
-    if (accountStateSnapshotIdSchema.parse(parsedRow.snapshot_id) !== parsedId) {
-      throw new Error("Account-state snapshot record key does not match its query");
+    if (
+      accountStateSnapshotIdSchema.parse(parsedRow.snapshot_id) !== parsedId
+    ) {
+      throw new Error(
+        "Account-state snapshot record key does not match its query",
+      );
     }
     if (z.number().int().parse(parsedRow.schema_version) !== 1) {
-      throw new Error("Account-state snapshot uses an unsupported schema version");
+      throw new Error(
+        "Account-state snapshot uses an unsupported schema version",
+      );
     }
     const parsedSnapshot = accountStateSnapshotSchema.parse(parsedRow.snapshot);
     if (parsedSnapshot.snapshotId !== parsedId) {
-      throw new Error("Account-state snapshot ID does not match its record key");
+      throw new Error(
+        "Account-state snapshot ID does not match its record key",
+      );
     }
     return parsedSnapshot;
   }

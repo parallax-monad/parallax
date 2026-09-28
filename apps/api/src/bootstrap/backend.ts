@@ -14,12 +14,12 @@ import { ReplayApplicationService } from "@parallax/orchestrator/application";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { z } from "zod";
-import { CheckApplicationService } from "../application.js";
 import { AccountStateApplicationService } from "../account-state-application.js";
 import type {
   AccountStateReader,
   AccountStateStore,
 } from "../account-state-model.js";
+import { CheckApplicationService } from "../application.js";
 import {
   type BackendApplicationRoute,
   validateBackendApplicationRoutes,
@@ -42,9 +42,9 @@ import {
   UnsupportedAgentFlowError,
 } from "../ports.js";
 import { QuoteApplicationService } from "../quote-application.js";
+import { createAccountStateApp } from "../routes/account-state.js";
 import { createHealthApp, type ReadinessCheck } from "../routes/health.js";
 import { createReplayApp } from "../routes/replay.js";
-import { createAccountStateApp } from "../routes/account-state.js";
 import { createRunQueryApp } from "../routes/runs.js";
 import { RunQueryApplicationService } from "../run-query.js";
 import { createConfiguredRunStore } from "../run-store-factory.js";

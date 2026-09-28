@@ -1,13 +1,15 @@
 import { Hono } from "hono";
-import type { AccountStateApplicationResponse } from "../account-state-model.js";
 import type { AccountStateApplicationService } from "../account-state-application.js";
+import type { AccountStateApplicationResponse } from "../account-state-model.js";
 import { createJsonResponse, parseJsonRequestBody } from "../json-http.js";
 import { registerApiFallbacks } from "./api-fallbacks.js";
 
-type RouteResponse = AccountStateApplicationResponse | {
-  status: 400 | 413;
-  body: { error: { code: string; message: string } };
-};
+type RouteResponse =
+  | AccountStateApplicationResponse
+  | {
+      status: 400 | 413;
+      body: { error: { code: string; message: string } };
+    };
 
 /** Read-only live account-state query and immutable snapshot retrieval routes. */
 export function createAccountStateApp(

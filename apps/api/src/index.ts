@@ -1,6 +1,6 @@
-export * from "./application.js";
 export * from "./account-state-application.js";
 export * from "./account-state-model.js";
+export * from "./application.js";
 export * from "./backend/arbitrum-account-state-reader.js";
 export * from "./backend/arbitrum-chain-adapter.js";
 export * from "./backend/arbitrum-composition.js";
@@ -21,8 +21,8 @@ export * from "./http.js";
 export * from "./normalization.js";
 export * from "./ports.js";
 export * from "./quote-application.js";
-export * from "./routes/health.js";
 export * from "./routes/account-state.js";
+export * from "./routes/health.js";
 export * from "./routes/replay.js";
 export * from "./routes/runs.js";
 export * from "./run-query.js";

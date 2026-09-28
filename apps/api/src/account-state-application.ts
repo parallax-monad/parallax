@@ -4,20 +4,20 @@ import {
   quoteRequestSchema,
   type TrustedTokenRegistry,
 } from "@parallax/contracts";
-import { normalizeArbitrumQuoteRequest } from "./normalization.js";
 import {
-  accountStateSnapshotIdSchema,
-  accountStateRequestSchema,
-  accountStateObservationSchema,
-  accountStateSnapshotSchema,
-  sameAccountStateAsset,
-  summarizeAccountState,
   type AccountStateApplicationResponse,
   type AccountStateObservation,
   type AccountStateReader,
   type AccountStateSnapshot,
   type AccountStateStore,
+  accountStateObservationSchema,
+  accountStateRequestSchema,
+  accountStateSnapshotIdSchema,
+  accountStateSnapshotSchema,
+  sameAccountStateAsset,
+  summarizeAccountState,
 } from "./account-state-model.js";
+import { normalizeArbitrumQuoteRequest } from "./normalization.js";
 
 export type AccountStateApplicationServiceDependencies = {
   readonly tokenRegistry: TrustedTokenRegistry;
@@ -36,7 +36,9 @@ export class AccountStateApplicationService {
     this.createSnapshotId = dependencies.createSnapshotId ?? randomUUID;
   }
 
-  public async query(request: unknown): Promise<AccountStateApplicationResponse> {
+  public async query(
+    request: unknown,
+  ): Promise<AccountStateApplicationResponse> {
     const parsedRequest = accountStateRequestSchema.safeParse(request);
     if (!parsedRequest.success) {
       return errorResponse(400, "INVALID_REQUEST", parsedRequest.error.issues);
@@ -91,7 +93,8 @@ export class AccountStateApplicationService {
 
     let snapshot: AccountStateSnapshot;
     try {
-      const parsedObservation = accountStateObservationSchema.parse(observation);
+      const parsedObservation =
+        accountStateObservationSchema.parse(observation);
       if (
         !observationMatchesIntent(
           parsedObservation,
@@ -160,7 +163,10 @@ function observationMatchesIntent(
   const balanceBindings = [
     { balance: observation.balances.inputToken, asset: intent.tokenIn },
     { balance: observation.balances.outputToken, asset: intent.tokenOut },
-    { balance: observation.balances.native, asset: { kind: "native" as const } },
+    {
+      balance: observation.balances.native,
+      asset: { kind: "native" as const },
+    },
   ];
   return balanceBindings.every(({ balance, asset }) => {
     const trustedMetadata = tokenRegistry.resolve(intent.chainId, asset);

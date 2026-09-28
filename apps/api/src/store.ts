@@ -5,10 +5,10 @@ import type {
   RunResult,
 } from "@parallax/contracts";
 import {
+  type AccountStateSnapshot,
+  type AccountStateStore,
   accountStateSnapshotIdSchema,
   accountStateSnapshotSchema,
-  type AccountStateStore,
-  type AccountStateSnapshot,
 } from "./account-state-model.js";
 
 export const CHECK_RUN_FAILURE_CODES = [
@@ -64,7 +64,10 @@ export interface RunStore {
 /** Process-local backend for local/demo operation; PostgreSQL is configurable for production. */
 export class InMemoryRunStore implements RunStore, AccountStateStore {
   private readonly runs = new Map<string, CheckRunRecord>();
-  private readonly accountStateSnapshots = new Map<string, AccountStateSnapshot>();
+  private readonly accountStateSnapshots = new Map<
+    string,
+    AccountStateSnapshot
+  >();
 
   /** In-memory storage is ready as long as the process is running. */
   public checkReady(): Promise<void> {
@@ -161,7 +164,9 @@ export class InMemoryRunStore implements RunStore, AccountStateStore {
   public async saveAccountState(snapshot: AccountStateSnapshot): Promise<void> {
     const parsed = accountStateSnapshotSchema.parse(snapshot);
     if (this.accountStateSnapshots.has(parsed.snapshotId)) {
-      throw new Error(`Account-state snapshot ${parsed.snapshotId} already exists`);
+      throw new Error(
+        `Account-state snapshot ${parsed.snapshotId} already exists`,
+      );
     }
     this.accountStateSnapshots.set(parsed.snapshotId, clone(parsed));
   }

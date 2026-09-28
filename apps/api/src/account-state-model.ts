@@ -77,7 +77,8 @@ const accountStateMetadataSchema = z
     ) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "Chain-configured decimals cannot claim an ERC-20 verification block",
+        message:
+          "Chain-configured decimals cannot claim an ERC-20 verification block",
         path: ["verifiedAtBlock"],
       });
     }
@@ -224,20 +225,20 @@ const accountStateBlockContextFieldsSchema = z.discriminatedUnion("status", [
     .strict(),
 ]);
 
-export const accountStateBlockContextSchema = accountStateBlockContextFieldsSchema.superRefine(
-  (block, context) => {
+export const accountStateBlockContextSchema =
+  accountStateBlockContextFieldsSchema.superRefine((block, context) => {
     if (
       block.status === "UNAVAILABLE" &&
       (block.blockNumber === undefined) !== (block.blockHash === undefined)
     ) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "Unavailable block context must include both block number and hash or neither",
+        message:
+          "Unavailable block context must include both block number and hash or neither",
         path: ["blockHash"],
       });
     }
-  },
-);
+  });
 
 const accountStateObservationFieldsSchema = z
   .object({
@@ -255,7 +256,9 @@ const accountStateObservationFieldsSchema = z
   .strict();
 
 export const accountStateObservationSchema =
-  accountStateObservationFieldsSchema.superRefine(validateAccountStateObservation);
+  accountStateObservationFieldsSchema.superRefine(
+    validateAccountStateObservation,
+  );
 
 export const accountStateSnapshotIdSchema = z
   .string()
@@ -283,9 +286,7 @@ export const accountStateSnapshotSchema = z
 
 export type AccountStateRequest = z.infer<typeof accountStateRequestSchema>;
 export type AccountStateBalance = z.infer<typeof accountStateBalanceSchema>;
-export type AccountStateAllowance = z.infer<
-  typeof accountStateAllowanceSchema
->;
+export type AccountStateAllowance = z.infer<typeof accountStateAllowanceSchema>;
 export type AccountStateBlockContext = z.infer<
   typeof accountStateBlockContextSchema
 >;
@@ -296,7 +297,9 @@ export type AccountStateSnapshot = z.infer<typeof accountStateSnapshotSchema>;
 
 export interface AccountStateStore {
   saveAccountState(snapshot: AccountStateSnapshot): Promise<void>;
-  getAccountState(snapshotId: string): Promise<AccountStateSnapshot | undefined>;
+  getAccountState(
+    snapshotId: string,
+  ): Promise<AccountStateSnapshot | undefined>;
 }
 
 export type AccountStateApplicationErrorCode =
@@ -326,7 +329,9 @@ export type AccountStateReaderInput = {
 };
 
 export interface AccountStateReader {
-  readAccountState(input: AccountStateReaderInput): Promise<AccountStateObservation>;
+  readAccountState(
+    input: AccountStateReaderInput,
+  ): Promise<AccountStateObservation>;
 }
 
 export function summarizeAccountState(
@@ -404,22 +409,23 @@ function validateAccountStateObservation(
     ) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "Balances cannot be available without a verified block context",
+        message:
+          "Balances cannot be available without a verified block context",
         path: ["balances", expected.field, "status"],
       });
     }
   }
 
   const allowance = observation.allowance;
-  const nativeInput = observation.context.tokenIn.kind === "native";
-  if (nativeInput) {
+  if (observation.context.tokenIn.kind === "native") {
     if (
       allowance.status !== "NOT_APPLICABLE" ||
       allowance.owner.toLowerCase() !== observation.context.sender.toLowerCase()
     ) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "Native input must have a not-applicable allowance for the sender",
+        message:
+          "Native input must have a not-applicable allowance for the sender",
         path: ["allowance"],
       });
     }
@@ -436,16 +442,19 @@ function validateAccountStateObservation(
       });
     }
   } else {
-    const expectedTokenAddress = observation.context.tokenIn.address.toLowerCase();
+    const expectedTokenAddress =
+      observation.context.tokenIn.address.toLowerCase();
     if (
       allowance.status === "NOT_APPLICABLE" ||
-      allowance.owner.toLowerCase() !== observation.context.sender.toLowerCase() ||
+      allowance.owner.toLowerCase() !==
+        observation.context.sender.toLowerCase() ||
       allowance.tokenAddress.toLowerCase() !== expectedTokenAddress ||
       allowance.requiredAmountAtomic !== observation.context.amountInAtomic
     ) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "ERC-20 allowance must match the sender, input token, and normalized amount",
+        message:
+          "ERC-20 allowance must match the sender, input token, and normalized amount",
         path: ["allowance"],
       });
     }
@@ -466,7 +475,8 @@ function validateAccountStateObservation(
     ) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "ERC-20 allowance cannot be usable without a verified block context",
+        message:
+          "ERC-20 allowance cannot be usable without a verified block context",
         path: ["allowance", "status"],
       });
     }
@@ -482,7 +492,8 @@ function validateAccountStateObservation(
     }
     if (
       allowance.status === "INSUFFICIENT" &&
-      BigInt(allowance.allowanceAtomic) >= BigInt(allowance.requiredAmountAtomic)
+      BigInt(allowance.allowanceAtomic) >=
+        BigInt(allowance.requiredAmountAtomic)
     ) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
@@ -512,7 +523,8 @@ export function sameAccountStateAsset(
   right: z.infer<typeof assetReferenceSchema>,
 ): boolean {
   if (left.kind !== right.kind) return false;
-  return left.kind === "native" || left.address.toLowerCase() === right.address.toLowerCase();
+  if (left.kind === "native" || right.kind === "native") return true;
+  return left.address.toLowerCase() === right.address.toLowerCase();
 }
 
 function assetIdentity(

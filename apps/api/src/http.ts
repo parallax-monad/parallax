@@ -1,30 +1,21 @@
 import { Hono } from "hono";
-import type {
-  CheckApiErrorBody,
-  CheckApplicationResponse,
-} from "./application.js";
-import type { QuoteApplicationResponse } from "./quote-application.js";
+import type { CheckApplicationResponse } from "./application.js";
 import { createJsonResponse, parseJsonRequestBody } from "./json-http.js";
+import type { QuoteApplicationResponse } from "./quote-application.js";
+import { registerApiFallbacks } from "./routes/api-fallbacks.js";
 
 export interface CheckService {
   check(request: unknown): Promise<CheckApplicationResponse>;
 }
 
 type TransportErrorResponse = {
-  status: 400 | 404 | 405 | 413 | 500;
-  body:
-    | CheckApiErrorBody
-    | {
-        error: {
-          code:
-            | "INVALID_JSON"
-            | "NOT_FOUND"
-            | "METHOD_NOT_ALLOWED"
-            | "PAYLOAD_TOO_LARGE"
-            | "INTERNAL_ERROR";
-          message: string;
-        };
-      };
+  status: 400 | 413;
+  body: {
+    error: {
+      code: "INVALID_JSON" | "PAYLOAD_TOO_LARGE";
+      message: string;
+    };
+  };
 };
 
 type TransportResponse =
@@ -79,39 +70,16 @@ function createJsonPostApp(options: JsonPostAppOptions): Hono {
     return jsonResponse(await options.handle(parsed.body));
   });
 
-  app.all(options.path, () =>
-    jsonResponse(
+  registerApiFallbacks(app, {
+    methodNotAllowed: [
       {
-        status: 405,
-        body: {
-          error: {
-            code: "METHOD_NOT_ALLOWED",
-            message: `Only POST is supported for ${options.path}`,
-          },
-        },
+        path: options.path,
+        method: "POST",
+        message: `Only POST is supported for ${options.path}`,
       },
-      { allow: "POST" },
-    ),
-  );
-
-  app.notFound(() =>
-    jsonResponse({
-      status: 404,
-      body: { error: { code: "NOT_FOUND", message: "Route not found" } },
-    }),
-  );
-
-  app.onError(() =>
-    jsonResponse({
-      status: 500,
-      body: {
-        error: {
-          code: "INTERNAL_ERROR",
-          message: `The ${options.operation} could not be completed`,
-        },
-      },
-    }),
-  );
+    ],
+    internalErrorMessage: `The ${options.operation} could not be completed`,
+  });
 
   return app;
 }

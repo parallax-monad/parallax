@@ -1,19 +1,19 @@
 import {
   ARBITRUM_SEPOLIA_CHAIN_ID,
-  addressSchema,
   type AssetReference,
+  addressSchema,
   type NormalizedSwapIntent,
   type TrustedTokenMetadata,
   type TrustedTokenRegistry,
 } from "@parallax/contracts";
 import {
-  accountStateObservationSchema,
   type AccountStateAllowance,
   type AccountStateBalance,
   type AccountStateBlockContext,
   type AccountStateObservation,
   type AccountStateReader,
   type AccountStateReaderInput,
+  accountStateObservationSchema,
 } from "../account-state-model.js";
 import type { ArbitrumRpcClient } from "./arbitrum-chain-adapter.js";
 
@@ -65,7 +65,9 @@ export class ArbitrumAccountStateReader implements AccountStateReader {
   private readonly now: () => string;
   private readonly timeoutMs: number;
 
-  public constructor(private readonly options: ArbitrumAccountStateReaderOptions) {
+  public constructor(
+    private readonly options: ArbitrumAccountStateReaderOptions,
+  ) {
     const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
     if (!Number.isInteger(timeoutMs) || timeoutMs <= 0) {
       throw new TypeError("Account-state timeoutMs must be a positive integer");
@@ -200,7 +202,10 @@ export class ArbitrumAccountStateReader implements AccountStateReader {
     let recheckedBlock: PinnedBlock;
     try {
       recheckedBlock = parsePinnedBlock(
-        await this.request("eth_getBlockByNumber", [pinnedBlock.blockTag, false]),
+        await this.request("eth_getBlockByNumber", [
+          pinnedBlock.blockTag,
+          false,
+        ]),
       );
     } catch {
       return this.invalidateObservation({
@@ -263,7 +268,10 @@ export class ArbitrumAccountStateReader implements AccountStateReader {
       const amountAtomic =
         input.asset.kind === "native"
           ? parseRpcQuantity(
-              await this.request("eth_getBalance", [input.account, input.blockTag]),
+              await this.request("eth_getBalance", [
+                input.account,
+                input.blockTag,
+              ]),
             )
           : parseUint256Word(
               await this.request("eth_call", [
@@ -322,7 +330,8 @@ export class ArbitrumAccountStateReader implements AccountStateReader {
         await this.request("eth_call", [
           {
             to: tokenAddress,
-            data: `0x${ALLOWANCE_SELECTOR}${addressWord(input.owner)}` +
+            data:
+              `0x${ALLOWANCE_SELECTOR}${addressWord(input.owner)}` +
               addressWord(qualifiedSpender.address),
           },
           input.blockTag,
@@ -357,7 +366,9 @@ export class ArbitrumAccountStateReader implements AccountStateReader {
 
   private resolveQualifiedSpender(
     intent: NormalizedSwapIntent,
-  ): Extract<AccountStateAllowance, { status: "SUFFICIENT" }>['spender'] | undefined {
+  ):
+    | Extract<AccountStateAllowance, { status: "SUFFICIENT" }>["spender"]
+    | undefined {
     let candidate: QualifiedAllowanceSpender | undefined;
     try {
       candidate = this.options.resolveQualifiedSpender?.({ intent });
@@ -388,7 +399,9 @@ export class ArbitrumAccountStateReader implements AccountStateReader {
   ): TrustedTokenMetadata {
     const metadata = this.options.tokenRegistry.resolve(chainId, asset);
     if (metadata === undefined) {
-      throw new Error("Account-state asset is missing trusted registry metadata");
+      throw new Error(
+        "Account-state asset is missing trusted registry metadata",
+      );
     }
     return metadata;
   }
@@ -531,15 +544,21 @@ export class ArbitrumAccountStateReader implements AccountStateReader {
             observedAt: completedAt,
             reason:
               input.blockReason === "CHAIN_MISMATCH"
-                ? "CHAIN_MISMATCH" as const
-                : "BLOCK_RECHECK_FAILED" as const,
+                ? ("CHAIN_MISMATCH" as const)
+                : ("BLOCK_RECHECK_FAILED" as const),
           };
     return accountStateObservationSchema.parse({
       context: input.context,
       block,
       balances: {
-        inputToken: unavailableBalance(input.balances.inputToken, input.readReason),
-        outputToken: unavailableBalance(input.balances.outputToken, input.readReason),
+        inputToken: unavailableBalance(
+          input.balances.inputToken,
+          input.readReason,
+        ),
+        outputToken: unavailableBalance(
+          input.balances.outputToken,
+          input.readReason,
+        ),
         native: unavailableBalance(input.balances.native, input.readReason),
       },
       allowance: unavailableAllowance(input.allowance, input.readReason),
@@ -567,7 +586,10 @@ function parsePinnedBlock(value: unknown): PinnedBlock {
 }
 
 function parseRpcQuantity(value: unknown): string {
-  if (typeof value !== "string" || !/^0x(?:0|[1-9a-fA-F][0-9a-fA-F]*)$/.test(value)) {
+  if (
+    typeof value !== "string" ||
+    !/^0x(?:0|[1-9a-fA-F][0-9a-fA-F]*)$/.test(value)
+  ) {
     throw new Error("RPC quantity is malformed");
   }
   const quantity = BigInt(value);
@@ -641,7 +663,9 @@ function unavailableBalanceForMetadata(input: {
   readonly asset: AssetReference;
   readonly metadata: TrustedTokenMetadata;
   readonly chainId: number;
-  readonly reason: Extract<AccountStateBalance, { status: "UNAVAILABLE" }>['reason'] | "CHAIN_MISMATCH";
+  readonly reason:
+    | Extract<AccountStateBalance, { status: "UNAVAILABLE" }>["reason"]
+    | "CHAIN_MISMATCH";
 }): AccountStateBalance {
   return {
     account: input.account.toLowerCase(),
@@ -662,7 +686,9 @@ function unavailableAllowanceForIntent(input: {
   readonly reason: BlockUnavailableReason;
   readonly resolveSpender: (
     intent: NormalizedSwapIntent,
-  ) => Extract<AccountStateAllowance, { status: "SUFFICIENT" }>['spender'] | undefined;
+  ) =>
+    | Extract<AccountStateAllowance, { status: "SUFFICIENT" }>["spender"]
+    | undefined;
 }): AccountStateAllowance {
   if (input.intent.tokenIn.kind === "native") {
     return {
@@ -672,23 +698,28 @@ function unavailableAllowanceForIntent(input: {
       reason: "NATIVE_INPUT",
     };
   }
-  const spender = input.resolveSpender(input.intent);
+  const qualifiedSpender = input.resolveSpender(input.intent);
   return {
     status: "UNAVAILABLE",
     owner: input.owner,
     tokenAddress: input.intent.tokenIn.address.toLowerCase(),
-    spender: spender ?? { status: "UNAVAILABLE", reason: "SPENDER_NOT_QUALIFIED" },
+    spender: qualifiedSpender ?? {
+      status: "UNAVAILABLE",
+      reason: "SPENDER_NOT_QUALIFIED",
+    },
     requiredAmountAtomic: input.intent.amountInAtomic,
     reason:
-      input.reason === "CHAIN_MISMATCH"
-        ? "BLOCK_CONTEXT_UNAVAILABLE"
-        : input.reason,
+      qualifiedSpender === undefined
+        ? "SPENDER_NOT_QUALIFIED"
+        : input.reason === "CHAIN_MISMATCH"
+          ? "BLOCK_CONTEXT_UNAVAILABLE"
+          : input.reason,
   };
 }
 
 function unavailableBalance(
   balance: AccountStateBalance,
-  reason: Extract<AccountStateBalance, { status: "UNAVAILABLE" }>['reason'],
+  reason: Extract<AccountStateBalance, { status: "UNAVAILABLE" }>["reason"],
 ): AccountStateBalance {
   const identity = {
     account: balance.account,
@@ -701,21 +732,22 @@ function unavailableBalance(
 
 function unavailableAllowance(
   allowance: AccountStateAllowance,
-  reason: Extract<AccountStateAllowance, { status: "UNAVAILABLE" }>['reason'],
+  reason: Extract<AccountStateAllowance, { status: "UNAVAILABLE" }>["reason"],
 ): AccountStateAllowance {
   if (allowance.status === "NOT_APPLICABLE") return allowance;
   return {
     status: "UNAVAILABLE",
     owner: allowance.owner,
-    ...("tokenAddress" in allowance && allowance.tokenAddress !== undefined
-      ? { tokenAddress: allowance.tokenAddress }
-      : {}),
+    tokenAddress: allowance.tokenAddress,
     spender: allowance.spender,
     requiredAmountAtomic: allowance.requiredAmountAtomic,
     ...(allowance.blockNumber === undefined
       ? {}
       : { blockNumber: allowance.blockNumber }),
-    reason,
+    reason:
+      allowance.spender.status === "UNAVAILABLE"
+        ? "SPENDER_NOT_QUALIFIED"
+        : reason,
   };
 }
 

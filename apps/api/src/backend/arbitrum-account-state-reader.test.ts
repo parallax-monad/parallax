@@ -1,10 +1,10 @@
-import { describe, expect, it } from "vitest";
 import {
-  normalizedSwapIntentSchema,
   type AssetReference,
   type NormalizedSwapIntent,
+  normalizedSwapIntentSchema,
   type TrustedTokenRegistry,
 } from "@parallax/contracts";
+import { describe, expect, it } from "vitest";
 import {
   accountStateObservationSchema,
   summarizeAccountState,
@@ -54,6 +54,7 @@ type RpcCall = {
 type RpcClientOptions = {
   readonly chainId?: string;
   readonly failChainId?: boolean;
+  readonly failChainIdOnSecondCall?: boolean;
   readonly initialBlockHash?: string;
   readonly recheckedBlockHash?: string;
   readonly nativeBalance?: string;
@@ -87,12 +88,19 @@ function createRpcClient(options: RpcClientOptions = {}): ArbitrumRpcClient & {
   readonly calls: RpcCall[];
 } {
   const calls: RpcCall[] = [];
+  let chainIdCallCount = 0;
   return {
     calls,
     async request(method, params = []) {
       calls.push({ method, params });
       if (method === "eth_chainId") {
-        if (options.failChainId) throw new Error("offline");
+        chainIdCallCount += 1;
+        if (
+          options.failChainId ||
+          (options.failChainIdOnSecondCall && chainIdCallCount === 2)
+        ) {
+          throw new Error("offline");
+        }
         return options.chainId ?? "0x66eee";
       }
       if (method === "eth_getBlockByNumber") {
@@ -100,8 +108,10 @@ function createRpcClient(options: RpcClientOptions = {}): ArbitrumRpcClient & {
         return {
           number: "0x64",
           hash: isLatest
-            ? options.initialBlockHash ?? blockHash
-            : options.recheckedBlockHash ?? options.initialBlockHash ?? blockHash,
+            ? (options.initialBlockHash ?? blockHash)
+            : (options.recheckedBlockHash ??
+              options.initialBlockHash ??
+              blockHash),
         };
       }
       if (method === "eth_getBalance") {
@@ -115,7 +125,8 @@ function createRpcClient(options: RpcClientOptions = {}): ArbitrumRpcClient & {
         if (transaction.data.startsWith("0x70a08231")) {
           if (
             options.failBalancesFor?.some(
-              (address) => address.toLowerCase() === transaction.to.toLowerCase(),
+              (address) =>
+                address.toLowerCase() === transaction.to.toLowerCase(),
             )
           ) {
             throw new Error("balance read failed");
@@ -187,22 +198,27 @@ describe("ArbitrumAccountStateReader", () => {
       account: recipient,
       amountAtomic: "0",
     });
-    expect(client.calls.filter((call) => call.method === "eth_getBalance"))
-      .toHaveLength(1);
+    expect(
+      client.calls.filter((call) => call.method === "eth_getBalance"),
+    ).toHaveLength(1);
 
     const outputBalanceCall = client.calls.find((call) => {
       if (call.method !== "eth_call") return false;
       const transaction = call.params[0] as { to: string; data: string };
       return transaction.to.toLowerCase() === usdc;
     });
-    expect(outputBalanceCall?.params[1]).toBe("0x64");
-    expect((outputBalanceCall?.params[0] as { data: string }).data).toBe(
+    expect(outputBalanceCall).toBeDefined();
+    if (outputBalanceCall === undefined)
+      throw new Error("Expected output balance RPC call");
+    expect(outputBalanceCall.params[1]).toBe("0x64");
+    expect((outputBalanceCall.params[0] as { data: string }).data).toBe(
       `0x70a08231${recipient.slice(2).toLowerCase().padStart(64, "0")}`,
     );
     expect(
       client.calls
         .filter(
-          (call) => call.method === "eth_getBalance" || call.method === "eth_call",
+          (call) =>
+            call.method === "eth_getBalance" || call.method === "eth_call",
         )
         .every((call) => call.params[1] === "0x64"),
     ).toBe(true);
@@ -248,9 +264,10 @@ describe("ArbitrumAccountStateReader", () => {
       spender: { status: "UNAVAILABLE", reason: "SPENDER_NOT_QUALIFIED" },
     });
     expect(
-      client.calls.some((call) =>
-        call.method === "eth_call" &&
-        (call.params[0] as { data: string }).data.startsWith("0xdd62ed3e"),
+      client.calls.some(
+        (call) =>
+          call.method === "eth_call" &&
+          (call.params[0] as { data: string }).data.startsWith("0xdd62ed3e"),
       ),
     ).toBe(false);
     expect(summarizeAccountState(observation)).toBe("PARTIAL");
@@ -303,55 +320,107 @@ describe("ArbitrumAccountStateReader", () => {
     });
 
     expect(observation.block.status).toBe("UNAVAILABLE");
+    expect(observation.block).toMatchObject({
+      reason: "RPC_UNAVAILABLE",
+    });
     expect(observation.balances.inputToken.status).toBe("UNAVAILABLE");
     expect(observation.balances.outputToken.status).toBe("UNAVAILABLE");
     expect(observation.balances.native.status).toBe("UNAVAILABLE");
     expect(observation.allowance).toMatchObject({
       status: "UNAVAILABLE",
-      reason: "RPC_UNAVAILABLE",
+      reason: "SPENDER_NOT_QUALIFIED",
+      spender: { status: "UNAVAILABLE", reason: "SPENDER_NOT_QUALIFIED" },
     });
     expect(summarizeAccountState(observation)).toBe("UNAVAILABLE");
     expect(client.calls.map((call) => call.method)).toEqual(["eth_chainId"]);
   });
 
-  it(
-    "binds allowance sufficiency to normalized amount, qualified spender, and pinned block",
-    async () => {
-      const client = createRpcClient({ allowanceAtomic: "1000000" });
-      const reader = new ArbitrumAccountStateReader({
-        client,
-        tokenRegistry,
-        resolveQualifiedSpender: qualifiedSpender,
-      });
+  it("preserves the unqualified spender reason when the RPC reports another chain", async () => {
+    const client = createRpcClient({ chainId: "0x1" });
+    const reader = new ArbitrumAccountStateReader({ client, tokenRegistry });
 
-      const observation = await reader.readAccountState({
-        intent: makeIntent(
-          { kind: "erc20", address: usdc },
-          { kind: "erc20", address: weth },
-          { amountInAtomic: "1000000" },
-        ),
-      });
+    const observation = await reader.readAccountState({
+      intent: makeIntent(
+        { kind: "erc20", address: usdc },
+        { kind: "erc20", address: weth },
+      ),
+    });
 
-      expect(observation.allowance).toMatchObject({
-        status: "SUFFICIENT",
-        owner: sender,
-        tokenAddress: usdc,
-        spender: { status: "QUALIFIED", address: spender },
-        requiredAmountAtomic: "1000000",
-        allowanceAtomic: "1000000",
-        blockNumber: "100",
-      });
-      const allowanceCall = client.calls.find((call) => {
-        if (call.method !== "eth_call") return false;
-        return (call.params[0] as { data: string }).data.startsWith("0xdd62ed3e");
-      });
-      expect(allowanceCall?.params[1]).toBe("0x64");
-      expect((allowanceCall?.params[0] as { data: string }).data).toBe(
-        `0xdd62ed3e${sender.slice(2).toLowerCase().padStart(64, "0")}` +
-          spender.slice(2).toLowerCase().padStart(64, "0"),
-      );
-    },
-  );
+    expect(observation.block).toMatchObject({
+      status: "UNAVAILABLE",
+      reason: "CHAIN_MISMATCH",
+    });
+    expect(observation.allowance).toMatchObject({
+      status: "UNAVAILABLE",
+      reason: "SPENDER_NOT_QUALIFIED",
+      spender: { status: "UNAVAILABLE", reason: "SPENDER_NOT_QUALIFIED" },
+    });
+    expect(client.calls.map((call) => call.method)).toEqual(["eth_chainId"]);
+  });
+
+  it("preserves the unqualified spender reason when the final chain recheck fails", async () => {
+    const client = createRpcClient({ failChainIdOnSecondCall: true });
+    const reader = new ArbitrumAccountStateReader({ client, tokenRegistry });
+
+    const observation = await reader.readAccountState({
+      intent: makeIntent(
+        { kind: "erc20", address: usdc },
+        { kind: "erc20", address: weth },
+      ),
+    });
+
+    expect(observation.block).toMatchObject({
+      status: "UNAVAILABLE",
+      reason: "BLOCK_RECHECK_FAILED",
+    });
+    expect(observation.allowance).toMatchObject({
+      status: "UNAVAILABLE",
+      reason: "SPENDER_NOT_QUALIFIED",
+      spender: { status: "UNAVAILABLE", reason: "SPENDER_NOT_QUALIFIED" },
+    });
+    expect(
+      client.calls.filter((call) => call.method === "eth_chainId"),
+    ).toHaveLength(2);
+  });
+
+  it("binds allowance sufficiency to normalized amount, qualified spender, and pinned block", async () => {
+    const client = createRpcClient({ allowanceAtomic: "1000000" });
+    const reader = new ArbitrumAccountStateReader({
+      client,
+      tokenRegistry,
+      resolveQualifiedSpender: qualifiedSpender,
+    });
+
+    const observation = await reader.readAccountState({
+      intent: makeIntent(
+        { kind: "erc20", address: usdc },
+        { kind: "erc20", address: weth },
+        { amountInAtomic: "1000000" },
+      ),
+    });
+
+    expect(observation.allowance).toMatchObject({
+      status: "SUFFICIENT",
+      owner: sender,
+      tokenAddress: usdc,
+      spender: { status: "QUALIFIED", address: spender },
+      requiredAmountAtomic: "1000000",
+      allowanceAtomic: "1000000",
+      blockNumber: "100",
+    });
+    const allowanceCall = client.calls.find((call) => {
+      if (call.method !== "eth_call") return false;
+      return (call.params[0] as { data: string }).data.startsWith("0xdd62ed3e");
+    });
+    expect(allowanceCall).toBeDefined();
+    if (allowanceCall === undefined)
+      throw new Error("Expected allowance RPC call");
+    expect(allowanceCall.params[1]).toBe("0x64");
+    expect((allowanceCall.params[0] as { data: string }).data).toBe(
+      `0xdd62ed3e${sender.slice(2).toLowerCase().padStart(64, "0")}` +
+        spender.slice(2).toLowerCase().padStart(64, "0"),
+    );
+  });
 
   it("does not mark an allowance sufficient when the amount exceeds the allowance", async () => {
     const reader = new ArbitrumAccountStateReader({

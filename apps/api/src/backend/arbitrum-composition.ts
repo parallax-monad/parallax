@@ -35,6 +35,7 @@ import {
   evaluateEvidence,
   solveSelectedTargetOutput,
 } from "@parallax/risk";
+import type { AccountStateReader } from "../account-state-model.js";
 import {
   normalizeArbitrumCheckSwapRequest,
   normalizeArbitrumQuoteRequest,
@@ -45,18 +46,17 @@ import {
   bootstrapBackendRuntime,
 } from "../runtime-config.js";
 import type { CheckRunRecord, RunStore } from "../store.js";
-import type { AccountStateReader } from "../account-state-model.js";
 import { tokenDecimals } from "../token-decimals.js";
+import {
+  ArbitrumAccountStateReader,
+  type QualifiedAllowanceSpenderResolver,
+} from "./arbitrum-account-state-reader.js";
 import {
   ArbitrumChainAdapter,
   type ArbitrumRpcClient,
   type ArbitrumTransaction,
   createArbitrumRpcClient,
 } from "./arbitrum-chain-adapter.js";
-import {
-  ArbitrumAccountStateReader,
-  type QualifiedAllowanceSpenderResolver,
-} from "./arbitrum-account-state-reader.js";
 import { CamelotV3ProtocolAdapter } from "./camelot-v3-protocol-adapter.js";
 import type { BlockContext, ChainAdapter } from "./chain-adapter.js";
 import { ChainRegistry } from "./chain-registry.js";
@@ -430,7 +430,9 @@ export function createArbitrumProductionComposition(
   if (accountStateReader === undefined) {
     return composition as ArbitrumProductionComposition;
   }
-  return Object.assign(composition, { accountStateReader }) as ArbitrumProductionComposition;
+  return Object.assign(composition, {
+    accountStateReader,
+  }) as ArbitrumProductionComposition;
 }
 
 /** Naming alias for callers that use the shorter Backend composition term. */

@@ -1,14 +1,12 @@
-import { describe, expect, it } from "vitest";
 import type { NormalizedSwapIntent } from "@parallax/contracts";
-import {
-  AccountStateApplicationService,
-} from "./account-state-application.js";
+import { describe, expect, it } from "vitest";
+import { AccountStateApplicationService } from "./account-state-application.js";
 import type {
   AccountStateObservation,
   AccountStateReader,
 } from "./account-state-model.js";
-import { createTrustedTokenRegistry } from "./trusted-token-registry.js";
 import { InMemoryRunStore } from "./store.js";
+import { createTrustedTokenRegistry } from "./trusted-token-registry.js";
 
 const sender = "0x1111111111111111111111111111111111111111";
 const otherSender = "0x3333333333333333333333333333333333333333";
@@ -152,7 +150,9 @@ describe("AccountStateApplicationService", () => {
       status: 503,
       body: { error: { code: "ACCOUNT_STATE_READ_ERROR" } },
     });
-    await expect(store.getAccountState(snapshotIdLower)).resolves.toBeUndefined();
+    await expect(
+      store.getAccountState(snapshotIdLower),
+    ).resolves.toBeUndefined();
   });
 
   it("rejects reader metadata that conflicts with the trusted token registry", async () => {
@@ -188,6 +188,8 @@ describe("AccountStateApplicationService", () => {
       status: 503,
       body: { error: { code: "ACCOUNT_STATE_READ_ERROR" } },
     });
-    await expect(store.getAccountState(snapshotIdLower)).resolves.toBeUndefined();
+    await expect(
+      store.getAccountState(snapshotIdLower),
+    ).resolves.toBeUndefined();
   });
 });
