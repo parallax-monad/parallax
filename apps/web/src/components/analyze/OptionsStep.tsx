@@ -13,7 +13,8 @@ export function OptionsStep({
   onSelectOption?: (option: RemediationOption) => void;
   onBack: () => void;
 }) {
-  const hasOptions = result.remediationOptions && result.remediationOptions.length > 0;
+  const hasOptions =
+    result.remediationOptions && result.remediationOptions.length > 0;
 
   if (!hasOptions) {
     return (

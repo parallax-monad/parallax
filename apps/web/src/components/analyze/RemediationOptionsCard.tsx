@@ -61,7 +61,9 @@ export function RemediationOptionsCard({
               zh: "这些变更已经过检查，可以套用。",
             })}
           </p>
-          <div className="mt-3 space-y-4">{verifiedOptions.map(renderOption)}</div>
+          <div className="mt-3 space-y-4">
+            {verifiedOptions.map(renderOption)}
+          </div>
         </div>
       )}
 
@@ -79,7 +81,9 @@ export function RemediationOptionsCard({
               zh: "这些只是参考建议，不能直接套用。",
             })}
           </p>
-          <div className="mt-3 space-y-4">{guidanceOptions.map(renderOption)}</div>
+          <div className="mt-3 space-y-4">
+            {guidanceOptions.map(renderOption)}
+          </div>
         </div>
       )}
     </section>
@@ -135,8 +139,12 @@ function RemediationOptionRow({
   const content = (
     <>
       <div className="flex flex-wrap items-center gap-2">
-        <strong className="text-[15px] font-bold">{say(language, option.objective)}</strong>
-        <span className={`rounded-full border px-2 py-0.5 text-[11px] font-bold ${verificationColor}`}>
+        <strong className="text-[15px] font-bold">
+          {say(language, option.objective)}
+        </strong>
+        <span
+          className={`rounded-full border px-2 py-0.5 text-[11px] font-bold ${verificationColor}`}
+        >
           {say(language, verificationLabel)}
         </span>
       </div>
@@ -145,16 +153,22 @@ function RemediationOptionRow({
         {say(language, option.candidateAdjustment)}
       </p>
 
-      <div className={`mt-3 grid grid-cols-1 gap-3 border-t pt-3 sm:grid-cols-2 ${divider}`}>
+      <div
+        className={`mt-3 grid grid-cols-1 gap-3 border-t pt-3 sm:grid-cols-2 ${divider}`}
+      >
         <div>
-          <span className={`block text-[11px] font-bold uppercase tracking-[0.08em] ${secondaryText}`}>
+          <span
+            className={`block text-[11px] font-bold uppercase tracking-[0.08em] ${secondaryText}`}
+          >
             {say(language, { en: "Change", zh: "变化" })}
           </span>
           <div className="mt-1 flex items-baseline gap-2">
             <span className={`text-[14px] ${secondaryText}`}>
               {option.quantification.before} {option.quantification.unit}
             </span>
-            <span aria-hidden="true" className={secondaryText}>→</span>
+            <span aria-hidden="true" className={secondaryText}>
+              →
+            </span>
             <strong className="text-[16px] font-bold">
               {option.quantification.after} {option.quantification.unit}
             </strong>
@@ -162,7 +176,9 @@ function RemediationOptionRow({
         </div>
 
         <div>
-          <span className={`block text-[11px] font-bold uppercase tracking-[0.08em] ${secondaryText}`}>
+          <span
+            className={`block text-[11px] font-bold uppercase tracking-[0.08em] ${secondaryText}`}
+          >
             {say(language, { en: "Predicted outcome", zh: "预测结果" })}
           </span>
           <p className="m-0 mt-1 text-[14px] leading-[1.5]">
@@ -173,7 +189,9 @@ function RemediationOptionRow({
 
       {option.tradeOff && (
         <div className={`mt-3 border-t pt-3 ${divider}`}>
-          <span className={`block text-[11px] font-bold uppercase tracking-[0.08em] ${secondaryText}`}>
+          <span
+            className={`block text-[11px] font-bold uppercase tracking-[0.08em] ${secondaryText}`}
+          >
             {say(language, { en: "Trade-off", zh: "权衡" })}
           </span>
           <p className={`m-0 mt-1 text-[13px] leading-[1.6] ${secondaryText}`}>
@@ -183,7 +201,9 @@ function RemediationOptionRow({
       )}
 
       {option.verificationStatus === "CONDITIONAL" && (
-        <p className={`m-0 mt-3 border-t pt-3 text-[12px] leading-[1.5] ${divider} ${secondaryText}`}>
+        <p
+          className={`m-0 mt-3 border-t pt-3 text-[12px] leading-[1.5] ${divider} ${secondaryText}`}
+        >
           {say(language, {
             en: "Wait until the condition is met, then run the check again.",
             zh: "等待条件满足后，再重新运行检查。",
@@ -192,7 +212,9 @@ function RemediationOptionRow({
       )}
 
       {option.verificationStatus === "UNVERIFIED" && (
-        <p className={`m-0 mt-3 border-t pt-3 text-[12px] leading-[1.5] ${divider} ${secondaryText}`}>
+        <p
+          className={`m-0 mt-3 border-t pt-3 text-[12px] leading-[1.5] ${divider} ${secondaryText}`}
+        >
           {say(language, {
             en: "This change has not been verified and cannot be applied.",
             zh: "此变更尚未验证，不能直接套用。",
@@ -226,5 +248,7 @@ function RemediationOptionRow({
     );
   }
 
-  return <div className={`rounded-[14px] border p-5 ${cardStyle}`}>{content}</div>;
+  return (
+    <div className={`rounded-[14px] border p-5 ${cardStyle}`}>{content}</div>
+  );
 }

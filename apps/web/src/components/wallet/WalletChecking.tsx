@@ -16,7 +16,10 @@ const HEADER = {
 };
 
 const TITLE = {
-  live: { en: "Checking this swap before you sign.", zh: "正在签名前检查这笔兑换。" },
+  live: {
+    en: "Checking this swap before you sign.",
+    zh: "正在签名前检查这笔兑换。",
+  },
   replay: { en: "Loading a recorded check.", zh: "正在载入一次录制的检查。" },
 };
 
@@ -30,7 +33,10 @@ export function WalletChecking({
   mode?: "live" | "replay";
 }) {
   return (
-    <div aria-live="polite" className="flex flex-1 flex-col justify-center px-5 pb-10">
+    <div
+      aria-live="polite"
+      className="flex flex-1 flex-col justify-center px-5 pb-10"
+    >
       <span className="eyebrow-monad">{say(language, HEADER[mode])}</span>
       <h2 className="m-0 text-[24px] font-extrabold leading-[1.15] tracking-[-0.04em]">
         {say(language, TITLE[mode])}

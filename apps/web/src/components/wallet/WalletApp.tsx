@@ -293,7 +293,7 @@ export function WalletApp({ language }: { language: Language }) {
       ERROR: arbitrumSampleIntegrationError,
     };
     const sample = sampleMap[verdict];
-    
+
     recoveryCancelledRef.current = true;
     schedulerRef.current.cancel();
     const sampleForm: FormState = {
@@ -354,78 +354,78 @@ export function WalletApp({ language }: { language: Language }) {
         <WalletIntro onComplete={() => setShowIntro(false)} />
       ) : (
         <div className="wallet-app-frame relative z-10 flex h-[calc(100vh-2.5rem)] flex-col overflow-hidden rounded-[24px] border-none bg-ink-elev/90 backdrop-blur-xl shadow-[0_8px_32px_rgba(0,0,0,0.12),_0_1px_3px_rgba(0,0,0,0.08)] animate-wallet-enter">
-        <header className="relative flex items-center justify-center px-6 py-5">
-          <span className="text-[22px] font-semibold tracking-[-0.02em] text-monad-dim">
-            PARAL<span className="text-white">LAX</span>
-          </span>
-          {screen !== "home" && (
-            <button
-              type="button"
-              aria-label={pick(
-                language,
-                "Return to wallet home",
-                "è¿?å??æ¼?ç¤ºé?±å??é¦?é¡µ",
-              )}
-              className="wallet-app-close absolute right-6 rounded-full p-2 text-dim/80 transition-all duration-200 ease-out hover:bg-white/[0.06] hover:text-white active:scale-95"
-              onClick={discard}
-            >
-              <CloseIcon size={20} />
-            </button>
-          )}
-        </header>
+          <header className="relative flex items-center justify-center px-6 py-5">
+            <span className="text-[22px] font-semibold tracking-[-0.02em] text-monad-dim">
+              PARAL<span className="text-white">LAX</span>
+            </span>
+            {screen !== "home" && (
+              <button
+                type="button"
+                aria-label={pick(
+                  language,
+                  "Return to wallet home",
+                  "è¿?å??æ¼?ç¤ºé?±å??é¦?é¡µ",
+                )}
+                className="wallet-app-close absolute right-6 rounded-full p-2 text-dim/80 transition-all duration-200 ease-out hover:bg-white/[0.06] hover:text-white active:scale-95"
+                onClick={discard}
+              >
+                <CloseIcon size={20} />
+              </button>
+            )}
+          </header>
 
-        {/* x is clipped because the screen transition slides in from the right;
+          {/* x is clipped because the screen transition slides in from the right;
             leaving it visible would resolve to auto and flash a scrollbar. */}
-        <div className="no-scrollbar flex flex-1 flex-col overflow-y-auto overflow-x-hidden">
-          <ScreenTransition key={screen}>
-            <div className="flex w-full flex-1 flex-col">
-              {screen === "home" && (
-                <WalletHome
-                  language={language}
-                  onLoadArbitrumSample={loadArbitrumSample}
-                  onSwap={() => {
-                    recoveryCancelledRef.current = true;
-                    setScreen("swap");
-                  }}
-                />
-              )}
-              {screen === "swap" && (
-                <WalletSwap
-                  errors={formErrors}
-                  flags={flags}
-                  form={form}
-                  language={language}
-                  quote={quote}
-                  onChange={(nextForm) => {
-                    setForm(nextForm);
-                    if (Object.keys(formErrors).length > 0) setFormErrors({});
-                  }}
-                  onSubmit={runCheck}
-                  onReplay={runReplay}
-                />
-              )}
-              {screen === "checking" && (
-                <WalletChecking
-                  language={language}
-                  mode={checkingMode}
-                  stage={stage}
-                />
-              )}
-              {screen === "result" && result && (
-                <WalletResult
-                  language={language}
-                  result={result}
-                  onDiscard={discard}
-                  onRetry={() => runCheck(true)}
-                  onKeep={() => setScreen("swap")}
-                  onOpenEvidence={() => setDrawerOpen(true)}
-                  onSelectOption={applyOption}
-                />
-              )}
-            </div>
-          </ScreenTransition>
+          <div className="no-scrollbar flex flex-1 flex-col overflow-y-auto overflow-x-hidden">
+            <ScreenTransition key={screen}>
+              <div className="flex w-full flex-1 flex-col">
+                {screen === "home" && (
+                  <WalletHome
+                    language={language}
+                    onLoadArbitrumSample={loadArbitrumSample}
+                    onSwap={() => {
+                      recoveryCancelledRef.current = true;
+                      setScreen("swap");
+                    }}
+                  />
+                )}
+                {screen === "swap" && (
+                  <WalletSwap
+                    errors={formErrors}
+                    flags={flags}
+                    form={form}
+                    language={language}
+                    quote={quote}
+                    onChange={(nextForm) => {
+                      setForm(nextForm);
+                      if (Object.keys(formErrors).length > 0) setFormErrors({});
+                    }}
+                    onSubmit={runCheck}
+                    onReplay={runReplay}
+                  />
+                )}
+                {screen === "checking" && (
+                  <WalletChecking
+                    language={language}
+                    mode={checkingMode}
+                    stage={stage}
+                  />
+                )}
+                {screen === "result" && result && (
+                  <WalletResult
+                    language={language}
+                    result={result}
+                    onDiscard={discard}
+                    onRetry={() => runCheck(true)}
+                    onKeep={() => setScreen("swap")}
+                    onOpenEvidence={() => setDrawerOpen(true)}
+                    onSelectOption={applyOption}
+                  />
+                )}
+              </div>
+            </ScreenTransition>
+          </div>
         </div>
-      </div>
       )}
 
       {result && drawerOpen && (

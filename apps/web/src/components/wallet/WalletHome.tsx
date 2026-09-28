@@ -16,7 +16,9 @@ export function WalletHome({
 }: {
   language: Language;
   onSwap: () => void;
-  onLoadArbitrumSample?: (verdict: "ADJUST" | "PROCEED" | "STOP" | "UNKNOWN" | "ERROR") => void;
+  onLoadArbitrumSample?: (
+    verdict: "ADJUST" | "PROCEED" | "STOP" | "UNKNOWN" | "ERROR",
+  ) => void;
 }) {
   return (
     <div className="flex flex-col gap-5 px-5 pb-6 pt-2">

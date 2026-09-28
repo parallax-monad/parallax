@@ -1,8 +1,8 @@
 ﻿import { useState } from "react";
 import { OptionsStep } from "@/components/analyze/OptionsStep";
 import { ResultStep } from "@/components/analyze/ResultStep";
-import { StepTimeline } from "@/components/analyze/StepTimeline";
 import { VerdictIcon } from "@/components/analyze/StatusIcon";
+import { StepTimeline } from "@/components/analyze/StepTimeline";
 import type {
   CheckSwapResult,
   ProductRunMode,
@@ -56,7 +56,9 @@ export function WalletResult({
   onOpenEvidence: () => void;
   onSelectOption?: (option: RemediationOption) => void;
 }) {
-  const [currentStep, setCurrentStep] = useState<"result" | "options">("result");
+  const [currentStep, setCurrentStep] = useState<"result" | "options">(
+    "result",
+  );
 
   if (result.systemStatus === "INTEGRATION_ERROR") {
     return (
@@ -189,7 +191,8 @@ export function WalletResult({
     );
   }
 
-  const hasOptions = result.remediationOptions && result.remediationOptions.length > 0;
+  const hasOptions =
+    result.remediationOptions && result.remediationOptions.length > 0;
 
   return (
     <div className="flex flex-col gap-4 px-5 pb-6 pt-2">

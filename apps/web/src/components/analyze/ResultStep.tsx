@@ -67,14 +67,25 @@ function SwapSummary({
             <div className="text-[11px] font-bold uppercase tracking-[0.08em] text-dim">
               {say(language, { en: "You pay", zh: "你支付" })}
             </div>
-              <div className="truncate text-[16px] font-extrabold text-white">
+            <div className="truncate text-[16px] font-extrabold text-white">
               {amountIn} {tokenIn}
             </div>
           </div>
         </div>
         <div className="shrink-0 text-monad-dim" aria-hidden="true">
-          <svg className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-            <path d="M13 7l5 5m0 0l-5 5m5-5H6" strokeLinecap="round" strokeLinejoin="round" />
+          <svg
+            aria-hidden="true"
+            className="h-6 w-6"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={2}
+            viewBox="0 0 24 24"
+          >
+            <path
+              d="M13 7l5 5m0 0l-5 5m5-5H6"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
           </svg>
         </div>
         <div className="flex min-w-0 flex-1 items-center gap-2">
@@ -83,7 +94,7 @@ function SwapSummary({
             <div className="text-[11px] font-bold uppercase tracking-[0.08em] text-dim">
               {say(language, { en: "You receive", zh: "你收到" })}
             </div>
-              <div className="truncate text-[16px] font-extrabold text-white">
+            <div className="truncate text-[16px] font-extrabold text-white">
               {amountOut} {tokenOut}
             </div>
           </div>
@@ -116,9 +127,15 @@ function ScopeSummary({
             {say(language, { en: "Check scope", zh: "检查范围" })}
           </div>
           <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[13px] text-white">
-            <span>{say(language, { en: "Checked", zh: "已检查" })}: {checked}</span>
-            <span className="text-dim">{say(language, { en: "Unknown", zh: "未知" })}: {unknown}</span>
-            <span className="text-dim">{say(language, { en: "Not checked", zh: "未检查" })}: {notChecked}</span>
+            <span>
+              {say(language, { en: "Checked", zh: "已检查" })}: {checked}
+            </span>
+            <span className="text-dim">
+              {say(language, { en: "Unknown", zh: "未知" })}: {unknown}
+            </span>
+            <span className="text-dim">
+              {say(language, { en: "Not checked", zh: "未检查" })}: {notChecked}
+            </span>
           </div>
         </div>
         <button
@@ -127,7 +144,12 @@ function ScopeSummary({
           className="shrink-0 text-[12px] font-bold uppercase tracking-[0.06em] text-monad-dim underline"
           onClick={onToggle}
         >
-          {say(language, expanded ? { en: "Hide details", zh: "收起详情" } : { en: "View details", zh: "查看详情" })}
+          {say(
+            language,
+            expanded
+              ? { en: "Hide details", zh: "收起详情" }
+              : { en: "View details", zh: "查看详情" },
+          )}
         </button>
       </div>
       {expanded && (
@@ -138,7 +160,9 @@ function ScopeSummary({
                 {say(language, { en: "Unknown", zh: "未知" })}
               </div>
               <ul className="m-0 mt-1 list-disc space-y-1 pl-4 text-[13px] leading-[1.5] text-white">
-                {result.unknowns.map((item) => <li key={item.id}>{say(language, item.reason)}</li>)}
+                {result.unknowns.map((item) => (
+                  <li key={item.id}>{say(language, item.reason)}</li>
+                ))}
               </ul>
             </div>
           )}
@@ -148,7 +172,9 @@ function ScopeSummary({
                 {say(language, { en: "Checked", zh: "已检查" })}
               </div>
               <ul className="m-0 mt-1 list-disc space-y-1 pl-4 text-[13px] leading-[1.5] text-white">
-                {result.checked.map((item, index) => <li key={`${index}-${item.en}`}>{say(language, item)}</li>)}
+                {result.checked.map((item) => (
+                  <li key={item.en}>{say(language, item)}</li>
+                ))}
               </ul>
             </div>
           )}
@@ -158,7 +184,9 @@ function ScopeSummary({
                 {say(language, { en: "Not checked", zh: "未检查" })}
               </div>
               <ul className="m-0 mt-1 list-disc space-y-1 pl-4 text-[13px] leading-[1.5] text-white">
-                {result.notChecked.map((item, index) => <li key={`${index}-${item.en}`}>{say(language, item)}</li>)}
+                {result.notChecked.map((item) => (
+                  <li key={item.en}>{say(language, item)}</li>
+                ))}
               </ul>
             </div>
           )}
@@ -179,61 +207,140 @@ export function ResultStep({
 }) {
   const [scopeOpen, setScopeOpen] = useState(false);
   const { intent, quote, verdict } = result;
-  const amountIn = Number.isFinite(Number(intent.amountIn)) ? formatAmount(Number(intent.amountIn)) : intent.amountIn;
-  const amountOut = quote.expectedOutput === "unavailable" ? say(language, { en: "Unknown", zh: "未知" }) : quote.expectedOutput;
-  const hasOptions = Boolean(result.remediationOptions && result.remediationOptions.length > 0);
-  const hasDiagnosis = Boolean(result.quoteFidelity || result.executionEconomics);
+  const amountIn = Number.isFinite(Number(intent.amountIn))
+    ? formatAmount(Number(intent.amountIn))
+    : intent.amountIn;
+  const amountOut =
+    quote.expectedOutput === "unavailable"
+      ? say(language, { en: "Unknown", zh: "未知" })
+      : quote.expectedOutput;
+  const hasOptions = Boolean(
+    result.remediationOptions && result.remediationOptions.length > 0,
+  );
+  const hasDiagnosis = Boolean(
+    result.quoteFidelity || result.executionEconomics,
+  );
   const hasMinimumBoundary = result.minimumReceivedSource !== "unavailable";
 
   return (
     <div className="flex flex-col gap-2.5">
-    <section className={`flex items-start gap-2.5 rounded-[12px] border p-3.5 ${VERDICT_TONE[verdict]}`}>
+      <section
+        className={`flex items-start gap-2.5 rounded-[12px] border p-3.5 ${VERDICT_TONE[verdict]}`}
+      >
         <VerdictIcon className="mt-0.5 shrink-0" size={30} verdict={verdict} />
         <div className="min-w-0 flex-1">
-          <strong className="block text-[20px] font-extrabold leading-[1.1] tracking-[-0.04em]">{say(language, VERDICT_TITLE[verdict])}</strong>
-          <p className="mt-1 text-[13px] leading-[1.4] text-white">{say(language, VERDICT_EXPLANATION[verdict])}</p>
+          <strong className="block text-[20px] font-extrabold leading-[1.1] tracking-[-0.04em]">
+            {say(language, VERDICT_TITLE[verdict])}
+          </strong>
+          <p className="mt-1 text-[13px] leading-[1.4] text-white">
+            {say(language, VERDICT_EXPLANATION[verdict])}
+          </p>
         </div>
       </section>
 
-      <SwapSummary amountIn={amountIn} amountOut={amountOut} language={language} tokenIn={intent.tokenIn} tokenOut={intent.tokenOut} />
+      <SwapSummary
+        amountIn={amountIn}
+        amountOut={amountOut}
+        language={language}
+        tokenIn={intent.tokenIn}
+        tokenOut={intent.tokenOut}
+      />
 
-      {result.quoteFidelity && <QuoteFidelityCard language={language} quoteFidelity={result.quoteFidelity} tokenSymbol={intent.tokenOut} />}
+      {result.quoteFidelity && (
+        <QuoteFidelityCard
+          language={language}
+          quoteFidelity={result.quoteFidelity}
+          tokenSymbol={intent.tokenOut}
+        />
+      )}
 
       {hasMinimumBoundary && (
         <section className="rounded-[12px] border border-line bg-ink-elev2/30 p-3">
-          <div className="text-[12px] font-bold uppercase tracking-[0.08em] text-dim">{say(language, { en: "Minimum received", zh: "最低收到量" })}</div>
+          <div className="text-[12px] font-bold uppercase tracking-[0.08em] text-dim">
+            {say(language, { en: "Minimum received", zh: "最低收到量" })}
+          </div>
           <div className="mt-1 text-[16px] font-bold text-white">
             {say(language, {
               en: "Provided for this check",
               zh: "已为本次检查提供",
             })}
           </div>
-          <p className="mt-2 text-[12px] leading-[1.5] text-dim">{say(language, { en: "This is your acceptance boundary, not an estimate and not a way to improve the transaction.", zh: "这是你的接受边界，不是预估值，也不是改善交易结果的方法。" })}</p>
+          <p className="mt-2 text-[12px] leading-[1.5] text-dim">
+            {say(language, {
+              en: "This is your acceptance boundary, not an estimate and not a way to improve the transaction.",
+              zh: "这是你的接受边界，不是预估值，也不是改善交易结果的方法。",
+            })}
+          </p>
         </section>
       )}
 
       <div className="rounded-[16px] border border-line bg-ink-elev2/30 px-4 py-3 text-[13px]">
         <div className="flex items-center justify-between gap-3">
-          <span className="text-dim">{say(language, { en: "Route", zh: "路径" })}</span>
-          <span className="font-bold text-white">{say(language, quote.route)}</span>
+          <span className="text-dim">
+            {say(language, { en: "Route", zh: "路径" })}
+          </span>
+          <span className="font-bold text-white">
+            {say(language, quote.route)}
+          </span>
         </div>
         <div className="mt-2 flex items-center justify-between gap-3">
-          <span className="text-dim">{say(language, { en: "Quote block", zh: "报价区块" })}</span>
+          <span className="text-dim">
+            {say(language, { en: "Quote block", zh: "报价区块" })}
+          </span>
           <span className="mono text-white">{quote.blockNumber}</span>
         </div>
       </div>
 
-      {result.executionEconomics && <ExecutionEconomicsCard economics={result.executionEconomics} language={language} />}
+      {result.executionEconomics && (
+        <ExecutionEconomicsCard
+          economics={result.executionEconomics}
+          language={language}
+        />
+      )}
 
-      {hasDiagnosis && <ScopeSummary expanded={scopeOpen} language={language} onToggle={() => setScopeOpen(!scopeOpen)} result={result} />}
-      {!hasDiagnosis && <ScopeSummary expanded={scopeOpen} language={language} onToggle={() => setScopeOpen(!scopeOpen)} result={result} />}
+      {hasDiagnosis && (
+        <ScopeSummary
+          expanded={scopeOpen}
+          language={language}
+          onToggle={() => setScopeOpen(!scopeOpen)}
+          result={result}
+        />
+      )}
+      {!hasDiagnosis && (
+        <ScopeSummary
+          expanded={scopeOpen}
+          language={language}
+          onToggle={() => setScopeOpen(!scopeOpen)}
+          result={result}
+        />
+      )}
 
       <section className="rounded-[12px] border border-line bg-ink-elev2/30 p-3">
-        <p className="m-0 text-[13px] leading-[1.6] text-dim">{say(language, RECHECK_COPY)}</p>
+        <p className="m-0 text-[13px] leading-[1.6] text-dim">
+          {say(language, RECHECK_COPY)}
+        </p>
       </section>
 
-      {hasOptions && <button type="button" className="btn btn-monad mt-1 w-full" onClick={onNext}>{say(language, { en: "View verified options →", zh: "查看已验证选项 →" })}</button>}
-      {!hasOptions && <div className="rounded-[16px] border border-line bg-ink-elev2/30 p-4 text-center text-[13px] text-dim">{say(language, { en: "No verified transaction adjustment is available for this result.", zh: "此结果没有可用的已验证交易调整。" })}</div>}
+      {hasOptions && (
+        <button
+          type="button"
+          className="btn btn-monad mt-1 w-full"
+          onClick={onNext}
+        >
+          {say(language, {
+            en: "View verified options →",
+            zh: "查看已验证选项 →",
+          })}
+        </button>
+      )}
+      {!hasOptions && (
+        <div className="rounded-[16px] border border-line bg-ink-elev2/30 p-4 text-center text-[13px] text-dim">
+          {say(language, {
+            en: "No verified transaction adjustment is available for this result.",
+            zh: "此结果没有可用的已验证交易调整。",
+          })}
+        </div>
+      )}
     </div>
   );
 }

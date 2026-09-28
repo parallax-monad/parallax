@@ -7,10 +7,7 @@ import {
   formatAmount,
 } from "@/components/wallet/walletData";
 import type { FieldFlag } from "@/lib/analyze/fields";
-import {
-  receiveTokenFor,
-  SUPPORTED_TOKENS_IN,
-} from "@/lib/analyze/fixtures";
+import { receiveTokenFor, SUPPORTED_TOKENS_IN } from "@/lib/analyze/fixtures";
 import type { FormFieldErrors, FormState } from "@/lib/analyze/form";
 import type { QuoteState } from "@/lib/analyze/types";
 import { type Copy, type Language, say } from "@/lib/i18n";
@@ -165,7 +162,11 @@ export function WalletSwap({
             options={SUPPORTED_TOKENS_IN}
             value={form.tokenIn}
             onSelect={(value) =>
-              onChange({ ...form, tokenIn: value, tokenOut: receiveTokenFor(value) })
+              onChange({
+                ...form,
+                tokenIn: value,
+                tokenOut: receiveTokenFor(value),
+              })
             }
           />
         </div>

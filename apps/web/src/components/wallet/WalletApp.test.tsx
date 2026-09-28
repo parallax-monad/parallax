@@ -261,9 +261,10 @@ describe("WalletApp persisted Run recovery", () => {
       timelineOptionsButton?.click();
     });
 
-    const applyButtons = Array.from(container.querySelectorAll("button")).filter(
-      (button) =>
-        button.textContent?.includes("Preserve a similar effective rate"),
+    const applyButtons = Array.from(
+      container.querySelectorAll("button"),
+    ).filter((button) =>
+      button.textContent?.includes("Preserve a similar effective rate"),
     );
     expect(applyButtons.length).toBeGreaterThan(0);
 
