@@ -1,5 +1,6 @@
 import type { Copy } from "@/lib/i18n";
 import { getChainIdForProtocol } from "./api-helpers";
+import { evidenceCoverage } from "./evidence-coverage";
 import { type FormState, INITIAL_FORM, validateForm } from "./form";
 import type {
   ActionSuggestion,
@@ -24,7 +25,7 @@ export const ARBITRUM_SEPOLIA_USDC_ADDRESS =
 const API_BASE = "";
 const cp = (value: string) => ({ en: value, zh: value });
 const obj = (value: unknown): Record<string, unknown> | undefined =>
-  typeof value === "object" && value !== null
+  typeof value === "object" && value !== null && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : undefined;
 const str = (value: unknown) => (typeof value === "string" ? value : undefined);
@@ -198,8 +199,9 @@ function evidence(value: unknown, replay: boolean): EvidenceItem | undefined {
   return {
     id,
     stage,
-    label: cp(str(item?.summary) ?? id),
-    value: JSON.stringify(item, null, 2),
+    // The drawer must never serialize an Evidence or Provider object.
+    label: cp("Backend evidence record"),
+    value: "Recorded at this stage",
     origin: replay
       ? "replay"
       : isMock
@@ -207,14 +209,24 @@ function evidence(value: unknown, replay: boolean): EvidenceItem | undefined {
         : source === "derived"
           ? "derived"
           : "live",
-    blockNumber: str(item?.blockNumber) ?? str(item?.simulatorPinnedBlock),
-    runtimeVersion: str(item?.runtimeVersion),
-    runtimeRevision: str(item?.runtimeRevision),
+    blockNumber: [item?.blockNumber, item?.simulatorPinnedBlock].find(
+      (value): value is string =>
+        typeof value === "string" && /^(0|[1-9]\d*)$/.test(value),
+    ),
+    runtimeVersion: safeToken(item?.runtimeVersion),
+    runtimeRevision: safeToken(item?.runtimeRevision),
     fixtureId: str(item?.fixtureId),
     reproducibility: str(item?.reproducibility),
     isMock,
   };
 }
+
+const safeToken = (value: unknown): string | undefined => {
+  const text = str(value);
+  return text && /^[a-zA-Z0-9][a-zA-Z0-9._@+-]{0,79}$/.test(text)
+    ? text
+    : undefined;
+};
 
 /**
  * The wire Diff names the amount field `amountInAtomic` and carries atomic
@@ -284,7 +296,7 @@ function failureCopy(failure: ApiFailure) {
 function failed(
   input: CheckSwapInput,
   apiFailure: ApiFailure,
-  rawResponse: unknown,
+  _rawResponse: unknown,
 ): CheckSwapResult {
   return {
     runId: `request-${Date.now()}`,
@@ -325,14 +337,13 @@ function failed(
     productRunMode: "LIVE",
     replayMode: false,
     apiFailure,
-    rawResponse,
   };
 }
 
 function mapRun(
   raw: unknown,
   transportFailure?: ApiFailure,
-  rawResponse: unknown = raw,
+  _rawResponse: unknown = raw,
   createdAtOverride?: string,
 ): CheckSwapResult | undefined {
   const run = obj(raw);
@@ -379,6 +390,18 @@ function mapRun(
   const tokenIn = symbol(intent?.tokenIn, chainId);
   const tokenOut = symbol(intent?.tokenOut, chainId);
   const boundary = obj(intent?.economicBoundary);
+  const coverage = evidenceCoverage(run);
+  const protocol = str(intent.protocol);
+  const recoveryInput =
+    protocol === "kuru" || protocol === "pancake" || protocol === "camelot-v3"
+      ? {
+          protocol: protocol as CheckSwapInput["protocol"],
+          minimumReceived:
+            boundary?.availability === "available"
+              ? decimal(boundary.minimumReceivedAtomic, decimalsFor(tokenOut))
+              : "",
+        }
+      : undefined;
   return {
     runId,
     parentRunId: str(run?.parentRunId),
@@ -407,6 +430,10 @@ function mapRun(
         label: cp(str(item.label) ?? "Unknown"),
         reason: cp(str(item.reason) ?? "No reason provided"),
       })),
+    ...(coverage.sources.length > 0
+      ? { evidenceCoverage: coverage.sources }
+      : {}),
+    ...(coverage.notice ? { evidenceCoverageNotice: coverage.notice } : {}),
     evidence: mappedEvidence,
     ruleResults: arr(run?.ruleResults)
       .map(rule)
@@ -453,7 +480,8 @@ function mapRun(
     replayMode,
     simulatorPinnedBlock: str(run?.simulatorPinnedBlock),
     apiFailure,
-    rawResponse,
+    backendRunId: runId,
+    recoveryInput,
   };
 }
 
@@ -823,28 +851,12 @@ export async function loadRun(
 
 /** Reconstructs the editable fields needed to continue a persisted Run. */
 export function formFromRunResult(result: CheckSwapResult): FormState {
-  const envelope = obj(result.rawResponse);
-  const rawRun =
-    obj(envelope?.result) ?? obj(envelope?.run) ?? envelope ?? undefined;
-  const rawIntent = obj(rawRun?.intent);
-  const rawBoundary = obj(rawIntent?.economicBoundary);
-  const protocol = str(rawIntent?.protocol);
-
   return {
     ...INITIAL_FORM,
-    protocol:
-      protocol === "kuru" || protocol === "pancake" || protocol === "camelot-v3"
-        ? protocol
-        : INITIAL_FORM.protocol,
+    protocol: result.recoveryInput?.protocol ?? INITIAL_FORM.protocol,
     tokenIn: result.intent.tokenIn,
     tokenOut: result.intent.tokenOut,
     amountIn: result.intent.amountIn,
-    minimumReceived:
-      rawBoundary?.availability === "available"
-        ? decimal(
-            rawBoundary.minimumReceivedAtomic,
-            decimalsFor(result.intent.tokenOut),
-          )
-        : "",
+    minimumReceived: result.recoveryInput?.minimumReceived ?? "",
   };
 }

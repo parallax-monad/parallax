@@ -127,7 +127,11 @@ describe("checkSwap API adapter", () => {
     expect(result.productRunMode).toBe("LIVE");
     expect(result.createdAt).toBe(completed.createdAt);
     expect(result.quote.route.en).toBe("MON → USDC");
-    expect(result.rawResponse).toEqual(completed);
+    expect(result.backendRunId).toBe(completed.runId);
+    expect(result.recoveryInput).toEqual({
+      protocol: "kuru",
+      minimumReceived: "",
+    });
   });
 
   test("maps a malformed successful Check response to INVALID_RESPONSE", async () => {
@@ -384,10 +388,7 @@ describe("checkSwap API adapter", () => {
       stage: "quote",
       retryable: false,
     });
-    expect(result.rawResponse).toMatchObject({
-      error: { code: "AGENT_FLOW_ERROR" },
-      run: { runId: "failed-1" },
-    });
+    expect(result.backendRunId).toBe("failed-1");
   });
 
   test("surfaces backend field issues from a normalization failure", async () => {
@@ -481,9 +482,7 @@ describe("checkSwap API adapter", () => {
       reason: "PARENT_NOT_FOUND",
       retryable: false,
     });
-    expect(result.rawResponse).toEqual(
-      expect.objectContaining({ error: expect.any(Object) }),
-    );
+    expect(result.backendRunId).toBeUndefined();
   });
 
   test("turns a fetch exception into a retryable NETWORK_ERROR page", async () => {

@@ -105,21 +105,7 @@ function setStoredRunId(runId: string | undefined): void {
 
 function backendRunId(result: CheckSwapResult): string | undefined {
   if (result.replayMode) return undefined;
-  const raw =
-    typeof result.rawResponse === "object" && result.rawResponse !== null
-      ? (result.rawResponse as Record<string, unknown>)
-      : undefined;
-  const nested =
-    typeof raw?.run === "object" && raw.run !== null
-      ? (raw.run as Record<string, unknown>)
-      : undefined;
-  const runId =
-    typeof raw?.runId === "string"
-      ? raw.runId
-      : typeof nested?.runId === "string"
-        ? nested.runId
-        : undefined;
-  return runId === result.runId ? runId : undefined;
+  return result.backendRunId === result.runId ? result.runId : undefined;
 }
 
 export function WalletApp({ language }: { language: Language }) {

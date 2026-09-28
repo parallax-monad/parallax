@@ -278,7 +278,7 @@ export const arbitrumSampleSuccess: CheckSwapResult = {
   ruleVersion: "0.2.0",
   mossVersion: "0.1.0",
   productRunMode: "LIVE",
+  presentationOrigin: "sample",
   replayMode: false,
   simulatorPinnedBlock: "92820000",
-  rawResponse: {},
 };

@@ -14,6 +14,11 @@ const MODE_LABEL: Record<ProductRunMode, Copy> = {
   LIVE: { en: "Live check", zh: "实时检查" },
   RECORDED_REPLAY: { en: "Recorded replay", zh: "录制回放" },
 };
+const SAMPLE_LABEL: Copy = { en: "Sample result", zh: "示例结果" };
+const SAMPLE_EXPLANATION: Copy = {
+  en: "This is a sample result for exploring the steps. It is not current live evidence.",
+  zh: "这是用于了解步骤的示例结果，并非当前实时证据。",
+};
 
 const MODE_EXPLANATION: Record<ProductRunMode, Copy> = {
   LIVE: {
@@ -71,7 +76,12 @@ export function WalletResult({
             {say(language, { en: "Integration error", zh: "集成错误" })}
           </span>
           <span className="pill">
-            {say(language, MODE_LABEL[result.productRunMode])}
+            {say(
+              language,
+              result.presentationOrigin === "sample"
+                ? SAMPLE_LABEL
+                : MODE_LABEL[result.productRunMode],
+            )}
           </span>
         </div>
 
@@ -145,7 +155,12 @@ export function WalletResult({
           </div>
         </section>
         <p className="text-[12px] leading-[1.6] text-dim">
-          {say(language, MODE_EXPLANATION[result.productRunMode])}
+          {say(
+            language,
+            result.presentationOrigin === "sample"
+              ? SAMPLE_EXPLANATION
+              : MODE_EXPLANATION[result.productRunMode],
+          )}
         </p>
 
         <div
@@ -201,7 +216,12 @@ export function WalletResult({
           {say(language, { en: "Before you sign", zh: "签名之前" })}
         </span>
         <span className="pill">
-          {say(language, MODE_LABEL[result.productRunMode])}
+          {say(
+            language,
+            result.presentationOrigin === "sample"
+              ? SAMPLE_LABEL
+              : MODE_LABEL[result.productRunMode],
+          )}
         </span>
       </div>
 
@@ -216,7 +236,12 @@ export function WalletResult({
       )}
 
       <p className="text-[12px] leading-[1.6] text-dim">
-        {say(language, MODE_EXPLANATION[result.productRunMode])}
+        {say(
+          language,
+          result.presentationOrigin === "sample"
+            ? SAMPLE_EXPLANATION
+            : MODE_EXPLANATION[result.productRunMode],
+        )}
       </p>
 
       {currentStep === "result" ? (

@@ -100,6 +100,21 @@ export type RuleResult = {
 };
 
 export type UnknownItem = { id: string; label: Copy; reason: Copy };
+
+/** Display-only, provider-neutral coverage. No provider payload is retained. */
+export type EvidenceCoverage = {
+  sourceId: string;
+  source: Copy;
+  role: "primary" | "supplementary";
+  mode: ProductRunMode | "MOCK";
+  status?: "success" | "partial" | "unknown" | "unavailable" | "invalid";
+  blockNumber?: string;
+  observedAt?: string;
+  checked: Copy[];
+  notChecked: Copy[];
+  unknown: UnknownItem[];
+  unavailable: UnknownItem[];
+};
 export type IntentSummary = {
   tokenIn: string;
   tokenOut: string;
@@ -148,6 +163,8 @@ export type CheckSwapResult = {
   evidence: EvidenceItem[];
   ruleResults: RuleResult[];
   unknowns: UnknownItem[];
+  evidenceCoverage?: EvidenceCoverage[];
+  evidenceCoverageNotice?: Copy;
   intent: IntentSummary;
   diff?: RunDiff;
   quote: { expectedOutput: string; route: Copy; blockNumber: string };
@@ -157,10 +174,14 @@ export type CheckSwapResult = {
   ruleVersion: string;
   mossVersion: string;
   productRunMode: ProductRunMode;
+  /** Frontend-only preset marker; never inferred from a Backend Run. */
+  presentationOrigin?: "sample";
   replayMode: boolean;
   simulatorPinnedBlock?: string;
   apiFailure?: ApiFailure;
-  rawResponse: unknown;
+  /** Only the normalized fields needed for saved-Run recovery are retained. */
+  backendRunId?: string;
+  recoveryInput?: { protocol: Protocol; minimumReceived: string };
   quoteFidelity?: QuoteFidelity;
   remediationOptions?: RemediationOption[];
   executionEconomics?: ExecutionEconomics;
