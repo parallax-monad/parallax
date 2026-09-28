@@ -36,6 +36,7 @@ If you are implementing a feature, start from its owning specification and accep
 
 - [Frontend API handoff](./integration/api-frontend-handoff.md) — frontend payloads, errors, CORS, and startup details.
 - [Backend P0 acceptance](./integration/backend-p0-acceptance.md) — backend acceptance matrix and boundaries.
+- [Issue #107 verified remediation blocker](./integration/verified-remediation-107-blocker.md) — why no reachable live scenario produces a `VERIFIED` remediation child re-check, with the exact blocker classes and open owner decisions.
 - [Moss/Kuru live runtime](./integration/moss-kuru-live-runtime.md) — pinned runtime, provenance, and live-operation requirements.
 
 ## Research

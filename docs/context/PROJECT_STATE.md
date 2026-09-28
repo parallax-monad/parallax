@@ -408,3 +408,32 @@ The implementation is currently on `feat/backend-fs-d-trace-integration`. After 
 tree is committed and reviewed at its exact head, #91 can consume the integrated same-
 transaction Native + Trace path. Do not start #103 before Product P0 #73 reaches its
 prerequisite gate.
+
+## 2026-09-28 — #107 verified remediation live feasibility result
+
+`feat/verified-remediation-107` exercised the merged remediation orchestration on the real
+Arbitrum Sepolia × Camelot V3 × ETH → USDC path with a bounded solver configuration, from
+the accepted BE-063 real quote scenario. The exercise is read-only and changed no Product,
+Risk, Contract, or Provider semantics.
+
+Result: `VERIFIED_REMEDIATION_NOT_REACHABLE`. The primary Run completed truthfully with
+`eth_call = SUCCEEDED`, `gasEstimate = AVAILABLE`, Transaction Protection `PASS`,
+`providerEvidence.provider.status = UNKNOWN`, `p0.evidenceState = INCOMPLETE`,
+`p0.remediation = NOT_RUN`, and Risk verdict `UNKNOWN`. A declared Economic Boundary above
+the live quote is rejected as an integration error rather than published as a completed
+`ADJUST`, because a declared boundary is bound verbatim into the prepared calldata as
+`amountOutMinimum`.
+
+Blockers recorded by the gate: `EVIDENCE_STATE_NOT_VERIFIED`,
+`LIVE_PROVIDER_STATUS_NOT_SUCCESS`, `REMEDIATION_BRANCH_NOT_ENTERED`,
+`TRANSACTION_PROTECTION_IS_ECONOMIC_BOUNDARY`, `CHILD_SIMULATED_OUTPUT_UNAVAILABLE`,
+`CONSTRAINT_ROUTE_NOT_SIZE_REMEDIABLE`. The blocker classes are evidence insufficiency plus
+rule structure, not scenario scarcity: route, quote, exact prepared unsigned transaction,
+live `eth_call`, gas estimate, pinned block, persistence, and historical read all behaved
+correctly.
+
+Durable record: [verified-remediation-107-blocker.md](../integration/verified-remediation-107-blocker.md).
+Sanitized live capture: `fixtures/provider-registry/be-107/verified-remediation-<stamp>/capture.json`.
+Gate command: `pnpm --filter @parallax/api probe:verified-remediation`.
+
+Verified Remediation therefore stays `NOT COMPLETE`; #107 stays open and is not claimed.

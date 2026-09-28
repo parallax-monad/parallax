@@ -236,3 +236,25 @@ preflight --read
 
 For Provider/Backend work, default target after this checkpoint is #110 unless live GitHub
 state has superseded it.
+
+## 2026-09-28 — #107 verified remediation handoff
+
+`feat/verified-remediation-107` is the Verified Remediation lane branch. It carries a
+read-only live feasibility gate plus its blocker record; it changes no production semantics
+and claims no gate.
+
+State to carry forward:
+
+- Verified Remediation: `NOT COMPLETE` / `VERIFIED_REMEDIATION_NOT_REACHABLE`.
+- The merged mechanism (solver, `verificationBound`, child Runs, `p0.remediation`
+  projection) is real but reachable only with a caller-injected `providerEvidenceMapper`,
+  i.e. synthetic Evidence. Do not present that as #107 acceptance.
+- The live gate is `pnpm --filter @parallax/api probe:verified-remediation`; its sanitized
+  capture is under `fixtures/provider-registry/be-107/`.
+- Exact blocker detail and the four owner decisions that would unblock the gate are in
+  [verified-remediation-107-blocker.md](../integration/verified-remediation-107-blocker.md).
+
+Do not resolve this blocker by weakening `backendEvidenceState`, reclassifying a partial
+Native RPC surface as `SUCCESS`, mapping `UNKNOWN` to `VERIFIED`, or deriving
+`simulated_token_out` from an unqualified trace state diff. Each is a Product/Contract/
+Provider semantic decision owned outside this branch.

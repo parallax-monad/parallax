@@ -271,3 +271,17 @@ it records equal Native/Trace fingerprints, exact prepared-transaction matching,
 scope, public redaction, persisted round-trip, and historical no-requery. This mutation does not
 change Product/Risk/Contract semantics, Provider selection, signing, broadcasting, custody, or
 accepted evidence meaning; no GitHub review mutation was performed.
+
+## 2026-09-28 — #107 verified remediation feasibility gate (read-only)
+
+Branch `feat/verified-remediation-107` added a read-only live feasibility gate
+(`scripts/backend-gates/verified-remediation-live.ts`), its pure feasibility classification
+and offline coverage (`scripts/backend-gates/verified-remediation-assertions.ts`,
+`verified-remediation-assertions.test.ts`), and one sanitized capture under
+`fixtures/provider-registry/be-107/`. The gate ran from a clean committed source head with
+production runtime source unchanged and recorded `VERIFIED_REMEDIATION_NOT_REACHABLE`.
+
+No signing, broadcasting, custody, wallet mutation, secret, history rewrite, force push,
+merge, or GitHub review mutation occurred. No accepted evidence was rewritten: the accepted
+BE-063 source capture digest is asserted and unchanged. No prior capture was moved or
+deleted. No Product, Risk, Contract, or Provider semantic was changed.
