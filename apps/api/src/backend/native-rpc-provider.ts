@@ -92,8 +92,8 @@ type Freshness =
 
 type EvaluationState = {
   observedChainId?: string;
-  readonly callReturnData?: string;
-  readonly gasUnits?: string;
+  callReturnData?: string;
+  gasUnits?: string;
   freshness: Freshness;
   readonly fields: ProvisionalCandidateFieldInput[];
 };
@@ -368,6 +368,7 @@ export class NativeRpcProvider<Intent extends NativeRpcIntent = NativeRpcIntent>
         return this.result(input.runId, "unknown", state);
       }
       callReturnData = response;
+      state.callReturnData = response;
       state.fields.push(
         candidate(
           "nativeRpc.ethCall.returnData",
@@ -403,6 +404,7 @@ export class NativeRpcProvider<Intent extends NativeRpcIntent = NativeRpcIntent>
         blockTag,
       ]);
       gasUnits = normalizeQuantity(response);
+      state.gasUnits = gasUnits;
       state.fields.push(
         candidate(
           "nativeRpc.estimateGas.gasUnits",
