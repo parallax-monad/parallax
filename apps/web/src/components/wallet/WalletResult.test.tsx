@@ -30,7 +30,6 @@ function result(overrides: Partial<CheckSwapResult> = {}): CheckSwapResult {
     mossVersion: "moss@1",
     productRunMode: "LIVE",
     replayMode: false,
-    rawResponse: { runId: "run-1" },
     ...overrides,
   };
 }
@@ -173,6 +172,8 @@ describe("WalletResult", () => {
 
   test("renders the Arbitrum diagnosis in Result and keeps options on the next step", () => {
     const html = render(arbitrumSampleSuccess, () => undefined);
+    expect(html).toContain("Sample result");
+    expect(html).not.toContain("This is the backend response for a live Check");
     expect(html).toContain("Your quote has changed");
     expect(html).toContain("4.812");
     expect(html).toContain("4.746");
