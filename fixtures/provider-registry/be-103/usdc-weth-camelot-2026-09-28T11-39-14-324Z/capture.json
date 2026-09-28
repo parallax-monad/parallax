@@ -1,0 +1,156 @@
+{
+  "schemaVersion": "be-103-usdc-weth-feasibility-v1",
+  "status": "BLOCKED_ACCOUNT_STATE",
+  "assetCoverage": "NOT_COMPLETE",
+  "real": true,
+  "readOnly": true,
+  "capturedAt": "2026-09-28T11:39:14.324Z",
+  "sourceHead": "35f6ddfd3f6c5c4f8b503c5725a05ce9c337073b",
+  "nodeVersion": "v22.23.2",
+  "endpointClass": "authorized_https_rpc",
+  "chain": {
+    "chainId": 421614,
+    "blockNumber": "313595416",
+    "blockHash": "0xb190a9ea5f727b37e7fe84741b1a37cd7bd49d5f0bc1abe2b1b8f5e2f4693520",
+    "blockTimestamp": "1790595546",
+    "blockHashRechecked": true
+  },
+  "addresses": {
+    "usdc": "0xb893E3334D4Bd6C5ba8277Fd559e99Ed683A9FC7",
+    "weth": "0x980B62Da83eFf3D4576C647993b0c1D7faf17c73",
+    "factory": "0xaA37Bea711D585478E1c04b04707cCb0f10D762a",
+    "pool": "0x3965361ea4f9000ae3cf995f553115b2832d0e2d",
+    "quoter": "0xe49ef2F48539EA7498605CC1B3a242042cb5FC83",
+    "router": "0x171B925C51565F5D2a7d8C494ba3188D304EFD93"
+  },
+  "tokenMetadata": {
+    "usdcDecimals": 18,
+    "wethDecimals": 18,
+    "source": "onchain_verified_at_pinned_block",
+    "trustedRegistryResolved": true
+  },
+  "route": {
+    "pool": "0x3965361ea4f9000ae3cf995f553115b2832d0e2d",
+    "factoryPool": "0x3965361ea4f9000ae3cf995f553115b2832d0e2d",
+    "token0": "0x980B62Da83eFf3D4576C647993b0c1D7faf17c73",
+    "token1": "0xb893E3334D4Bd6C5ba8277Fd559e99Ed683A9FC7",
+    "activeLiquidity": "42569169734279816834",
+    "poolUsdcBalanceAtomic": "169866800706499532798",
+    "poolWethBalanceAtomic": "9880667448219849512"
+  },
+  "candidates": [
+    {
+      "sender": "0x671d310504bb888dc5c2a6f36468afb49455b4cd",
+      "source": "public Approval log 0xfb37b345fa5decc5bd88015edfaa3c65614b2eb039ca334325b08765bd99833f",
+      "usdcBalanceAtomic": "0",
+      "routerAllowanceAtomic": "0",
+      "nativeBalanceWei": "0",
+      "balanceSufficient": false,
+      "allowanceSufficient": false
+    },
+    {
+      "sender": "0xeb7c5322f0997ee70f4bbd3ae7e428072c9af396",
+      "source": "accepted #77 public sender in fixtures/provider-registry/be-063/camelot-sepolia-real-2026-09-18T08-47-56-715Z/capture.json",
+      "usdcBalanceAtomic": "0",
+      "routerAllowanceAtomic": "0",
+      "nativeBalanceWei": "18654502205992000",
+      "balanceSufficient": false,
+      "allowanceSufficient": false
+    }
+  ],
+  "approvalEvidence": {
+    "transactionHash": "0xfb37b345fa5decc5bd88015edfaa3c65614b2eb039ca334325b08765bd99833f",
+    "blockNumber": "311265329",
+    "matchingUsdcRouterApprovalLogs": 3,
+    "currentAllowanceReadSeparatelyAtPinnedBlock": true
+  },
+  "selectedSender": "0x671d310504bb888dc5c2a6f36468afb49455b4cd",
+  "quote": {
+    "amountInAtomic": "1000000000000000",
+    "amountOutAtomic": "62941723964863",
+    "estimatedAmountOut": "0.000062941723964863",
+    "blockNumber": "313595416",
+    "quoter": "0xe49ef2F48539EA7498605CC1B3a242042cb5FC83"
+  },
+  "prepared": {
+    "intent": {
+      "chainId": 421614,
+      "protocol": "camelot-v3",
+      "sender": "0x671d310504bb888dc5c2a6f36468afb49455b4cd",
+      "recipient": "0x671d310504bb888dc5c2a6f36468afb49455b4cd",
+      "recipientSource": "defaulted_from_sender",
+      "tokenIn": {
+        "kind": "erc20",
+        "address": "0xb893E3334D4Bd6C5ba8277Fd559e99Ed683A9FC7"
+      },
+      "tokenOut": {
+        "kind": "erc20",
+        "address": "0x980B62Da83eFf3D4576C647993b0c1D7faf17c73"
+      },
+      "amountInAtomic": "1000000000000000",
+      "economicBoundary": {
+        "availability": "unavailable",
+        "source": "unavailable"
+      }
+    },
+    "unsignedTransaction": {
+      "from": "0x671d310504bb888dc5c2a6f36468afb49455b4cd",
+      "to": "0x171B925C51565F5D2a7d8C494ba3188D304EFD93",
+      "data": "0xbc651188000000000000000000000000b893e3334d4bd6c5ba8277fd559e99ed683a9fc7000000000000000000000000980b62da83eff3d4576c647993b0c1d7faf17c73000000000000000000000000671d310504bb888dc5c2a6f36468afb49455b4cd000000000000000000000000000000000000000000000000000000006aba530d00000000000000000000000000000000000000000000000000038d7ea4c68000000000000000000000000000000000000000000000000000000038ac36e8515e0000000000000000000000000000000000000000000000000000000000000000",
+      "value": "0x0",
+      "chainId": "0x66eee"
+    },
+    "transactionFingerprint": "sha256:72a37a36f7612b62225127328db22a3d77465c3fd43f6aca204eb1ddb68e3890",
+    "binding": {
+      "chainId": 421614,
+      "protocol": "camelot-v3",
+      "sender": "0x671d310504bb888dc5c2a6f36468afb49455b4cd",
+      "recipient": "0x671d310504bb888dc5c2a6f36468afb49455b4cd",
+      "tokenIn": "0xb893e3334d4bd6c5ba8277fd559e99ed683a9fc7",
+      "tokenOut": "0x980b62da83eff3d4576c647993b0c1d7faf17c73",
+      "amountInAtomic": "1000000000000000",
+      "amountOutMinimumAtomic": "62312306725214",
+      "router": "0x171B925C51565F5D2a7d8C494ba3188D304EFD93",
+      "from": "0x671d310504bb888dc5c2a6f36468afb49455b4cd",
+      "to": "0x171B925C51565F5D2a7d8C494ba3188D304EFD93",
+      "value": "0x0",
+      "dataFingerprint": "sha256:be31b73179b4485e7ea2908fe662b5373ab218509ee717ef63d8ddb1fedf38ef"
+    },
+    "amountOutMinimumPolicy": "99_percent_of_pinned_quote_floor"
+  },
+  "evaluation": {
+    "ethCall": {
+      "status": "failed",
+      "kind": "RPC_ERROR",
+      "rpcCode": 3
+    },
+    "ethEstimateGas": {
+      "status": "failed",
+      "kind": "RPC_ERROR",
+      "rpcCode": 3
+    },
+    "callTrace": {
+      "status": "success",
+      "rawFingerprint": "sha256:05d139c846fa9f50bcf23cec381470db660e45ad39961c31400c69c9b7652d18",
+      "erc20TransferFromObserved": true,
+      "actualSpender": "0x171B925C51565F5D2a7d8C494ba3188D304EFD93"
+    }
+  },
+  "limitations": [
+    "No transaction was signed, approved, broadcast, or executed onchain.",
+    "Selected public sender is not controlled by this probe; pinned balance and allowance are real and not overridden.",
+    "A valid quote and prepared transaction do not by themselves qualify executable reverse support.",
+    "eth_estimateGas was requested with the pinned block tag; backend state-selection semantics are not independently proven.",
+    "This is Provider feasibility only; #105 integration and Product P0 #73 acceptance remain separate."
+  ],
+  "provenance": {
+    "manifest": {
+      "scripts/provider-probes/usdc-weth-camelot-feasibility.ts": "sha256:24533a176ced4f3e1f0b7782be00dc53d351b324175dc540f9d0a528613f5fab",
+      "apps/api/src/backend/camelot-v3-protocol-adapter.ts": "sha256:af5375017d047eedb2d2b81010afac0dc34b2a670e40932e05c3d73430d6b037",
+      "apps/api/src/backend/camelot-v3-binding.ts": "sha256:af62ee09c21cfef9abb361265736bd022da7fa7da3af46f6d6af7c24c28a2fe5",
+      "apps/api/src/backend/native-rpc-client.ts": "sha256:a223781a34a7c1e40cae244575aa71aebe588a24e4e31799492047b04228f2b1",
+      "apps/api/src/trusted-token-registry.ts": "sha256:c114dcd651d0bf6406a5c19c7595489dd407f266ef9102cf09289bb9a2f34802",
+      "fixtures/provider-registry/be-063/camelot-sepolia-real-2026-09-18T08-47-56-715Z/capture.json": "sha256:85147b852e1e4b514af64241fede641f6a2b6db4f2056f0ab44d04164125cf23"
+    }
+  }
+}
