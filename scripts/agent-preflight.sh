@@ -41,13 +41,18 @@ git diff --cached --quiet || DIRTY=1
 [[ -z "$(git ls-files --others --exclude-standard)" ]] || DIRTY=1
 echo "WORKTREE_DIRTY=$DIRTY"
 
+if [[ "$DIRTY" == "1" ]]; then
+  echo "WORKTREE_SCOPE=DIRTY_REVIEW_REQUIRED"
+else
+  echo "WORKTREE_SCOPE=CLEAN"
+fi
+
 if [[ "$MODE" == "--read" ]]; then
   echo "PREFLIGHT=PASS"
   exit 0
 fi
 
 [[ "$BRANCH" != "main" ]] || die "write mode refuses direct main writes"
-[[ "$DIRTY" == "0" ]] || die "write mode requires a clean pre-task worktree"
 [[ -f ".parallax-agent.local" ]] || die "missing .parallax-agent.local"
 
 # shellcheck disable=SC1091

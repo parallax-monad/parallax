@@ -46,7 +46,14 @@ Before any commit, push, branch reconciliation, review mutation, issue mutation,
 
 Write mode requires a local, untracked `.parallax-agent.local` file containing the operator's expected Git identity.
 
-Do not write if repository/remote is unexpected, identity differs, worktree is already dirty, target head moved, owner scope is unclear, or unrelated-project context appears.
+Write mode reports the current worktree state but does not require a clean worktree. A
+task's intended edits are normally dirty until the task is committed. Before any
+mutation, record `git status --short`, inspect the existing diff, and reconcile the
+task scope; stage only files owned by the current task and preserve unrelated changes.
+
+Do not write if repository/remote is unexpected, identity differs, target head moved,
+owner scope is unclear, or unrelated-project context appears. A dirty worktree is a
+scope-review signal, not an automatic write failure.
 
 ## Proportional gating
 
