@@ -14,6 +14,11 @@ import { ReplayApplicationService } from "@parallax/orchestrator/application";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { z } from "zod";
+import { AccountStateApplicationService } from "../account-state-application.js";
+import type {
+  AccountStateReader,
+  AccountStateStore,
+} from "../account-state-model.js";
 import { CheckApplicationService } from "../application.js";
 import {
   type BackendApplicationRoute,
@@ -37,6 +42,7 @@ import {
   UnsupportedAgentFlowError,
 } from "../ports.js";
 import { QuoteApplicationService } from "../quote-application.js";
+import { createAccountStateApp } from "../routes/account-state.js";
 import { createHealthApp, type ReadinessCheck } from "../routes/health.js";
 import { createReplayApp } from "../routes/replay.js";
 import { createRunQueryApp } from "../routes/runs.js";
@@ -116,6 +122,8 @@ export type BackendAppDependencies = {
   /** Explicit disposer for a Store owned by this application. */
   disposeStore?: () => Promise<void>;
   replayRepository?: ReplayFixtureRepository;
+  /** Present only when the configured composition has an Arbitrum RPC reader. */
+  accountStateReader?: AccountStateReader;
 };
 
 export type BackendApp = Hono & {
@@ -182,6 +190,11 @@ export function createBackendApp(
       dependencies.replayRepository ?? new FileReplayFixtureRepository(),
   });
   const runQueryService = new RunQueryApplicationService({ store });
+  const accountStateService = new AccountStateApplicationService({
+    tokenRegistry: dependencies.runtime.tokenRegistry,
+    reader: dependencies.accountStateReader,
+    store: isAccountStateStore(store) ? store : undefined,
+  });
   const quoteService = new QuoteApplicationService({
     runtime: dependencies.runtime,
     composition: dependencies.composition,
@@ -202,6 +215,7 @@ export function createBackendApp(
   app.route("/", createCheckApp(checkService));
   app.route("/", createQuoteApp(quoteService));
   app.route("/", createRunQueryApp(runQueryService));
+  app.route("/", createAccountStateApp(accountStateService));
   app.route("/", createReplayApp(replayService));
   app.notFound(() => jsonError(404, "NOT_FOUND", "Route not found"));
   app.onError(() =>
@@ -443,7 +457,19 @@ export function bootstrapBackendApp(
     readinessCheck,
     disposeStore,
     replayRepository: options.replayRepository,
+    accountStateReader: arbitrumComposition?.accountStateReader,
   });
+}
+
+function isAccountStateStore(value: unknown): value is AccountStateStore {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "saveAccountState" in value &&
+    typeof value.saveAccountState === "function" &&
+    "getAccountState" in value &&
+    typeof value.getAccountState === "function"
+  );
 }
 
 export type StartBackendServerOptions = BootstrapBackendAppOptions & {

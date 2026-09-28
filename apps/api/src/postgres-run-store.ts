@@ -16,6 +16,12 @@ import {
 } from "pg";
 import { z } from "zod";
 import {
+  type AccountStateSnapshot,
+  type AccountStateStore,
+  accountStateSnapshotIdSchema,
+  accountStateSnapshotSchema,
+} from "./account-state-model.js";
+import {
   CHECK_RUN_FAILURE_CODES,
   type CheckRunFailureCode,
   type CheckRunRecord,
@@ -58,6 +64,12 @@ const failureCodeSchema = z.enum(CHECK_RUN_FAILURE_CODES);
 
 const lifecycleStateSchema = z.enum(["started", "completed", "failed"]);
 
+const rawAccountStateSnapshotRowSchema = z.object({
+  snapshot_id: z.unknown(),
+  snapshot: z.unknown(),
+  schema_version: z.unknown(),
+});
+
 const rawCheckRunRowSchema = z
   .object({
     run_id: z.unknown(),
@@ -74,7 +86,7 @@ const rawCheckRunRowSchema = z
 type RawCheckRunRow = z.infer<typeof rawCheckRunRowSchema>;
 
 /** PostgreSQL-backed RunStore with atomic terminal state transitions. */
-export class PostgresRunStore implements RunStore {
+export class PostgresRunStore implements RunStore, AccountStateStore {
   private closePromise: Promise<void> | undefined;
 
   public constructor(private readonly options: PostgresRunStoreOptions) {}
@@ -241,6 +253,67 @@ export class PostgresRunStore implements RunStore {
 
     const row = queryResult.rows[0];
     return row === undefined ? undefined : deserializeCheckRun(row);
+  }
+
+  public async saveAccountState(snapshot: AccountStateSnapshot): Promise<void> {
+    const parsedSnapshot = accountStateSnapshotSchema.parse(snapshot);
+    try {
+      await this.options.pool.query(
+        `
+          INSERT INTO account_state_snapshots (
+            snapshot_id,
+            snapshot,
+            schema_version
+          )
+          VALUES ($1, $2::jsonb, 1)
+        `,
+        [parsedSnapshot.snapshotId, JSON.stringify(parsedSnapshot)],
+      );
+    } catch (error) {
+      if (isPgErrorCode(error, "23505")) {
+        throw new Error(
+          `Account-state snapshot ${parsedSnapshot.snapshotId} already exists`,
+          { cause: error },
+        );
+      }
+      throw error;
+    }
+  }
+
+  public async getAccountState(
+    snapshotId: string,
+  ): Promise<AccountStateSnapshot | undefined> {
+    const parsedId = accountStateSnapshotIdSchema.parse(snapshotId);
+    const result = await this.options.pool.query(
+      `
+        SELECT snapshot_id, snapshot, schema_version
+        FROM account_state_snapshots
+        WHERE snapshot_id = $1
+      `,
+      [parsedId],
+    );
+    const row = result.rows[0];
+    if (row === undefined) return undefined;
+    const parsedRow = rawAccountStateSnapshotRowSchema.parse(row);
+    if (
+      accountStateSnapshotIdSchema.parse(parsedRow.snapshot_id) !== parsedId
+    ) {
+      throw new Error(
+        "Account-state snapshot record key does not match its query",
+      );
+    }
+    if (z.number().int().parse(parsedRow.schema_version) !== 1) {
+      throw new Error(
+        "Account-state snapshot uses an unsupported schema version",
+      );
+    }
+    const parsedSnapshot = accountStateSnapshotSchema.parse(parsedRow.snapshot);
+    if (parsedSnapshot.snapshotId !== parsedId) {
+      throw new Error(
+        "Account-state snapshot ID does not match its record key",
+      );
+    }
+    return parsedSnapshot;
   }
 
   private async readStartedRecord(

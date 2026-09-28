@@ -4,6 +4,7 @@ import type {
   RunQueryApiErrorBody,
   RunQueryApplicationResponse,
 } from "../run-query.js";
+import { registerApiFallbacks } from "./api-fallbacks.js";
 
 export interface RunQueryService {
   getRun(runId: string): Promise<RunQueryApplicationResponse>;
@@ -31,39 +32,17 @@ export function createRunQueryApp(service: RunQueryService): Hono {
     jsonResponse(await service.getRun(context.req.param("runId"))),
   );
 
-  app.all("/api/runs/:runId", () =>
-    jsonResponse(
+  registerApiFallbacks(app, {
+    methodNotAllowed: [
       {
-        status: 405,
-        body: {
-          error: {
-            code: "METHOD_NOT_ALLOWED",
-            message: "Only GET is supported for /api/runs/:runId",
-          },
-        },
+        path: "/api/runs/:runId",
+        method: "GET",
+        message: "Only GET is supported for /api/runs/:runId",
       },
-      { allow: "GET" },
-    ),
-  );
-
-  app.notFound(() =>
-    jsonResponse({
-      status: 404,
-      body: { error: { code: "NOT_FOUND", message: "Route not found" } },
-    }),
-  );
-
-  app.onError(() =>
-    jsonResponse({
-      status: 500,
-      body: {
-        error: {
-          code: "INTERNAL_ERROR",
-          message: "The requested run could not be returned",
-        },
-      },
-    }),
-  );
+    ],
+    internalErrorMessage: "The requested run could not be returned",
+    cacheControl: "no-store",
+  });
 
   return app;
 }

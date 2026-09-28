@@ -35,6 +35,7 @@ import {
   evaluateEvidence,
   solveSelectedTargetOutput,
 } from "@parallax/risk";
+import type { AccountStateReader } from "../account-state-model.js";
 import {
   normalizeArbitrumCheckSwapRequest,
   normalizeArbitrumQuoteRequest,
@@ -47,9 +48,14 @@ import {
 import type { CheckRunRecord, RunStore } from "../store.js";
 import { tokenDecimals } from "../token-decimals.js";
 import {
+  ArbitrumAccountStateReader,
+  type QualifiedAllowanceSpenderResolver,
+} from "./arbitrum-account-state-reader.js";
+import {
   ArbitrumChainAdapter,
   type ArbitrumRpcClient,
   type ArbitrumTransaction,
+  createArbitrumRpcClient,
 } from "./arbitrum-chain-adapter.js";
 import { CamelotV3ProtocolAdapter } from "./camelot-v3-protocol-adapter.js";
 import type { BlockContext, ChainAdapter } from "./chain-adapter.js";
@@ -149,6 +155,8 @@ export type ArbitrumProductionCompositionOptions = {
   readonly p0Risk?: ArbitrumP0RiskContext;
   readonly receiptSigner?: ReceiptSigner;
   readonly receiptAnchorer?: ReceiptAnchorer;
+  /** Backend-only protocol spender qualification; absent until evidence exists. */
+  readonly accountStateSpenderResolver?: QualifiedAllowanceSpenderResolver;
 };
 
 export type ArbitrumProductionComposition = BackendCompositionRuntime<
@@ -162,7 +170,9 @@ export type ArbitrumProductionComposition = BackendCompositionRuntime<
   NormalizedSwapIntent,
   unknown,
   unknown
->;
+> & {
+  readonly accountStateReader?: AccountStateReader;
+};
 
 export type ArbitrumBackendBootstrapOptions = Omit<
   ArbitrumProductionCompositionOptions,
@@ -381,7 +391,7 @@ export function createArbitrumProductionComposition(
       },
     } satisfies DecisionPort<unknown, unknown, unknown>);
 
-  return createBackendComposition({
+  const composition = createBackendComposition({
     chainRegistry: new ChainRegistry([chainAdapter]),
     protocolRegistry: new ProtocolRegistry([
       {
@@ -400,6 +410,28 @@ export function createArbitrumProductionComposition(
     receiptSigner: options.receiptSigner,
     receiptAnchorer: options.receiptAnchorer,
     providerEvidenceMapper,
+  });
+  const accountStateRpcClient =
+    options.rpcClient ??
+    (arbitrumConfig.rpcUrl === undefined
+      ? undefined
+      : createArbitrumRpcClient(arbitrumConfig.rpcUrl));
+  const accountStateReader =
+    accountStateRpcClient === undefined
+      ? undefined
+      : new ArbitrumAccountStateReader({
+          client: accountStateRpcClient,
+          tokenRegistry: options.runtime.tokenRegistry,
+          ...(options.accountStateSpenderResolver === undefined
+            ? {}
+            : { resolveQualifiedSpender: options.accountStateSpenderResolver }),
+        });
+
+  if (accountStateReader === undefined) {
+    return composition as ArbitrumProductionComposition;
+  }
+  return Object.assign(composition, {
+    accountStateReader,
   }) as ArbitrumProductionComposition;
 }
 
