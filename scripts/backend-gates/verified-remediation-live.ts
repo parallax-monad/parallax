@@ -660,7 +660,7 @@ async function main(): Promise<void> {
       baseReference: "origin/main",
       repositoryHeadAtCapture: startedHead,
       headNote:
-        "This capture is committed after the run; only fixtures/provider-registry/be-107/** was added afterwards.",
+        "This sanitized capture and the offline test files are committed after the run; the hashed runtime source manifest in sourceIntegrity was unchanged across the exercise.",
       startedAt,
       completedAt,
       source: {
