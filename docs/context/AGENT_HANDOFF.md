@@ -90,7 +90,8 @@ acceptance path.
 - #106 — CLOSED / COMPLETED by merged PR #112, historical PR head `dc84dd3`;
 - #110 — Backend supplementary integration after the minimum #106 interface is agreed;
 - #91 — follows #106/#110 for same-transaction Native vs Trace portability;
-- #103 — active bounded real USDC → WETH feasibility, may develop in parallel with #73;
+- #103 — first bounded attempt is NOT COMPLETE due real sender USDC balance and router allowance
+  both zero; it remains independent of #73;
 - #108 — Explorer feasibility, optional/stretch, not active;
 - #109 — additional asset feasibility, optional/stretch, not active.
 
@@ -200,8 +201,11 @@ preflight --read
 → fresh PR/review/CI state
 ```
 
-For Provider work, the active target after this checkpoint is #103 bounded real feasibility;
-the current branch is `feat/usdc-weth-camelot-feasibility` from
-`b6d48c5f2223d1888231a5eb7810ec2a04006111`. Keep construction, account state, and
-read-only execution results separate. Do not claim #103 PASS from a quote or unsigned tx
-alone; do not start #105 before qualification PASS. No separate context PR is needed.
+For Provider work, draft PR #116 on `feat/usdc-weth-camelot-feasibility` records the first
+bounded #103 attempt from `b6d48c5f2223d1888231a5eb7810ec2a04006111`.
+Capture `fixtures/provider-registry/be-103/usdc-weth-camelot-2026-09-28T11-39-14-324Z/capture.json`
+is `BLOCKED_ACCOUNT_STATE`, not qualification PASS. The selected public sender's USDC balance
+and router allowance were both zero at the pinned block; quote and unsigned construction passed,
+but `eth_call` and `eth_estimateGas` failed. Keep #103 OPEN / NOT COMPLETE, Asset Coverage NOT
+COMPLETE, and #105 blocked. A new real sufficient account context would require a fresh pinned
+qualification. No separate context PR is needed.

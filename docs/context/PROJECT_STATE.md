@@ -136,6 +136,15 @@ Full Best Case = NOT COMPLETE
 
 The acceptance standard is not lowered.
 
+The first bounded #103 attempt is **NOT COMPLETE**. At pinned block `313595416`, the
+reverse pool, onchain 18-decimal token metadata, real quote, exact unsigned ERC-20-input
+transaction (`value=0`), and router-as-spender call boundary were observed. The selected
+public account had zero USDC and zero router allowance; pinned `eth_call` and
+`eth_estimateGas` failed. This proves a current account-state blocker, not an executable
+reverse-path PASS. The read-only capture is
+`fixtures/provider-registry/be-103/usdc-weth-camelot-2026-09-28T11-39-14-324Z/capture.json`.
+#105 remains blocked until a later #103 qualification PASS.
+
 ## Evidence Federation — active Best Case lane
 
 Native RPC remains the primary baseline.
@@ -234,8 +243,8 @@ COMPLETED:
 AFTER #106 + Backend integration:
 #91 Native RPC + Trace supplementary portability proof
 
-NOW, in parallel with #73 Product P0 acceptance:
-#103 USDC → WETH real-chain feasibility
+BLOCKED after bounded real attempt, independently of #73 Product P0 acceptance:
+#103 USDC → WETH needs a real sender with sufficient USDC and router allowance
 
 NOT ACTIVE:
 #108 Explorer
@@ -265,7 +274,7 @@ real credentialed qualification. It is removed from the Final Sprint critical pa
 ## Current gate status
 
 - Product P0: IN PROGRESS (#73, #100, #102; #101 is complete); #73 remains an independent acceptance gate.
-- Asset Coverage: NOT COMPLETE.
+- Asset Coverage: NOT COMPLETE (#103 account-state blocker; #105 not unlocked).
 - Evidence Federation: NOT COMPLETE.
 - Verified Remediation: NOT COMPLETE.
 - Minimal SDK: NOT DONE / SHOULD.
@@ -352,9 +361,9 @@ closes them:
 Provider-side next executable task:
 
 ```text
-#103 — Qualify real USDC → WETH Camelot V3 feasibility within four hours
+#103 — Review the captured account-state blocker; qualify only with real sufficient state
 ```
 
-Use real pinned Arbitrum Sepolia chain state and keep construction correctness separate from
-the sender's balance/allowance and read-only execution result. Do not start #105 before #103
-qualification PASS. #73 remains open and independent.
+The first bounded attempt recorded construction and quote facts but did not qualify real
+execution. Do not alter a sender's state merely to obtain PASS, and do not start #105 before
+#103 qualification PASS. #73 remains open and independent.

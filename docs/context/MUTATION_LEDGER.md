@@ -228,3 +228,15 @@ development. #73 remains OPEN and is not claimed PASS; #105 still waits for #103
 PASS, while #107 has its own real VERIFIED acceptance. This #103 PR carries the minimal durable
 checkpoint and the bounded Provider feasibility record. No signing, approving, broadcasting,
 custody, state override, or accepted-evidence rewrite is authorized by this sequencing update.
+
+The bounded #103 read-only attempt used clean committed source head
+`35f6ddfd3f6c5c4f8b503c5725a05ce9c337073b` and produced capture
+`fixtures/provider-registry/be-103/usdc-weth-camelot-2026-09-28T11-39-14-324Z/capture.json`
+(SHA-256 `44c665475d8ca88feefb91ed810fedafb7592c021b4534f7b12f973e85dd9c4e`).
+Pinned route, decimals, liquidity, quote, transaction binding, `tx.value=0`, and actual
+router spender were observed. Both selected public-account USDC balance and router allowance
+were zero; pinned `eth_call` and `eth_estimateGas` failed. Classification is
+`BLOCKED_ACCOUNT_STATE`, #103 / Asset Coverage remain NOT COMPLETE, and #105 remains blocked.
+The capture and source hashes were independently verified; no RPC endpoint, token, raw error,
+or raw trace payload was persisted. The attempt stopped within its four-hour bound without
+signing, approval, broadcast, custody, or fabricated state.
