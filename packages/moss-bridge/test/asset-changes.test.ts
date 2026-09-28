@@ -23,11 +23,11 @@ const AMOUNT_IN = "10000000000000000";
 const AMOUNT_OUT = "223";
 
 function addressTopic(address: string): string {
-  return "0x" + address.slice(2).toLowerCase().padStart(64, "0");
+  return `0x${address.slice(2).toLowerCase().padStart(64, "0")}`;
 }
 
 function amountData(amount: string): string {
-  return "0x" + BigInt(amount).toString(16).padStart(64, "0");
+  return `0x${BigInt(amount).toString(16).padStart(64, "0")}`;
 }
 
 function nativeTransfer(from: string, to: string, value: string): JsonValue {
