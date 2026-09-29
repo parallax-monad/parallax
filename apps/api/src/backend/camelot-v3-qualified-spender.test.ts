@@ -314,6 +314,30 @@ describe("Camelot V3 reverse ERC-20 binding fails closed", () => {
     return { data: `${data.slice(0, start)}${hex}${data.slice(start + 64)}` };
   };
 
+  it("accepts USDC -> WETH when the explicit recipient differs from the sender", () => {
+    const recipient = "0x2222222222222222222222222222222222222222";
+    const splitIntent = normalizedSwapIntentSchema.parse({
+      ...reverseIntent(),
+      recipient,
+      recipientSource: "explicit",
+    });
+
+    const result = inspect(withWord(2, BigInt(recipient)), splitIntent);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.binding).toMatchObject({
+        sender: qualifiedSender,
+        recipient,
+        from: qualifiedSender,
+        to: CAMELOT_V3_ROUTER_ADDRESS,
+        value: "0x0",
+        tokenIn: usdc.toLowerCase(),
+        tokenOut: weth.toLowerCase(),
+      });
+    }
+  });
+
   it("rejects a non-zero sqrtPriceLimitX96 word", () => {
     expect(inspect(withWord(6, 1n)).ok).toBe(false);
   });
