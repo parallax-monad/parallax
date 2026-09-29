@@ -329,6 +329,49 @@ describe("ArbitrumChainAdapter", () => {
     });
   });
 
+  it("classifies an explicit JSON-RPC execution revert separately", async () => {
+    const adapter = createArbitrumChainAdapter({
+      client: clientFor({
+        eth_estimateGas: Object.assign(
+          new Error("execution reverted: pool is paused"),
+          { rpcCode: 3 },
+        ),
+      }),
+    });
+
+    await expect(
+      adapter.estimateGas({ to: "0xrouter", data: "0x", value: "0x0" }),
+    ).rejects.toSatisfy((error: unknown) => {
+      return (
+        isChainAdapterError(error) &&
+        error.operation === "estimateGas" &&
+        error.code === "EXECUTION_REVERT" &&
+        error.message ===
+          "Arbitrum gas preflight observed an EVM execution revert" &&
+        !error.retryable
+      );
+    });
+  });
+
+  it("does not classify JSON-RPC code 3 as a revert without revert semantics", async () => {
+    const adapter = createArbitrumChainAdapter({
+      client: clientFor({
+        eth_estimateGas: Object.assign(
+          new Error("upstream execution failure"),
+          {
+            rpcCode: 3,
+          },
+        ),
+      }),
+    });
+
+    await expect(
+      adapter.estimateGas({ to: "0xrouter", data: "0x", value: "0x0" }),
+    ).rejects.toSatisfy((error: unknown) => {
+      return isChainAdapterError(error) && error.code === "UNKNOWN";
+    });
+  });
+
   it("uses the explicit HTTP JSON-RPC seam and normalizes RPC errors", async () => {
     const fetchImplementation = vi
       .fn<typeof fetch>()
