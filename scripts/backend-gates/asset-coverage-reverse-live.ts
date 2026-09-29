@@ -529,7 +529,14 @@ async function main(): Promise<void> {
       quote === undefined
         ? undefined
         : {
-            ...intentRequest,
+            // `expectationBaselineSchema` is strict: it repeats the exact-input
+            // intent identity (chain/protocol/pair/amount) plus the selected
+            // quote, and deliberately does not accept `sender`.
+            chainId: intentRequest.chainId,
+            protocol: intentRequest.protocol,
+            tokenIn: intentRequest.tokenIn,
+            tokenOut: intentRequest.tokenOut,
+            amountIn: intentRequest.amountIn,
             quote: {
               estimatedAmountOut: quoteAmountOut,
               source: quote.source,
