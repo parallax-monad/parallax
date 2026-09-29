@@ -308,3 +308,13 @@ API tests passed 654, disposable PostgreSQL integration passed 16, and typecheck
 lint, web build, diff check, and added-line secret scan passed. These are local
 implementation observations, pending exact-head PR CI and owner acceptance; they do
 not change Product/Risk/Contract semantics or certify a Product P0 PASS.
+
+## 2026-09-29 — current-main Final Sprint reconciliation
+
+Current `main` advanced to `811e2b80fd6d6db6ccee5da6f4a518a6b66ba6c7` through merged PR #126;
+PR #127 separately established real USDC → WETH `QUALIFIED_REAL`. PRs #118/#119/#121/#122
+completed the Evidence Federation lane (#106/#110/#91/#92), while PR #123's
+`BLOCKED_ACCOUNT_STATE` remains historical and PR #124 leaves Verified Remediation NOT COMPLETE.
+PR #125 preserves the execution-readiness/preflight versus Provider Evidence boundary.
+Product acceptance remains pending on #73; this entry records a durable snapshot only and does
+not claim Asset Coverage or Product P0 PASS.
