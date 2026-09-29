@@ -1,0 +1,172 @@
+{
+  "schemaVersion": "be-109-asset3-feasibility-v1",
+  "status": "QUALIFIED_REAL_FEASIBILITY",
+  "productionSupport": false,
+  "real": true,
+  "readOnly": true,
+  "noStateOverride": true,
+  "noWriteRpc": true,
+  "capturedAt": "2026-09-29T13:31:53.975Z",
+  "sourceHead": "fab582d3ebdc33fc171a40bc79e0ec506162a855",
+  "endpointClass": "official_public_https_rpc",
+  "chain": {
+    "chainId": 421614,
+    "blockNumber": "313963761",
+    "blockHash": "0xeb5097223003fb54ce7808c76c8c21976294c1ff003959465f08300aa9061019",
+    "blockHashRechecked": true
+  },
+  "discovery": {
+    "method": "Camelot official token list, pinned factory poolByPair for WETH and USDC, pinned liquidity and quote",
+    "candidates": [
+      {
+        "symbol": "GRAIL",
+        "address": "0x52CFD1d72A64f8D13711bb7Dc3899653dbd4191B",
+        "decimals": 18,
+        "observedSymbol": "GRAIL",
+        "addressSource": "https://docs.camelot.exchange/contracts/arbitrum/sepolia-testnet/",
+        "decimalsSource": "onchain_at_pinned_block",
+        "wethPool": "0x0000000000000000000000000000000000000000",
+        "usdcPool": "0xac2a15bae75f5fc7b5d35d03439bd1d3b1219cc5"
+      },
+      {
+        "symbol": "xGRAIL",
+        "address": "0x60A186019F81bFD04aFc16c9C01804a04E79e68B",
+        "decimals": 18,
+        "observedSymbol": "xGRAIL",
+        "addressSource": "https://docs.camelot.exchange/contracts/arbitrum/sepolia-testnet/",
+        "decimalsSource": "onchain_at_pinned_block",
+        "wethPool": "0x0000000000000000000000000000000000000000",
+        "usdcPool": "0x0000000000000000000000000000000000000000"
+      }
+    ],
+    "rejected": [
+      {
+        "symbol": "xGRAIL",
+        "address": "0x60A186019F81bFD04aFc16c9C01804a04E79e68B",
+        "decimals": 18,
+        "observedSymbol": "xGRAIL",
+        "addressSource": "https://docs.camelot.exchange/contracts/arbitrum/sepolia-testnet/",
+        "decimalsSource": "onchain_at_pinned_block",
+        "wethPool": "0x0000000000000000000000000000000000000000",
+        "usdcPool": "0x0000000000000000000000000000000000000000",
+        "reason": "No direct WETH or USDC Camelot V3 pool at pinned block"
+      }
+    ],
+    "selected": "GRAIL",
+    "selectedReason": "GRAIL/USDC has a real direct Camelot V3 pool, nonzero liquidity and quote; xGRAIL has no direct route; the #103 public USDC sender retains real balance, router allowance and native gas"
+  },
+  "token": {
+    "chainId": 421614,
+    "address": "0x52CFD1d72A64f8D13711bb7Dc3899653dbd4191B",
+    "symbol": "GRAIL",
+    "decimals": 18,
+    "addressSource": "https://docs.camelot.exchange/contracts/arbitrum/sepolia-testnet/",
+    "decimalsSource": "eth_call decimals() at pinned block"
+  },
+  "route": {
+    "factory": "0xaA37Bea711D585478E1c04b04707cCb0f10D762a",
+    "pool": "0xac2a15bae75f5fc7b5d35d03439bd1d3b1219cc5",
+    "token0": "0x52cfd1d72a64f8d13711bb7dc3899653dbd4191b",
+    "token1": "0xb893e3334d4bd6c5ba8277fd559e99ed683a9fc7",
+    "activeLiquidity": "1132238620628550184882074",
+    "poolGrailBalanceAtomic": "1014999999998411719523",
+    "poolUsdcBalanceAtomic": "12069582221945313422322044"
+  },
+  "sender": {
+    "address": "0x01bb7b44cc398aaa2b76ac6253f0f5634279db9d",
+    "provenance": "public third-party EOA from fixtures/provider-registry/be-103/usdc-weth-camelot-2026-09-29T10-09-52-993Z/capture.json; not the user's account",
+    "usdcBalanceAtomic": "87898181500507860645523021",
+    "allowanceAtomic": "115792089237316195423570985008687907853269984665640564039427584007913129639935",
+    "spender": "0x171B925C51565F5D2a7d8C494ba3188D304EFD93",
+    "spenderBinding": "prior_qualified_USDC_router_trace:fixtures/provider-registry/be-103/usdc-weth-camelot-2026-09-29T10-09-52-993Z/capture.json",
+    "nativeBalanceWei": "70270868758068858",
+    "observedGasPriceWei": "28840000"
+  },
+  "quote": {
+    "amountInAtomic": "1000000000000000",
+    "amountOutAtomic": "99990088117",
+    "estimatedAmountOut": "0.000000099990088117",
+    "quoter": "0xe49ef2F48539EA7498605CC1B3a242042cb5FC83",
+    "blockNumber": "313963761"
+  },
+  "prepared": {
+    "intent": {
+      "chainId": 421614,
+      "protocol": "camelot-v3",
+      "sender": "0x01bb7b44cc398aaa2b76ac6253f0f5634279db9d",
+      "recipient": "0x01bb7b44cc398aaa2b76ac6253f0f5634279db9d",
+      "recipientSource": "defaulted_from_sender",
+      "tokenIn": {
+        "kind": "erc20",
+        "address": "0xb893E3334D4Bd6C5ba8277Fd559e99Ed683A9FC7"
+      },
+      "tokenOut": {
+        "kind": "erc20",
+        "address": "0x52CFD1d72A64f8D13711bb7Dc3899653dbd4191B"
+      },
+      "amountInAtomic": "1000000000000000",
+      "economicBoundary": {
+        "availability": "unavailable",
+        "source": "unavailable"
+      }
+    },
+    "unsignedTransaction": {
+      "from": "0x01bb7b44cc398aaa2b76ac6253f0f5634279db9d",
+      "to": "0x171B925C51565F5D2a7d8C494ba3188D304EFD93",
+      "data": "0xbc651188000000000000000000000000b893e3334d4bd6c5ba8277fd559e99ed683a9fc700000000000000000000000052cfd1d72a64f8d13711bb7dc3899653dbd4191b00000000000000000000000001bb7b44cc398aaa2b76ac6253f0f5634279db9d000000000000000000000000000000000000000000000000000000006abbbef400000000000000000000000000000000000000000000000000038d7ea4c68000000000000000000000000000000000000000000000000000000000170c4662e30000000000000000000000000000000000000000000000000000000000000000",
+      "value": "0x0",
+      "chainId": "0x66eee"
+    },
+    "transactionFingerprint": "sha256:b02188c85059a8f1ff8dacebaeb7fb53ee9265ba8d8623239ad40456932c0bf3",
+    "binding": {
+      "chainId": 421614,
+      "protocol": "camelot-v3",
+      "sender": "0x01bb7b44cc398aaa2b76ac6253f0f5634279db9d",
+      "recipient": "0x01bb7b44cc398aaa2b76ac6253f0f5634279db9d",
+      "tokenIn": "0xb893e3334d4bd6c5ba8277fd559e99ed683a9fc7",
+      "tokenOut": "0x52cfd1d72a64f8d13711bb7dc3899653dbd4191b",
+      "amountInAtomic": "1000000000000000",
+      "amountOutMinimumAtomic": "98990187235",
+      "router": "0x171B925C51565F5D2a7d8C494ba3188D304EFD93",
+      "from": "0x01bb7b44cc398aaa2b76ac6253f0f5634279db9d",
+      "to": "0x171B925C51565F5D2a7d8C494ba3188D304EFD93",
+      "value": "0x0",
+      "dataFingerprint": "sha256:078b866f6c054b7e0be15a0fee5d97cd2291cfbb5c438e4dc58ba24dd5bdbac3"
+    },
+    "calldataDecodedBy": "inspectCamelotV3Transaction",
+    "amountOutMinimumPolicy": "99_percent_of_pinned_quote_floor"
+  },
+  "evaluation": {
+    "ethCall": {
+      "status": "success",
+      "amountOutAtomic": "99990088117"
+    },
+    "ethEstimateGas": {
+      "status": "success",
+      "gasUnits": "208272"
+    },
+    "debugTraceCall": {
+      "status": "unavailable",
+      "erc20TransferFromObserved": false,
+      "actualSpender": null,
+      "rawFingerprint": null
+    },
+    "nativeBalanceCoversObservedGasEstimate": true
+  },
+  "limitations": [
+    "No transaction was signed, approved, broadcast, or executed onchain.",
+    "The selected public sender is not controlled by this probe.",
+    "This is Provider feasibility, not Backend composition, browser acceptance, Asset Coverage PASS, or production support.",
+    "eth_estimateGas was requested with the pinned block tag; node state-selection semantics are not independently proven."
+  ],
+  "provenance": {
+    "manifest": {
+      "scripts/provider-probes/asset3-grail-feasibility.ts": "sha256:0125f6bc267cdfd28a5d30c2aefe7aad82df2b1f3bb85b018faddabf56983f9a",
+      "apps/api/src/backend/camelot-v3-protocol-adapter.ts": "sha256:0c509324edb0759bc269b846198a1cc39ff8b129e79c0003a33748ea476e6b0c",
+      "apps/api/src/backend/camelot-v3-binding.ts": "sha256:2dfc23a0269d0c834b4143a038762f2304727d7a6083e7b367309307d43d282a",
+      "apps/api/src/backend/native-rpc-client.ts": "sha256:a223781a34a7c1e40cae244575aa71aebe588a24e4e31799492047b04228f2b1",
+      "apps/api/src/trusted-token-registry.ts": "sha256:c114dcd651d0bf6406a5c19c7595489dd407f266ef9102cf09289bb9a2f34802",
+      "fixtures/provider-registry/be-103/usdc-weth-camelot-2026-09-29T10-09-52-993Z/capture.json": "sha256:5a7ed69ca2dcf0413f79ddd29749e6f0ae652da91493814fece00cb0963b7b20"
+    }
+  }
+}
