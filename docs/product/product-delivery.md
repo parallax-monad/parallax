@@ -227,6 +227,7 @@ These codes select error-specific support text but never a transaction Verdict.
 | `TIMEOUT` | **The check timed out before a usable result was returned.** |
 | `UNSUPPORTED` | **This check is not supported for the supplied Intent.** |
 | `INVALID_RESPONSE` | **A required integration returned an unusable response.** |
+| `INSUFFICIENT_NATIVE_BALANCE` | **The sender does not have enough native currency to cover the transaction amount and gas. The check was not completed.** |
 | `INTERNAL_ERROR` | **Parallax encountered an internal error while completing the check.** |
 
 The canonical error payload should preserve `stage`, `code`, `message`, and `retryable` from the agreed Contract mapping. Product/UI displays the approved title and explanation first; raw messages may appear only in technical details and must not drive state selection.
@@ -525,6 +526,7 @@ type IntegrationErrorCode =
   | "TIMEOUT"
   | "UNSUPPORTED"
   | "INVALID_RESPONSE"
+  | "INSUFFICIENT_NATIVE_BALANCE"
   | "INTERNAL_ERROR";
 
 type IntegrationErrorStage =

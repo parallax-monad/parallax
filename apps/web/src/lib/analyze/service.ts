@@ -278,6 +278,12 @@ function failureIssues(value: unknown): ApiFailureIssue[] | undefined {
 }
 
 function failureCopy(failure: ApiFailure) {
+  if (failure.code === "INSUFFICIENT_NATIVE_BALANCE") {
+    return {
+      en: "The sender does not have enough native currency to cover the transaction amount and gas. The check was not completed, so this is not a transaction-risk verdict.",
+      zh: "该地址的原生币余额不足以支付交易金额和 Gas。检查尚未完成，因此这不是交易风险结论。",
+    };
+  }
   const label = failure.code.replaceAll("_", " ").toLowerCase();
   const reason = failure.reason ? ` (${failure.reason})` : "";
   const detail = failure.issues
@@ -407,10 +413,13 @@ function mapRun(
     parentRunId: str(run?.parentRunId),
     systemStatus: systemStatus as CheckSwapResult["systemStatus"],
     verdict: verdict as Verdict,
-    summary: cp(
-      str(run?.summary) ??
-        (apiFailure ? failureCopy(apiFailure).en : "No summary provided"),
-    ),
+    summary:
+      apiFailure?.code === "INSUFFICIENT_NATIVE_BALANCE"
+        ? failureCopy(apiFailure)
+        : cp(
+            str(run?.summary) ??
+              (apiFailure ? failureCopy(apiFailure).en : "No summary provided"),
+          ),
     recommendedActions: arr(run?.recommendedActions)
       .map((item) => suggestion(item, tokenIn, tokenOut))
       .filter((item): item is ActionSuggestion => !!item),
@@ -825,8 +834,15 @@ export async function loadRun(
     return { kind: "started", runId: storedRunId };
   }
 
+  // A persisted failure describes the RunStore lifecycle, which is deliberately
+  // coarse. Keep the specific native-balance error during recovery instead of
+  // replacing it with the lifecycle code (for example, AGENT_FLOW_ERROR).
+  const storedResult = obj(record?.result);
+  const storedErrorCode = str(obj(storedResult?.error)?.code);
   const persistedFailure =
-    status === "failed" ? str(record?.failure) : undefined;
+    status === "failed" && storedErrorCode !== "INSUFFICIENT_NATIVE_BALANCE"
+      ? str(record?.failure)
+      : undefined;
   const result = mapRun(
     record?.result,
     persistedFailure === undefined

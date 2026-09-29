@@ -26,6 +26,7 @@ import {
   type BackendApplicationRoute,
   findBackendApplicationRoute,
 } from "./backend/application-routing.js";
+import { isChainAdapterError } from "./backend/chain-adapter.js";
 import type { BackendCompositionRuntime } from "./backend/composition.js";
 import { isBackendControlError } from "./backend/control-boundary.js";
 import { projectTraceRpcEvidence } from "./backend/trace-rpc-public.js";
@@ -49,6 +50,7 @@ export type CheckApiErrorCode =
   | "UNSUPPORTED"
   | "AGENT_FLOW_ERROR"
   | "INVALID_AGENT_FLOW_RESPONSE"
+  | "INSUFFICIENT_NATIVE_BALANCE"
   | "RUN_STORE_ERROR";
 
 export type CheckApiError =
@@ -192,18 +194,30 @@ export class CheckApplicationService {
     );
     if (!invoked.ok) {
       const unsupported = isUnsupportedCheckError(invoked.error);
+      const mappedError = integrationErrorForFailure(
+        unsupported ? "UNSUPPORTED" : "AGENT_FLOW_ERROR",
+        invoked.error,
+        normalized.intent.chainId,
+      );
+      const publicError: CheckApiError =
+        mappedError.code === "INSUFFICIENT_NATIVE_BALANCE"
+          ? {
+              code: mappedError.code,
+              message: mappedError.message,
+            }
+          : {
+              code: unsupported ? "UNSUPPORTED" : "AGENT_FLOW_ERROR",
+              message: unsupported
+                ? unsupportedCheckMessage(invoked.error)
+                : "Agent Flow could not complete the check",
+            };
       return this.recordFailure(
         runId,
         unsupported ? "UNSUPPORTED" : "AGENT_FLOW_ERROR",
         normalized.intent,
         childFields,
         createdAt,
-        {
-          code: unsupported ? "UNSUPPORTED" : "AGENT_FLOW_ERROR",
-          message: unsupported
-            ? unsupportedCheckMessage(invoked.error)
-            : "Agent Flow could not complete the check",
-        },
+        publicError,
         invoked.error,
         partialRunResultFrom(invoked.error),
       );
@@ -772,19 +786,12 @@ function createIntegrationErrorResult(
     systemStatus: "INTEGRATION_ERROR",
     verdict: "UNKNOWN",
     summary: "The check could not be completed",
-    error: integrationErrorForFailure(failure, cause),
+    error: integrationErrorForFailure(failure, cause, intent.chainId),
     ruleResults: [],
     recommendedActions: [],
     irrelevantActions: [],
     evidence: [],
-    scope: [
-      {
-        key: "P0-CHECK-SIMULATION-001",
-        label: integrationScopeLabel(cause),
-        status: "unknown",
-        reason: "REQUIRED_CHECK_INTERRUPTED",
-      },
-    ],
+    scope: integrationScope(cause, intent.chainId),
   });
 }
 
@@ -793,6 +800,7 @@ type IntegrationError = FailedRunResult["error"];
 function integrationErrorForFailure(
   failure: CheckRunFailureCode,
   cause: unknown,
+  expectedChainId: number,
 ): IntegrationError {
   if (failure === "UNSUPPORTED") {
     return {
@@ -817,6 +825,16 @@ function integrationErrorForFailure(
   const rawStatus = stringField(fields, "integrationStatus");
   const source = stringField(fields, "source");
   const stage = integrationErrorStage(stringField(fields, "stage"));
+
+  if (isInsufficientNativeBalanceFailure(cause, expectedChainId)) {
+    return {
+      code: "INSUFFICIENT_NATIVE_BALANCE",
+      stage: "action",
+      message:
+        "The sender does not have enough native currency to cover the transaction amount and gas",
+      retryable: false,
+    };
+  }
 
   if (rawCode === "TIMEOUT" || rawStatus === "TIMEOUT") {
     return {
@@ -891,10 +909,54 @@ function integrationErrorStage(
   }
 }
 
-function integrationScopeLabel(cause: unknown): string {
-  return isProviderBoundaryFailure(cause)
-    ? "Provider evaluation"
-    : "Moss simulation";
+function integrationScope(
+  cause: unknown,
+  expectedChainId: number,
+): FailedRunResult["scope"] {
+  if (isInsufficientNativeBalanceFailure(cause, expectedChainId)) {
+    return [
+      {
+        key: "P0-CHECK-ACTION-001",
+        label: "Transaction preparation",
+        status: "unknown",
+        reason: "REQUIRED_CHECK_INTERRUPTED",
+      },
+      {
+        key: "P0-CHECK-SIMULATION-001",
+        label: "Moss simulation",
+        status: "unknown",
+        reason: "REQUIRED_CHECK_INTERRUPTED",
+      },
+      {
+        key: "P0-CHECK-SIMULATION-COVERAGE-001",
+        label: "Simulation coverage",
+        status: "unknown",
+        reason: "REQUIRED_CHECK_INTERRUPTED",
+      },
+    ];
+  }
+  return [
+    {
+      key: "P0-CHECK-SIMULATION-001",
+      label: isProviderBoundaryFailure(cause)
+        ? "Provider evaluation"
+        : "Moss simulation",
+      status: "unknown",
+      reason: "REQUIRED_CHECK_INTERRUPTED",
+    },
+  ];
+}
+
+function isInsufficientNativeBalanceFailure(
+  cause: unknown,
+  expectedChainId: number,
+): boolean {
+  return (
+    isChainAdapterError(cause) &&
+    cause.chainId === expectedChainId &&
+    cause.code === "INSUFFICIENT_NATIVE_BALANCE" &&
+    cause.operation === "estimateGas"
+  );
 }
 
 function unsupportedCheckMessage(cause: unknown): string {

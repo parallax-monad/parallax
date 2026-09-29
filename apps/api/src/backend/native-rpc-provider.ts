@@ -2,7 +2,10 @@ import { isDeepStrictEqual } from "node:util";
 import { normalizedSwapIntentSchema } from "@parallax/contracts";
 import type { ArbitrumTransaction } from "./arbitrum-chain-adapter.js";
 import { inspectCamelotV3Transaction } from "./camelot-v3-binding.js";
-import type { ChainOperationOptions } from "./chain-adapter.js";
+import type {
+  ChainOperationOptions,
+  PreparedGasEstimate,
+} from "./chain-adapter.js";
 import {
   createNativeRpcClient,
   NativeRpcClientError,
@@ -18,6 +21,7 @@ import {
 } from "./native-rpc-evidence.js";
 import {
   createProviderAdapter,
+  PROVIDER_OWNED_GAS_ESTIMATE_CAPABILITY,
   type ProviderAdapter,
   type ProviderAdapterRawImplementation,
   type ProviderEvaluationInput,
@@ -111,6 +115,9 @@ export class NativeRpcProvider<Intent extends NativeRpcIntent = NativeRpcIntent>
 {
   public readonly providerId = NATIVE_RPC_ARBITRUM_PROVIDER_ID;
   public readonly capabilities = NATIVE_RPC_CAPABILITIES;
+  public readonly routingCapabilities = Object.freeze([
+    PROVIDER_OWNED_GAS_ESTIMATE_CAPABILITY,
+  ]);
   public readonly adapter: ProviderAdapter<
     Intent,
     NativeRpcPreparedExecution<Intent>
@@ -547,6 +554,10 @@ export class NativeRpcProvider<Intent extends NativeRpcIntent = NativeRpcIntent>
       }
     }
 
+    const preparedGasUnits = providerGasUnits(
+      input.input.gasEstimate,
+      gasUnits,
+    );
     state.fields.push(
       candidate(
         "nativeRpc.preparedExecution",
@@ -556,7 +567,9 @@ export class NativeRpcProvider<Intent extends NativeRpcIntent = NativeRpcIntent>
           chainId: input.input.chainId,
           protocol: input.input.protocol,
           quote,
-          gasEstimate: input.input.gasEstimate.gasUnits,
+          ...(preparedGasUnits === undefined
+            ? {}
+            : { gasEstimate: preparedGasUnits }),
           finality: input.input.finality.status,
         },
       ),
@@ -793,11 +806,8 @@ function validatePreparedExecution<Intent extends NativeRpcIntent>(
     payload as ArbitrumTransaction,
   );
   if (!binding.ok) return binding.reason;
-  if (
-    !isRecord(prepared.gasEstimate) ||
-    !isDecimalQuantity(prepared.gasEstimate.gasUnits)
-  ) {
-    return "Native RPC requires a prepared decimal gas estimate";
+  if (!isPreparedGasEstimate(prepared.gasEstimate)) {
+    return "Native RPC requires a prepared gas estimate or explicit unavailability";
   }
   if (
     !isRecord(prepared.finality) ||
@@ -806,6 +816,35 @@ function validatePreparedExecution<Intent extends NativeRpcIntent>(
     return "Native RPC requires a prepared finality status";
   }
   return undefined;
+}
+
+function isPreparedGasEstimate(value: unknown): value is PreparedGasEstimate {
+  if (!isRecord(value)) return false;
+  if (isDecimalQuantity(value.gasUnits)) return true;
+  return (
+    value.status === "UNAVAILABLE" &&
+    typeof value.reason === "string" &&
+    value.reason.trim().length > 0
+  );
+}
+
+function providerGasUnits(
+  prepared: PreparedGasEstimate,
+  observed: string,
+): string | undefined {
+  if (isDecimalQuantity(observed)) return observed;
+  return isAvailableGasEstimate(prepared) ? prepared.gasUnits : undefined;
+}
+
+function isAvailableGasEstimate(
+  value: PreparedGasEstimate,
+): value is { readonly gasUnits: string } {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "gasUnits" in value &&
+    isDecimalQuantity(value.gasUnits)
+  );
 }
 
 function candidate(
