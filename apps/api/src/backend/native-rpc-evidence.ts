@@ -15,7 +15,7 @@ import {
   type ArbitrumTransaction,
 } from "./arbitrum-chain-adapter.js";
 import { inspectCamelotV3Transaction } from "./camelot-v3-binding.js";
-import type { BlockContext, GasEstimate } from "./chain-adapter.js";
+import type { BlockContext, PreparedGasEstimate } from "./chain-adapter.js";
 import { fingerprintPreparedTransaction } from "./prepared-transaction-fingerprint.js";
 import type { ProviderEvaluationResult } from "./provider-adapter.js";
 import type {
@@ -65,7 +65,7 @@ export type NativeRpcPreparedExecution<
     readonly kind: "unsigned";
     readonly payload: ArbitrumTransaction | Readonly<Record<string, unknown>>;
   };
-  readonly gasEstimate: GasEstimate;
+  readonly gasEstimate: PreparedGasEstimate;
   readonly finality: {
     readonly status: "unknown" | "pending" | "confirmed" | "finalized";
     readonly blockContext?: BlockContext;

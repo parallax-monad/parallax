@@ -2,6 +2,7 @@ import type { NormalizedSwapIntent } from "@parallax/contracts";
 import { describe, expect, it, vi } from "vitest";
 import { bootstrapBackendApp } from "../bootstrap/backend.js";
 import { InMemoryRunStore } from "../store.js";
+import { ChainAdapterError } from "./chain-adapter.js";
 import { ChainRegistry } from "./chain-registry.js";
 import { createBackendComposition } from "./composition.js";
 import {
@@ -12,6 +13,7 @@ import {
 } from "./fake-harness.js";
 import { BackendPipeline } from "./pipeline.js";
 import { ProtocolRegistry } from "./protocol-registry.js";
+import { PROVIDER_OWNED_GAS_ESTIMATE_CAPABILITY } from "./provider-adapter.js";
 import { ProviderRegistry } from "./provider-registry.js";
 
 const normalizedIntent = {
@@ -28,6 +30,52 @@ const normalizedIntent = {
   amountInAtomic: "1000000000000000000",
   economicBoundary: { availability: "unavailable", source: "unavailable" },
 } as NormalizedSwapIntent;
+
+function createPipelineWithGasPreflightFailure(
+  error: unknown,
+  options: { readonly providerOwnsGasEstimate?: boolean } = {},
+) {
+  const fixture = fakeBackendFixture();
+  const chain = {
+    ...createFakeChainAdapter(fixture.chain),
+    async estimateGas() {
+      throw error;
+    },
+  };
+  const routingCapabilities = options.providerOwnsGasEstimate
+    ? [
+        ...(fixture.provider.routingCapabilities ?? []),
+        PROVIDER_OWNED_GAS_ESTIMATE_CAPABILITY,
+      ]
+    : fixture.provider.routingCapabilities;
+  const provider = createFakeProviderAdapterHarness({
+    ...fixture.provider,
+    routingCapabilities,
+    supports: (query) =>
+      query.chainId === fixture.chain.chainId &&
+      query.protocol === fixture.protocol.id,
+  });
+  const runtime = createBackendComposition({
+    chainRegistry: new ChainRegistry([chain]),
+    protocolRegistry: new ProtocolRegistry([
+      {
+        chainId: fixture.chain.chainId,
+        protocol: fixture.protocol.id,
+        adapter: createFakeProtocolAdapter(fixture.protocol),
+      },
+    ]),
+    providerRegistry: new ProviderRegistry([provider.adapter]),
+    normalization: { normalize: () => normalizedIntent },
+    core: { evaluate: async () => undefined },
+    decision: { decide: async () => undefined },
+    runStore: new InMemoryRunStore(),
+  });
+
+  return {
+    pipeline: new BackendPipeline({ runtime }),
+    provider,
+  };
+}
 
 describe("BackendPipeline", () => {
   it("evaluates supplementary evidence from the exact prepared execution without passing it to Risk seams", async () => {
@@ -259,6 +307,140 @@ describe("BackendPipeline", () => {
         providerResult: expect.objectContaining({ status: "success" }),
       }),
     );
+  });
+
+  it.each(["INSUFFICIENT_NATIVE_BALANCE", "UNAVAILABLE"] as const)(
+    "continues to a provider-owned pinned gas check for %s preflight failures",
+    async (code) => {
+      const fixture = fakeBackendFixture();
+      const error = new ChainAdapterError({
+        chainId: fixture.chain.chainId,
+        operation: "estimateGas",
+        code,
+        message: "preflight estimate unavailable",
+      });
+      const { pipeline, provider } = createPipelineWithGasPreflightFailure(
+        error,
+        { providerOwnsGasEstimate: true },
+      );
+
+      const result = await pipeline.execute({
+        rawInput: {},
+        runId: `gas-preflight-${code}`,
+        chainId: fixture.chain.chainId,
+        protocol: fixture.protocol.id,
+      });
+
+      expect(result.gasEstimate).toEqual({
+        status: "UNAVAILABLE",
+        reason: "Chain-level gas preflight was unavailable",
+      });
+      expect(provider.evaluations).toHaveLength(1);
+      expect(result.providerResult.status).toBe("success");
+    },
+  );
+
+  it.each([
+    {
+      label: "timeout",
+      chainId: 901,
+      operation: "estimateGas",
+      code: "TIMEOUT",
+    },
+    {
+      label: "cancellation",
+      chainId: 901,
+      operation: "estimateGas",
+      code: "CANCELLED",
+    },
+    {
+      label: "invalid request",
+      chainId: 901,
+      operation: "estimateGas",
+      code: "INVALID_REQUEST",
+    },
+    {
+      label: "unknown error",
+      chainId: 901,
+      operation: "estimateGas",
+      code: "UNKNOWN",
+    },
+    {
+      label: "wrong chain",
+      chainId: 143,
+      operation: "estimateGas",
+      code: "UNAVAILABLE",
+    },
+    {
+      label: "wrong operation",
+      chainId: 901,
+      operation: "getBlockContext",
+      code: "UNAVAILABLE",
+    },
+  ] as const)(
+    "stops before Provider evaluation for a $label gas-preflight failure",
+    async ({ chainId, operation, code }) => {
+      const error = new ChainAdapterError({
+        chainId,
+        operation,
+        code,
+        message: "must not be treated as a recoverable gas preflight",
+      });
+      const { pipeline, provider } = createPipelineWithGasPreflightFailure(
+        error,
+        { providerOwnsGasEstimate: true },
+      );
+
+      await expect(
+        pipeline.execute({
+          rawInput: {},
+          runId: `gas-preflight-blocked-${code}-${operation}-${chainId}`,
+          chainId: 901,
+          protocol: "kuru",
+        }),
+      ).rejects.toBe(error);
+      expect(provider.evaluations).toHaveLength(0);
+    },
+  );
+
+  it("stops when the selected Provider does not own gas estimation", async () => {
+    const error = new ChainAdapterError({
+      chainId: 901,
+      operation: "estimateGas",
+      code: "UNAVAILABLE",
+      message: "chain preflight unavailable",
+    });
+    const { pipeline, provider } = createPipelineWithGasPreflightFailure(error);
+
+    await expect(
+      pipeline.execute({
+        rawInput: {},
+        runId: "gas-preflight-no-provider-capability",
+        chainId: 901,
+        protocol: "kuru",
+      }),
+    ).rejects.toBe(error);
+    expect(provider.evaluations).toHaveLength(0);
+  });
+
+  it("does not continue after an untyped gas-preflight exception", async () => {
+    const error = new Error("unclassified preflight failure");
+    const { pipeline, provider } = createPipelineWithGasPreflightFailure(
+      error,
+      {
+        providerOwnsGasEstimate: true,
+      },
+    );
+
+    await expect(
+      pipeline.execute({
+        rawInput: {},
+        runId: "gas-preflight-untyped-error",
+        chainId: 901,
+        protocol: "kuru",
+      }),
+    ).rejects.toBe(error);
+    expect(provider.evaluations).toHaveLength(0);
   });
 
   it("binds Provider evaluation input to the exact Protocol preparation", async () => {

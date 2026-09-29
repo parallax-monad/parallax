@@ -185,6 +185,7 @@ export type FakeProviderFixture<Intent = FakeProviderIntent> = {
   readonly chainId: number;
   readonly protocol: string;
   readonly capabilities?: readonly string[];
+  readonly routingCapabilities?: readonly string[];
   readonly observedAt?: string;
   readonly mode?: GenericEvidenceMode;
   readonly candidateFields?: readonly ProvisionalCandidateFieldInput[];
@@ -205,6 +206,7 @@ function buildFakeProviderAdapter<Intent, Input>(
     providerId: fixture.providerId,
     mode: fixture.mode ?? "MOCK",
     capabilities: fixture.capabilities,
+    routingCapabilities: fixture.routingCapabilities,
     supports: (query) =>
       fixture.supports?.(query) ??
       (isDeepStrictEqual(query.intent, fixture.intent) &&

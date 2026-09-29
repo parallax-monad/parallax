@@ -15,6 +15,7 @@ import {
 } from "@parallax/orchestrator/application/action-gate-fixtures";
 import { describe, expect, it } from "vitest";
 import { CheckApplicationService } from "./application.js";
+import { ChainAdapterError } from "./backend/chain-adapter.js";
 import { normalizeCheckSwapRequest } from "./normalization.js";
 import { type AgentFlowPort, UnsupportedAgentFlowError } from "./ports.js";
 import type { BackendRuntime } from "./runtime-config.js";
@@ -2026,6 +2027,147 @@ describe("CheckApplicationService", () => {
       status: "failed",
       failure: "AGENT_FLOW_ERROR",
     });
+  });
+
+  it("exposes a safe native-balance error when gas estimation cannot fund the transaction", async () => {
+    const store = new InMemoryRunStore();
+    const service = createService(
+      {
+        async check() {
+          throw new ChainAdapterError({
+            chainId: 143,
+            operation: "estimateGas",
+            code: "INSUFFICIENT_NATIVE_BALANCE",
+            message:
+              "estimateGas RPC request failed: failed with 50003829 gas: insufficient funds for gas * price + value: address 0x1111111111111111111111111111111111111111 have 50883771891842106 want 100000000000000000000",
+            retryable: false,
+          });
+        },
+      },
+      store,
+    );
+
+    const response = await service.check(publicRequest());
+
+    expect(response).toMatchObject({
+      status: 502,
+      body: {
+        error: {
+          code: "INSUFFICIENT_NATIVE_BALANCE",
+          message:
+            "The sender does not have enough native currency to cover the transaction amount and gas",
+        },
+        run: {
+          status: "integration_error",
+          systemStatus: "INTEGRATION_ERROR",
+          verdict: "UNKNOWN",
+          error: {
+            code: "INSUFFICIENT_NATIVE_BALANCE",
+            stage: "action",
+            retryable: false,
+            message:
+              "The sender does not have enough native currency to cover the transaction amount and gas",
+          },
+          scope: [
+            {
+              key: "P0-CHECK-ACTION-001",
+              label: "Transaction preparation",
+              status: "unknown",
+              reason: "REQUIRED_CHECK_INTERRUPTED",
+            },
+            {
+              key: "P0-CHECK-SIMULATION-001",
+              label: "Moss simulation",
+              status: "unknown",
+              reason: "REQUIRED_CHECK_INTERRUPTED",
+            },
+            {
+              key: "P0-CHECK-SIMULATION-COVERAGE-001",
+              label: "Simulation coverage",
+              status: "unknown",
+              reason: "REQUIRED_CHECK_INTERRUPTED",
+            },
+          ],
+        },
+      },
+    });
+    const runScope =
+      "run" in response.body ? response.body.run?.scope : undefined;
+    expect(runScope).toEqual([
+      {
+        key: "P0-CHECK-ACTION-001",
+        label: "Transaction preparation",
+        status: "unknown",
+        reason: "REQUIRED_CHECK_INTERRUPTED",
+      },
+      {
+        key: "P0-CHECK-SIMULATION-001",
+        label: "Moss simulation",
+        status: "unknown",
+        reason: "REQUIRED_CHECK_INTERRUPTED",
+      },
+      {
+        key: "P0-CHECK-SIMULATION-COVERAGE-001",
+        label: "Simulation coverage",
+        status: "unknown",
+        reason: "REQUIRED_CHECK_INTERRUPTED",
+      },
+    ]);
+    expect(JSON.stringify(response)).not.toContain("50003829");
+    expect(JSON.stringify(response)).not.toContain("50883771891842106");
+    const persisted = await store.get("run-1");
+    expect(persisted).toMatchObject({
+      status: "failed",
+      failure: "AGENT_FLOW_ERROR",
+      result: {
+        error: {
+          code: "INSUFFICIENT_NATIVE_BALANCE",
+          stage: "action",
+        },
+      },
+    });
+    expect(JSON.stringify(persisted)).not.toContain("50003829");
+    expect(JSON.stringify(persisted)).not.toContain("50883771891842106");
+  });
+
+  it("does not expose native-balance errors from untyped or mismatched-chain failures", async () => {
+    const failures = [
+      Object.assign(new Error("estimate failed"), {
+        chainId: 143,
+        operation: "estimateGas",
+        code: "INSUFFICIENT_NATIVE_BALANCE",
+      }),
+      new ChainAdapterError({
+        chainId: 421614,
+        operation: "estimateGas",
+        code: "INSUFFICIENT_NATIVE_BALANCE",
+        message: "wrong chain balance failure",
+      }),
+    ];
+
+    for (const failure of failures) {
+      const service = createService(
+        {
+          async check() {
+            throw failure;
+          },
+        },
+        new InMemoryRunStore(),
+      );
+
+      const response = await service.check(publicRequest());
+
+      expect(response).toMatchObject({
+        status: 502,
+        body: {
+          error: { code: "AGENT_FLOW_ERROR" },
+          run: {
+            status: "integration_error",
+            error: { code: "INTERNAL_ERROR" },
+          },
+        },
+      });
+    }
   });
 
   it.each([

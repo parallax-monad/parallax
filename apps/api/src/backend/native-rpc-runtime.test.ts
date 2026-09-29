@@ -1085,6 +1085,7 @@ describe("NativeRpcProvider", () => {
       "providerId",
       "mode",
       "capabilities",
+      "routingCapabilities",
       "supports",
     ]);
     expect(

@@ -23,6 +23,10 @@ import {
  */
 export type ProviderCapability = string;
 
+/** Backend-local routing hint; it is not a public Evidence capability. */
+export const PROVIDER_OWNED_GAS_ESTIMATE_CAPABILITY =
+  "provider-owned-gas-estimate" as const;
+
 /** Generic, side-effect-free capability query. */
 export type ProviderSupportQuery<Intent = unknown> = {
   readonly intent?: Intent;
@@ -129,6 +133,8 @@ export type ProviderAdapterRawImplementation<
   /** Explicit evidence truthfulness mode for every result from this adapter. */
   readonly mode?: GenericEvidenceMode;
   readonly capabilities?: readonly ProviderCapability[];
+  /** Backend-local routing hints; never copied into Provider Evidence. */
+  readonly routingCapabilities?: readonly ProviderCapability[];
   supports(query: ProviderSupportQuery<Intent>): boolean;
   evaluateRaw(input: ProviderEvaluationInput<Intent, Input>): Promise<unknown>;
 };
@@ -148,6 +154,8 @@ export interface ProviderAdapter<Intent = unknown, _Input = unknown> {
   readonly providerId: string;
   readonly mode: GenericEvidenceMode;
   readonly capabilities?: readonly ProviderCapability[];
+  /** Backend-local routing hints; not part of ProviderEvaluationResult. */
+  readonly routingCapabilities?: readonly ProviderCapability[];
 
   supports(query: ProviderSupportQuery<Intent>): boolean;
 }
@@ -241,12 +249,20 @@ export function createProviderAdapter<Intent = unknown, Input = unknown>(
   }
   const mode = normalizeEvidenceMode(raw.mode);
   const capabilities = normalizeCapabilities(raw.capabilities);
+  const routingCapabilities = normalizeCapabilities(raw.routingCapabilities);
   const publicCapabilities =
     capabilities === undefined ? undefined : Object.freeze([...capabilities]);
+  const internalRoutingCapabilities =
+    routingCapabilities === undefined
+      ? undefined
+      : Object.freeze([...routingCapabilities]);
   const adapter = Object.freeze({
     providerId,
     mode,
     capabilities: publicCapabilities,
+    ...(internalRoutingCapabilities === undefined
+      ? {}
+      : { routingCapabilities: internalRoutingCapabilities }),
     supports: (query: ProviderSupportQuery<Intent>) => raw.supports(query),
   }) as ProviderAdapter<Intent, Input>;
   const evaluate = async (

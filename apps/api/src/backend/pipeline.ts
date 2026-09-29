@@ -7,8 +7,9 @@ import type {
   BlockContext,
   ChainAdapter,
   FinalityStatus,
-  GasEstimate,
+  PreparedGasEstimate,
 } from "./chain-adapter.js";
+import { isChainAdapterError } from "./chain-adapter.js";
 import type {
   BackendCompositionRuntime,
   BackendOperationResult,
@@ -18,6 +19,7 @@ import type {
   UnsignedTransaction,
 } from "./protocol-adapter.js";
 import {
+  PROVIDER_OWNED_GAS_ESTIMATE_CAPABILITY,
   type ProviderAdapter,
   ProviderAdapterError,
   type ProviderAdapterErrorCode,
@@ -44,7 +46,7 @@ export type BackendPipelineContext<
   readonly blockContext: BlockContext;
   readonly quote: unknown;
   readonly unsignedTransaction: UnsignedTransaction<unknown>;
-  readonly gasEstimate: GasEstimate;
+  readonly gasEstimate: PreparedGasEstimate;
   readonly finality: FinalityStatus;
   readonly providerResult: ProviderEvaluationResult;
   /** Optional provisional evidence projection for Core/Decision consumers. */
@@ -76,7 +78,7 @@ export type BackendPipelineProviderExecution<
   readonly blockContext: BlockContext;
   readonly quote: unknown;
   readonly unsignedTransaction: UnsignedTransaction<unknown>;
-  readonly gasEstimate: GasEstimate;
+  readonly gasEstimate: PreparedGasEstimate;
   readonly finality: FinalityStatus;
   readonly providerResult: ProviderEvaluationResult;
   readonly providerEvidence?: unknown;
@@ -89,9 +91,11 @@ export type BackendPipelineProviderExecution<
  *
  * Provider-specific input builders receive this only after Chain and Protocol
  * have produced this execution's block context, quote, unsigned transaction,
- * gas estimate, and finality. They may translate it to a private Provider
- * shape, but the pipeline does not pass an independently supplied Provider
- * payload into this boundary.
+ * gas preparation result, and finality. The gas preparation result may be an
+ * explicit unavailable fact when the selected Provider owns its pinned gas
+ * check; it is never an invented estimate. Providers may translate this to a
+ * private shape, but the pipeline does not pass an independently supplied
+ * Provider payload into this boundary.
  */
 export type BackendPipelinePreparedExecution<NormalizedIntent> = {
   readonly runId: string;
@@ -101,7 +105,7 @@ export type BackendPipelinePreparedExecution<NormalizedIntent> = {
   readonly blockContext: BlockContext;
   readonly quote: unknown;
   readonly unsignedTransaction: UnsignedTransaction<unknown>;
-  readonly gasEstimate: GasEstimate;
+  readonly gasEstimate: PreparedGasEstimate;
   readonly finality: FinalityStatus;
 };
 
@@ -151,7 +155,7 @@ export type BackendPipelineExecution<
   readonly blockContext: BlockContext;
   readonly quote: unknown;
   readonly unsignedTransaction: UnsignedTransaction<unknown>;
-  readonly gasEstimate: GasEstimate;
+  readonly gasEstimate: PreparedGasEstimate;
   readonly finality: FinalityStatus;
   readonly providerResult: ProviderEvaluationResult;
   /** Optional provisional evidence projection for Backend/API composition. */
@@ -433,7 +437,32 @@ export class BackendPipeline<
       normalized as never,
       { blockContext, quote },
     );
-    const gasEstimate = await chain.estimateGas(unsignedTransaction.payload);
+    let gasEstimate: PreparedGasEstimate;
+    try {
+      gasEstimate = await chain.estimateGas(unsignedTransaction.payload);
+    } catch (error) {
+      if (
+        !isChainAdapterError(error) ||
+        error.chainId !== input.chainId ||
+        error.operation !== "estimateGas" ||
+        (error.code !== "INSUFFICIENT_NATIVE_BALANCE" &&
+          error.code !== "UNAVAILABLE") ||
+        !provider.routingCapabilities?.includes(
+          PROVIDER_OWNED_GAS_ESTIMATE_CAPABILITY,
+        )
+      ) {
+        throw error;
+      }
+
+      // Only a matching, typed balance/RPC-unavailable preflight failure may
+      // continue to a Provider that explicitly owns the pinned gas check.
+      // This absence is not itself a gas observation; the Provider must still
+      // perform and report its authoritative pinned check.
+      gasEstimate = {
+        status: "UNAVAILABLE",
+        reason: "Chain-level gas preflight was unavailable",
+      };
+    }
     const finality = await chain.getFinality(blockContext);
     const preparedExecution: BackendPipelinePreparedExecution<NormalizedIntent> =
       {

@@ -29,7 +29,17 @@ export type ArbitrumChainAdapterOptions = {
   readonly fetchImplementation?: typeof fetch;
 };
 
-type RpcError = Error & { rpcCode?: number };
+type RpcError = Error & { rpcCode?: number; httpStatus?: number };
+
+class ArbitrumRpcHttpError extends Error {
+  public readonly httpStatus: number;
+
+  public constructor(status: number) {
+    super(`Arbitrum RPC HTTP ${status}`);
+    this.name = "ArbitrumRpcHttpError";
+    this.httpStatus = status;
+  }
+}
 
 type RpcBlock = {
   readonly number?: unknown;
@@ -236,14 +246,14 @@ export class ArbitrumChainAdapter implements ChainAdapter<ArbitrumTransaction> {
                 reject(error);
                 return;
               }
-              const code = classifyRpcFailure(error);
+              const code = classifyRpcFailure(operation, error);
               reject(
                 new ChainAdapterError({
                   chainId: this.chainId,
                   operation,
                   code,
                   message: rpcFailureMessage(operation, error),
-                  retryable: code === "UNAVAILABLE",
+                  retryable: code === "UNAVAILABLE" || code === "TIMEOUT",
                   cause: error,
                 }),
               );
@@ -282,7 +292,7 @@ export function createArbitrumRpcClient(
         signal: options?.signal,
       });
       if (!response.ok) {
-        throw new Error(`Arbitrum RPC HTTP ${response.status}`);
+        throw new ArbitrumRpcHttpError(response.status);
       }
       const payload = (await response.json()) as {
         result?: unknown;
@@ -390,23 +400,43 @@ function invalidQuantity(): never {
 }
 
 function classifyRpcFailure(
+  operation: ChainOperation,
   error: unknown,
-): "UNAVAILABLE" | "TIMEOUT" | "INVALID_REQUEST" | "UNKNOWN" {
+):
+  | "UNAVAILABLE"
+  | "TIMEOUT"
+  | "INVALID_REQUEST"
+  | "INSUFFICIENT_NATIVE_BALANCE"
+  | "UNKNOWN" {
   const candidate = error as RpcError | undefined;
+  const message = candidate?.message ?? "";
   if (candidate?.rpcCode === -32600 || candidate?.rpcCode === -32602) {
     return "INVALID_REQUEST";
   }
-  if (
-    candidate?.name === "AbortError" ||
-    /timeout|timed out/i.test(candidate?.message ?? "")
-  ) {
+  if (typeof candidate?.httpStatus === "number") {
+    if (candidate.httpStatus === 408) return "TIMEOUT";
+    if (
+      candidate.httpStatus === 429 ||
+      (candidate.httpStatus >= 500 && candidate.httpStatus <= 599)
+    ) {
+      return "UNAVAILABLE";
+    }
+    if (candidate.httpStatus === 400 || candidate.httpStatus === 422) {
+      return "INVALID_REQUEST";
+    }
+    return "UNKNOWN";
+  }
+  if (candidate?.name === "AbortError" || /timeout|timed out/i.test(message)) {
     return "TIMEOUT";
   }
-  if (
-    candidate?.name === "TypeError" ||
-    /fetch|network|http \d{3}/i.test(candidate?.message ?? "")
-  ) {
+  if (candidate?.name === "TypeError" || /fetch|network/i.test(message)) {
     return "UNAVAILABLE";
+  }
+  if (
+    operation === "estimateGas" &&
+    /insufficient funds for gas\s*\*\s*price\s*\+\s*value/i.test(message)
+  ) {
+    return "INSUFFICIENT_NATIVE_BALANCE";
   }
   return "UNKNOWN";
 }
