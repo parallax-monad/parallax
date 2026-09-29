@@ -39,6 +39,15 @@ const asUint = (value: unknown, name: string): bigint => {
     throw new Error(`${name} is not a hex uint`);
   return BigInt(value);
 };
+function asSymbol(value: unknown, name: string): string {
+  if (typeof value !== "string" || !/^0x(?:[0-9a-f]{64})+$/i.test(value))
+    throw new Error(`${name} is not ABI-encoded`);
+  const words = value.slice(2).match(/.{64}/g) ?? [];
+  const length = Number(BigInt(`0x${words[1] ?? "0"}`));
+  if (BigInt(`0x${words[0]}`) !== 32n || length < 1 || length > 32 || !words[2])
+    throw new Error(`${name} is not an ABI string`);
+  return Buffer.from(words[2].slice(0, length * 2), "hex").toString("utf8");
+}
 function assert(ok: unknown, reason: string): asserts ok {
   if (!ok) throw new Error(reason);
 }
@@ -156,12 +165,18 @@ async function main() {
       tag,
       `${symbol} decimals`,
     );
+    const observedSymbol = asSymbol(
+      await read(rpc, "eth_call", [{ to: address, data: "0x95d89b41" }, tag]),
+      `${symbol} symbol`,
+    );
+    assert(observedSymbol === symbol, `${symbol} onchain symbol changed`);
     const wethPool = await poolFor(rpc, address, WETH, tag);
     const usdcPool = await poolFor(rpc, address, CAMELOT_SEPOLIA_USDC, tag);
     candidates.push({
       symbol,
       address,
       decimals: Number(decimals),
+      observedSymbol,
       addressSource:
         "https://docs.camelot.exchange/contracts/arbitrum/sepolia-testnet/",
       decimalsSource: "onchain_at_pinned_block",
@@ -251,6 +266,7 @@ async function main() {
     await read(rpc, "eth_getBalance", [SENDER, tag]),
     "native balance",
   );
+  const gasPrice = asUint(await read(rpc, "eth_gasPrice", []), "gas price");
   assert(
     usdcBalance >= AMOUNT_IN && allowance >= AMOUNT_IN && nativeBalance > 0n,
     "No qualifying public account state",
@@ -361,7 +377,7 @@ async function main() {
     callAmount !== null &&
     gasUnits !== null &&
     spenderBound &&
-    nativeBalance > gasUnits * 1_000_000_000n;
+    nativeBalance > gasUnits * gasPrice;
   const status = qualified
     ? "QUALIFIED_REAL_FEASIBILITY"
     : "BLOCKED_EXECUTION_OR_SPENDER";
@@ -432,6 +448,7 @@ async function main() {
             ? `prior_qualified_USDC_router_trace:${SOURCE_103}`
             : "unverified",
       nativeBalanceWei: nativeBalance.toString(),
+      observedGasPriceWei: gasPrice.toString(),
     },
     quote: {
       amountInAtomic: AMOUNT_IN.toString(),
@@ -464,8 +481,8 @@ async function main() {
         rawFingerprint:
           trace.status === "success" ? sha(JSON.stringify(trace.value)) : null,
       },
-      nativeBalanceCoversOneGweiGas:
-        gasUnits !== null && nativeBalance > gasUnits * 1_000_000_000n,
+      nativeBalanceCoversObservedGasEstimate:
+        gasUnits !== null && nativeBalance > gasUnits * gasPrice,
     },
     limitations: [
       "No transaction was signed, approved, broadcast, or executed onchain.",
