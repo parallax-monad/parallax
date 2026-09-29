@@ -286,9 +286,15 @@ function createCompositionBackedQuoteFlow(
 }
 
 function projectCompositionQuote(input: {
-  blockContext: { readonly blockNumber: string };
+  blockContext: { readonly blockNumber: string; readonly observedAt?: string };
   quote: unknown;
 }): unknown {
+  // The quote contract already carries an optional `fetchedAt`; the pinned block
+  // context is where the composition observed it. Without it the public quote
+  // cannot form a provenance-complete Expectation Baseline.
+  const observedAt = input.blockContext.observedAt;
+  const observedAtFields =
+    observedAt === undefined ? {} : { fetchedAt: observedAt };
   const parsedQuoteResult = quoteResultSchema.safeParse(input.quote);
   if (parsedQuoteResult.success) {
     if (parsedQuoteResult.data.status === "unavailable") {
@@ -300,6 +306,7 @@ function projectCompositionQuote(input: {
       quote: {
         ...parsedQuoteResult.data.quote,
         blockNumber: input.blockContext.blockNumber,
+        ...observedAtFields,
       },
     };
   }
@@ -337,6 +344,7 @@ function projectCompositionQuote(input: {
       ...(minimumAmountOut === undefined ? {} : { minimumAmountOut }),
       source: "quote",
       blockNumber: input.blockContext.blockNumber,
+      ...observedAtFields,
       runtimeVersion,
       runtimeRevision,
     },
