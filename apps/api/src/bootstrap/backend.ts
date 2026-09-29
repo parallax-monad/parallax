@@ -29,6 +29,7 @@ import type {
   ArbitrumProductionComposition,
 } from "../backend/arbitrum-composition.js";
 import { createArbitrumProductionComposition } from "../backend/arbitrum-composition.js";
+import { createCamelotV3QualifiedAllowanceSpenderResolver } from "../backend/camelot-v3-qualified-spender.js";
 import type { BackendCompositionRuntime } from "../backend/composition.js";
 import {
   BackendPipeline,
@@ -449,6 +450,11 @@ export function bootstrapBackendApp(
       runtime,
       runStore: store,
       providerEnvironment: "production",
+      // The Camelot V3 allowance spender is now qualified by the real #103
+      // reverse-path evidence, so ERC-20 allowance state is readable instead of
+      // structurally unavailable. Other protocols still fail closed.
+      accountStateSpenderResolver:
+        createCamelotV3QualifiedAllowanceSpenderResolver(),
       ...(configuredTraceRpcEvidenceSource === undefined
         ? {}
         : { traceRpcEvidenceSource: configuredTraceRpcEvidenceSource }),

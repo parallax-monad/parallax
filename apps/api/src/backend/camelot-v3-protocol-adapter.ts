@@ -10,6 +10,10 @@ import {
   type ArbitrumRpcClient,
   createArbitrumRpcClient,
 } from "./arbitrum-chain-adapter.js";
+import {
+  CAMELOT_V3_ROUTER_ADDRESS,
+  CAMELOT_V3_WETH_ADDRESS,
+} from "./camelot-v3-binding.js";
 import type {
   ProtocolQuoteOptions,
   ProtocolTransactionOptions,
@@ -55,14 +59,15 @@ export type CamelotV3ProtocolAdapterOptions = {
   readonly runtimeRevision?: string;
 };
 
-export const CAMELOT_SEPOLIA_WETH =
-  "0x980B62Da83eFf3D4576C647993b0c1D7faf17c73" as const;
+// The router and WETH addresses are the single qualified constants shared with
+// the prepared-transaction binding (`camelot-v3-binding.ts`), so the adapter can
+// never prepare a transaction the binding would reject.
+export const CAMELOT_SEPOLIA_WETH = CAMELOT_V3_WETH_ADDRESS;
 export const CAMELOT_SEPOLIA_USDC =
   "0xb893E3334D4Bd6C5ba8277Fd559e99Ed683A9FC7" as const;
 export const CAMELOT_SEPOLIA_QUOTER =
   "0xe49ef2F48539EA7498605CC1B3a242042cb5FC83" as const;
-export const CAMELOT_SEPOLIA_ROUTER =
-  "0x171B925C51565F5D2a7d8C494ba3188D304EFD93" as const;
+export const CAMELOT_SEPOLIA_ROUTER = CAMELOT_V3_ROUTER_ADDRESS;
 
 const QUOTE_EXACT_INPUT_SINGLE_SELECTOR = "2d9ebd1d";
 const ROUTER_EXACT_INPUT_SINGLE_SELECTOR = "bc651188";
