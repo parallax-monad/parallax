@@ -555,8 +555,35 @@ async function main() {
     ],
     provenance: { manifest },
   };
-  const serialized = `${JSON.stringify(capture, null, 2)}\n`;
-  assert(!serialized.includes(rpcUrl), "RPC endpoint leaked into capture");
+  const prescan = JSON.stringify(capture);
+  const credentialPattern =
+    /rpcUrl|rpc_url|api[_-]?key|private[_-]?key|authorization|bearer|mnemonic|quicknode|alchemy|infura/i;
+  assert(
+    !prescan.includes(rpcUrl) &&
+      !prescan.includes(OFFICIAL_RPC) &&
+      !credentialPattern.test(prescan),
+    "Capture secret scan failed",
+  );
+  const referenceUrls = prescan.match(/https?:\/\/[^"\\\s]+/g) ?? [];
+  assert(
+    referenceUrls.every((url) =>
+      ["docs.arbitrum.io", "docs.camelot.exchange"].includes(
+        new URL(url).hostname,
+      ),
+    ),
+    "Capture contains an unapproved URL",
+  );
+  const captureWithScan = {
+    ...capture,
+    secretScan: {
+      status: "PASS",
+      scope: "normalized_capture_json",
+      credentialPatternHits: 0,
+      endpointRecorded: false,
+      referenceUrlCount: referenceUrls.length,
+    },
+  };
+  const serialized = `${JSON.stringify(captureWithScan, null, 2)}\n`;
   const stamp = capture.capturedAt.replaceAll(":", "-").replaceAll(".", "-");
   const directory = join(
     ROOT,
