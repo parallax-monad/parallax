@@ -94,6 +94,15 @@ function decimalFromAtomic(value: string, decimals: number): string {
   return fraction.length === 0 ? whole : `${whole}.${fraction}`;
 }
 
+function atomicFromDecimal(value: string, decimals: number): string {
+  if (!/^(0|[1-9][0-9]*)(?:\.[0-9]+)?$/.test(value))
+    throw new Error("Live quote amount is not a decimal amount");
+  const [whole, fraction = ""] = value.split(".");
+  if (fraction.length > decimals)
+    throw new Error("Live quote exceeds trusted token precision");
+  return BigInt(`${whole}${fraction.padEnd(decimals, "0")}`).toString();
+}
+
 function endpointConfiguration(): {
   readonly url: string;
   readonly endpointClass: string;
@@ -132,15 +141,11 @@ function acceptedScenario(capture: AcceptedCapture) {
   const quote = capture.observations.quoteProbes.find(
     (item) => item.direction === "WETH_TO_USDC" && item.version === "IQuoter",
   );
-  const quoteRecord = capture.records.find(
-    (item) => item.context === "quote:IQuoter:WETH_TO_USDC",
-  );
   if (
     capture.classification !== "QUALIFIED_REAL" ||
     quote === undefined ||
     quote.error !== null ||
-    quote.decodedAmountOutAtomic === null ||
-    quoteRecord?.fetchedAt === undefined
+    quote.decodedAmountOutAtomic === null
   ) {
     throw new Error(
       "Accepted BE-063 capture lacks its qualified WETH/USDC quote",
@@ -157,28 +162,6 @@ function acceptedScenario(capture: AcceptedCapture) {
     },
     amountIn: decimalFromAtomic(quote.amountInAtomic, 18),
     expectedAmountInAtomic: quote.amountInAtomic,
-    expectedAmountOutAtomic: quote.decodedAmountOutAtomic,
-    baseline: {
-      chainId: 421614,
-      protocol: "camelot-v3",
-      tokenIn: { kind: "native" as const },
-      tokenOut: {
-        kind: "erc20" as const,
-        address: capture.observations.tokenFacts.USDC.address,
-      },
-      amountIn: decimalFromAtomic(quote.amountInAtomic, 18),
-      quote: {
-        estimatedAmountOut: decimalFromAtomic(
-          quote.decodedAmountOutAtomic,
-          TOKEN_OUT_DECIMALS,
-        ),
-        source: "quote" as const,
-        blockNumber: BigInt(capture.observations.observedHead).toString(),
-        fetchedAt: quoteRecord.fetchedAt,
-        runtimeVersion: "arbitrum-camelot-v3",
-        runtimeRevision: "native-rpc",
-      },
-    },
   };
 }
 
@@ -325,15 +308,25 @@ async function main(): Promise<void> {
     cwd: REPO_ROOT,
     encoding: "utf8",
   }).trim();
-  if (sourceHead !== originMain) {
+  try {
+    execFileSync(
+      "git",
+      ["merge-base", "--is-ancestor", "origin/main", "HEAD"],
+      {
+        cwd: REPO_ROOT,
+      },
+    );
+  } catch {
     throw new Error(
-      "Live Golden Path must run on the exact local origin/main HEAD",
+      "Live Golden Path HEAD must descend from current origin/main",
     );
   }
   const sourceProvenance = captureBackendGoldenPathProvenance(REPO_ROOT);
   if (sourceProvenance.repositoryHead !== sourceHead) {
     throw new Error("Backend Golden Path source provenance head mismatch");
   }
+  if (sourceProvenance.worktreeDirty)
+    throw new Error("Live Golden Path requires a clean committed source head");
   assertNoProductionRuntimeSourceChanges(sourceProvenance);
   const scriptDigest = hash(readFileSync(SCRIPT_PATH));
   const scenario = acceptedScenario(capture);
@@ -359,6 +352,18 @@ async function main(): Promise<void> {
   const runtime = bootstrapBackendRuntime({ environment, tokenRegistry });
   const runStore = new InMemoryRunStore();
   const p0RiskConfiguration = getP0RiskConfiguration();
+  const originalFetch = globalThis.fetch;
+  let rpcRequestCount = 0;
+  globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
+    const requestUrl =
+      typeof input === "string"
+        ? input
+        : input instanceof URL
+          ? input.href
+          : input.url;
+    if (requestUrl === rpcUrl) rpcRequestCount += 1;
+    return originalFetch(input, init);
+  }) as typeof fetch;
   const composition = createArbitrumProductionComposition({
     runtime,
     runStore,
@@ -384,6 +389,52 @@ async function main(): Promise<void> {
   try {
     const address = await listening;
     const baseUrl = `http://127.0.0.1:${address.port}`;
+    const quoteRequest = {
+      chainId: scenario.chainId,
+      protocol: scenario.protocol,
+      sender: scenario.sender,
+      tokenIn: scenario.tokenIn,
+      tokenOut: scenario.tokenOut,
+      amountIn: scenario.amountIn,
+    };
+    const quoteResponse = await postJson(`${baseUrl}/api/quote`, quoteRequest);
+    const quoteEnvelope = object(quoteResponse.body, "Live Quote response");
+    if (quoteResponse.status !== 200 || quoteEnvelope.status !== "available")
+      throw new Error("Real Camelot quote was not available");
+    const quoteResult = object(quoteEnvelope.quote, "Live Camelot quote");
+    const estimatedAmountOut = quoteResult.estimatedAmountOut;
+    const quoteBlock = quoteResult.blockNumber;
+    const quoteFetchedAt = quoteResult.fetchedAt;
+    const runtimeVersion = quoteResult.runtimeVersion;
+    const runtimeRevision = quoteResult.runtimeRevision;
+    if (
+      typeof estimatedAmountOut !== "string" ||
+      typeof quoteBlock !== "string" ||
+      !/^(0|[1-9][0-9]*)$/.test(quoteBlock) ||
+      typeof quoteFetchedAt !== "string" ||
+      typeof runtimeVersion !== "string" ||
+      typeof runtimeRevision !== "string"
+    )
+      throw new Error("Real Camelot quote omitted required public facts");
+    const liveBaseline = {
+      chainId: scenario.chainId,
+      protocol: scenario.protocol,
+      tokenIn: scenario.tokenIn,
+      tokenOut: scenario.tokenOut,
+      amountIn: scenario.amountIn,
+      quote: {
+        estimatedAmountOut,
+        source: "quote" as const,
+        blockNumber: quoteBlock,
+        fetchedAt: quoteFetchedAt,
+        runtimeVersion,
+        runtimeRevision,
+      },
+    };
+    const expectedAmountOutAtomic = atomicFromDecimal(
+      estimatedAmountOut,
+      TOKEN_OUT_DECIMALS,
+    );
     const request = {
       chainId: scenario.chainId,
       protocol: scenario.protocol,
@@ -392,7 +443,7 @@ async function main(): Promise<void> {
       tokenOut: scenario.tokenOut,
       amountIn: scenario.amountIn,
       economicBoundary: { availability: "unavailable", source: "unavailable" },
-      expectationBaseline: scenario.baseline,
+      expectationBaseline: liveBaseline,
     };
     const response = await postJson(`${baseUrl}/api/check`, request);
     const result = object(response.body, "Public Check response");
@@ -435,10 +486,20 @@ async function main(): Promise<void> {
       throw new Error("Completed Check response omitted runId");
 
     const liveOutput = JSON.stringify(response.body);
+    const rpcRequestsBeforeHistoricalGet = rpcRequestCount;
+    // "Historical GET made zero RPC requests" is only meaningful when the
+    // exercised check itself is observed making real RPC requests. Fail closed
+    // rather than let a broken counter satisfy the assertion vacuously.
+    if (rpcRequestsBeforeHistoricalGet < 1)
+      throw new Error(
+        "Live Golden Path primary check made no observed RPC request; the historical no-RPC count cannot be trusted",
+      );
     const runResponse = await fetch(
       `${baseUrl}/api/runs/${encodeURIComponent(resultId)}`,
     );
     const persistedRun: unknown = await runResponse.json();
+    const historicalGetRpcRequests =
+      rpcRequestCount - rpcRequestsBeforeHistoricalGet;
     const stored = object(persistedRun, "GET /api/runs response");
     const storedResult =
       stored.result === undefined
@@ -459,6 +520,47 @@ async function main(): Promise<void> {
     ) {
       throw new Error("GET /api/runs did not return the completed Check Run");
     }
+    const recheckResponse = await postJson(`${baseUrl}/api/check`, {
+      ...request,
+      parentRunId: resultId,
+    });
+    const recheckResult = object(
+      recheckResponse.body,
+      "Explicit re-check response",
+    );
+    const childRunId =
+      typeof recheckResult.runId === "string" ? recheckResult.runId : undefined;
+    if (
+      recheckResponse.status !== 200 ||
+      childRunId === undefined ||
+      childRunId === resultId
+    )
+      throw new Error("Explicit re-check did not create a distinct child Run");
+    const rpcRequestsBeforeChildGet = rpcRequestCount;
+    const childCheckRpcRequests =
+      rpcRequestsBeforeChildGet -
+      rpcRequestsBeforeHistoricalGet -
+      historicalGetRpcRequests;
+    if (childCheckRpcRequests < 1)
+      throw new Error(
+        "Explicit re-check made no observed RPC request; the child historical no-RPC count cannot be trusted",
+      );
+    const childReadResponse = await fetch(
+      `${baseUrl}/api/runs/${encodeURIComponent(childRunId)}`,
+    );
+    const childRead = object(
+      await childReadResponse.json(),
+      "Historical child Run response",
+    );
+    const childHistoricalGetRpcRequests =
+      rpcRequestCount - rpcRequestsBeforeChildGet;
+    const recheckVerified =
+      recheckResult.status === "completed" &&
+      recheckResult.parentRunId === resultId &&
+      childReadResponse.status === 200 &&
+      childRead.runId === childRunId &&
+      childRead.parentRunId === resultId &&
+      isDeepStrictEqual(childRead.result, recheckResult);
 
     const baseline =
       p0 === undefined
@@ -484,11 +586,11 @@ async function main(): Promise<void> {
       baseline.tokenIn === "native" &&
       baseline.tokenOut === scenario.tokenOut.address.toLowerCase() &&
       baseline.amountInAtomic === scenario.expectedAmountInAtomic &&
-      baseline.amountOutAtomic === scenario.expectedAmountOutAtomic &&
-      baseline.blockNumber === scenario.baseline.quote.blockNumber &&
-      baseline.observedAt === scenario.baseline.quote.fetchedAt &&
+      baseline.amountOutAtomic === expectedAmountOutAtomic &&
+      baseline.blockNumber === liveBaseline.quote.blockNumber &&
+      baseline.observedAt === liveBaseline.quote.fetchedAt &&
       baseline.provenance ===
-        "source=quote;runtime=arbitrum-camelot-v3@native-rpc";
+        `source=quote;runtime=${runtimeVersion}@${runtimeRevision}`;
     const providerExecutionVerified =
       providerEvidence !== undefined &&
       providerEvidence.providerId === NATIVE_RPC_ARBITRUM_PROVIDER_ID &&
@@ -537,9 +639,14 @@ async function main(): Promise<void> {
         "started",
       ] as const),
       persistedRunRoundTrip,
+      historicalReadNoRpc:
+        historicalGetRpcRequests === 0 && childHistoricalGetRpcRequests === 0,
+      explicitRecheckVerified: recheckVerified,
       basicSimulationCallVerified,
       basicSimulationMatchesRequest,
       basicSimulationRoundTrip,
+      basicSimulation: rawP0?.basicSimulation,
+      simulatorPinnedBlock: result.simulatorPinnedBlock,
       baselineStatus,
       baselineIdentityMatches,
       providerEvidenceReachedP0Risk: providerReachedRisk,
@@ -605,7 +712,6 @@ async function main(): Promise<void> {
     const sourceUnchangedDuringExecution =
       sourceHeadAfter === sourceHead &&
       originMainAfter === originMain &&
-      sourceHeadAfter === originMainAfter &&
       sourceFixtureDigestAfter === fixtureDigest &&
       scriptDigestAfter === scriptDigest &&
       sourceProvenance.manifestSha256 === sourceProvenanceAfter.manifestSha256;
@@ -624,7 +730,7 @@ async function main(): Promise<void> {
       real: true,
       readOnly: true,
       endpointClass,
-      baseReference: "origin/main",
+      baseReference: "origin/main ancestor of committed source HEAD",
       repositoryHeadAtCapture: sourceHead,
       startedAt: observedAt,
       completedAt,
@@ -634,8 +740,11 @@ async function main(): Promise<void> {
         fixtureSha256: fixtureDigest,
         fixtureClassification: capture.classification,
         command: "pnpm --filter @parallax/api probe:backend-golden-path",
+        quotePath: "POST /api/quote",
+        quoteHttpStatus: quoteResponse.status,
+        quote: liveBaseline.quote,
         request,
-        baseline: scenario.baseline,
+        baseline: liveBaseline,
       },
       api: {
         checkPath: "POST /api/check",
@@ -645,6 +754,18 @@ async function main(): Promise<void> {
         parentRunId: stored.parentRunId ?? null,
         resultStatus: result.status,
         persistedResultMatchesResponse: persistedRunRoundTrip,
+        primaryCheckRpcRequests: rpcRequestsBeforeHistoricalGet,
+        childCheckRpcRequests,
+        historicalGetRpcRequests,
+        childHistoricalGetRpcRequests,
+        recheck: {
+          childRunId,
+          parentRunId: resultId,
+          verified: recheckVerified,
+          status: recheckResult.status,
+          verdict: recheckResult.verdict,
+          historicalGetRpcRequests: childHistoricalGetRpcRequests,
+        },
         responseResultSha256: hash(JSON.stringify(result)),
         persistedResultSha256: hash(JSON.stringify(storedResult)),
         publicResponse: {
@@ -683,6 +804,12 @@ async function main(): Promise<void> {
               : undefined,
           blockNumber: basicSimulation?.blockNumber,
           blockHash: basicSimulation?.blockHash,
+          validityAtExecution: basicSimulation?.validityAtExecution,
+          simulatorPinnedBlock: result.simulatorPinnedBlock,
+          simulatorPinnedBlockHash: null,
+          executionBinding: gateAssertions.executionBinding,
+          transactionBindingPresent:
+            basicSimulation?.transactionBinding !== undefined,
           preparedTransactionFingerprint:
             basicSimulation?.preparedTransactionFingerprint,
         },
@@ -706,6 +833,10 @@ async function main(): Promise<void> {
         basicSimulationCallVerified,
         basicSimulationMatchesRequest,
         basicSimulationRoundTrip,
+        historicalReadNoRpc:
+          historicalGetRpcRequests === 0 && childHistoricalGetRpcRequests === 0,
+        explicitRecheckVerified: recheckVerified,
+        executionBinding: gateAssertions.executionBinding,
         publicSurfaceSafe,
         expectedFailClosedUnknown: gateAssertions.expectedFailClosedUnknown,
         quoteFidelityStatus: fidelity?.status,
@@ -761,10 +892,14 @@ async function main(): Promise<void> {
         providerId: providerEvidence?.providerId,
         providerStatus: providerEvidence?.providerStatus,
         pinnedBlock: result.simulatorPinnedBlock,
+        bindingLevel: gateAssertions.executionBinding.level,
+        historicalGetRpcRequests,
+        childRunId,
         capture: relative(REPO_ROOT, join(outputDirectory, "capture.json")),
       })}\n`,
     );
   } finally {
+    globalThis.fetch = originalFetch;
     await server.shutdown();
     await runStore.close();
   }

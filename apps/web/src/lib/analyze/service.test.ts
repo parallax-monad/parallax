@@ -1,5 +1,6 @@
 import { describe, expect, test, vi } from "vitest";
 import { DEMO_ADDRESS, DEMO_RECIPIENT } from "@/components/wallet/walletData";
+import { genericEvidenceSchema } from "../../../../../packages/contracts/src/generic-evidence.js";
 import {
   changedLogicalFields,
   INITIAL_FORM,
@@ -1048,6 +1049,135 @@ describe("Arbitrum Product P0 Backend consumption", () => {
       },
     },
   };
+
+  /**
+   * The public Check/Run wire shape for `providerEvidence` is the provider-neutral
+   * Evidence contract: a nested `provider.status` / `execution.status`, not a
+   * flattened `providerStatus` / `executionStatus`. Gate captures under
+   * `fixtures/` store a *summarized* projection (`publicEvidenceSummary`) and are
+   * therefore not a valid oracle for this boundary; parsing the fixture through
+   * `genericEvidenceSchema` keeps it from drifting away from the real wire shape.
+   */
+  const evidenceField = <T>(value: T, source: "rpc" | "quote" | "derived") => ({
+    value,
+    source,
+    reproducibility: "REPRODUCIBLE" as const,
+    blockNumber: "313878740",
+  });
+  const wireProviderEvidence = genericEvidenceSchema.parse({
+    intent: {
+      chainId: 421614,
+      protocol: "camelot-v3",
+      sender: DEMO_ADDRESS,
+      tokenIn: "native",
+      tokenOut: usdc,
+      amountIn: "0.001",
+      minimumReceivedSource: "unavailable",
+    },
+    provider: {
+      providerId: "native-rpc-arbitrum",
+      status: "UNKNOWN",
+      integrationStatus: "OK",
+      errors: evidenceField([], "rpc"),
+    },
+    execution: { status: "SUCCESS" },
+    quote: evidenceField(
+      { estimatedAmountOut: "0.015882894550627146" },
+      "quote",
+    ),
+    action: evidenceField([], "rpc"),
+    receipt: evidenceField(null, "rpc"),
+    outcome: evidenceField(null, "rpc"),
+    assetChanges: evidenceField(null, "rpc"),
+    assetChangeAssessment: "UNKNOWN",
+    warnings: evidenceField([], "rpc"),
+    simulation: {
+      value: {
+        expectedTransactions: 1,
+        observedResults: 0,
+        unmatchedResultIndexes: [],
+        halted: false,
+        complete: false,
+        missingTransactionIndexes: [0],
+      },
+      source: "derived",
+      reproducibility: "REPRODUCIBLE",
+      blockNumber: "313878740",
+    },
+    blockNumber: evidenceField("313878740", "rpc"),
+    capabilities: ["quote", "simulate"],
+    provenance: {
+      observedChainId: 421614,
+      mode: "LIVE",
+      source: "rpc",
+      simulationBlock: "313878740",
+    },
+    checkedScope: ["quote"],
+    unknownScope: ["receipt", "simulation"],
+    providerData: {},
+  });
+
+  test("maps provider and execution status from the real serialized public wire shape", async () => {
+    const serializedRun = JSON.parse(
+      JSON.stringify({
+        ...run,
+        simulatorPinnedBlock: "313878740",
+        providerEvidence: wireProviderEvidence,
+      }),
+    );
+    const request = vi.fn<typeof fetch>().mockImplementation(async (url) => {
+      if (url === "/api/p0/metadata") return jsonResponse(metadata);
+      if (String(url).startsWith("/api/runs/"))
+        return jsonResponse({
+          runId: serializedRun.runId,
+          status: "completed",
+          result: serializedRun,
+        });
+      throw new Error(`Unexpected path: ${String(url)}`);
+    });
+
+    const recovered = await loadRun(serializedRun.runId, { fetch: request });
+    expect(recovered.kind).toBe("terminal");
+    if (recovered.kind === "terminal") {
+      expect(recovered.result.providerStatus).toBe("UNKNOWN");
+      expect(recovered.result.executionStatus).toBe("SUCCESS");
+      expect(recovered.result.verdict).toBe("UNKNOWN");
+    }
+  });
+
+  test("fails closed instead of reading a flattened status summary off the wire shape", async () => {
+    // The gate summary shape must never be treated as the public wire contract:
+    // mapping it would silently publish "not recorded" for real Backend facts.
+    expect(Object.hasOwn(wireProviderEvidence, "providerStatus")).toBe(false);
+    expect(Object.hasOwn(wireProviderEvidence, "executionStatus")).toBe(false);
+    const serializedRun = JSON.parse(
+      JSON.stringify({
+        ...run,
+        simulatorPinnedBlock: "313878740",
+        providerEvidence: {
+          providerStatus: "UNKNOWN",
+          executionStatus: "SUCCESS",
+        },
+      }),
+    );
+    const request = vi.fn<typeof fetch>().mockImplementation(async (url) => {
+      if (url === "/api/p0/metadata") return jsonResponse(metadata);
+      if (String(url).startsWith("/api/runs/"))
+        return jsonResponse({
+          runId: serializedRun.runId,
+          status: "completed",
+          result: serializedRun,
+        });
+      throw new Error(`Unexpected path: ${String(url)}`);
+    });
+
+    const recovered = await loadRun(serializedRun.runId, { fetch: request });
+    expect(recovered.kind).toBe("terminal");
+    if (recovered.kind === "terminal") {
+      expect(recovered.result.providerStatus).toBeUndefined();
+      expect(recovered.result.executionStatus).toBeUndefined();
+    }
+  });
 
   test("uses Backend registry decimals and preserves call success through recovery", async () => {
     const request = vi.fn<typeof fetch>().mockImplementation(async (url) => {

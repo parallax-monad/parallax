@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   basicSimulationBindingMatchesRequest,
   evaluateBackendGoldenPathAssertions,
+  evaluateExecutionBinding,
   isBasicSimulationCallVerified,
   summarizeBasicSimulation,
 } from "./backend-golden-path-assertions.js";
@@ -48,13 +49,21 @@ function basicSimulation(overrides: Record<string, unknown> = {}) {
   };
 }
 
+const validPublicSimulation = summarizeBasicSimulation(basicSimulation());
+if (validPublicSimulation === undefined)
+  throw new Error("Test simulation must be valid after public sanitization");
+
 const completePath = {
   httpStatus: 200,
   runStatus: "completed" as const,
   persistedRunRoundTrip: true,
+  historicalReadNoRpc: true,
+  explicitRecheckVerified: true,
   basicSimulationCallVerified: true,
   basicSimulationMatchesRequest: true,
   basicSimulationRoundTrip: true,
+  basicSimulation: validPublicSimulation,
+  simulatorPinnedBlock: "310131879",
   baselineStatus: "AVAILABLE" as const,
   baselineIdentityMatches: true,
   providerEvidenceReachedP0Risk: true,
@@ -136,11 +145,145 @@ describe("Backend Golden Path acceptance assertions", () => {
     expect(result.integrationExercise).toBe("COMPLETE");
     expect(result.gateStatus).toBe("EXERCISE_COMPLETE_REVIEW_REQUIRED");
     expect(result.expectedFailClosedUnknown).toBe(true);
+    expect(result.executionBinding).toEqual({
+      verified: true,
+      level: "NUMBER",
+    });
     expect(result.remediation).toEqual({
       configured: false,
       status: "NOT_RUN",
       childLifecycle: "NOT_RUN",
     });
+  });
+
+  it("records hash-level binding only when a matching pinned hash is supplied", () => {
+    const pinnedHash = `0x${"B".repeat(64)}`;
+    const result = evaluateBackendGoldenPathAssertions({
+      ...completePath,
+      simulatorPinnedBlockHash: pinnedHash,
+    });
+    expect(result.integrationExercise).toBe("COMPLETE");
+    expect(result.executionBinding).toEqual({ verified: true, level: "HASH" });
+  });
+
+  it.each([
+    [
+      "missing simulation",
+      undefined,
+      "310131879",
+      undefined,
+      "SIMULATION_MISSING",
+    ],
+    [
+      "malformed simulation",
+      { call: null },
+      "310131879",
+      undefined,
+      "SIMULATION_MALFORMED",
+    ],
+    [
+      "UNKNOWN validity",
+      { ...validPublicSimulation, validityAtExecution: "UNKNOWN" },
+      "310131879",
+      undefined,
+      "VALIDITY_NOT_VALID",
+    ],
+    [
+      "INVALID validity",
+      { ...validPublicSimulation, validityAtExecution: "INVALID" },
+      "310131879",
+      undefined,
+      "VALIDITY_NOT_VALID",
+    ],
+    [
+      "missing execution block",
+      { ...validPublicSimulation, blockNumber: undefined },
+      "310131879",
+      undefined,
+      "EXECUTION_BLOCK_MISSING",
+    ],
+    [
+      "malformed execution block",
+      { ...validPublicSimulation, blockNumber: "0310131879" },
+      "310131879",
+      undefined,
+      "EXECUTION_BLOCK_MALFORMED",
+    ],
+    [
+      "number mismatch",
+      { ...validPublicSimulation, blockNumber: "310131880" },
+      "310131879",
+      undefined,
+      "BLOCK_NUMBER_MISMATCH",
+    ],
+    [
+      "missing execution hash",
+      { ...validPublicSimulation, blockHash: undefined },
+      "310131879",
+      undefined,
+      "EXECUTION_HASH_MISSING",
+    ],
+    [
+      "malformed execution hash",
+      { ...validPublicSimulation, blockHash: "0x123" },
+      "310131879",
+      undefined,
+      "EXECUTION_HASH_MALFORMED",
+    ],
+    [
+      "pinned hash mismatch",
+      validPublicSimulation,
+      "310131879",
+      `0x${"e".repeat(64)}`,
+      "PINNED_HASH_MISMATCH",
+    ],
+    [
+      "missing transaction binding",
+      { ...validPublicSimulation, transactionBinding: undefined },
+      "310131879",
+      undefined,
+      "TRANSACTION_BINDING_MISSING",
+    ],
+    [
+      "malformed transaction binding",
+      { ...validPublicSimulation, transactionBinding: { chainId: 421614 } },
+      "310131879",
+      undefined,
+      "SIMULATION_MALFORMED",
+    ],
+    [
+      "missing pinned block",
+      validPublicSimulation,
+      undefined,
+      undefined,
+      "PINNED_BLOCK_MALFORMED",
+    ],
+  ] as const)(
+    "fails closed on %s",
+    (_name, basicSimulation, simulatorPinnedBlock, simulatorPinnedBlockHash, gap) => {
+      const result = evaluateBackendGoldenPathAssertions({
+        ...completePath,
+        basicSimulation,
+        simulatorPinnedBlock,
+        simulatorPinnedBlockHash,
+      });
+      expect(result.integrationExercise).toBe("INCOMPLETE");
+      expect(result.gateStatus).toBe("NOT_PASS_INTEGRATION_OR_ACCEPTANCE_GAP");
+      expect(result.executionBinding).toEqual({
+        verified: false,
+        level: "NONE",
+        gap,
+      });
+    },
+  );
+
+  it("rejects noncanonical pinned numbers and malformed pinned hashes", () => {
+    expect(
+      evaluateExecutionBinding(validPublicSimulation, "0310131879"),
+    ).toMatchObject({ verified: false, gap: "PINNED_BLOCK_MALFORMED" });
+    expect(
+      evaluateExecutionBinding(validPublicSimulation, "310131879", "0x123"),
+    ).toMatchObject({ verified: false, gap: "PINNED_HASH_MALFORMED" });
   });
 
   it("does not call an incomplete public path a completed exercise", () => {

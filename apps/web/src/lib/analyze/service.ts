@@ -467,6 +467,11 @@ function mapRun(
   const runQuote = obj(run?.quote);
   const p0 = obj(run?.p0);
   const providerEvidence = obj(run?.providerEvidence);
+  // The public Check/Run wire shape is the provider-neutral Evidence contract
+  // (`providerEvidence.provider.status` / `providerEvidence.execution.status`,
+  // see packages/contracts/src/generic-evidence.ts). Read those direct fields
+  // only; never infer either status from another execution fact, and never
+  // treat a flattened `providerStatus`/`executionStatus` as the wire shape.
   const providerStatus = str(obj(providerEvidence?.provider)?.status);
   const executionStatus = str(obj(providerEvidence?.execution)?.status);
   const chainId = typeof intent?.chainId === "number" ? intent.chainId : 143;
