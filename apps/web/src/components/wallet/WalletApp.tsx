@@ -278,6 +278,14 @@ export function WalletApp({ language }: { language: Language }) {
     recoveryCancelledRef.current = true;
     const parent = result?.systemStatus === "OK" ? result : undefined;
     const submitted = plan.submitted;
+    const selectedQuote =
+      quote.status === "available" &&
+      quote.request?.protocol === submitted.protocol &&
+      quote.request.tokenIn === submitted.tokenIn &&
+      quote.request.tokenOut === submitted.tokenOut &&
+      quote.request.amountIn === submitted.amountIn
+        ? quote.quote
+        : undefined;
     setFormErrors({});
     setStoredRunId(undefined);
     setResult(undefined);
@@ -291,15 +299,24 @@ export function WalletApp({ language }: { language: Language }) {
       stageMs: STAGE_MS,
       onStage: setStage,
       onSettle: async () => {
-        const nextResult = await checkSwap(toInput(submitted, parent?.runId), {
-          // Use the trusted decimals the user already saw, and only when they
-          // were read for exactly this intent rather than a stale one.
-          decimalsBySymbol:
-            accountState.status === "available" &&
-            accountStateKeyRef.current === intentKey(submitted)
-              ? accountState.view.decimalsBySymbol
-              : undefined,
-        });
+        const nextResult = await checkSwap(
+          {
+            ...toInput(submitted, parent?.runId),
+            // The selected quote is an Expectation Baseline, never a constraint.
+            ...(selectedQuote
+              ? { expectationBaseline: { quote: selectedQuote } }
+              : {}),
+          },
+          {
+            // Use the trusted decimals the user already saw, and only when they
+            // were read for exactly this intent rather than a stale one.
+            decimalsBySymbol:
+              accountState.status === "available" &&
+              accountStateKeyRef.current === intentKey(submitted)
+                ? accountState.view.decimalsBySymbol
+                : undefined,
+          },
+        );
         setStoredRunId(backendRunId(nextResult));
         setResult(nextResult);
         setSubmittedForm(submitted);
@@ -448,6 +465,13 @@ export function WalletApp({ language }: { language: Language }) {
                     quote={quote}
                     onChange={(nextForm) => {
                       setForm(nextForm);
+                      if (
+                        nextForm.protocol !== form.protocol ||
+                        nextForm.tokenIn !== form.tokenIn ||
+                        nextForm.tokenOut !== form.tokenOut ||
+                        nextForm.amountIn !== form.amountIn
+                      )
+                        setQuote({ status: "idle" });
                       if (Object.keys(formErrors).length > 0) setFormErrors({});
                     }}
                     onSubmit={runCheck}

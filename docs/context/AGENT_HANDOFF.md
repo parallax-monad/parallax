@@ -79,6 +79,14 @@ result with remediation `NOT_RUN` / `UNVERIFIED` / `UNKNOWN` and child verificat
 #101 exact binding is CLOSED / COMPLETED through merged PR #113. #100 and #102 remain open for
 their explicit application-entrypoint and historical-replay acceptance evidence.
 
+2026-09-29 #73 branch `feat/product-p0-final-73` contains a local real Backend and browser
+acceptance audit from `origin/main` `9dacb484d10f7fce06654511b176be0886cdbe49`.
+The browser completed quote, check, persisted recovery, and explicit child re-check;
+the observed Risk remained `UNKNOWN`. A counted historical GET made zero RPC calls.
+The #100 partial gas-failure case was covered by controlled regressions, while the real
+check's gas estimate was `AVAILABLE`. PR, exact-head CI, and Product Owner acceptance
+remain separate gates; refer to the live Issue #73 and PR for their current state.
+
 The earlier #67 controlled WETH → test-USDC target remains historical accepted evidence.
 Do not erase or rewrite it, but do not use it to override the current #96/#73 final Product P0
 acceptance path.

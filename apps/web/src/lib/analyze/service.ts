@@ -5,6 +5,7 @@ import {
 } from "./api-helpers";
 import { evidenceCoverage } from "./evidence-coverage";
 import { type FormState, INITIAL_FORM, validateForm } from "./form";
+import { fetchP0Metadata, matchesToken, type P0Metadata } from "./p0-metadata";
 import type {
   AccountAllowance,
   AccountBlockBinding,
@@ -28,6 +29,8 @@ import type {
 } from "./types";
 
 export const DEFAULT_SENDER = "0x1111111111111111111111111111111111111111";
+export const ARBITRUM_DEMO_SENDER =
+  "0xeb7c5322f0997ee70f4bbd3ae7e428072c9af396";
 export const MONAD_USDC_ADDRESS = "0x754704Bc059F8C67012fEd69BC8A327a5aafb603";
 export const ARBITRUM_SEPOLIA_USDC_ADDRESS =
   "0xb893E3334D4Bd6C5ba8277Fd559e99Ed683A9FC7";
@@ -44,49 +47,60 @@ const str = (value: unknown) => (typeof value === "string" ? value : undefined);
 const arr = (value: unknown): unknown[] => (Array.isArray(value) ? value : []);
 const unavailable = cp("unavailable");
 
-function symbol(value: unknown, chainId = 143): string {
+function symbol(value: unknown, chainId = 143, metadata?: P0Metadata): string {
   const asset = obj(value);
+  // The Backend registry metadata is the single primary naming source for the
+  // qualified P0 pair; nothing else may claim a P0 symbol for those assets.
+  if (chainId === 421614 && metadata) {
+    if (matchesToken(value, metadata.tokenIn)) return metadata.tokenIn.symbol;
+    if (matchesToken(value, metadata.tokenOut)) return metadata.tokenOut.symbol;
+  }
   if (asset?.kind === "native") {
     return chainId === ARBITRUM_SEPOLIA_CHAIN_ID ? "ETH" : "MON";
   }
   const address = str(asset?.address)?.toLowerCase();
-  if (
-    address === MONAD_USDC_ADDRESS.toLowerCase() ||
-    address === ARBITRUM_SEPOLIA_USDC_ADDRESS.toLowerCase()
-  )
-    return "USDC";
+  if (address === MONAD_USDC_ADDRESS.toLowerCase()) return "USDC";
+  // The reverse leg's WETH is outside the canonical P0 pair, so it is named from
+  // its canonical Arbitrum Sepolia address rather than invented.
+  if (address === ARBITRUM_SEPOLIA_USDC_ADDRESS.toLowerCase()) return "USDC";
   if (address === ARBITRUM_SEPOLIA_WETH_ADDRESS.toLowerCase()) return "WETH";
   return address ? `${address.slice(0, 6)}…${address.slice(-4)}` : "unknown";
 }
 
-function asset(value: string, chainId: number) {
-  if (value === "MON" || value === "ETH") return { kind: "native" };
-  if (value === "USDC") {
-    return {
-      kind: "erc20",
-      address:
-        chainId === ARBITRUM_SEPOLIA_CHAIN_ID
-          ? ARBITRUM_SEPOLIA_USDC_ADDRESS
-          : MONAD_USDC_ADDRESS,
-    };
+function asset(value: string, chainId: number, metadata?: P0Metadata) {
+  if (chainId === 421614) {
+    // Trusted metadata stays primary for the canonical pair.
+    if (metadata && value === metadata.tokenIn.symbol)
+      return metadata.tokenIn.asset;
+    if (metadata && value === metadata.tokenOut.symbol)
+      return metadata.tokenOut.asset;
+    // The reverse flow must still be able to build its own request when metadata
+    // does not cover the symbol; every other symbol fails closed.
+    if (value === "MON" || value === "ETH") return { kind: "native" };
+    if (value === "USDC")
+      return { kind: "erc20", address: ARBITRUM_SEPOLIA_USDC_ADDRESS };
+    if (value === "WETH")
+      return { kind: "erc20", address: ARBITRUM_SEPOLIA_WETH_ADDRESS };
+    throw new Error("Trusted P0 token metadata is unavailable");
   }
+  if (value === "MON" || value === "ETH") return { kind: "native" };
+  if (value === "USDC") return { kind: "erc20", address: MONAD_USDC_ADDRESS };
   if (value === "WETH") {
     // WETH exists only on the Arbitrum Sepolia leg; mapping it on Monad would
     // silently point the intent at a foreign chain's token.
-    if (chainId !== ARBITRUM_SEPOLIA_CHAIN_ID)
-      throw new Error(`Unsupported token: WETH on chain ${chainId}`);
-    return { kind: "erc20", address: ARBITRUM_SEPOLIA_WETH_ADDRESS };
+    throw new Error(`Unsupported token: WETH on chain ${chainId}`);
   }
   throw new Error(`Unsupported token: ${value}`);
 }
 
 function decimal(value: unknown, decimals: number | undefined): string {
   const atomic = str(value);
-  if (!atomic || !/^\d+$/.test(atomic)) return "unavailable";
-  // Without trusted decimals the atomic integer is shown verbatim. Guessing a
-  // scale is how the Arbitrum Sepolia test USDC (18 decimals) would be shown
-  // 10^12 too small.
-  if (decimals === undefined) return atomic;
+  // An atomic integer without a trusted scale is never guessed: applying the
+  // Monad registry's 6-decimal USDC to Arbitrum Sepolia's 18-decimal test token
+  // would be wrong by 10^12.
+  if (!atomic || !/^\d+$/.test(atomic) || decimals === undefined)
+    return "unavailable";
+  if (decimals === 0) return atomic;
   const padded = atomic.padStart(decimals + 1, "0");
   const fraction = padded.slice(-decimals).replace(/0+$/, "");
   return `${padded.slice(0, -decimals)}${fraction ? `.${fraction}` : ""}`;
@@ -126,21 +140,32 @@ const ACTION_REASON: Record<string, Copy> = {
 };
 
 /**
- * Monad P0 registry, kept only as a last-resort fallback for the Monad path.
- * Arbitrum Sepolia is trusted-only: its test USDC publishes 18 decimals, so the
- * 6-decimal USDC entry below must never be applied on that chain.
+ * Historical Monad display only. Arbitrum always uses Backend registry metadata.
+ * The 6-decimal USDC entry below must never be applied on Arbitrum Sepolia,
+ * whose test USDC publishes 18 decimals.
  */
-const DECIMALS: Record<string, number> = { MON: 18, USDC: 6 };
+const MONAD_DECIMALS: Record<string, number> = { MON: 18, USDC: 6 };
 
-/** Resolves the fallback scale for a symbol on a chain; undefined means unknown. */
-function fallbackDecimals(symbol: string, chainId: number): number | undefined {
-  if (chainId === ARBITRUM_SEPOLIA_CHAIN_ID) {
-    return symbol === "ETH" ? 18 : undefined;
+/**
+ * The single ordered trusted-decimals resolution:
+ *   1. Backend registry `metadata`, when it covers the symbol;
+ *   2. the trusted decimals read from `/api/account-state`, which covers the
+ *      reverse USDC -> WETH pair the canonical metadata does not carry;
+ *   3. the Monad-only historical fallback (never applied on chain 421614).
+ */
+function decimalsFor(
+  symbol: string,
+  chainId: number,
+  metadata?: P0Metadata,
+  accountDecimals?: Record<string, number>,
+): number | undefined {
+  if (chainId === 421614) {
+    if (metadata?.tokenIn.symbol === symbol) return metadata.tokenIn.decimals;
+    if (metadata?.tokenOut.symbol === symbol) return metadata.tokenOut.decimals;
+    return accountDecimals?.[symbol];
   }
-  return DECIMALS[symbol] ?? 18;
+  return accountDecimals?.[symbol] ?? MONAD_DECIMALS[symbol];
 }
-
-export type DecimalsResolver = (symbol: string) => number | undefined;
 
 /**
  * Converts an atomic integer for display using trusted decimals. With no
@@ -164,7 +189,9 @@ function displayChange(
   value: unknown,
   field: string,
   unit: string,
-  decimalsForToken: DecimalsResolver,
+  chainId: number,
+  metadata?: P0Metadata,
+  accountDecimals?: Record<string, number>,
 ) {
   const change = obj(value);
   const before = str(change?.before);
@@ -175,10 +202,15 @@ function displayChange(
   const isAmount = field === "amountIn" || field === "minimumReceived";
   if (!isAmount) return { before, after, unit: "" };
 
-  const decimals = decimalsForToken(unit);
   return {
-    before: decimal(before, decimals),
-    after: decimal(after, decimals),
+    before: decimal(
+      before,
+      decimalsFor(unit, chainId, metadata, accountDecimals),
+    ),
+    after: decimal(
+      after,
+      decimalsFor(unit, chainId, metadata, accountDecimals),
+    ),
     unit,
   };
 }
@@ -187,7 +219,9 @@ function suggestion(
   value: unknown,
   tokenIn: string,
   tokenOut: string,
-  decimalsForToken: DecimalsResolver,
+  chainId: number,
+  metadata?: P0Metadata,
+  accountDecimals?: Record<string, number>,
 ): ActionSuggestion | undefined {
   const evaluation = obj(value);
   const action = obj(evaluation?.action);
@@ -218,7 +252,9 @@ function suggestion(
       evaluation?.proposedChange,
       field,
       unit,
-      decimalsForToken,
+      chainId,
+      metadata,
+      accountDecimals,
     ),
   };
 }
@@ -300,7 +336,9 @@ const safeToken = (value: unknown): string | undefined => {
 function diff(
   value: unknown,
   tokenIn: string,
-  decimalsForToken: DecimalsResolver,
+  chainId: number,
+  metadata?: P0Metadata,
+  accountDecimals?: Record<string, number>,
 ): RunDiff | undefined {
   const rows = arr(obj(value)?.changedFields).flatMap((raw) => {
     const item = obj(raw);
@@ -310,9 +348,13 @@ function diff(
     if (!field || before === undefined || after === undefined) return [];
 
     const isAmount = field === "amountInAtomic";
-    const decimals = decimalsForToken(tokenIn);
     const show = (atomic: string) =>
-      isAmount ? `${decimal(atomic, decimals)} ${tokenIn}` : atomic;
+      isAmount
+        ? `${decimal(
+            atomic,
+            decimalsFor(tokenIn, chainId, metadata, accountDecimals),
+          )} ${tokenIn}`
+        : atomic;
 
     return [
       {
@@ -415,12 +457,51 @@ function failed(
   };
 }
 
+function basicSimulation(value: unknown): CheckSwapResult["basicSimulation"] {
+  const simulation = obj(value);
+  const call = str(obj(simulation?.call)?.status);
+  const gasEstimate = str(obj(simulation?.gasEstimate)?.status);
+  const blockNumber = str(simulation?.blockNumber);
+  const observedAt = str(simulation?.observedAt);
+  const fingerprint = str(simulation?.preparedTransactionFingerprint);
+  const validity = str(simulation?.validityAtExecution);
+  if (
+    !simulation ||
+    !["SUCCEEDED", "REVERTED", "UNAVAILABLE", "NOT_RUN"].includes(call ?? "") ||
+    !["AVAILABLE", "UNAVAILABLE", "NOT_RUN"].includes(gasEstimate ?? "") ||
+    !blockNumber ||
+    !observedAt ||
+    !fingerprint ||
+    !["VALID", "INVALID", "UNKNOWN"].includes(validity ?? "")
+  )
+    return undefined;
+  return {
+    call: call as NonNullable<CheckSwapResult["basicSimulation"]>["call"],
+    gasEstimate: gasEstimate as NonNullable<
+      CheckSwapResult["basicSimulation"]
+    >["gasEstimate"],
+    gasUnits: str(obj(simulation.gasEstimate)?.gasUnits),
+    blockNumber,
+    observedAt,
+    validityAtExecution: validity as NonNullable<
+      CheckSwapResult["basicSimulation"]
+    >["validityAtExecution"],
+    preparedTransactionFingerprint: fingerprint,
+    transactionBound: obj(simulation.transactionBinding) !== undefined,
+    sender: str(obj(simulation.transactionBinding)?.sender),
+    router: str(obj(simulation.transactionBinding)?.router),
+    failureStage: str(simulation.failureStage),
+    reason: str(simulation.reason),
+  };
+}
+
 function mapRun(
   raw: unknown,
   transportFailure?: ApiFailure,
   _rawResponse: unknown = raw,
   createdAtOverride?: string,
-  decimalsBySymbol?: Record<string, number>,
+  metadata?: P0Metadata,
+  accountDecimals?: Record<string, number>,
 ): CheckSwapResult | undefined {
   const run = obj(raw);
   const intent = obj(run?.intent);
@@ -456,22 +537,27 @@ function mapRun(
     .filter((item): item is Record<string, unknown> => !!item);
   const route = obj(run?.route);
   const runQuote = obj(run?.quote);
+  const p0 = obj(run?.p0);
+  const providerEvidence = obj(run?.providerEvidence);
+  // The public Check/Run wire shape is the provider-neutral Evidence contract
+  // (`providerEvidence.provider.status` / `providerEvidence.execution.status`,
+  // see packages/contracts/src/generic-evidence.ts). Read those direct fields
+  // only; never infer either status from another execution fact, and never
+  // treat a flattened `providerStatus`/`executionStatus` as the wire shape.
+  const providerStatus = str(obj(providerEvidence?.provider)?.status);
+  const executionStatus = str(obj(providerEvidence?.execution)?.status);
   const chainId = typeof intent?.chainId === "number" ? intent.chainId : 143;
   const routePath = arr(route?.path)
-    .map((item) => symbol(item, chainId))
+    .map((item) => symbol(item, chainId, metadata))
     .join(" → ");
   const output = arr(run?.evidence)
     .map(obj)
     .find((item) => item?.kind === "simulated_token_out");
-  const tokenIn = symbol(intent?.tokenIn, chainId);
-  const tokenOut = symbol(intent?.tokenOut, chainId);
+  const tokenIn = symbol(intent?.tokenIn, chainId, metadata);
+  const tokenOut = symbol(intent?.tokenOut, chainId, metadata);
   const boundary = obj(intent?.economicBoundary);
   const coverage = evidenceCoverage(run);
   const protocol = str(intent.protocol);
-  // Trusted decimals observed from `/api/account-state` win over the Monad
-  // registry fallback, so an Arbitrum test token is never scaled by a guess.
-  const decimalsForToken: DecimalsResolver = (name) =>
-    decimalsBySymbol?.[name] ?? fallbackDecimals(name, chainId);
   const recoveryInput =
     protocol === "kuru" || protocol === "pancake" || protocol === "camelot-v3"
       ? {
@@ -480,7 +566,7 @@ function mapRun(
             boundary?.availability === "available"
               ? decimal(
                   boundary.minimumReceivedAtomic,
-                  decimalsForToken(tokenOut),
+                  decimalsFor(tokenOut, chainId, metadata, accountDecimals),
                 )
               : "",
         }
@@ -488,6 +574,8 @@ function mapRun(
   return {
     runId,
     parentRunId: str(run?.parentRunId),
+    chainId,
+    protocol: recoveryInput?.protocol,
     systemStatus: systemStatus as CheckSwapResult["systemStatus"],
     verdict: verdict as Verdict,
     summary:
@@ -498,10 +586,14 @@ function mapRun(
               (apiFailure ? failureCopy(apiFailure).en : "No summary provided"),
           ),
     recommendedActions: arr(run?.recommendedActions)
-      .map((item) => suggestion(item, tokenIn, tokenOut, decimalsForToken))
+      .map((item) =>
+        suggestion(item, tokenIn, tokenOut, chainId, metadata, accountDecimals),
+      )
       .filter((item): item is ActionSuggestion => !!item),
     irrelevantActions: arr(run?.irrelevantActions)
-      .map((item) => suggestion(item, tokenIn, tokenOut, decimalsForToken))
+      .map((item) =>
+        suggestion(item, tokenIn, tokenOut, chainId, metadata, accountDecimals),
+      )
       .filter((item): item is ActionSuggestion => !!item),
     checked: scope
       .filter((item) => item.status === "checked")
@@ -521,15 +613,63 @@ function mapRun(
       : {}),
     ...(coverage.notice ? { evidenceCoverageNotice: coverage.notice } : {}),
     evidence: mappedEvidence,
+    providerStatus: [
+      "SUCCESS",
+      "UNKNOWN",
+      "UNSUPPORTED",
+      "FAILED",
+      "STALE",
+    ].includes(providerStatus ?? "")
+      ? (providerStatus as CheckSwapResult["providerStatus"])
+      : undefined,
+    executionStatus: ["SUCCESS", "NO_ROUTE", "REVERTED", "UNKNOWN"].includes(
+      executionStatus ?? "",
+    )
+      ? (executionStatus as CheckSwapResult["executionStatus"])
+      : undefined,
+    basicSimulation: basicSimulation(p0?.basicSimulation),
+    evidenceState: [
+      "VERIFIED",
+      "INCOMPLETE",
+      "UNAVAILABLE",
+      "STALE",
+      "UNVERIFIED",
+    ].includes(str(p0?.evidenceState) ?? "")
+      ? (p0?.evidenceState as CheckSwapResult["evidenceState"])
+      : undefined,
+    expectationBaselineStatus: ["AVAILABLE", "MISSING"].includes(
+      str(obj(p0?.expectationBaseline)?.status) ?? "",
+    )
+      ? (obj(p0?.expectationBaseline)
+          ?.status as CheckSwapResult["expectationBaselineStatus"])
+      : undefined,
+    quoteFidelityStatus: ["VERIFIED", "UNKNOWN"].includes(
+      str(obj(p0?.quoteFidelity)?.status) ?? "",
+    )
+      ? (obj(p0?.quoteFidelity)
+          ?.status as CheckSwapResult["quoteFidelityStatus"])
+      : undefined,
+    remediationStatus: [
+      "NOT_RUN",
+      "UNVERIFIED",
+      "NO_VALID_CANDIDATE",
+      "UNKNOWN",
+      "VERIFIED",
+    ].includes(str(obj(p0?.remediation)?.status) ?? "")
+      ? (obj(p0?.remediation)?.status as CheckSwapResult["remediationStatus"])
+      : undefined,
     ruleResults: arr(run?.ruleResults)
       .map(rule)
       .filter((item): item is RuleResult => !!item),
     intent: {
       tokenIn,
       tokenOut,
-      amountIn: decimal(intent?.amountInAtomic, decimalsForToken(tokenIn)),
+      amountIn: decimal(
+        intent?.amountInAtomic,
+        decimalsFor(tokenIn, chainId, metadata, accountDecimals),
+      ),
     },
-    diff: diff(run?.diff, tokenIn, decimalsForToken),
+    diff: diff(run?.diff, tokenIn, chainId, metadata, accountDecimals),
     quote: {
       // The handoff separates the QUOTE-stage observation from the simulated
       // output, so the top-level Quote wins for the "expected" figure and the
@@ -537,7 +677,10 @@ function mapRun(
       expectedOutput:
         str(runQuote?.estimatedAmountOut) ??
         (output
-          ? decimal(output.amountReceivedAtomic, decimalsForToken(tokenOut))
+          ? decimal(
+              output.amountReceivedAtomic,
+              decimalsFor(tokenOut, chainId, metadata, accountDecimals),
+            )
           : "unavailable"),
       route: routePath ? cp(routePath) : unavailable,
       blockNumber:
@@ -547,7 +690,10 @@ function mapRun(
         "unavailable",
     },
     simulatedOutput: output
-      ? decimal(output.amountReceivedAtomic, decimalsForToken(tokenOut))
+      ? decimal(
+          output.amountReceivedAtomic,
+          decimalsFor(tokenOut, chainId, metadata, accountDecimals),
+        )
       : "unavailable",
     minimumReceivedSource: (str(boundary?.source) ??
       "unavailable") as CheckSwapResult["minimumReceivedSource"],
@@ -571,15 +717,32 @@ function mapRun(
   };
 }
 
-function body(input: CheckSwapInput) {
+function body(input: CheckSwapInput, metadata?: P0Metadata) {
+  const chainId = getChainIdForProtocol(input.protocol);
+  const tokenIn = asset(input.tokenIn, chainId, metadata);
+  const tokenOut = asset(input.tokenOut, chainId, metadata);
   return {
     ...(input.parentRunId ? { parentRunId: input.parentRunId } : {}),
-    chainId: getChainIdForProtocol(input.protocol),
+    chainId,
     protocol: input.protocol,
-    sender: input.sender ?? DEFAULT_SENDER,
-    tokenIn: asset(input.tokenIn, getChainIdForProtocol(input.protocol)),
-    tokenOut: asset(input.tokenOut, getChainIdForProtocol(input.protocol)),
+    sender:
+      input.sender ??
+      (chainId === 421614 ? ARBITRUM_DEMO_SENDER : DEFAULT_SENDER),
+    tokenIn,
+    tokenOut,
     amountIn: input.amountIn,
+    ...(input.expectationBaseline
+      ? {
+          expectationBaseline: {
+            chainId,
+            protocol: input.protocol,
+            tokenIn,
+            tokenOut,
+            amountIn: input.amountIn,
+            quote: input.expectationBaseline.quote,
+          },
+        }
+      : {}),
     economicBoundary: input.minimumReceived
       ? {
           availability: "available",
@@ -601,13 +764,16 @@ export type CheckOptions = {
 };
 
 /** `/api/quote` is a strict exact-input body: no boundary, no parent, no slippage. */
-function quoteBody(input: QuoteSwapInput) {
+function quoteBody(input: QuoteSwapInput, metadata?: P0Metadata) {
+  const chainId = getChainIdForProtocol(input.protocol);
   return {
-    chainId: getChainIdForProtocol(input.protocol),
+    chainId,
     protocol: input.protocol,
-    sender: input.sender ?? DEFAULT_SENDER,
-    tokenIn: asset(input.tokenIn, getChainIdForProtocol(input.protocol)),
-    tokenOut: asset(input.tokenOut, getChainIdForProtocol(input.protocol)),
+    sender:
+      input.sender ??
+      (chainId === 421614 ? ARBITRUM_DEMO_SENDER : DEFAULT_SENDER),
+    tokenIn: asset(input.tokenIn, chainId, metadata),
+    tokenOut: asset(input.tokenOut, chainId, metadata),
     amountIn: input.amountIn,
   };
 }
@@ -630,6 +796,7 @@ function quotePreview(value: unknown): QuotePreview | undefined {
   return {
     estimatedAmountOut,
     minimumAmountOut: str(quote?.minimumAmountOut),
+    source: "quote",
     blockNumber,
     fetchedAt: str(quote?.fetchedAt),
     runtimeVersion,
@@ -645,12 +812,22 @@ export async function fetchQuote(
   input: QuoteSwapInput,
   options: CheckOptions = {},
 ): Promise<QuoteState> {
+  const metadata =
+    input.protocol === "camelot-v3"
+      ? await fetchP0Metadata(options.fetch ?? fetch, options.signal)
+      : undefined;
+  if (input.protocol === "camelot-v3" && metadata === undefined) {
+    return {
+      status: "error",
+      apiFailure: { code: "METADATA_UNAVAILABLE", retryable: true },
+    };
+  }
   let response: Response;
   try {
     response = await (options.fetch ?? fetch)(`${API_BASE}/api/quote`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify(quoteBody(input)),
+      body: JSON.stringify(quoteBody(input, metadata)),
       signal: options.signal,
     });
   } catch (error) {
@@ -719,7 +896,7 @@ export async function fetchQuote(
       },
     };
 
-  return { status: "available", quote: preview };
+  return { status: "available", quote: preview, request: input };
 }
 
 const int = (value: unknown): number | undefined =>
@@ -948,12 +1125,23 @@ export async function checkSwap(
       { code: "INVALID_REQUEST", retryable: false },
       { errors: validation.errors },
     );
+  const metadata =
+    input.protocol === "camelot-v3"
+      ? await fetchP0Metadata(options.fetch ?? fetch, options.signal)
+      : undefined;
+  if (input.protocol === "camelot-v3" && metadata === undefined) {
+    return failed(
+      input,
+      { code: "METADATA_UNAVAILABLE", retryable: true },
+      null,
+    );
+  }
   let response: Response;
   try {
     response = await (options.fetch ?? fetch)(`${API_BASE}/api/check`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify(body(input)),
+      body: JSON.stringify(body(input, metadata)),
       signal: options.signal,
     });
   } catch (error) {
@@ -990,6 +1178,7 @@ export async function checkSwap(
         undefined,
         payload,
         undefined,
+        metadata,
         options.decimalsBySymbol,
       ) ??
       failed(
@@ -1018,6 +1207,7 @@ export async function checkSwap(
       apiFailure,
       payload,
       undefined,
+      metadata,
       options.decimalsBySymbol,
     ) ?? failed(input, apiFailure, payload)
   );
@@ -1142,6 +1332,10 @@ export async function loadRun(
   // coarse. Keep the specific native-balance error during recovery instead of
   // replacing it with the lifecycle code (for example, AGENT_FLOW_ERROR).
   const storedResult = obj(record?.result);
+  const metadata =
+    obj(storedResult?.intent)?.chainId === 421614
+      ? await fetchP0Metadata(options.fetch ?? fetch, options.signal)
+      : undefined;
   const storedErrorCode = str(obj(storedResult?.error)?.code);
   const persistedFailure =
     status === "failed" && storedErrorCode !== "INSUFFICIENT_NATIVE_BALANCE"
@@ -1154,6 +1348,7 @@ export async function loadRun(
       : { code: persistedFailure, retryable: false },
     payload,
     str(record?.createdAt),
+    metadata,
   );
   if (result !== undefined && (status === "completed" || status === "failed")) {
     return { kind: "terminal", result };

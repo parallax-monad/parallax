@@ -96,6 +96,27 @@ describe("#119 public response to #92 Result UI", () => {
   test("parses a Check, renders source coverage, and recovers the same saved Run", async () => {
     const request = vi.fn<typeof fetch>().mockImplementation(async (input) => {
       const path = String(input);
+      if (path === "/api/p0/metadata")
+        return response({
+          chainId: 421614,
+          protocol: "camelot-v3",
+          tokenIn: {
+            asset: { kind: "native" },
+            symbol: "ETH",
+            decimals: 18,
+            decimalsSource: "chain_config",
+          },
+          tokenOut: {
+            asset: {
+              kind: "erc20",
+              address: "0xb893E3334D4Bd6C5ba8277Fd559e99Ed683A9FC7",
+            },
+            symbol: "USDC",
+            decimals: 18,
+            decimalsSource: "onchain_verified",
+            verifiedAtBlock: "310131879",
+          },
+        });
       if (path === "/api/check") return response(run);
       if (path === "/api/runs/backend-run-92") {
         return response({
@@ -160,8 +181,10 @@ describe("#119 public response to #92 Result UI", () => {
       expect(recovered.result.backendRunId).toBe(run.runId);
     }
     expect(request.mock.calls.map((call) => String(call[0]))).toEqual([
+      "/api/p0/metadata",
       "/api/check",
       "/api/runs/backend-run-92",
+      "/api/p0/metadata",
     ]);
   });
 });

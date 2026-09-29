@@ -275,7 +275,7 @@ export function WalletSwap({
           />
           <TokenSelect
             language={language}
-            options={SUPPORTED_TOKENS_IN}
+            options={["ETH"]}
             value={form.tokenIn}
             onSelect={(value) =>
               onChange({

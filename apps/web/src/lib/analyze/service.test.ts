@@ -1,5 +1,6 @@
 import { describe, expect, test, vi } from "vitest";
 import { DEMO_ADDRESS, DEMO_RECIPIENT } from "@/components/wallet/walletData";
+import { genericEvidenceSchema } from "../../../../../packages/contracts/src/generic-evidence.js";
 import {
   changedLogicalFields,
   INITIAL_FORM,
@@ -7,6 +8,7 @@ import {
   validateForm,
 } from "./form";
 import {
+  ARBITRUM_DEMO_SENDER,
   ARBITRUM_SEPOLIA_USDC_ADDRESS,
   ARBITRUM_SEPOLIA_WETH_ADDRESS,
   checkSwap,
@@ -101,7 +103,7 @@ const jsonResponse = (body: unknown, status = 200) =>
 
 describe("checkSwap API adapter", () => {
   test("shows the same read-only identity that the API request submits", () => {
-    expect(DEMO_ADDRESS).toBe("0x1111...1111");
+    expect(DEMO_ADDRESS).toBe("0xeb7c...f396");
     expect(DEMO_RECIPIENT).toBe(DEMO_ADDRESS);
   });
 
@@ -608,9 +610,11 @@ describe("fetchQuote", () => {
 
     expect(state).toEqual({
       status: "available",
+      request: quoteInput,
       quote: {
         estimatedAmountOut: "0.000223",
         minimumAmountOut: "0.000221",
+        source: "quote",
         blockNumber: "91383505",
         fetchedAt: "2026-08-08T12:00:00.000Z",
         runtimeVersion: "0.1.0",
@@ -1043,10 +1047,45 @@ describe("camelot-v3 reverse leg (USDC -> WETH)", () => {
       runtimeRevision: "a".repeat(40),
     },
   };
+  /**
+   * The canonical P0 registry read. #126 makes trusted Backend metadata the
+   * single primary mapper, so every camelot-v3 request reads it first; the
+   * reverse leg keeps working because `asset()` still resolves USDC and WETH
+   * when the canonical pair does not cover the symbol.
+   */
+  const p0Metadata = {
+    chainId: 421614,
+    protocol: "camelot-v3",
+    tokenIn: {
+      asset: { kind: "native" },
+      symbol: "ETH",
+      decimals: 18,
+      decimalsSource: "chain_config",
+    },
+    tokenOut: {
+      asset: { kind: "erc20", address: ARBITRUM_SEPOLIA_USDC_ADDRESS },
+      symbol: "USDC",
+      // Arbitrum Sepolia test USDC publishes 18 decimals, never the Monad 6.
+      decimals: 18,
+      decimalsSource: "onchain_verified",
+      verifiedAtBlock: "313622300",
+    },
+  };
+  /** A reverse Run that also observed a simulated WETH output. */
+  const reverseRunWithOutput = {
+    ...reverseRun,
+    evidence: [
+      {
+        kind: "simulated_token_out",
+        amountReceivedAtomic: "500000000000000000",
+      },
+    ],
+  };
 
   test("posts the exact erc20 USDC->WETH bodies to /api/quote and /api/check", async () => {
     const request = vi.fn<typeof fetch>().mockImplementation(async (input) => {
       const path = String(input);
+      if (path === "/api/p0/metadata") return jsonResponse(p0Metadata);
       if (path === "/api/quote") return jsonResponse(quoteAvailable);
       if (path === "/api/check") return jsonResponse(reverseRun);
       throw new Error(`Unexpected request: ${path}`);
@@ -1056,21 +1095,23 @@ describe("camelot-v3 reverse leg (USDC -> WETH)", () => {
     const result = await checkSwap(reverseCheckInput, { fetch: request });
 
     expect(request.mock.calls.map(([url]) => String(url))).toEqual([
+      "/api/p0/metadata",
       "/api/quote",
+      "/api/p0/metadata",
       "/api/check",
     ]);
-    expect(JSON.parse(String(request.mock.calls[0]?.[1]?.body))).toEqual({
+    expect(JSON.parse(String(request.mock.calls[1]?.[1]?.body))).toEqual({
       chainId: 421614,
       protocol: "camelot-v3",
-      sender: DEFAULT_SENDER,
+      sender: ARBITRUM_DEMO_SENDER,
       tokenIn: { kind: "erc20", address: ARBITRUM_SEPOLIA_USDC_ADDRESS },
       tokenOut: { kind: "erc20", address: ARBITRUM_SEPOLIA_WETH_ADDRESS },
       amountIn: "0.01",
     });
-    expect(JSON.parse(String(request.mock.calls[1]?.[1]?.body))).toEqual({
+    expect(JSON.parse(String(request.mock.calls[3]?.[1]?.body))).toEqual({
       chainId: 421614,
       protocol: "camelot-v3",
-      sender: DEFAULT_SENDER,
+      sender: ARBITRUM_DEMO_SENDER,
       tokenIn: { kind: "erc20", address: ARBITRUM_SEPOLIA_USDC_ADDRESS },
       tokenOut: { kind: "erc20", address: ARBITRUM_SEPOLIA_WETH_ADDRESS },
       amountIn: "0.01",
@@ -1080,25 +1121,45 @@ describe("camelot-v3 reverse leg (USDC -> WETH)", () => {
     expect(result.intent).toEqual({
       tokenIn: "USDC",
       tokenOut: "WETH",
-      amountIn: "10000000000000000",
+      // Registry metadata carries USDC at 18 decimals, so 1e16 is 0.01.
+      amountIn: "0.01",
     });
     expect(result.quote.route.en).toBe("USDC → WETH");
   });
 
   test("scales the reverse leg with trusted decimals, never the 6-decimal registry", async () => {
-    const untrusted = await checkSwap(reverseCheckInput, {
-      fetch: vi.fn<typeof fetch>().mockResolvedValue(jsonResponse(reverseRun)),
+    const request = vi
+      .fn<typeof fetch>()
+      .mockImplementation(async (url) =>
+        url === "/api/p0/metadata"
+          ? jsonResponse(p0Metadata)
+          : jsonResponse(reverseRunWithOutput),
+      );
+
+    // The Arbitrum Sepolia test USDC publishes 18 decimals through the Backend
+    // registry: applying the Monad registry's 6 here would be wrong by 10^12.
+    const usdcLeg = await checkSwap(reverseCheckInput, { fetch: request });
+    expect(usdcLeg.intent.amountIn).toBe("0.01");
+
+    // Ordered resolution: metadata covers USDC, so a stale account-state value
+    // can never re-scale it down to 6 decimals.
+    const staleRegistry = await checkSwap(reverseCheckInput, {
+      fetch: request,
+      decimalsBySymbol: { USDC: 6, WETH: 18 },
     });
-    // Without trusted decimals the atomic integer is shown verbatim: applying
-    // the Monad USDC registry here would be wrong by 10^12.
-    expect(untrusted.intent.amountIn).toBe("10000000000000000");
+    expect(staleRegistry.intent.amountIn).toBe("0.01");
+
+    // WETH is outside the canonical P0 pair, so only the trusted decimals read
+    // from `/api/account-state` may scale it. With no trusted value the amount is
+    // never guessed and never taken from the Monad registry.
+    const untrusted = await checkSwap(reverseCheckInput, { fetch: request });
+    expect(untrusted.simulatedOutput).toBe("unavailable");
 
     const trusted = await checkSwap(reverseCheckInput, {
-      fetch: vi.fn<typeof fetch>().mockResolvedValue(jsonResponse(reverseRun)),
+      fetch: request,
       decimalsBySymbol: { USDC: 18, WETH: 18 },
     });
-    // The Arbitrum Sepolia test USDC publishes 18 decimals, so 1e16 is 0.01.
-    expect(trusted.intent.amountIn).toBe("0.01");
+    expect(trusted.simulatedOutput).toBe("0.5");
   });
 
   test("rejects WETH on the Monad chain instead of pointing at a foreign token", async () => {
@@ -1201,7 +1262,7 @@ describe("fetchAccountState", () => {
     expect(JSON.parse(String(request.mock.calls[0]?.[1]?.body))).toEqual({
       chainId: 421614,
       protocol: "camelot-v3",
-      sender: DEFAULT_SENDER,
+      sender: ARBITRUM_DEMO_SENDER,
       tokenIn: { kind: "erc20", address: ARBITRUM_SEPOLIA_USDC_ADDRESS },
       tokenOut: { kind: "erc20", address: ARBITRUM_SEPOLIA_WETH_ADDRESS },
       amountIn: "0.01",
@@ -1316,6 +1377,278 @@ describe("fetchAccountState", () => {
       status: "unavailable",
       reason: "SNAPSHOT_UNAVAILABLE",
     });
+  });
+});
+
+describe("Arbitrum Product P0 Backend consumption", () => {
+  const usdc = "0xb893E3334D4Bd6C5ba8277Fd559e99Ed683A9FC7";
+  const metadata = {
+    chainId: 421614,
+    protocol: "camelot-v3",
+    tokenIn: {
+      chainId: 421614,
+      asset: { kind: "native" },
+      symbol: "ETH",
+      decimals: 18,
+      decimalsSource: "chain_config",
+    },
+    tokenOut: {
+      chainId: 421614,
+      asset: { kind: "erc20", address: usdc },
+      symbol: "USDC",
+      decimals: 18,
+      decimalsSource: "onchain_verified",
+      verifiedAtBlock: "310131879",
+    },
+  };
+  const arbitrumIntent = {
+    ...intent,
+    chainId: 421614,
+    protocol: "camelot-v3",
+    tokenOut: { kind: "erc20", address: usdc },
+    amountInAtomic: "1000000000000000",
+  };
+  const run = {
+    ...completed,
+    runId: "a59ee2c5-6e17-41bf-a600-e390d0a70a72",
+    intent: arbitrumIntent,
+    route: {
+      availability: "available",
+      path: [arbitrumIntent.tokenIn, arbitrumIntent.tokenOut],
+      blockNumber: "313878740",
+    },
+    quote: {
+      estimatedAmountOut: "0.015882894550627146",
+      blockNumber: "313878734",
+    },
+    p0: {
+      expectationBaseline: { status: "AVAILABLE" },
+      quoteFidelity: { status: "UNKNOWN", reason: "EVIDENCE_NOT_VERIFIED" },
+      evidenceState: "INCOMPLETE",
+      remediation: { status: "NOT_RUN" },
+      basicSimulation: {
+        call: {
+          status: "SUCCEEDED",
+          returnDataFingerprint: `sha256:${"a".repeat(64)}`,
+        },
+        gasEstimate: { status: "UNAVAILABLE" },
+        blockNumber: "313878740",
+        observedAt: "2026-09-29T07:00:00.000Z",
+        validityAtExecution: "UNKNOWN",
+        preparedTransactionFingerprint: `sha256:${"b".repeat(64)}`,
+        failureStage: "GAS_ESTIMATE",
+        reason: "ESTIMATE_UNAVAILABLE",
+        uncheckedCapabilities: ["gas_estimate"],
+      },
+    },
+  };
+
+  /**
+   * The public Check/Run wire shape for `providerEvidence` is the provider-neutral
+   * Evidence contract: a nested `provider.status` / `execution.status`, not a
+   * flattened `providerStatus` / `executionStatus`. Gate captures under
+   * `fixtures/` store a *summarized* projection (`publicEvidenceSummary`) and are
+   * therefore not a valid oracle for this boundary; parsing the fixture through
+   * `genericEvidenceSchema` keeps it from drifting away from the real wire shape.
+   */
+  const evidenceField = <T>(value: T, source: "rpc" | "quote" | "derived") => ({
+    value,
+    source,
+    reproducibility: "REPRODUCIBLE" as const,
+    blockNumber: "313878740",
+  });
+  const wireProviderEvidence = genericEvidenceSchema.parse({
+    intent: {
+      chainId: 421614,
+      protocol: "camelot-v3",
+      sender: DEMO_ADDRESS,
+      tokenIn: "native",
+      tokenOut: usdc,
+      amountIn: "0.001",
+      minimumReceivedSource: "unavailable",
+    },
+    provider: {
+      providerId: "native-rpc-arbitrum",
+      status: "UNKNOWN",
+      integrationStatus: "OK",
+      errors: evidenceField([], "rpc"),
+    },
+    execution: { status: "SUCCESS" },
+    quote: evidenceField(
+      { estimatedAmountOut: "0.015882894550627146" },
+      "quote",
+    ),
+    action: evidenceField([], "rpc"),
+    receipt: evidenceField(null, "rpc"),
+    outcome: evidenceField(null, "rpc"),
+    assetChanges: evidenceField(null, "rpc"),
+    assetChangeAssessment: "UNKNOWN",
+    warnings: evidenceField([], "rpc"),
+    simulation: {
+      value: {
+        expectedTransactions: 1,
+        observedResults: 0,
+        unmatchedResultIndexes: [],
+        halted: false,
+        complete: false,
+        missingTransactionIndexes: [0],
+      },
+      source: "derived",
+      reproducibility: "REPRODUCIBLE",
+      blockNumber: "313878740",
+    },
+    blockNumber: evidenceField("313878740", "rpc"),
+    capabilities: ["quote", "simulate"],
+    provenance: {
+      observedChainId: 421614,
+      mode: "LIVE",
+      source: "rpc",
+      simulationBlock: "313878740",
+    },
+    checkedScope: ["quote"],
+    unknownScope: ["receipt", "simulation"],
+    providerData: {},
+  });
+
+  test("maps provider and execution status from the real serialized public wire shape", async () => {
+    const serializedRun = JSON.parse(
+      JSON.stringify({
+        ...run,
+        simulatorPinnedBlock: "313878740",
+        providerEvidence: wireProviderEvidence,
+      }),
+    );
+    const request = vi.fn<typeof fetch>().mockImplementation(async (url) => {
+      if (url === "/api/p0/metadata") return jsonResponse(metadata);
+      if (String(url).startsWith("/api/runs/"))
+        return jsonResponse({
+          runId: serializedRun.runId,
+          status: "completed",
+          result: serializedRun,
+        });
+      throw new Error(`Unexpected path: ${String(url)}`);
+    });
+
+    const recovered = await loadRun(serializedRun.runId, { fetch: request });
+    expect(recovered.kind).toBe("terminal");
+    if (recovered.kind === "terminal") {
+      expect(recovered.result.providerStatus).toBe("UNKNOWN");
+      expect(recovered.result.executionStatus).toBe("SUCCESS");
+      expect(recovered.result.verdict).toBe("UNKNOWN");
+    }
+  });
+
+  test("fails closed instead of reading a flattened status summary off the wire shape", async () => {
+    // The gate summary shape must never be treated as the public wire contract:
+    // mapping it would silently publish "not recorded" for real Backend facts.
+    expect(Object.hasOwn(wireProviderEvidence, "providerStatus")).toBe(false);
+    expect(Object.hasOwn(wireProviderEvidence, "executionStatus")).toBe(false);
+    const serializedRun = JSON.parse(
+      JSON.stringify({
+        ...run,
+        simulatorPinnedBlock: "313878740",
+        providerEvidence: {
+          providerStatus: "UNKNOWN",
+          executionStatus: "SUCCESS",
+        },
+      }),
+    );
+    const request = vi.fn<typeof fetch>().mockImplementation(async (url) => {
+      if (url === "/api/p0/metadata") return jsonResponse(metadata);
+      if (String(url).startsWith("/api/runs/"))
+        return jsonResponse({
+          runId: serializedRun.runId,
+          status: "completed",
+          result: serializedRun,
+        });
+      throw new Error(`Unexpected path: ${String(url)}`);
+    });
+
+    const recovered = await loadRun(serializedRun.runId, { fetch: request });
+    expect(recovered.kind).toBe("terminal");
+    if (recovered.kind === "terminal") {
+      expect(recovered.result.providerStatus).toBeUndefined();
+      expect(recovered.result.executionStatus).toBeUndefined();
+    }
+  });
+
+  test("uses Backend registry decimals and preserves call success through recovery", async () => {
+    const request = vi.fn<typeof fetch>().mockImplementation(async (url) => {
+      if (url === "/api/p0/metadata") return jsonResponse(metadata);
+      if (url === "/api/check") return jsonResponse(run);
+      if (String(url).startsWith("/api/runs/")) {
+        return jsonResponse({
+          runId: run.runId,
+          status: "completed",
+          result: run,
+        });
+      }
+      throw new Error(`Unexpected path: ${String(url)}`);
+    });
+    const selectedQuote = {
+      estimatedAmountOut: "0.015882894550627146",
+      source: "quote" as const,
+      blockNumber: "313878734",
+      runtimeVersion: "camelot-v3",
+      runtimeRevision: "route-1",
+    };
+    const result = await checkSwap(
+      {
+        protocol: "camelot-v3",
+        tokenIn: "ETH",
+        tokenOut: "USDC",
+        amountIn: "0.001",
+        expectationBaseline: { quote: selectedQuote },
+      },
+      { fetch: request },
+    );
+    const sent = JSON.parse(
+      String(
+        request.mock.calls.find(([path]) => path === "/api/check")?.[1]?.body,
+      ),
+    );
+    expect(sent.tokenOut).toEqual({ kind: "erc20", address: usdc });
+    expect(sent.expectationBaseline).toMatchObject({
+      amountIn: "0.001",
+      quote: selectedQuote,
+    });
+    expect(result.intent.amountIn).toBe("0.001");
+    expect(result.basicSimulation?.call).toBe("SUCCEEDED");
+    expect(result.basicSimulation?.gasEstimate).toBe("UNAVAILABLE");
+    expect(result.verdict).toBe("UNKNOWN");
+    expect(result.evidenceState).toBe("INCOMPLETE");
+    expect(result.remediationStatus).toBe("NOT_RUN");
+    const recovery = await loadRun(run.runId, { fetch: request });
+    expect(recovery.kind).toBe("terminal");
+    if (recovery.kind === "terminal") {
+      expect(recovery.result.basicSimulation).toEqual(result.basicSimulation);
+      expect(formFromRunResult(recovery.result).amountIn).toBe("0.001");
+    }
+    expect(request.mock.calls.map(([path]) => path)).toEqual([
+      "/api/p0/metadata",
+      "/api/check",
+      `/api/runs/${run.runId}`,
+      "/api/p0/metadata",
+    ]);
+  });
+
+  test("fails closed before Check when trusted metadata is unavailable", async () => {
+    const request = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(
+        jsonResponse({ error: { code: "METADATA_UNAVAILABLE" } }, 503),
+      );
+    const result = await checkSwap(
+      {
+        protocol: "camelot-v3",
+        tokenIn: "ETH",
+        tokenOut: "USDC",
+        amountIn: "0.001",
+      },
+      { fetch: request },
+    );
+    expect(result.apiFailure?.code).toBe("METADATA_UNAVAILABLE");
+    expect(request).toHaveBeenCalledTimes(1);
   });
 });
 

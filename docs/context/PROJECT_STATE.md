@@ -101,6 +101,18 @@ Active acceptance items:
 - #100 — `basicSimulation` and partial Native RPC execution facts, owned by `@brightheartma`;
 - #102 — persistence and historical Run semantics, owned by `@brightheartma`.
 
+2026-09-29 local #73 acceptance audit, pending PR review and Product Owner acceptance:
+the active browser path reached a real Camelot V3 ETH → USDC quote and a persisted
+Arbitrum Sepolia Native RPC Run (`0d5d68d3-01c8-414f-bc10-3023e212cefb`). The UI
+recovered that Run after reload and created child re-check Run
+`71721898-4b14-4f81-8a93-914d039ec931`. The observed check had `eth_call=SUCCEEDED`,
+`gasEstimate=AVAILABLE`, Risk `UNKNOWN`, Evidence `INCOMPLETE`, and remediation
+`NOT_RUN`; no Product P0 PASS is inferred from call success. A separate counted-RPC
+historical GET on Run `def2b539-e536-48b5-b65e-6f9b709ea14f` made zero RPC
+requests. The gas-unavailable partial-evidence branch is regression-tested, not claimed
+as a live observation. The local audit supports #100/#102 consumption closure review
+after this change is merged; those owner-owned Issues remain open until their owners act.
+
 #101 — exact Intent → prepared transaction → RPC request binding — is CLOSED / COMPLETED by
 merged PR #113 for the native ETH → USDC P0 scope. Its reverse ERC-20 extension remains under
 #105 and does not reopen #101.

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { AccountStateCard } from "@/components/analyze/AccountStateCard";
 import { EvidenceCoverageCard } from "@/components/analyze/EvidenceCoverageCard";
 import { ExecutionEconomicsCard } from "@/components/analyze/ExecutionEconomicsCard";
+import { P0ExecutionCard } from "@/components/analyze/P0ExecutionCard";
 import { QuoteFidelityCard } from "@/components/analyze/QuoteFidelityCard";
 import { VerdictIcon } from "@/components/analyze/StatusIcon";
 import { TokenIcon } from "@/components/analyze/TokenIcon";
@@ -322,6 +323,8 @@ export function ResultStep({
         notice={result.evidenceCoverageNotice}
         sources={result.evidenceCoverage}
       />
+
+      <P0ExecutionCard language={language} result={result} />
 
       <AccountStateCard accountState={accountState} language={language} />
 
