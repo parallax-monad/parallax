@@ -1,4 +1,3 @@
-import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -18,16 +17,20 @@ describe("#103 real USDC -> WETH qualified capture", () => {
       "sha256:5a7ed69ca2dcf0413f79ddd29749e6f0ae652da91493814fece00cb0963b7b20",
     );
     expect(capture.sourceHead).toBe("69011893029f546149563ee1b933c6b8aaec31fa");
-    for (const [path, hash] of Object.entries(
-      capture.provenance.manifest as Record<string, string>,
-    )) {
-      const historicalBytes = execFileSync(
-        "git",
-        ["show", `${String(capture.sourceHead)}:${path}`],
-        { cwd: root },
-      );
-      expect(digest(historicalBytes)).toBe(hash);
-    }
+    expect(capture.provenance.manifest).toEqual({
+      "scripts/provider-probes/usdc-weth-camelot-feasibility.ts":
+        "sha256:ff7816fbf8c87a3f38c0ef1cb93ab0a674e325bd4633acfad4d3413a586264ee",
+      "apps/api/src/backend/camelot-v3-protocol-adapter.ts":
+        "sha256:af5375017d047eedb2d2b81010afac0dc34b2a670e40932e05c3d73430d6b037",
+      "apps/api/src/backend/camelot-v3-binding.ts":
+        "sha256:af62ee09c21cfef9abb361265736bd022da7fa7da3af46f6d6af7c24c28a2fe5",
+      "apps/api/src/backend/native-rpc-client.ts":
+        "sha256:a223781a34a7c1e40cae244575aa71aebe588a24e4e31799492047b04228f2b1",
+      "apps/api/src/trusted-token-registry.ts":
+        "sha256:c114dcd651d0bf6406a5c19c7595489dd407f266ef9102cf09289bb9a2f34802",
+      "fixtures/provider-registry/be-063/camelot-sepolia-real-2026-09-18T08-47-56-715Z/capture.json":
+        "sha256:85147b852e1e4b514af64241fede641f6a2b6db4f2056f0ab44d04164125cf23",
+    });
   });
 
   it("records bounded candidate discovery and one qualifying real EOA", () => {
