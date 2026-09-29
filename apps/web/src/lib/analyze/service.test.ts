@@ -97,7 +97,7 @@ const jsonResponse = (body: unknown, status = 200) =>
 
 describe("checkSwap API adapter", () => {
   test("shows the same read-only identity that the API request submits", () => {
-    expect(DEMO_ADDRESS).toBe("0x1111...1111");
+    expect(DEMO_ADDRESS).toBe("0xeb7c...f396");
     expect(DEMO_RECIPIENT).toBe(DEMO_ADDRESS);
   });
 
@@ -604,9 +604,11 @@ describe("fetchQuote", () => {
 
     expect(state).toEqual({
       status: "available",
+      request: quoteInput,
       quote: {
         estimatedAmountOut: "0.000223",
         minimumAmountOut: "0.000221",
+        source: "quote",
         blockNumber: "91383505",
         fetchedAt: "2026-08-08T12:00:00.000Z",
         runtimeVersion: "0.1.0",
@@ -983,6 +985,149 @@ function mapRunForTest(raw: unknown) {
     return recovery.result;
   });
 }
+
+describe("Arbitrum Product P0 Backend consumption", () => {
+  const usdc = "0xb893E3334D4Bd6C5ba8277Fd559e99Ed683A9FC7";
+  const metadata = {
+    chainId: 421614,
+    protocol: "camelot-v3",
+    tokenIn: {
+      chainId: 421614,
+      asset: { kind: "native" },
+      symbol: "ETH",
+      decimals: 18,
+      decimalsSource: "chain_config",
+    },
+    tokenOut: {
+      chainId: 421614,
+      asset: { kind: "erc20", address: usdc },
+      symbol: "USDC",
+      decimals: 18,
+      decimalsSource: "onchain_verified",
+      verifiedAtBlock: "310131879",
+    },
+  };
+  const arbitrumIntent = {
+    ...intent,
+    chainId: 421614,
+    protocol: "camelot-v3",
+    tokenOut: { kind: "erc20", address: usdc },
+    amountInAtomic: "1000000000000000",
+  };
+  const run = {
+    ...completed,
+    runId: "a59ee2c5-6e17-41bf-a600-e390d0a70a72",
+    intent: arbitrumIntent,
+    route: {
+      availability: "available",
+      path: [arbitrumIntent.tokenIn, arbitrumIntent.tokenOut],
+      blockNumber: "313878740",
+    },
+    quote: {
+      estimatedAmountOut: "0.015882894550627146",
+      blockNumber: "313878734",
+    },
+    p0: {
+      expectationBaseline: { status: "AVAILABLE" },
+      quoteFidelity: { status: "UNKNOWN", reason: "EVIDENCE_NOT_VERIFIED" },
+      evidenceState: "INCOMPLETE",
+      remediation: { status: "NOT_RUN" },
+      basicSimulation: {
+        call: {
+          status: "SUCCEEDED",
+          returnDataFingerprint: `sha256:${"a".repeat(64)}`,
+        },
+        gasEstimate: { status: "UNAVAILABLE" },
+        blockNumber: "313878740",
+        observedAt: "2026-09-29T07:00:00.000Z",
+        validityAtExecution: "UNKNOWN",
+        preparedTransactionFingerprint: `sha256:${"b".repeat(64)}`,
+        failureStage: "GAS_ESTIMATE",
+        reason: "ESTIMATE_UNAVAILABLE",
+        uncheckedCapabilities: ["gas_estimate"],
+      },
+    },
+  };
+
+  test("uses Backend registry decimals and preserves call success through recovery", async () => {
+    const request = vi.fn<typeof fetch>().mockImplementation(async (url) => {
+      if (url === "/api/p0/metadata") return jsonResponse(metadata);
+      if (url === "/api/check") return jsonResponse(run);
+      if (String(url).startsWith("/api/runs/")) {
+        return jsonResponse({
+          runId: run.runId,
+          status: "completed",
+          result: run,
+        });
+      }
+      throw new Error(`Unexpected path: ${String(url)}`);
+    });
+    const selectedQuote = {
+      estimatedAmountOut: "0.015882894550627146",
+      source: "quote" as const,
+      blockNumber: "313878734",
+      runtimeVersion: "camelot-v3",
+      runtimeRevision: "route-1",
+    };
+    const result = await checkSwap(
+      {
+        protocol: "camelot-v3",
+        tokenIn: "ETH",
+        tokenOut: "USDC",
+        amountIn: "0.001",
+        expectationBaseline: { quote: selectedQuote },
+      },
+      { fetch: request },
+    );
+    const sent = JSON.parse(
+      String(
+        request.mock.calls.find(([path]) => path === "/api/check")?.[1]?.body,
+      ),
+    );
+    expect(sent.tokenOut).toEqual({ kind: "erc20", address: usdc });
+    expect(sent.expectationBaseline).toMatchObject({
+      amountIn: "0.001",
+      quote: selectedQuote,
+    });
+    expect(result.intent.amountIn).toBe("0.001");
+    expect(result.basicSimulation?.call).toBe("SUCCEEDED");
+    expect(result.basicSimulation?.gasEstimate).toBe("UNAVAILABLE");
+    expect(result.verdict).toBe("UNKNOWN");
+    expect(result.evidenceState).toBe("INCOMPLETE");
+    expect(result.remediationStatus).toBe("NOT_RUN");
+    const recovery = await loadRun(run.runId, { fetch: request });
+    expect(recovery.kind).toBe("terminal");
+    if (recovery.kind === "terminal") {
+      expect(recovery.result.basicSimulation).toEqual(result.basicSimulation);
+      expect(formFromRunResult(recovery.result).amountIn).toBe("0.001");
+    }
+    expect(request.mock.calls.map(([path]) => path)).toEqual([
+      "/api/p0/metadata",
+      "/api/check",
+      `/api/runs/${run.runId}`,
+      "/api/p0/metadata",
+    ]);
+  });
+
+  test("fails closed before Check when trusted metadata is unavailable", async () => {
+    const request = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(
+        jsonResponse({ error: { code: "METADATA_UNAVAILABLE" } }, 503),
+      );
+    const result = await checkSwap(
+      {
+        protocol: "camelot-v3",
+        tokenIn: "ETH",
+        tokenOut: "USDC",
+        amountIn: "0.001",
+      },
+      { fetch: request },
+    );
+    expect(result.apiFailure?.code).toBe("METADATA_UNAVAILABLE");
+    expect(request).toHaveBeenCalledTimes(1);
+  });
+});
 
 describe("form validation and backend-supported reruns", () => {
   test("validates the initial live request", () => {

@@ -285,3 +285,26 @@ No signing, broadcasting, custody, wallet mutation, secret, history rewrite, for
 merge, or GitHub review mutation occurred. No accepted evidence was rewritten: the accepted
 BE-063 source capture digest is asserted and unchanged. No prior capture was moved or
 deleted. No Product, Risk, Contract, or Provider semantic was changed.
+
+## 2026-09-29 — #73 local Product P0 acceptance implementation
+
+Branch `feat/product-p0-final-73` was created in an isolated worktree from fresh
+`origin/main` `9dacb484d10f7fce06654511b176be0886cdbe49`. The change exposes the
+configured trusted ETH/test-USDC metadata, includes the quote observation time for
+selected-quote baseline binding, consumes the public Backend `basicSimulation` and
+separate Provider/Execution/Evidence/Risk/remediation states in the active UI, and
+connects the selected quote, persisted recovery, and explicit re-check. The shared
+worktree was not modified.
+
+Local read-only Arbitrum Sepolia/Camelot V3 ETH → USDC browser acceptance observed
+real quote and Run `0d5d68d3-01c8-414f-bc10-3023e212cefb`, reload recovery, and
+child re-check `71721898-4b14-4f81-8a93-914d039ec931`. The observed facts were
+call `SUCCEEDED`, gas `AVAILABLE`, Risk `UNKNOWN`, Evidence `INCOMPLETE`, and
+remediation `NOT_RUN`. A separate historical GET for Run
+`def2b539-e536-48b5-b65e-6f9b709ea14f` produced zero RPC requests through a
+read-only method counter. Controlled tests cover the distinct call-success/gas-failure
+branch. Full repository tests passed 1393 with 2 skipped, web tests passed 89,
+API tests passed 654, disposable PostgreSQL integration passed 16, and typecheck,
+lint, web build, diff check, and added-line secret scan passed. These are local
+implementation observations, pending exact-head PR CI and owner acceptance; they do
+not change Product/Risk/Contract semantics or certify a Product P0 PASS.

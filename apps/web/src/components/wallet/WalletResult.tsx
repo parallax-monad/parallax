@@ -1,5 +1,6 @@
 ﻿import { useState } from "react";
 import { OptionsStep } from "@/components/analyze/OptionsStep";
+import { P0ExecutionCard } from "@/components/analyze/P0ExecutionCard";
 import { ResultStep } from "@/components/analyze/ResultStep";
 import { VerdictIcon } from "@/components/analyze/StatusIcon";
 import { StepTimeline } from "@/components/analyze/StepTimeline";
@@ -32,6 +33,7 @@ const MODE_EXPLANATION: Record<ProductRunMode, Copy> = {
 };
 
 const PRIMARY_ACTION: Copy = { en: "Review swap inputs", zh: "查看兑换输入" };
+const RECHECK_ACTION: Copy = { en: "Edit and re-check", zh: "修改并重新检查" };
 const DISCARD_ACTION: Copy = { en: "Discard this swap", zh: "放弃这笔兑换" };
 
 const INTEGRATION_ERROR_COPY = {
@@ -154,6 +156,7 @@ export function WalletResult({
             )}
           </div>
         </section>
+        <P0ExecutionCard language={language} result={result} />
         <p className="text-[12px] leading-[1.6] text-dim">
           {say(
             language,
@@ -261,7 +264,7 @@ export function WalletResult({
 
       <div className="mt-1 grid grid-cols-2 gap-2">
         <button type="button" className="btn btn-monad" onClick={onKeep}>
-          {say(language, PRIMARY_ACTION)}
+          {say(language, result.backendRunId ? RECHECK_ACTION : PRIMARY_ACTION)}
         </button>
         <button
           type="button"
