@@ -1,25 +1,25 @@
 # Project State
 
-Last checkpoint: 2026-09-28
+Last checkpoint: 2026-09-29
 
 ## Main checkpoint
 
-`checkpoint_head = b6d48c5f2223d1888231a5eb7810ec2a04006111`
+`checkpoint_head = 811e2b80fd6d6db6ccee5da6f4a518a6b66ba6c7`
 
 This is the verified `main` tip at this checkpoint. Future takeovers must fresh-fetch and
 verify that this checkpoint is an ancestor of current `main`; equality is not required.
 
 At checkpoint time:
 
-- current `main` includes merged PR #112 at `b6d48c5f2223d1888231a5eb7810ec2a04006111`;
-- #106 is CLOSED / COMPLETED by PR #112, with the accepted qualification capture retained
-  under `fixtures/provider-registry/be-106/`;
-- #101 is CLOSED / COMPLETED by PR #113; #100 and #102 remain open for their explicit
-  application-entrypoint and historical-replay acceptance evidence;
-- PR-FS-D / #110 is implemented through exact-head commit
-  `93a1084c0cfc5a741e8c6d4251290ef86ed6f605` on `feat/backend-fs-d-trace-integration`; it is
-  not yet merged or accepted;
+- current `main` includes merged PR #126 at `811e2b80fd6d6db6ccee5da6f4a518a6b66ba6c7`;
+- PR #127 is merged and records the real reverse-path qualification;
+- #101 is CLOSED / COMPLETED by PR #113; #100 and #102 remain open pending explicit Product
+  acceptance of the merged #126 path;
+- #106, #110, #91, and #92 are closed/completed; Evidence Federation is PASS;
 - live Product execution scope is represented by Issues #73, #96, and #100–#110.
+
+This file is a durable checkpoint, not the live execution tracker. Always fresh-fetch Issue #96
+and the target Issue/PR before acting; fresh GitHub state wins when it differs from this snapshot.
 
 ## Final Sprint v3 control-plane transition
 
@@ -73,6 +73,11 @@ Preserve:
 - raw Provider payload isolation;
 - no signing, broadcasting, custody, or autonomous user transaction execution.
 
+PR #125 boundary: generic gas estimation is preflight; the NativeRpcProvider pinned gas check is
+execution Evidence consumed independently by Risk. `INSUFFICIENT_NATIVE_BALANCE` is an
+execution-readiness/integration fact, not a Risk verdict. Partial `call=SUCCEEDED` /
+`gas=UNAVAILABLE` remains incomplete Evidence and does not become a Risk PASS.
+
 Issue #67 remains a closed historical acceptance/evidence decision. Its earlier controlled
 WETH → test-USDC target is not rewritten or falsified. For the current Final Sprint's final
 Product P0 acceptance, Issues #96 and #73 define the active user-facing path as ETH → USDC.
@@ -95,23 +100,18 @@ Arbitrum Sepolia
 → re-check path
 ```
 
-Active acceptance items:
+Current state:
 
-- #73 — Frontend final Product P0 / Demo Gate, owned by `@antony819`;
-- #100 — `basicSimulation` and partial Native RPC execution facts, owned by `@brightheartma`;
-- #102 — persistence and historical Run semantics, owned by `@brightheartma`.
+- PR #126 is MERGED and contains the real browser/Backend path; explicit Product Owner
+  acceptance is NOT YET RECORDED;
+- #73 remains the final Product P0 gate, owned by `@antony819` with Product acceptance by
+  `@chin0312`;
+- #100 and #102 have complete Backend scope but remain open pending explicit Product acceptance.
 
-2026-09-29 local #73 acceptance audit, pending PR review and Product Owner acceptance:
-the active browser path reached a real Camelot V3 ETH → USDC quote and a persisted
-Arbitrum Sepolia Native RPC Run (`0d5d68d3-01c8-414f-bc10-3023e212cefb`). The UI
-recovered that Run after reload and created child re-check Run
-`71721898-4b14-4f81-8a93-914d039ec931`. The observed check had `eth_call=SUCCEEDED`,
-`gasEstimate=AVAILABLE`, Risk `UNKNOWN`, Evidence `INCOMPLETE`, and remediation
-`NOT_RUN`; no Product P0 PASS is inferred from call success. A separate counted-RPC
-historical GET on Run `def2b539-e536-48b5-b65e-6f9b709ea14f` made zero RPC
-requests. The gas-unavailable partial-evidence branch is regression-tested, not claimed
-as a live observation. The local audit supports #100/#102 consumption closure review
-after this change is merged; those owner-owned Issues remain open until their owners act.
+Merged PR #126 records a real Arbitrum browser path, persisted Run recovery, and an explicit
+child re-check. The observed result was `eth_call=SUCCEEDED`, `gasEstimate=AVAILABLE`, Provider
+`UNKNOWN`, execution `SUCCESS`, Evidence `INCOMPLETE`, Risk `UNKNOWN`, and remediation
+`NOT_RUN`. This is implementation evidence, not Product P0 PASS; `UNKNOWN` is not a pass.
 
 #101 — exact Intent → prepared transaction → RPC request binding — is CLOSED / COMPLETED by
 merged PR #113 for the native ETH → USDC P0 scope. Its reverse ERC-20 extension remains under
@@ -123,25 +123,25 @@ child verification `unknown` / `unavailable`.
 
 ## Asset Coverage — Best Case gate
 
-Dependency:
+Acceptance requires:
 
 ```text
-#73 Product P0
-        ↓
-#103 real USDC → WETH feasibility
-        ↓
-#104 ERC-20 account-state / allowance
-        ↓
-#105 end-to-end reverse asset flow
+#103 QUALIFIED_REAL
++ #104 account-state / allowance support
++ #105 end-to-end Product acceptance
+→ Asset Coverage PASS
 ```
 
-- #103 is Provider-owned by `@jzhao0` and is a bounded real-chain feasibility task.
-- #104 is Backend-owned, non-blocking for Product P0 but enabling MUST for qualified ERC-20
-  reverse support.
-- #105 composes the qualified reverse path and represents Asset Coverage PASS.
+These are acceptance dependencies, not a mandatory serial engineering order. Independent work
+may proceed when no concrete interface/data dependency exists:
 
-Do not begin production reverse-path integration before #103 qualifies the actual
-transaction semantics. #103 itself remains gated by Product P0 #73.
+- #103 is Provider-owned and `QUALIFIED_REAL` through PR #127;
+- #104 is Backend-owned and COMPLETE through PR #115; it is non-blocking for Product P0 but
+  enabling MUST for qualified ERC-20 reverse support;
+- #105 is ACTIVE and owns the remaining end-to-end reverse-path acceptance. #73 does not block
+  #105 implementation, and #103 qualification does not block deterministic #105 work;
+- #103 qualification gates real reverse-path qualification/activation claims; #105 still gates
+  Asset Coverage PASS.
 
 #103 has a focused four-hour feasibility kill switch. If it cannot qualify the real path:
 
@@ -154,7 +154,12 @@ Full Best Case = NOT COMPLETE
 
 The acceptance standard is not lowered.
 
-## Evidence Federation — active Best Case lane
+Historical #103 transition: PR #123 completed bounded feasibility but recorded
+`BLOCKED_ACCOUNT_STATE` with qualification incomplete at that time. PR #127 later added a new
+real read-only qualification and established `QUALIFIED_REAL`. The old blocker remains historical;
+the current result does not make Asset Coverage PASS.
+
+## Evidence Federation — PASS
 
 Native RPC remains the primary baseline.
 
@@ -172,7 +177,7 @@ Trace RPC is supplementary deeper Evidence only:
 #92 capability / provenance Product UX
 ```
 
-#106 is owned by `@jzhao0`.
+#106 is CLOSED / COMPLETED through PR #112 and is owned by `@jzhao0`.
 
 `TraceRpcEvidenceSource` must:
 
@@ -188,15 +193,11 @@ Trace RPC is supplementary deeper Evidence only:
 
 `fixtures/provider-registry/be-106/trace-rpc-source-qualification-2026-09-28T10-06-13-121Z/capture.json`
 
-#110 is the Backend consumer, owned by `@brightheartma`, covering composition, exact context
-binding, persistence, public projection, and historical consistency. The current PR-FS-D
-implementation keeps Trace outside `ProviderRegistry`, Core, Decision, and Risk; Native RPC
-remains primary. A read-only live Backend gate now passes against the environment-supplied
-Arbitrum endpoint, with sanitized capture retained at
-`fixtures/provider-registry/be-110/backend-trace-integration-20260928133255854/capture.json`.
-It is not yet a merged Evidence Federation acceptance, and #110 does not block Product P0.
-
-#91 depends on #106 and the integrated same-transaction execution path.
+#110 is CLOSED / COMPLETED through PR #119. It keeps Trace outside `ProviderRegistry`, Core,
+Decision, and Risk; Native RPC remains primary. #91 is CLOSED / COMPLETED through PR #118 and
+#92 is CLOSED / COMPLETED through PR #122. The completed lane preserves exact transaction/run,
+chain/protocol, fingerprint, compatible block context, checked/unknown/unavailable capability
+states, provenance, and historical no-requery behavior. Trace does not upgrade Risk.
 
 This decomposition does not change the Product architecture. Native RPC remains the primary
 execution baseline and Trace remains supplementary. No ProviderRegistry multi-provider rewrite,
@@ -228,6 +229,11 @@ Ownership:
 Frontend must distinguish `PROPOSED`, `VERIFIED`, `FAILED`, `UNKNOWN`, and `UNAVAILABLE`.
 Antony does not own Risk logic or remediation generation.
 
+PR #124 records `VERIFIED_SCENARIO_FOUND = NO`: the result is not currently reachable under
+frozen semantics because of evidence insufficiency plus the current rule structure. Keep #107
+OPEN / NOT COMPLETE; details remain in
+`docs/integration/verified-remediation-107-blocker.md` and no semantic changes are adopted here.
+
 ## Optional / stretch
 
 Do not start these ahead of the active critical path:
@@ -241,9 +247,10 @@ Do not start these ahead of the active critical path:
 QuickNode, or Explorer logic, and its absence does not invalidate any of the four gates.
 
 #90 is `OPTIONAL / BOUNDED STRETCH` with a maximum four-hour read-only feasibility window.
-#108 is `OPTIONAL` with a two-hour ExplorerEvidenceSource feasibility window; Explorer evidence
-does not provide simulation, trace, or state diff. #109 is `OPTIONAL` with a two-hour feasibility
-window for at most one additional asset. None is on the four-gate critical path.
+#108 is `OPTIONAL / STRETCH` with bounded feasibility in draft PR #120; credentialed Etherscan V2
+qualification is currently blocked. Explorer evidence does not provide simulation, trace, or
+state diff. #109 is `OPTIONAL` with a two-hour feasibility window for at most one additional
+asset. None is on the four-gate critical path.
 
 #93 Enso is CLOSED / NOT_PLANNED and #95 Decision Receipt is CLOSED / NOT_PLANNED. Both are
 Final Sprint cuts retained for post-sprint history.
@@ -253,13 +260,14 @@ Final Sprint cuts retained for post-sprint history.
 For `@jzhao0`:
 
 ```text
-NOW:
+COMPLETE:
+#103 USDC → WETH real-chain qualification
+#106 TraceRpcEvidenceSource
+#110 Backend Trace integration
 #91 Native RPC + Trace supplementary portability proof
+#92 capability / provenance UX
 
-AFTER #73 Product P0:
-#103 USDC → WETH real-chain feasibility
-
-NOT ACTIVE:
+OPTIONAL / NOT ACTIVE:
 #108 Explorer
 #109 Asset 3
 ```
@@ -288,14 +296,17 @@ real credentialed qualification. It is removed from the Final Sprint critical pa
 
 ## Current gate status
 
-- Product P0: IN PROGRESS (#73, #100, #102; #101 is complete).
-- Asset Coverage: NOT COMPLETE.
-- Evidence Federation: IN PROGRESS / NOT ACCEPTED (#110 Backend integration is being built).
-- Verified Remediation: NOT COMPLETE.
-- Minimal SDK: NOT DONE / SHOULD.
-- Explorer: NOT STARTED.
-- Asset 3: NOT STARTED.
-- Arbitrum One: NOT STARTED.
+- Product P0: FINAL OWNER REVIEW — PR #126 MERGED; Product Owner acceptance not yet recorded;
+  #73/#100/#102 remain open.
+- Asset Coverage: IN PROGRESS — #103 `QUALIFIED_REAL`, #104 complete, #105 end-to-end acceptance
+  pending.
+- Evidence Federation: PASS — #106/#110/#91/#92 complete.
+- Verified Remediation: NOT COMPLETE — currently not reachable under frozen semantics (#107 / PR
+  #124).
+- Minimal SDK: SHOULD / NOT STARTED (#94).
+- Explorer: OPTIONAL / BOUNDED FEASIBILITY IN PROGRESS — draft PR #120 / #108.
+- Asset 3: OPTIONAL / NOT STARTED (#109).
+- Arbitrum One: OPTIONAL / NOT STARTED (#90).
 
 ## Current execution ordering
 
@@ -304,12 +315,11 @@ Product P0 work proceeds in parallel:
 - Clare / Backend: #100 and #102; #101 is the completed binding slice from PR #113.
 - Antony / Frontend: #73, converging on the reviewed public P0 surface.
 
-After Product P0, the Asset Coverage lane is #103 → #104 → #105. In parallel, the Evidence
-Federation lane is Jie / #106 → Clare / #110 → #91 → Antony / #92. Preparation for #110 may
-proceed against the now qualified and closed #106 source; #110 still requires exact-head review
-and merge before #91 can consume the integrated path. Then #107 is the separate Verified
-Remediation gate, followed by #94 as a SHOULD.
-Optional #90/#108/#109 work starts only after the critical gates are stable.
+Asset Coverage acceptance depends on #103 qualification, #104 support, and #105 end-to-end
+acceptance, but those arrows do not mandate serial engineering: #105 may proceed independently
+when its concrete interfaces/data are available. Evidence Federation is complete through
+#106/#110/#91/#92. #107 remains the separate Verified Remediation gate, #94 is SHOULD, and
+#90/#108/#109 remain optional/outside the critical path.
 
 ## Retained accepted-evidence details
 
@@ -410,16 +420,15 @@ closes them:
 
 ## Next executable action
 
-Current next executable task:
+Current Product gate:
 
 ```text
-#110 — Backend supplementary Trace integration (PR-FS-D)
+#73 — explicit Product Owner acceptance of the merged PR #126 path
 ```
 
-The implementation is currently on `feat/backend-fs-d-trace-integration`. After the working
-tree is committed and reviewed at its exact head, #91 can consume the integrated same-
-transaction Native + Trace path. Do not start #103 before Product P0 #73 reaches its
-prerequisite gate.
+In parallel, #105 may continue its end-to-end Asset Coverage implementation against #103
+`QUALIFIED_REAL` and #104 support. Consult the live Issues for detailed acceptance state; do not
+default to #110 or treat #103 as waiting for #73.
 
 ## 2026-09-28 — #107 verified remediation live feasibility result
 
