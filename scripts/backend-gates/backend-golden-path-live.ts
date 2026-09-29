@@ -30,6 +30,14 @@ const ACCEPTED_SOURCE_SHA256 =
   "85147b852e1e4b514af64241fede641f6a2b6db4f2056f0ab44d04164125cf23";
 const OFFICIAL_RPC = "https://sepolia-rollup.arbitrum.io/rpc";
 const TOKEN_OUT_DECIMALS = 18;
+/**
+ * An explicit re-check must change exactly one supported Intent field. Editing
+ * only the recipient keeps the selected quote, the Expectation Baseline, and the
+ * Economic Boundary unchanged, so the child Run re-checks the same economic
+ * intent with a different prepared recipient. The exercise stays read-only:
+ * nothing is signed, broadcast, or sent to this address.
+ */
+const RECHECK_RECIPIENT = "0x000000000000000000000000000000000000dEaD";
 const SCRIPT_PATH = fileURLToPath(import.meta.url);
 const REPO_ROOT = resolve(dirname(SCRIPT_PATH), "../..");
 const REQUIRED_LIVE_PROVIDER_SCOPES = [
@@ -523,6 +531,7 @@ async function main(): Promise<void> {
     const recheckResponse = await postJson(`${baseUrl}/api/check`, {
       ...request,
       parentRunId: resultId,
+      recipient: RECHECK_RECIPIENT,
     });
     const recheckResult = object(
       recheckResponse.body,
@@ -536,6 +545,25 @@ async function main(): Promise<void> {
       childRunId === resultId
     )
       throw new Error("Explicit re-check did not create a distinct child Run");
+    // The child must be an exactly-one-field Intent re-check, not a duplicate
+    // submission that the API would reject as NOT_EXACTLY_ONE_CHANGE.
+    const recheckDiff = recheckResult.diff;
+    const recheckChangedFields =
+      typeof recheckDiff === "object" &&
+      recheckDiff !== null &&
+      !Array.isArray(recheckDiff) &&
+      Array.isArray((recheckDiff as ObjectValue).changedFields)
+        ? ((recheckDiff as ObjectValue).changedFields as unknown[])
+        : [];
+    const recheckChangedExactlyRecipient =
+      recheckChangedFields.length === 1 &&
+      typeof recheckChangedFields[0] === "object" &&
+      recheckChangedFields[0] !== null &&
+      (recheckChangedFields[0] as ObjectValue).field === "recipient";
+    if (!recheckChangedExactlyRecipient)
+      throw new Error(
+        "Explicit re-check did not record exactly one recipient Intent change",
+      );
     const rpcRequestsBeforeChildGet = rpcRequestCount;
     const childCheckRpcRequests =
       rpcRequestsBeforeChildGet -
@@ -555,6 +583,7 @@ async function main(): Promise<void> {
     const childHistoricalGetRpcRequests =
       rpcRequestCount - rpcRequestsBeforeChildGet;
     const recheckVerified =
+      recheckChangedExactlyRecipient &&
       recheckResult.status === "completed" &&
       recheckResult.parentRunId === resultId &&
       childReadResponse.status === 200 &&
@@ -764,6 +793,12 @@ async function main(): Promise<void> {
           verified: recheckVerified,
           status: recheckResult.status,
           verdict: recheckResult.verdict,
+          changedIntentFields: recheckChangedFields.map((field) =>
+            typeof field === "object" && field !== null
+              ? (field as ObjectValue).field
+              : undefined,
+          ),
+          recipient: RECHECK_RECIPIENT,
           historicalGetRpcRequests: childHistoricalGetRpcRequests,
         },
         responseResultSha256: hash(JSON.stringify(result)),
