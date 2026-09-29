@@ -358,7 +358,7 @@ export function projectNativeRpcBasicSimulation(
     gasEstimate,
   });
   const validityAtExecution =
-    call.status === "REVERTED"
+    call.status === "REVERTED" && blockVerified
       ? "INVALID"
       : input.providerResult.status === "success" &&
           call.status === "SUCCEEDED" &&
@@ -452,7 +452,14 @@ function basicSimulationFailureStage(input: {
   if (
     input.blockNumberField?.status !== "observed" ||
     input.blockHashField?.status !== "observed" ||
-    input.revalidatedBlockField?.status === "invalid"
+    (input.revalidatedBlockField !== undefined &&
+      input.revalidatedBlockField.status !== "observed")
+  ) {
+    return "BLOCK";
+  }
+  if (
+    input.call.status === "REVERTED" &&
+    input.revalidatedBlockField?.status !== "observed"
   ) {
     return "BLOCK";
   }
@@ -479,7 +486,11 @@ function basicSimulationReason(
   bindingInspection: ReturnType<typeof inspectCamelotV3Transaction>,
 ): string | undefined {
   if (!bindingInspection.ok) return "Prepared transaction binding is invalid";
-  if (callStatus === "REVERTED") return "Native RPC eth_call reverted";
+  if (callStatus === "REVERTED") {
+    return stage === "BLOCK"
+      ? "Native RPC eth_call reverted but the pinned block could not be verified throughout evaluation"
+      : "Native RPC eth_call reverted";
+  }
   switch (stage) {
     case "BLOCK":
       return "Pinned execution block could not be verified before and after evaluation";

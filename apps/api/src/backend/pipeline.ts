@@ -446,7 +446,8 @@ export class BackendPipeline<
         error.chainId !== input.chainId ||
         error.operation !== "estimateGas" ||
         (error.code !== "INSUFFICIENT_NATIVE_BALANCE" &&
-          error.code !== "UNAVAILABLE") ||
+          error.code !== "UNAVAILABLE" &&
+          error.code !== "EXECUTION_REVERT") ||
         !provider.routingCapabilities?.includes(
           PROVIDER_OWNED_GAS_ESTIMATE_CAPABILITY,
         )
@@ -454,7 +455,7 @@ export class BackendPipeline<
         throw error;
       }
 
-      // Only a matching, typed balance/RPC-unavailable preflight failure may
+      // Only a matching, typed balance/RPC/revert preflight failure may
       // continue to a Provider that explicitly owns the pinned gas check.
       // This absence is not itself a gas observation; the Provider must still
       // perform and report its authoritative pinned check.

@@ -96,6 +96,7 @@ type Freshness =
 
 type EvaluationState = {
   observedChainId?: string;
+  observedBlockHash?: string;
   callReturnData?: string;
   gasUnits?: string;
   freshness: Freshness;
@@ -336,6 +337,7 @@ export class NativeRpcProvider<Intent extends NativeRpcIntent = NativeRpcIntent>
           "$.result.hash",
         ),
       );
+      state.observedBlockHash = observed.hash;
     } catch (error) {
       const classified = classifyRpcFailure(error);
       state.freshness = {
@@ -361,10 +363,6 @@ export class NativeRpcProvider<Intent extends NativeRpcIntent = NativeRpcIntent>
     try {
       const response = await this.request("eth_call", [transaction, blockTag]);
       if (!isHexData(response)) {
-        state.freshness = {
-          status: "unknown",
-          reason: "invalid eth_call result",
-        };
         state.fields.push(
           invalidCandidate(
             "nativeRpc.ethCall.returnData",
@@ -372,7 +370,15 @@ export class NativeRpcProvider<Intent extends NativeRpcIntent = NativeRpcIntent>
             "eth_call returned a non-hex result",
           ),
         );
-        return this.result(input.runId, "unknown", state);
+        const revalidation = await this.revalidatePinnedBlock(blockTag, state);
+        return this.result(
+          input.runId,
+          revalidation.failure?.status ?? "unknown",
+          state,
+          revalidation.failure === undefined
+            ? {}
+            : { failure: revalidation.failure },
+        );
       }
       callReturnData = response;
       state.callReturnData = response;
@@ -399,9 +405,14 @@ export class NativeRpcProvider<Intent extends NativeRpcIntent = NativeRpcIntent>
             : classified.message,
         ),
       );
-      return this.result(input.runId, classified.status, state, {
-        failure: classified,
-      });
+      const revalidation = await this.revalidatePinnedBlock(blockTag, state);
+      const failure = revalidation.failure ?? classified;
+      return this.result(
+        input.runId,
+        revalidation.failure?.status ?? classified.status,
+        state,
+        { failure },
+      );
     }
 
     let gasUnits: string;
@@ -433,69 +444,29 @@ export class NativeRpcProvider<Intent extends NativeRpcIntent = NativeRpcIntent>
           classified.message,
         ),
       );
-      return this.result(input.runId, classified.status, state, {
-        failure: classified,
-      });
+      const revalidation = await this.revalidatePinnedBlock(blockTag, state);
+      const failure = revalidation.failure ?? classified;
+      return this.result(
+        input.runId,
+        revalidation.failure?.status ?? classified.status,
+        state,
+        { failure },
+      );
     }
 
-    // Re-read the exact pinned block after transaction evaluation. A block
-    // number alone is not enough: the provider may return a different block
-    // hash for the same tag while the request is in flight. The call and gas
-    // facts remain available, but the overall execution becomes UNKNOWN.
-    try {
-      const observed = await this.request("eth_getBlockByNumber", [
-        blockTag,
-        false,
-      ]);
-      if (
-        !isRecord(observed) ||
-        observed.number !== blockTag ||
-        !isBlockHash(observed.hash) ||
-        (input.input.blockContext.blockHash !== undefined &&
-          observed.hash.toLowerCase() !==
-            input.input.blockContext.blockHash.toLowerCase())
-      ) {
-        state.freshness = {
-          status: "unknown",
-          reason: "Pinned block changed during evaluation",
-        };
-        state.fields.push(
-          invalidCandidate(
-            "nativeRpc.revalidatedBlock",
-            "block",
-            "Pinned block changed during evaluation",
-          ),
-        );
-        return this.result(input.runId, "unknown", state);
-      }
-      state.fields.push(
-        candidate(
-          "nativeRpc.revalidatedBlock",
-          "hex_string",
-          "observed",
-          observed.hash,
-          "$.result.hash",
-        ),
+    // Pin verification must bracket both successful and failed calls. Failed
+    // call/gas paths retain their observation only when the same pinned block
+    // is still returned after evaluation.
+    const revalidation = await this.revalidatePinnedBlock(blockTag, state);
+    if (!revalidation.verified) {
+      return this.result(
+        input.runId,
+        revalidation.failure?.status ?? "unknown",
+        state,
+        revalidation.failure === undefined
+          ? {}
+          : { failure: revalidation.failure },
       );
-    } catch (error) {
-      const classified = classifyRpcFailure(error);
-      state.freshness = {
-        status: "unknown",
-        reason: "Pinned block could not be revalidated",
-      };
-      state.fields.push(
-        candidate(
-          "nativeRpc.revalidatedBlock",
-          "block",
-          "missing",
-          undefined,
-          "$.result",
-          classified.message,
-        ),
-      );
-      return this.result(input.runId, classified.status, state, {
-        failure: classified,
-      });
     }
 
     if (this.checkFreshness) {
@@ -630,6 +601,68 @@ export class NativeRpcProvider<Intent extends NativeRpcIntent = NativeRpcIntent>
           (error: unknown) => settle(() => reject(error)),
         );
     });
+  }
+
+  private async revalidatePinnedBlock(
+    blockTag: string,
+    state: EvaluationState,
+  ): Promise<{
+    readonly verified: boolean;
+    readonly failure?: ClassifiedRpcFailure;
+  }> {
+    try {
+      const observed = await this.request("eth_getBlockByNumber", [
+        blockTag,
+        false,
+      ]);
+      if (
+        !isRecord(observed) ||
+        observed.number !== blockTag ||
+        !isBlockHash(observed.hash) ||
+        !isBlockHash(state.observedBlockHash) ||
+        observed.hash.toLowerCase() !== state.observedBlockHash.toLowerCase()
+      ) {
+        state.freshness = {
+          status: "unknown",
+          reason: "Pinned block changed during evaluation",
+        };
+        state.fields.push(
+          invalidCandidate(
+            "nativeRpc.revalidatedBlock",
+            "block",
+            "Pinned block changed during evaluation",
+          ),
+        );
+        return { verified: false };
+      }
+      state.fields.push(
+        candidate(
+          "nativeRpc.revalidatedBlock",
+          "hex_string",
+          "observed",
+          observed.hash,
+          "$.result.hash",
+        ),
+      );
+      return { verified: true };
+    } catch (error) {
+      const failure = classifyRpcFailure(error);
+      state.freshness = {
+        status: "unknown",
+        reason: "Pinned block could not be revalidated",
+      };
+      state.fields.push(
+        candidate(
+          "nativeRpc.revalidatedBlock",
+          "block",
+          "missing",
+          undefined,
+          "$.result",
+          failure.message,
+        ),
+      );
+      return { verified: false, failure };
+    }
   }
 
   private observedAt(): string {

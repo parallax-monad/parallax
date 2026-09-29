@@ -407,6 +407,7 @@ function classifyRpcFailure(
   | "TIMEOUT"
   | "INVALID_REQUEST"
   | "INSUFFICIENT_NATIVE_BALANCE"
+  | "EXECUTION_REVERT"
   | "UNKNOWN" {
   const candidate = error as RpcError | undefined;
   const message = candidate?.message ?? "";
@@ -434,6 +435,13 @@ function classifyRpcFailure(
   }
   if (
     operation === "estimateGas" &&
+    candidate?.rpcCode === 3 &&
+    /execution reverted|revert/i.test(message)
+  ) {
+    return "EXECUTION_REVERT";
+  }
+  if (
+    operation === "estimateGas" &&
     /insufficient funds for gas\s*\*\s*price\s*\+\s*value/i.test(message)
   ) {
     return "INSUFFICIENT_NATIVE_BALANCE";
@@ -442,6 +450,14 @@ function classifyRpcFailure(
 }
 
 function rpcFailureMessage(operation: ChainOperation, error: unknown): string {
+  const candidate = error as RpcError | undefined;
+  if (
+    operation === "estimateGas" &&
+    candidate?.rpcCode === 3 &&
+    /execution reverted|revert/i.test(candidate.message ?? "")
+  ) {
+    return "Arbitrum gas preflight observed an EVM execution revert";
+  }
   const message = error instanceof Error ? error.message : String(error);
   return `Arbitrum ${operation} RPC request failed: ${message}`;
 }

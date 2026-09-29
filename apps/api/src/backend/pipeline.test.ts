@@ -34,8 +34,8 @@ const normalizedIntent = {
 function createPipelineWithGasPreflightFailure(
   error: unknown,
   options: { readonly providerOwnsGasEstimate?: boolean } = {},
+  fixture = fakeBackendFixture(),
 ) {
-  const fixture = fakeBackendFixture();
   const chain = {
     ...createFakeChainAdapter(fixture.chain),
     async estimateGas() {
@@ -74,6 +74,7 @@ function createPipelineWithGasPreflightFailure(
   return {
     pipeline: new BackendPipeline({ runtime }),
     provider,
+    fixture,
   };
 }
 
@@ -309,7 +310,11 @@ describe("BackendPipeline", () => {
     );
   });
 
-  it.each(["INSUFFICIENT_NATIVE_BALANCE", "UNAVAILABLE"] as const)(
+  it.each([
+    "INSUFFICIENT_NATIVE_BALANCE",
+    "UNAVAILABLE",
+    "EXECUTION_REVERT",
+  ] as const)(
     "continues to a provider-owned pinned gas check for %s preflight failures",
     async (code) => {
       const fixture = fakeBackendFixture();
@@ -322,6 +327,7 @@ describe("BackendPipeline", () => {
       const { pipeline, provider } = createPipelineWithGasPreflightFailure(
         error,
         { providerOwnsGasEstimate: true },
+        fixture,
       );
 
       const result = await pipeline.execute({
@@ -337,6 +343,20 @@ describe("BackendPipeline", () => {
       });
       expect(provider.evaluations).toHaveLength(1);
       expect(result.providerResult.status).toBe("success");
+      expect(provider.evaluations[0]?.input).toMatchObject({
+        runId: `gas-preflight-${code}`,
+        intent: normalizedIntent,
+        blockContext: { blockNumber: fixture.chain.blockNumber },
+        quote: fixture.protocol.quote,
+        unsignedTransaction: {
+          kind: "unsigned",
+          payload: fixture.protocol.transaction,
+        },
+        gasEstimate: {
+          status: "UNAVAILABLE",
+          reason: "Chain-level gas preflight was unavailable",
+        },
+      });
     },
   );
 
@@ -416,6 +436,26 @@ describe("BackendPipeline", () => {
       pipeline.execute({
         rawInput: {},
         runId: "gas-preflight-no-provider-capability",
+        chainId: 901,
+        protocol: "kuru",
+      }),
+    ).rejects.toBe(error);
+    expect(provider.evaluations).toHaveLength(0);
+  });
+
+  it("does not hand an execution revert to a Provider without pinned gas ownership", async () => {
+    const error = new ChainAdapterError({
+      chainId: 901,
+      operation: "estimateGas",
+      code: "EXECUTION_REVERT",
+      message: "transaction execution reverted during gas preflight",
+    });
+    const { pipeline, provider } = createPipelineWithGasPreflightFailure(error);
+
+    await expect(
+      pipeline.execute({
+        rawInput: {},
+        runId: "gas-preflight-revert-no-provider-capability",
         chainId: 901,
         protocol: "kuru",
       }),
