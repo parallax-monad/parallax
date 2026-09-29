@@ -1,13 +1,13 @@
 import { runEvidence } from "@/lib/analyze/fixtures";
 import { validateForm } from "@/lib/analyze/form";
-import { ARBITRUM_DEMO_SENDER } from "@/lib/analyze/service";
+import { DEFAULT_SENDER } from "@/lib/analyze/service";
 import type { Protocol } from "@/lib/analyze/types";
 
 /** Fixed read-only identity. No key material exists anywhere in this flow. */
 const displayAddress = (address: string) =>
   `${address.slice(0, 6)}...${address.slice(-4)}`;
-export const DEMO_ADDRESS = displayAddress(ARBITRUM_DEMO_SENDER);
-export const DEMO_RECIPIENT = displayAddress(ARBITRUM_DEMO_SENDER);
+export const DEMO_ADDRESS = displayAddress(DEFAULT_SENDER);
+export const DEMO_RECIPIENT = displayAddress(DEFAULT_SENDER);
 
 /** The demo picks the route for the user, so the swap sheet stays wallet-like. */
 export { DEMO_PROTOCOL, DEMO_SLIPPAGE } from "@/lib/analyze/form";
@@ -21,7 +21,7 @@ export type WalletAsset = {
 };
 
 export const ASSETS: readonly WalletAsset[] = [
-  { symbol: "ETH", name: "Ether", balance: 0, price: 0 },
+  { symbol: "MON", name: "Monad", balance: 1800, price: 0.42 },
   { symbol: "USDC", name: "USD Coin", balance: 500, price: 1 },
 ];
 

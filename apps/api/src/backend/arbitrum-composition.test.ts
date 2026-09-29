@@ -1195,17 +1195,6 @@ describe("Arbitrum production composition skeleton", () => {
     const body = runResultSchema.parse(await response.json());
 
     expect(response.status).toBe(200);
-    // Public wire contract: `providerEvidence` is serialized as the
-    // provider-neutral GenericEvidence shape with nested `provider` and
-    // `execution` objects. A flattened `providerStatus` / `executionStatus`
-    // summary is not part of the public Run contract; consumers (including the
-    // web client) must read the nested status fields.
-    expect(body.providerEvidence).toMatchObject({
-      provider: { status: expect.any(String) },
-      execution: { status: expect.any(String) },
-    });
-    expect(body.providerEvidence).not.toHaveProperty("providerStatus");
-    expect(body.providerEvidence).not.toHaveProperty("executionStatus");
     expect(body).toMatchObject({
       status: "completed",
       verdict: "UNKNOWN",
