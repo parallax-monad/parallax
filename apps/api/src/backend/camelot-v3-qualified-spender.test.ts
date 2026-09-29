@@ -147,6 +147,82 @@ describe("Camelot V3 qualified allowance spender", () => {
     expect(resolver({ intent: nativeIntent })).toBe(undefined);
   });
 
+  it("qualifies only the exact #103 USDC -> WETH pair", () => {
+    const otherChain = 421614;
+    const withPair = (
+      tokenIn: { kind: "erc20"; address: string },
+      tokenOut: { kind: "erc20"; address: string },
+    ) =>
+      normalizedSwapIntentSchema.parse({
+        ...reverseIntent({ chainId: otherChain }),
+        tokenIn,
+        tokenOut,
+      });
+    const arbitrary = "0x0000000000000000000000000000000000000abc";
+
+    // Swapping the qualified legs must not inherit the USDC -> WETH evidence.
+    expect(
+      resolver({
+        intent: withPair(
+          { kind: "erc20", address: weth },
+          { kind: "erc20", address: usdc },
+        ),
+      }),
+    ).toBe(undefined);
+    // An arbitrary ERC-20 input must not inherit it either.
+    expect(
+      resolver({
+        intent: withPair(
+          { kind: "erc20", address: arbitrary },
+          { kind: "erc20", address: weth },
+        ),
+      }),
+    ).toBe(undefined);
+    // Nor may an arbitrary output.
+    expect(
+      resolver({
+        intent: withPair(
+          { kind: "erc20", address: usdc },
+          { kind: "erc20", address: arbitrary },
+        ),
+      }),
+    ).toBe(undefined);
+    // The qualified pair itself still qualifies.
+    expect(
+      resolver({
+        intent: withPair(
+          { kind: "erc20", address: usdc },
+          { kind: "erc20", address: weth },
+        ),
+      }),
+    ).toMatchObject({
+      address: CAMELOT_V3_ROUTER_ADDRESS,
+      qualificationRef: CAMELOT_V3_ALLOWANCE_SPENDER_QUALIFICATION_REF,
+    });
+  });
+
+  it("leaves an unqualified pair's allowance SPENDER_NOT_QUALIFIED through the real reader", async () => {
+    const reader = new ArbitrumAccountStateReader({
+      client: createRpcClient({ allowanceAtomic: "1000000000000000" }),
+      tokenRegistry,
+      resolveQualifiedSpender: resolver,
+    });
+
+    const observation = await reader.readAccountState({
+      intent: normalizedSwapIntentSchema.parse({
+        ...reverseIntent(),
+        tokenIn: { kind: "erc20", address: weth },
+        tokenOut: { kind: "erc20", address: usdc },
+      }),
+    });
+
+    expect(observation.allowance).toMatchObject({
+      status: "UNAVAILABLE",
+      reason: "SPENDER_NOT_QUALIFIED",
+      spender: { status: "UNAVAILABLE", reason: "SPENDER_NOT_QUALIFIED" },
+    });
+  });
+
   it("reads a real ERC-20 allowance for the reverse path instead of SPENDER_NOT_QUALIFIED", async () => {
     const reader = new ArbitrumAccountStateReader({
       client: createRpcClient({ allowanceAtomic: "1000000000000000" }),

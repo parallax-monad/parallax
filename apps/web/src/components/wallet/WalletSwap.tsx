@@ -221,9 +221,37 @@ export function WalletSwap({
   const flagFor = (key: FieldFlag["field"]) =>
     flags.find((flag) => flag.field === key);
 
-  // Only a recorded demo balance may drive the balance line or "Use max": an
-  // asset this wallet has no demo balance for is unknown, not zero.
-  const balance = knownBalanceOf(form.tokenIn);
+  // The real Arbitrum/Camelot path has exactly one balance source: the checked
+  // account state. The demo wallet table is historical Monad fixture data (its
+  // USDC entry is 500) and must never be shown or spent as a real balance.
+  const realArbitrumPath = form.protocol === "camelot-v3";
+  const accountInputToken =
+    accountState?.status === "available"
+      ? accountState.view.inputToken
+      : undefined;
+  const trustedBalanceAtomic =
+    accountInputToken?.status === "AVAILABLE"
+      ? accountInputToken.amountAtomic
+      : undefined;
+  const trustedBalanceDecimals = accountInputToken?.decimals;
+  // Exact string conversion only: routing the atomic amount through a JS Number
+  // would lose precision on 18-decimal balances.
+  const trustedBalance =
+    trustedBalanceAtomic !== undefined && trustedBalanceDecimals !== undefined
+      ? atomicToDisplay(trustedBalanceAtomic, trustedBalanceDecimals)
+      : undefined;
+  const demoBalance = realArbitrumPath
+    ? undefined
+    : knownBalanceOf(form.tokenIn);
+  const balanceLabel =
+    trustedBalance ??
+    (demoBalance === undefined ? undefined : formatAmount(demoBalance));
+  const maxAmount =
+    trustedBalance ??
+    (demoBalance === undefined ? undefined : String(demoBalance));
+  const canUseMax = realArbitrumPath
+    ? trustedBalanceAtomic !== undefined && BigInt(trustedBalanceAtomic) > 0n
+    : demoBalance !== undefined && demoBalance > 0;
   const receiveOptions = SUPPORTED_TOKENS_OUT.includes(form.tokenOut)
     ? SUPPORTED_TOKENS_OUT
     : [form.tokenOut, ...SUPPORTED_TOKENS_OUT];
@@ -248,9 +276,9 @@ export function WalletSwap({
           </span>
           <span className="text-[12px] text-dim">
             {say(language, { en: "Balance", zh: "余额" })}{" "}
-            {balance === undefined
+            {balanceLabel === undefined
               ? say(language, { en: "unknown", zh: "未知" })
-              : formatAmount(balance)}
+              : balanceLabel}
           </span>
         </div>
         <div className="mt-3 flex items-center gap-3">
@@ -288,9 +316,10 @@ export function WalletSwap({
         <button
           type="button"
           className="mt-1 text-[12px] font-bold uppercase tracking-[0.08em] text-monad-dim disabled:cursor-not-allowed disabled:opacity-50"
-          disabled={balance === undefined || balance <= 0}
+          disabled={!canUseMax || maxAmount === undefined}
           onClick={() => {
-            if (balance !== undefined) set("amountIn", String(balance));
+            // Writes the exact trusted decimal string, never a rounded Number.
+            if (maxAmount !== undefined) set("amountIn", maxAmount);
           }}
         >
           {say(language, { en: "Use max", zh: "使用全部" })}

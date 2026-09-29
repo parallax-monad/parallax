@@ -4,6 +4,10 @@ import type {
   QualifiedAllowanceSpenderResolver,
 } from "./arbitrum-account-state-reader.js";
 import { CAMELOT_V3_ROUTER_ADDRESS } from "./camelot-v3-binding.js";
+import {
+  CAMELOT_SEPOLIA_USDC,
+  CAMELOT_SEPOLIA_WETH,
+} from "./camelot-v3-protocol-adapter.js";
 
 const CAMELOT_V3_PROTOCOL_ID = "camelot-v3";
 const ARBITRUM_SEPOLIA_CHAIN_ID = 421614;
@@ -28,7 +32,9 @@ export const CAMELOT_V3_ALLOWANCE_SPENDER_QUALIFICATION_REF =
  * transaction therefore cannot disagree about the approved spender: there is a
  * single address constant behind both.
  *
- * Any other protocol or chain fails closed by returning `undefined`, which the
+ * The qualification is deliberately narrow. The #103 evidence observed exactly
+ * one pair on one chain, so only that pair inherits the reference. Any other
+ * protocol, chain, pair, or native input returns `undefined`, which the
  * account-state reader reports as an explicit `SPENDER_NOT_QUALIFIED`
  * unavailability rather than an assumed approval.
  */
@@ -42,9 +48,21 @@ function resolveCamelotV3QualifiedSpender(
 ): QualifiedAllowanceSpender | undefined {
   if (intent.protocol !== CAMELOT_V3_PROTOCOL_ID) return undefined;
   if (intent.chainId !== ARBITRUM_SEPOLIA_CHAIN_ID) return undefined;
-  // ERC-20 inputs are the only ones that need an approval spender; a native
-  // input is reported as NOT_APPLICABLE by the reader without this resolver.
-  if (intent.tokenIn.kind !== "erc20") return undefined;
+  // Both legs must be the qualified ERC-20 pair; a native leg is reported as
+  // NOT_APPLICABLE by the reader without this resolver.
+  if (intent.tokenIn.kind !== "erc20" || intent.tokenOut.kind !== "erc20") {
+    return undefined;
+  }
+  if (
+    intent.tokenIn.address.toLowerCase() !== CAMELOT_SEPOLIA_USDC.toLowerCase()
+  ) {
+    return undefined;
+  }
+  if (
+    intent.tokenOut.address.toLowerCase() !== CAMELOT_SEPOLIA_WETH.toLowerCase()
+  ) {
+    return undefined;
+  }
   return {
     address: CAMELOT_V3_ROUTER_ADDRESS,
     qualificationRef: CAMELOT_V3_ALLOWANCE_SPENDER_QUALIFICATION_REF,
