@@ -56,7 +56,6 @@ export type QuoteSwapInput = {
 export type QuotePreview = {
   estimatedAmountOut: string;
   minimumAmountOut?: string;
-  source: "quote";
   blockNumber: string;
   fetchedAt?: string;
   runtimeVersion: string;
@@ -66,7 +65,7 @@ export type QuotePreview = {
 export type QuoteState =
   | { status: "idle" }
   | { status: "loading" }
-  | { status: "available"; quote: QuotePreview; request?: QuoteSwapInput }
+  | { status: "available"; quote: QuotePreview }
   | { status: "unavailable"; reason: "NO_ROUTE" | "QUOTE_UNAVAILABLE" }
   | { status: "error"; apiFailure: ApiFailure };
 
@@ -154,8 +153,6 @@ export type RunRecovery =
 export type CheckSwapResult = {
   runId: string;
   parentRunId?: string;
-  chainId?: number;
-  protocol?: Protocol;
   systemStatus: SystemStatus;
   verdict: Verdict;
   summary: Copy;
@@ -168,36 +165,6 @@ export type CheckSwapResult = {
   unknowns: UnknownItem[];
   evidenceCoverage?: EvidenceCoverage[];
   evidenceCoverageNotice?: Copy;
-  providerStatus?: "SUCCESS" | "UNKNOWN" | "UNSUPPORTED" | "FAILED" | "STALE";
-  executionStatus?: "SUCCESS" | "NO_ROUTE" | "REVERTED" | "UNKNOWN";
-  basicSimulation?: {
-    call: "SUCCEEDED" | "REVERTED" | "UNAVAILABLE" | "NOT_RUN";
-    gasEstimate: "AVAILABLE" | "UNAVAILABLE" | "NOT_RUN";
-    gasUnits?: string;
-    blockNumber: string;
-    observedAt: string;
-    validityAtExecution: "VALID" | "INVALID" | "UNKNOWN";
-    preparedTransactionFingerprint: string;
-    transactionBound: boolean;
-    sender?: string;
-    router?: string;
-    failureStage?: string;
-    reason?: string;
-  };
-  evidenceState?:
-    | "VERIFIED"
-    | "INCOMPLETE"
-    | "UNAVAILABLE"
-    | "STALE"
-    | "UNVERIFIED";
-  expectationBaselineStatus?: "AVAILABLE" | "MISSING";
-  quoteFidelityStatus?: "VERIFIED" | "UNKNOWN";
-  remediationStatus?:
-    | "NOT_RUN"
-    | "UNVERIFIED"
-    | "NO_VALID_CANDIDATE"
-    | "UNKNOWN"
-    | "VERIFIED";
   intent: IntentSummary;
   diff?: RunDiff;
   quote: { expectedOutput: string; route: Copy; blockNumber: string };

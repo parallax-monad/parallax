@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { EvidenceCoverageCard } from "@/components/analyze/EvidenceCoverageCard";
 import { ExecutionEconomicsCard } from "@/components/analyze/ExecutionEconomicsCard";
-import { P0ExecutionCard } from "@/components/analyze/P0ExecutionCard";
 import { QuoteFidelityCard } from "@/components/analyze/QuoteFidelityCard";
 import { VerdictIcon } from "@/components/analyze/StatusIcon";
 import { TokenIcon } from "@/components/analyze/TokenIcon";
@@ -315,8 +314,6 @@ export function ResultStep({
         notice={result.evidenceCoverageNotice}
         sources={result.evidenceCoverage}
       />
-
-      <P0ExecutionCard language={language} result={result} />
 
       <section className="rounded-[12px] border border-line bg-ink-elev2/30 p-3">
         <p className="m-0 text-[13px] leading-[1.6] text-dim">
