@@ -7,7 +7,7 @@ import {
   formatAmount,
 } from "@/components/wallet/walletData";
 import type { FieldFlag } from "@/lib/analyze/fields";
-import { receiveTokenFor, SUPPORTED_TOKENS_IN } from "@/lib/analyze/fixtures";
+import { receiveTokenFor } from "@/lib/analyze/fixtures";
 import type { FormFieldErrors, FormState } from "@/lib/analyze/form";
 import type { QuoteState } from "@/lib/analyze/types";
 import { type Copy, type Language, say } from "@/lib/i18n";
@@ -133,10 +133,12 @@ export function WalletSwap({
           <span className="text-[12px] font-bold uppercase tracking-[0.08em] text-dim">
             {say(language, { en: "You pay", zh: "你支付" })}
           </span>
-          <span className="text-[12px] text-dim">
-            {say(language, { en: "Balance", zh: "余额" })}{" "}
-            {formatAmount(balance)}
-          </span>
+          {form.protocol !== "camelot-v3" && (
+            <span className="text-[12px] text-dim">
+              {say(language, { en: "Balance", zh: "余额" })}{" "}
+              {formatAmount(balance)}
+            </span>
+          )}
         </div>
         <div className="mt-3 flex items-center gap-3">
           <input
@@ -159,7 +161,7 @@ export function WalletSwap({
           />
           <TokenSelect
             language={language}
-            options={SUPPORTED_TOKENS_IN}
+            options={["ETH"]}
             value={form.tokenIn}
             onSelect={(value) =>
               onChange({
@@ -170,13 +172,15 @@ export function WalletSwap({
             }
           />
         </div>
-        <button
-          type="button"
-          className="mt-1 text-[12px] font-bold uppercase tracking-[0.08em] text-monad-dim"
-          onClick={() => set("amountIn", String(balance))}
-        >
-          {say(language, { en: "Use max", zh: "使用全部" })}
-        </button>
+        {form.protocol !== "camelot-v3" && (
+          <button
+            type="button"
+            className="mt-1 text-[12px] font-bold uppercase tracking-[0.08em] text-monad-dim"
+            onClick={() => set("amountIn", String(balance))}
+          >
+            {say(language, { en: "Use max", zh: "使用全部" })}
+          </button>
+        )}
         {amountError && (
           <p
             id="swap-amount-error"
@@ -405,8 +409,14 @@ export function WalletSwap({
               </span>
               <span className="field-control text-white">
                 {say(language, {
-                  en: "Kuru (live API)",
-                  zh: "Kuru（实时 API）",
+                  en:
+                    form.protocol === "camelot-v3"
+                      ? "Camelot V3 (live API)"
+                      : "Kuru (live API)",
+                  zh:
+                    form.protocol === "camelot-v3"
+                      ? "Camelot V3（实时 API）"
+                      : "Kuru（实时 API）",
                 })}
               </span>
               {flagFor("protocol") && (

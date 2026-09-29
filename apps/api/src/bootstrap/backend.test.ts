@@ -6,6 +6,7 @@ import type { ServerType } from "@hono/node-server";
 import type { KuruLiveRunner } from "@parallax/orchestrator/agent-flow";
 import { Pool } from "pg";
 import { describe, expect, it, vi } from "vitest";
+import { CAMELOT_SEPOLIA_USDC } from "../backend/camelot-v3-protocol-adapter.js";
 import type { BackendCompositionRuntime } from "../backend/composition.js";
 import { createTraceRpcEvidenceSource } from "../backend/trace-rpc-evidence-source.js";
 import { bootstrapBackendRuntime } from "../runtime-config.js";
@@ -53,6 +54,53 @@ function checkRequest() {
 }
 
 describe("backend Node runtime", () => {
+  it("projects trusted P0 metadata without invoking an RPC or Agent Flow", async () => {
+    const check = vi.fn();
+    const quote = vi.fn();
+    const runtime = bootstrapBackendRuntime({
+      environment,
+      tokenRegistry: {
+        chains: [
+          ...tokenRegistry.chains,
+          { chainId: 421614, symbol: "ETH", decimals: 18 },
+        ],
+        tokens: [
+          ...tokenRegistry.tokens,
+          {
+            chainId: 421614,
+            address: CAMELOT_SEPOLIA_USDC,
+            symbol: "USDC",
+            decimals: 18,
+            decimalsSource: "onchain_verified" as const,
+            verifiedAtBlock: "310131879",
+          },
+        ],
+      },
+    });
+    const app = createBackendApp({
+      runtime,
+      agentFlow: { check },
+      quoteFlow: { quote },
+    });
+    const response = await app.fetch(
+      new Request("https://api.example.test/api/p0/metadata"),
+    );
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      chainId: 421614,
+      protocol: "camelot-v3",
+      tokenIn: { symbol: "ETH", decimals: 18 },
+      tokenOut: {
+        asset: { kind: "erc20", address: CAMELOT_SEPOLIA_USDC },
+        symbol: "USDC",
+        decimals: 18,
+        decimalsSource: "onchain_verified",
+      },
+    });
+    expect(check).not.toHaveBeenCalled();
+    expect(quote).not.toHaveBeenCalled();
+  });
+
   it("rejects a Trace source that would be silently ignored by a supplied composition", () => {
     const source = createTraceRpcEvidenceSource({
       client: { request: async () => undefined },

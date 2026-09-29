@@ -119,7 +119,7 @@ describe("WalletApp persisted Run recovery", () => {
     expect(container.textContent).toContain("Live check");
 
     const reviewInputs = Array.from(container.querySelectorAll("button")).find(
-      (button) => button.textContent?.includes("Review swap inputs"),
+      (button) => button.textContent?.includes("Edit and re-check"),
     );
     expect(reviewInputs).toBeDefined();
 

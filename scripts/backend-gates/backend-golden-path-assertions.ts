@@ -7,12 +7,18 @@ export type GoldenPathAssertionInput = {
   readonly httpStatus: number;
   readonly runStatus: "completed" | "failed" | "started" | undefined;
   readonly persistedRunRoundTrip: boolean;
+  readonly historicalReadNoRpc: boolean;
+  readonly explicitRecheckVerified: boolean;
   /** Public `basicSimulation.call` must independently prove eth_call ran. */
   readonly basicSimulationCallVerified: boolean;
   /** The prepared transaction identity must match this canonical request. */
   readonly basicSimulationMatchesRequest: boolean;
   /** The execution facts returned first must survive the public Run read. */
   readonly basicSimulationRoundTrip: boolean;
+  /** Raw public facts, independently checked for execution validity and pin binding. */
+  readonly basicSimulation: unknown;
+  readonly simulatorPinnedBlock: unknown;
+  readonly simulatorPinnedBlockHash?: unknown;
   readonly baselineStatus: "AVAILABLE" | "MISSING" | undefined;
   readonly baselineIdentityMatches: boolean;
   readonly providerEvidenceReachedP0Risk: boolean;
@@ -76,78 +82,164 @@ export function summarizeBasicSimulation(
   value: unknown,
 ): BasicSimulationSummary | undefined {
   if (value === undefined) return undefined;
-  const simulation = asObject(value, "Public basicSimulation");
-  const call = asObject(simulation.call, "basicSimulation.call");
-  const gasEstimate = asObject(
-    simulation.gasEstimate,
-    "basicSimulation.gasEstimate",
-  );
-  const binding =
-    simulation.transactionBinding === undefined
-      ? undefined
-      : asObject(
-          simulation.transactionBinding,
-          "basicSimulation.transactionBinding",
-        );
-  const bindingKeys = [
-    "chainId",
-    "protocol",
-    "sender",
-    "recipient",
-    "tokenIn",
-    "tokenOut",
-    "amountInAtomic",
-    "amountOutMinimumAtomic",
-    "router",
-    "from",
-    "to",
-    "value",
-    "dataFingerprint",
-  ] as const;
-  const transactionBinding =
-    binding === undefined
-      ? undefined
-      : Object.fromEntries(
-          bindingKeys.flatMap((key) =>
-            typeof binding[key] === "string" || typeof binding[key] === "number"
-              ? [[key, binding[key]]]
-              : [],
-          ),
-        );
+  try {
+    const simulation = asObject(value, "Public basicSimulation");
+    const call = asObject(simulation.call, "basicSimulation.call");
+    const gasEstimate = asObject(
+      simulation.gasEstimate,
+      "basicSimulation.gasEstimate",
+    );
+    const binding =
+      simulation.transactionBinding === undefined
+        ? undefined
+        : asObject(
+            simulation.transactionBinding,
+            "basicSimulation.transactionBinding",
+          );
+    const bindingKeys = [
+      "chainId",
+      "protocol",
+      "sender",
+      "recipient",
+      "tokenIn",
+      "tokenOut",
+      "amountInAtomic",
+      "amountOutMinimumAtomic",
+      "router",
+      "from",
+      "to",
+      "value",
+      "dataFingerprint",
+    ] as const;
+    const transactionBinding =
+      binding === undefined
+        ? undefined
+        : Object.fromEntries(
+            bindingKeys.flatMap((key) =>
+              typeof binding[key] === "string" ||
+              typeof binding[key] === "number"
+                ? [[key, binding[key]]]
+                : [],
+            ),
+          );
 
-  return p0BasicSimulationSchema.parse({
-    call: {
-      status: call.status,
-      ...(typeof call.returnDataFingerprint === "string"
-        ? { returnDataFingerprint: call.returnDataFingerprint }
+    const parsed = p0BasicSimulationSchema.safeParse({
+      call: {
+        status: call.status,
+        ...(typeof call.returnDataFingerprint === "string"
+          ? { returnDataFingerprint: call.returnDataFingerprint }
+          : {}),
+      },
+      gasEstimate: {
+        status: gasEstimate.status,
+        ...(typeof gasEstimate.gasUnits === "string"
+          ? { gasUnits: gasEstimate.gasUnits }
+          : {}),
+      },
+      blockNumber: simulation.blockNumber,
+      ...(typeof simulation.blockHash === "string"
+        ? { blockHash: simulation.blockHash }
         : {}),
-    },
-    gasEstimate: {
-      status: gasEstimate.status,
-      ...(typeof gasEstimate.gasUnits === "string"
-        ? { gasUnits: gasEstimate.gasUnits }
+      observedAt: simulation.observedAt,
+      validityAtExecution: simulation.validityAtExecution,
+      preparedTransactionFingerprint: simulation.preparedTransactionFingerprint,
+      ...(transactionBinding === undefined ? {} : { transactionBinding }),
+      ...(typeof simulation.failureStage === "string"
+        ? { failureStage: simulation.failureStage }
         : {}),
-    },
-    blockNumber: simulation.blockNumber,
-    ...(typeof simulation.blockHash === "string"
-      ? { blockHash: simulation.blockHash }
-      : {}),
-    observedAt: simulation.observedAt,
-    validityAtExecution: simulation.validityAtExecution,
-    preparedTransactionFingerprint: simulation.preparedTransactionFingerprint,
-    ...(transactionBinding === undefined ? {} : { transactionBinding }),
-    ...(typeof simulation.failureStage === "string"
-      ? { failureStage: simulation.failureStage }
-      : {}),
-    ...(typeof simulation.reason === "string"
-      ? { reason: simulation.reason }
-      : {}),
-    uncheckedCapabilities: Array.isArray(simulation.uncheckedCapabilities)
-      ? simulation.uncheckedCapabilities.filter(
-          (capability): capability is string => typeof capability === "string",
-        )
-      : [],
+      ...(typeof simulation.reason === "string"
+        ? { reason: simulation.reason }
+        : {}),
+      uncheckedCapabilities: Array.isArray(simulation.uncheckedCapabilities)
+        ? simulation.uncheckedCapabilities.filter(
+            (capability): capability is string =>
+              typeof capability === "string",
+          )
+        : [],
+    });
+    return parsed.success ? parsed.data : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+export type ExecutionBinding = {
+  readonly verified: boolean;
+  readonly level: "HASH" | "NUMBER" | "NONE";
+  readonly gap?:
+    | "SIMULATION_MISSING"
+    | "SIMULATION_MALFORMED"
+    | "VALIDITY_NOT_VALID"
+    | "EXECUTION_BLOCK_MISSING"
+    | "EXECUTION_BLOCK_MALFORMED"
+    | "PINNED_BLOCK_MALFORMED"
+    | "BLOCK_NUMBER_MISMATCH"
+    | "EXECUTION_HASH_MISSING"
+    | "EXECUTION_HASH_MALFORMED"
+    | "PINNED_HASH_MALFORMED"
+    | "PINNED_HASH_MISMATCH"
+    | "TRANSACTION_BINDING_MISSING";
+};
+
+const canonicalBlock = /^(0|[1-9][0-9]*)$/;
+const blockHash = /^0x[0-9a-f]{64}$/i;
+
+/** COMPLETE requires valid execution facts at the exact simulator pinned block. */
+export function evaluateExecutionBinding(
+  value: unknown,
+  pinnedBlock: unknown,
+  pinnedHash?: unknown,
+): ExecutionBinding {
+  const gap = (
+    reason: NonNullable<ExecutionBinding["gap"]>,
+  ): ExecutionBinding => ({
+    verified: false,
+    level: "NONE",
+    gap: reason,
   });
+  if (value === undefined) return gap("SIMULATION_MISSING");
+  if (typeof value !== "object" || value === null || Array.isArray(value))
+    return gap("SIMULATION_MALFORMED");
+  const simulation = value as Record<string, unknown>;
+  if (simulation.validityAtExecution !== "VALID") {
+    if (
+      simulation.validityAtExecution === "UNKNOWN" ||
+      simulation.validityAtExecution === "INVALID"
+    )
+      return gap("VALIDITY_NOT_VALID");
+    return gap("SIMULATION_MALFORMED");
+  }
+  if (simulation.blockNumber === undefined)
+    return gap("EXECUTION_BLOCK_MISSING");
+  if (
+    typeof simulation.blockNumber !== "string" ||
+    !canonicalBlock.test(simulation.blockNumber)
+  )
+    return gap("EXECUTION_BLOCK_MALFORMED");
+  if (typeof pinnedBlock !== "string" || !canonicalBlock.test(pinnedBlock))
+    return gap("PINNED_BLOCK_MALFORMED");
+  if (simulation.blockNumber !== pinnedBlock)
+    return gap("BLOCK_NUMBER_MISMATCH");
+  if (simulation.blockHash === undefined) return gap("EXECUTION_HASH_MISSING");
+  if (
+    typeof simulation.blockHash !== "string" ||
+    !blockHash.test(simulation.blockHash)
+  )
+    return gap("EXECUTION_HASH_MALFORMED");
+  if (simulation.transactionBinding === undefined)
+    return gap("TRANSACTION_BINDING_MISSING");
+  if (pinnedHash !== undefined && pinnedHash !== null) {
+    if (typeof pinnedHash !== "string" || !blockHash.test(pinnedHash))
+      return gap("PINNED_HASH_MALFORMED");
+    if (simulation.blockHash.toLowerCase() !== pinnedHash.toLowerCase())
+      return gap("PINNED_HASH_MISMATCH");
+  }
+  if (!p0BasicSimulationSchema.safeParse(value).success)
+    return gap("SIMULATION_MALFORMED");
+  return {
+    verified: true,
+    level: pinnedHash === undefined || pinnedHash === null ? "NUMBER" : "HASH",
+  };
 }
 
 /** Require observed call output plus its block and prepared-transaction identity. */
@@ -212,6 +304,7 @@ export type GoldenPathAssertionResult = {
     | "EXERCISE_COMPLETE_REVIEW_REQUIRED"
     | "NOT_PASS_INTEGRATION_OR_ACCEPTANCE_GAP";
   readonly expectedFailClosedUnknown: boolean;
+  readonly executionBinding: ExecutionBinding;
   readonly remediation: {
     readonly configured: boolean;
     readonly status: GoldenPathAssertionInput["remediationStatus"];
@@ -234,13 +327,21 @@ export type GoldenPathAssertionResult = {
 export function evaluateBackendGoldenPathAssertions(
   input: GoldenPathAssertionInput,
 ): GoldenPathAssertionResult {
+  const executionBinding = evaluateExecutionBinding(
+    input.basicSimulation,
+    input.simulatorPinnedBlock,
+    input.simulatorPinnedBlockHash,
+  );
   const integrationComplete =
     input.httpStatus === 200 &&
     input.runStatus === "completed" &&
     input.persistedRunRoundTrip &&
+    input.historicalReadNoRpc &&
+    input.explicitRecheckVerified &&
     input.basicSimulationCallVerified &&
     input.basicSimulationMatchesRequest &&
     input.basicSimulationRoundTrip &&
+    executionBinding.verified &&
     input.baselineStatus === "AVAILABLE" &&
     input.baselineIdentityMatches &&
     input.providerEvidenceReachedP0Risk &&
@@ -272,6 +373,7 @@ export function evaluateBackendGoldenPathAssertions(
       ? "EXERCISE_COMPLETE_REVIEW_REQUIRED"
       : "NOT_PASS_INTEGRATION_OR_ACCEPTANCE_GAP",
     expectedFailClosedUnknown,
+    executionBinding,
     remediation: {
       configured: input.remediationConfigured,
       status: input.remediationStatus,
