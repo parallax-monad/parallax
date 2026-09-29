@@ -1,9 +1,18 @@
 import type { Copy } from "@/lib/i18n";
-import { getChainIdForProtocol } from "./api-helpers";
+import {
+  ARBITRUM_SEPOLIA_CHAIN_ID,
+  getChainIdForProtocol,
+} from "./api-helpers";
 import { evidenceCoverage } from "./evidence-coverage";
 import { type FormState, INITIAL_FORM, validateForm } from "./form";
 import type {
+  AccountAllowance,
+  AccountBlockBinding,
+  AccountStateState,
+  AccountStateView,
+  AccountTokenBalance,
   ActionSuggestion,
+  AllowanceSpender,
   ApiFailure,
   ApiFailureIssue,
   CheckSwapInput,
@@ -22,6 +31,9 @@ export const DEFAULT_SENDER = "0x1111111111111111111111111111111111111111";
 export const MONAD_USDC_ADDRESS = "0x754704Bc059F8C67012fEd69BC8A327a5aafb603";
 export const ARBITRUM_SEPOLIA_USDC_ADDRESS =
   "0xb893E3334D4Bd6C5ba8277Fd559e99Ed683A9FC7";
+/** Canonical WETH on Arbitrum Sepolia, the reverse leg of the qualified pair. */
+export const ARBITRUM_SEPOLIA_WETH_ADDRESS =
+  "0x980B62Da83eFf3D4576C647993b0c1D7faf17c73";
 const API_BASE = "";
 const cp = (value: string) => ({ en: value, zh: value });
 const obj = (value: unknown): Record<string, unknown> | undefined =>
@@ -35,7 +47,7 @@ const unavailable = cp("unavailable");
 function symbol(value: unknown, chainId = 143): string {
   const asset = obj(value);
   if (asset?.kind === "native") {
-    return chainId === 421614 ? "ETH" : "MON";
+    return chainId === ARBITRUM_SEPOLIA_CHAIN_ID ? "ETH" : "MON";
   }
   const address = str(asset?.address)?.toLowerCase();
   if (
@@ -43,6 +55,7 @@ function symbol(value: unknown, chainId = 143): string {
     address === ARBITRUM_SEPOLIA_USDC_ADDRESS.toLowerCase()
   )
     return "USDC";
+  if (address === ARBITRUM_SEPOLIA_WETH_ADDRESS.toLowerCase()) return "WETH";
   return address ? `${address.slice(0, 6)}…${address.slice(-4)}` : "unknown";
 }
 
@@ -52,15 +65,28 @@ function asset(value: string, chainId: number) {
     return {
       kind: "erc20",
       address:
-        chainId === 421614 ? ARBITRUM_SEPOLIA_USDC_ADDRESS : MONAD_USDC_ADDRESS,
+        chainId === ARBITRUM_SEPOLIA_CHAIN_ID
+          ? ARBITRUM_SEPOLIA_USDC_ADDRESS
+          : MONAD_USDC_ADDRESS,
     };
+  }
+  if (value === "WETH") {
+    // WETH exists only on the Arbitrum Sepolia leg; mapping it on Monad would
+    // silently point the intent at a foreign chain's token.
+    if (chainId !== ARBITRUM_SEPOLIA_CHAIN_ID)
+      throw new Error(`Unsupported token: WETH on chain ${chainId}`);
+    return { kind: "erc20", address: ARBITRUM_SEPOLIA_WETH_ADDRESS };
   }
   throw new Error(`Unsupported token: ${value}`);
 }
 
-function decimal(value: unknown, decimals: number): string {
+function decimal(value: unknown, decimals: number | undefined): string {
   const atomic = str(value);
   if (!atomic || !/^\d+$/.test(atomic)) return "unavailable";
+  // Without trusted decimals the atomic integer is shown verbatim. Guessing a
+  // scale is how the Arbitrum Sepolia test USDC (18 decimals) would be shown
+  // 10^12 too small.
+  if (decimals === undefined) return atomic;
   const padded = atomic.padStart(decimals + 1, "0");
   const fraction = padded.slice(-decimals).replace(/0+$/, "");
   return `${padded.slice(0, -decimals)}${fraction ? `.${fraction}` : ""}`;
@@ -99,16 +125,47 @@ const ACTION_REASON: Record<string, Copy> = {
   },
 };
 
-/** Registry decimals for the P0 pair, so atomic values never reach a screen. */
+/**
+ * Monad P0 registry, kept only as a last-resort fallback for the Monad path.
+ * Arbitrum Sepolia is trusted-only: its test USDC publishes 18 decimals, so the
+ * 6-decimal USDC entry below must never be applied on that chain.
+ */
 const DECIMALS: Record<string, number> = { MON: 18, USDC: 6 };
-const decimalsFor = (symbol: string) => DECIMALS[symbol] ?? 18;
+
+/** Resolves the fallback scale for a symbol on a chain; undefined means unknown. */
+function fallbackDecimals(symbol: string, chainId: number): number | undefined {
+  if (chainId === ARBITRUM_SEPOLIA_CHAIN_ID) {
+    return symbol === "ETH" ? 18 : undefined;
+  }
+  return DECIMALS[symbol] ?? 18;
+}
+
+export type DecimalsResolver = (symbol: string) => number | undefined;
+
+/**
+ * Converts an atomic integer for display using trusted decimals. With no
+ * trusted value the atomic integer is returned verbatim with an explicit marker
+ * so no screen implies a scale the Backend did not publish.
+ */
+export function atomicToDisplay(
+  amountAtomic: string,
+  decimals: number | undefined,
+): string {
+  if (decimals === undefined) return `${amountAtomic} (atomic)`;
+  return decimal(amountAtomic, decimals);
+}
 
 /**
  * Converts an atomic `proposedChange` into display units. The handoff requires
  * rendering human copy from the Intent plus token registry rather than showing
  * atomic strings or reverse-engineering Diff values.
  */
-function displayChange(value: unknown, field: string, unit: string) {
+function displayChange(
+  value: unknown,
+  field: string,
+  unit: string,
+  decimalsForToken: DecimalsResolver,
+) {
   const change = obj(value);
   const before = str(change?.before);
   const after = str(change?.after);
@@ -118,9 +175,10 @@ function displayChange(value: unknown, field: string, unit: string) {
   const isAmount = field === "amountIn" || field === "minimumReceived";
   if (!isAmount) return { before, after, unit: "" };
 
+  const decimals = decimalsForToken(unit);
   return {
-    before: decimal(before, decimalsFor(unit)),
-    after: decimal(after, decimalsFor(unit)),
+    before: decimal(before, decimals),
+    after: decimal(after, decimals),
     unit,
   };
 }
@@ -129,6 +187,7 @@ function suggestion(
   value: unknown,
   tokenIn: string,
   tokenOut: string,
+  decimalsForToken: DecimalsResolver,
 ): ActionSuggestion | undefined {
   const evaluation = obj(value);
   const action = obj(evaluation?.action);
@@ -155,7 +214,12 @@ function suggestion(
     reason:
       ACTION_REASON[reasonCode ?? ""] ??
       cp("This action carries no recognized reason code."),
-    proposedChange: displayChange(evaluation?.proposedChange, field, unit),
+    proposedChange: displayChange(
+      evaluation?.proposedChange,
+      field,
+      unit,
+      decimalsForToken,
+    ),
   };
 }
 
@@ -233,7 +297,11 @@ const safeToken = (value: unknown): string | undefined => {
  * strings. The handoff requires human copy from the Intent plus token registry,
  * so the row is relabeled `amountIn` and converted with trusted decimals.
  */
-function diff(value: unknown, tokenIn: string): RunDiff | undefined {
+function diff(
+  value: unknown,
+  tokenIn: string,
+  decimalsForToken: DecimalsResolver,
+): RunDiff | undefined {
   const rows = arr(obj(value)?.changedFields).flatMap((raw) => {
     const item = obj(raw);
     const field = str(item?.field);
@@ -242,8 +310,9 @@ function diff(value: unknown, tokenIn: string): RunDiff | undefined {
     if (!field || before === undefined || after === undefined) return [];
 
     const isAmount = field === "amountInAtomic";
+    const decimals = decimalsForToken(tokenIn);
     const show = (atomic: string) =>
-      isAmount ? `${decimal(atomic, decimalsFor(tokenIn))} ${tokenIn}` : atomic;
+      isAmount ? `${decimal(atomic, decimals)} ${tokenIn}` : atomic;
 
     return [
       {
@@ -351,6 +420,7 @@ function mapRun(
   transportFailure?: ApiFailure,
   _rawResponse: unknown = raw,
   createdAtOverride?: string,
+  decimalsBySymbol?: Record<string, number>,
 ): CheckSwapResult | undefined {
   const run = obj(raw);
   const intent = obj(run?.intent);
@@ -398,13 +468,20 @@ function mapRun(
   const boundary = obj(intent?.economicBoundary);
   const coverage = evidenceCoverage(run);
   const protocol = str(intent.protocol);
+  // Trusted decimals observed from `/api/account-state` win over the Monad
+  // registry fallback, so an Arbitrum test token is never scaled by a guess.
+  const decimalsForToken: DecimalsResolver = (name) =>
+    decimalsBySymbol?.[name] ?? fallbackDecimals(name, chainId);
   const recoveryInput =
     protocol === "kuru" || protocol === "pancake" || protocol === "camelot-v3"
       ? {
           protocol: protocol as CheckSwapInput["protocol"],
           minimumReceived:
             boundary?.availability === "available"
-              ? decimal(boundary.minimumReceivedAtomic, decimalsFor(tokenOut))
+              ? decimal(
+                  boundary.minimumReceivedAtomic,
+                  decimalsForToken(tokenOut),
+                )
               : "",
         }
       : undefined;
@@ -421,10 +498,10 @@ function mapRun(
               (apiFailure ? failureCopy(apiFailure).en : "No summary provided"),
           ),
     recommendedActions: arr(run?.recommendedActions)
-      .map((item) => suggestion(item, tokenIn, tokenOut))
+      .map((item) => suggestion(item, tokenIn, tokenOut, decimalsForToken))
       .filter((item): item is ActionSuggestion => !!item),
     irrelevantActions: arr(run?.irrelevantActions)
-      .map((item) => suggestion(item, tokenIn, tokenOut))
+      .map((item) => suggestion(item, tokenIn, tokenOut, decimalsForToken))
       .filter((item): item is ActionSuggestion => !!item),
     checked: scope
       .filter((item) => item.status === "checked")
@@ -450,9 +527,9 @@ function mapRun(
     intent: {
       tokenIn,
       tokenOut,
-      amountIn: decimal(intent?.amountInAtomic, tokenIn === "USDC" ? 6 : 18),
+      amountIn: decimal(intent?.amountInAtomic, decimalsForToken(tokenIn)),
     },
-    diff: diff(run?.diff, tokenIn),
+    diff: diff(run?.diff, tokenIn, decimalsForToken),
     quote: {
       // The handoff separates the QUOTE-stage observation from the simulated
       // output, so the top-level Quote wins for the "expected" figure and the
@@ -460,7 +537,7 @@ function mapRun(
       expectedOutput:
         str(runQuote?.estimatedAmountOut) ??
         (output
-          ? decimal(output.amountReceivedAtomic, tokenOut === "USDC" ? 6 : 18)
+          ? decimal(output.amountReceivedAtomic, decimalsForToken(tokenOut))
           : "unavailable"),
       route: routePath ? cp(routePath) : unavailable,
       blockNumber:
@@ -470,7 +547,7 @@ function mapRun(
         "unavailable",
     },
     simulatedOutput: output
-      ? decimal(output.amountReceivedAtomic, tokenOut === "USDC" ? 6 : 18)
+      ? decimal(output.amountReceivedAtomic, decimalsForToken(tokenOut))
       : "unavailable",
     minimumReceivedSource: (str(boundary?.source) ??
       "unavailable") as CheckSwapResult["minimumReceivedSource"],
@@ -513,7 +590,15 @@ function body(input: CheckSwapInput) {
   };
 }
 
-export type CheckOptions = { fetch?: typeof fetch; signal?: AbortSignal };
+export type CheckOptions = {
+  fetch?: typeof fetch;
+  signal?: AbortSignal;
+  /**
+   * Trusted decimals observed from `/api/account-state`, keyed by symbol. When
+   * present these override the Monad registry fallback for display conversion.
+   */
+  decimalsBySymbol?: Record<string, number>;
+};
 
 /** `/api/quote` is a strict exact-input body: no boundary, no parent, no slippage. */
 function quoteBody(input: QuoteSwapInput) {
@@ -637,6 +722,214 @@ export async function fetchQuote(
   return { status: "available", quote: preview };
 }
 
+const int = (value: unknown): number | undefined =>
+  typeof value === "number" && Number.isInteger(value) ? value : undefined;
+const digits = (value: unknown): string | undefined => {
+  const text = str(value);
+  return text !== undefined && /^\d+$/.test(text) ? text : undefined;
+};
+
+/**
+ * Normalizes one balance side. Only the public metadata and amount are kept:
+ * the snapshot never carries provider data, and nothing else is copied.
+ */
+function accountBalance(value: unknown): AccountTokenBalance | undefined {
+  const balance = obj(value);
+  const status = str(balance?.status);
+  if (status !== "AVAILABLE" && status !== "UNAVAILABLE") return undefined;
+  const metadata = obj(balance?.metadata);
+  const symbolValue = str(metadata?.symbol);
+  if (metadata === undefined || !symbolValue) return undefined;
+  const decimalsSource = str(metadata?.decimalsSource);
+  const view: AccountTokenBalance = {
+    status,
+    symbol: symbolValue,
+    decimals: int(metadata?.decimals),
+    decimalsSource:
+      decimalsSource === "chain_config" || decimalsSource === "onchain_verified"
+        ? decimalsSource
+        : undefined,
+  };
+  if (status === "AVAILABLE") {
+    const amountAtomic = digits(balance?.amountAtomic);
+    return amountAtomic === undefined ? undefined : { ...view, amountAtomic };
+  }
+  return { ...view, reason: str(balance?.reason) ?? "UNAVAILABLE" };
+}
+
+function allowanceSpender(value: unknown): AllowanceSpender | undefined {
+  const spender = obj(value);
+  const status = str(spender?.status);
+  if (status === "QUALIFIED") {
+    const address = str(spender?.address);
+    const qualificationRef = str(spender?.qualificationRef);
+    if (!address || !qualificationRef) return undefined;
+    return { status, address, qualificationRef };
+  }
+  if (status === "UNAVAILABLE") {
+    return {
+      status,
+      reason: str(spender?.reason) ?? "SPENDER_NOT_QUALIFIED",
+    };
+  }
+  if (status === "NOT_APPLICABLE") return { status };
+  return undefined;
+}
+
+function accountAllowance(value: unknown): AccountAllowance | undefined {
+  const allowance = obj(value);
+  const status = str(allowance?.status);
+  const spender = allowanceSpender(allowance?.spender);
+  if (status === "SUFFICIENT" || status === "INSUFFICIENT") {
+    const allowanceAtomic = digits(allowance?.allowanceAtomic);
+    const requiredAmountAtomic = digits(allowance?.requiredAmountAtomic);
+    if (
+      allowanceAtomic === undefined ||
+      requiredAmountAtomic === undefined ||
+      spender?.status !== "QUALIFIED"
+    )
+      return undefined;
+    return {
+      status,
+      allowanceAtomic,
+      requiredAmountAtomic,
+      spender,
+      blockNumber: digits(allowance?.blockNumber),
+    };
+  }
+  if (status === "UNAVAILABLE") {
+    return {
+      status,
+      reason: str(allowance?.reason) ?? "UNAVAILABLE",
+      requiredAmountAtomic: digits(allowance?.requiredAmountAtomic),
+      spender,
+      blockNumber: digits(allowance?.blockNumber),
+    };
+  }
+  if (status === "NOT_APPLICABLE") {
+    return { status, reason: "NATIVE_INPUT" };
+  }
+  return undefined;
+}
+
+function accountBlock(value: unknown): AccountBlockBinding | undefined {
+  const block = obj(value);
+  const status = str(block?.status);
+  const observedAt = str(block?.observedAt);
+  const chainId = int(block?.chainId);
+  if (status === "VERIFIED" || status === "STALE") {
+    const blockNumber = digits(block?.blockNumber);
+    const blockHash = str(block?.blockHash);
+    if (
+      blockNumber === undefined ||
+      !blockHash ||
+      !observedAt ||
+      chainId === undefined
+    )
+      return undefined;
+    return status === "VERIFIED"
+      ? { status, chainId, blockNumber, blockHash, observedAt }
+      : {
+          status,
+          chainId,
+          blockNumber,
+          blockHash,
+          observedAt,
+          reason: str(block?.reason) ?? "BLOCK_HASH_MISMATCH",
+        };
+  }
+  if (status === "UNAVAILABLE") {
+    return {
+      status,
+      chainId,
+      blockNumber: digits(block?.blockNumber),
+      blockHash: str(block?.blockHash),
+      observedAt,
+      reason: str(block?.reason),
+    };
+  }
+  return undefined;
+}
+
+/**
+ * Maps a normalized `POST /api/account-state` snapshot. Returns undefined for a
+ * payload that cannot be trusted, so the caller fails closed rather than showing
+ * a partially invented observation.
+ */
+export function mapAccountState(
+  payload: unknown,
+): AccountStateView | undefined {
+  const snapshot = obj(payload);
+  if (!snapshot) return undefined;
+  const status = str(snapshot.status);
+  if (
+    status !== "AVAILABLE" &&
+    status !== "PARTIAL" &&
+    status !== "UNAVAILABLE"
+  )
+    return undefined;
+  if (str(snapshot.snapshotId) === undefined) return undefined;
+  const balances = obj(snapshot.balances);
+  const inputToken = accountBalance(balances?.inputToken);
+  const outputToken = accountBalance(balances?.outputToken);
+  const allowance = accountAllowance(snapshot.allowance);
+  const block = accountBlock(snapshot.block);
+  if (!inputToken || !outputToken || !allowance || !block) return undefined;
+
+  const decimalsBySymbol: Record<string, number> = {};
+  for (const side of [inputToken, outputToken]) {
+    if (side.symbol && side.decimals !== undefined) {
+      decimalsBySymbol[side.symbol] = side.decimals;
+    }
+  }
+  return {
+    status,
+    decimalsBySymbol,
+    inputToken,
+    outputToken,
+    allowance,
+    block,
+  };
+}
+
+/**
+ * Reads trusted account state for the same intent `/api/quote` accepts. The
+ * endpoint is optional evidence: any transport error, non-200, malformed body,
+ * or `UNAVAILABLE` snapshot fails closed with no decimals and no fabricated
+ * amount, and never blocks submitting the Check.
+ */
+export async function fetchAccountState(
+  input: QuoteSwapInput,
+  options: CheckOptions = {},
+): Promise<AccountStateState> {
+  let response: Response;
+  try {
+    response = await (options.fetch ?? fetch)(`${API_BASE}/api/account-state`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(quoteBody(input)),
+      signal: options.signal,
+    });
+  } catch {
+    return { status: "unavailable", reason: "REQUEST_FAILED" };
+  }
+
+  let payload: unknown;
+  try {
+    payload = await response.json();
+  } catch {
+    return { status: "unavailable", reason: "INVALID_RESPONSE" };
+  }
+  if (!response.ok) return { status: "unavailable", reason: "REQUEST_FAILED" };
+
+  const view = mapAccountState(payload);
+  if (!view) return { status: "unavailable", reason: "INVALID_RESPONSE" };
+  if (view.status === "UNAVAILABLE") {
+    return { status: "unavailable", reason: "SNAPSHOT_UNAVAILABLE" };
+  }
+  return { status: "available", view };
+}
+
 export async function checkSwap(
   input: CheckSwapInput,
   options: CheckOptions = {},
@@ -692,7 +985,13 @@ export async function checkSwap(
   }
   if (response.ok)
     return (
-      mapRun(payload) ??
+      mapRun(
+        payload,
+        undefined,
+        payload,
+        undefined,
+        options.decimalsBySymbol,
+      ) ??
       failed(
         input,
         {
@@ -714,8 +1013,13 @@ export async function checkSwap(
     issues: failureIssues(error?.issues),
   };
   return (
-    mapRun(envelope?.run, apiFailure, payload) ??
-    failed(input, apiFailure, payload)
+    mapRun(
+      envelope?.run,
+      apiFailure,
+      payload,
+      undefined,
+      options.decimalsBySymbol,
+    ) ?? failed(input, apiFailure, payload)
   );
 }
 

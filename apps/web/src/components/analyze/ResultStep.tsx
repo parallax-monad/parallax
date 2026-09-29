@@ -1,11 +1,16 @@
 import { useState } from "react";
+import { AccountStateCard } from "@/components/analyze/AccountStateCard";
 import { EvidenceCoverageCard } from "@/components/analyze/EvidenceCoverageCard";
 import { ExecutionEconomicsCard } from "@/components/analyze/ExecutionEconomicsCard";
 import { QuoteFidelityCard } from "@/components/analyze/QuoteFidelityCard";
 import { VerdictIcon } from "@/components/analyze/StatusIcon";
 import { TokenIcon } from "@/components/analyze/TokenIcon";
 import { formatAmount } from "@/components/wallet/walletData";
-import type { CheckSwapResult, Verdict } from "@/lib/analyze/types";
+import type {
+  AccountStateState,
+  CheckSwapResult,
+  Verdict,
+} from "@/lib/analyze/types";
 import { type Copy, type Language, say } from "@/lib/i18n";
 
 const VERDICT_TONE: Record<Verdict, string> = {
@@ -206,10 +211,13 @@ function ScopeSummary({
 export function ResultStep({
   result,
   language,
+  accountState,
   onNext,
 }: {
   result: CheckSwapResult;
   language: Language;
+  /** Trusted account state for the checked intent; unknown reads stay unknown. */
+  accountState?: AccountStateState;
   onNext: () => void;
 }) {
   const [scopeOpen, setScopeOpen] = useState(false);
@@ -314,6 +322,8 @@ export function ResultStep({
         notice={result.evidenceCoverageNotice}
         sources={result.evidenceCoverage}
       />
+
+      <AccountStateCard accountState={accountState} language={language} />
 
       <section className="rounded-[12px] border border-line bg-ink-elev2/30 p-3">
         <p className="m-0 text-[13px] leading-[1.6] text-dim">
