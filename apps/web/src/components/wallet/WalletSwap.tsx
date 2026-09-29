@@ -10,7 +10,6 @@ import type { FieldFlag } from "@/lib/analyze/fields";
 import {
   payTokenFor,
   receiveTokenFor,
-  SUPPORTED_TOKENS_IN,
   SUPPORTED_TOKENS_OUT,
   swapDirectionFor,
 } from "@/lib/analyze/fixtures";
