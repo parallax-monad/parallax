@@ -172,3 +172,21 @@ Recorded consequences for sequencing only:
   `docs/integration/verified-remediation-107-blocker.md`.
 - Read-only capture and gate: `fixtures/provider-registry/be-107/` and
   `pnpm --filter @parallax/api probe:verified-remediation`.
+
+## 2026-09-29 — current-main durable snapshot
+
+- Issue #96 is the canonical Final Sprint tracker; linked GitHub Issues are live implementation
+  and acceptance state, PRs/captures are evidence records, and `docs/context/*` is only a durable
+  snapshot/handoff. Notion is supporting reference material. Agents must fresh-fetch before acting.
+- Product P0 remains final owner review: PR #126 is merged, but Product Owner acceptance is not
+  recorded; #73/#100/#102 remain open. P0 does not require `VERIFIED` remediation.
+- Asset Coverage acceptance is #103 real qualification + #104 support + #105 end-to-end acceptance;
+  these are acceptance dependencies, not mandatory serial engineering. PR #123's
+  `BLOCKED_ACCOUNT_STATE` is historical, and PR #127 later establishes `QUALIFIED_REAL`.
+- Evidence Federation is PASS with #106/#110/#91/#92 complete. Native RPC is primary and Trace
+  supplementary; no ranking, voting, scoring, consensus, or automatic fallback is introduced.
+- `INSUFFICIENT_NATIVE_BALANCE` is an execution-readiness/integration fact, not a Risk verdict.
+  Generic gas is preflight; the pinned Provider gas check is Evidence consumed independently by
+  Risk.
+- #107 remains NOT COMPLETE / not currently reachable under frozen semantics; details stay in
+  `docs/integration/verified-remediation-107-blocker.md`.
