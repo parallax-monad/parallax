@@ -101,9 +101,7 @@
       "verified": true,
       "status": "completed",
       "verdict": "UNKNOWN",
-      "changedIntentFields": [
-        "recipient"
-      ],
+      "changedIntentFields": ["recipient"],
       "recipient": "0x000000000000000000000000000000000000dEaD",
       "historicalGetRpcRequests": 0
     },
