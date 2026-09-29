@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -20,7 +21,12 @@ describe("#103 real USDC -> WETH blocked-account capture", () => {
     for (const [path, hash] of Object.entries(
       capture.provenance.manifest as Record<string, string>,
     )) {
-      expect(digest(readFileSync(resolve(root, path)))).toBe(hash);
+      const historicalBytes = execFileSync(
+        "git",
+        ["show", `${String(capture.sourceHead)}:${path}`],
+        { cwd: root },
+      );
+      expect(digest(historicalBytes)).toBe(hash);
     }
   });
 
