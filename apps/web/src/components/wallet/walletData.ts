@@ -33,6 +33,15 @@ export function balanceOf(symbol: string): number {
   return assetFor(symbol)?.balance ?? 0;
 }
 
+/**
+ * The recorded demo balance for an asset, or undefined when this wallet has no
+ * demo balance for it. Callers must not treat undefined as 0: "Use max" would
+ * then write a fabricated zero.
+ */
+export function knownBalanceOf(symbol: string): number | undefined {
+  return assetFor(symbol)?.balance;
+}
+
 export const TOTAL_BALANCE_USD = ASSETS.reduce(
   (sum, asset) => sum + asset.balance * asset.price,
   0,

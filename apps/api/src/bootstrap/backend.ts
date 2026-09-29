@@ -30,6 +30,7 @@ import type {
 } from "../backend/arbitrum-composition.js";
 import { createArbitrumProductionComposition } from "../backend/arbitrum-composition.js";
 import { CAMELOT_SEPOLIA_USDC } from "../backend/camelot-v3-protocol-adapter.js";
+import { createCamelotV3QualifiedAllowanceSpenderResolver } from "../backend/camelot-v3-qualified-spender.js";
 import type { BackendCompositionRuntime } from "../backend/composition.js";
 import {
   BackendPipeline,
@@ -316,6 +317,9 @@ function projectCompositionQuote(input: {
   blockContext: { readonly blockNumber: string; readonly observedAt?: string };
   quote: unknown;
 }): unknown {
+  // The quote contract already carries an optional `fetchedAt`; the pinned block
+  // context is where the composition observed it. Without it the public quote
+  // cannot form a provenance-complete Expectation Baseline.
   const parsedQuoteResult = quoteResultSchema.safeParse(input.quote);
   if (parsedQuoteResult.success) {
     if (parsedQuoteResult.data.status === "unavailable") {
@@ -483,6 +487,11 @@ export function bootstrapBackendApp(
       runtime,
       runStore: store,
       providerEnvironment: "production",
+      // The Camelot V3 allowance spender is now qualified by the real #103
+      // reverse-path evidence, so ERC-20 allowance state is readable instead of
+      // structurally unavailable. Other protocols still fail closed.
+      accountStateSpenderResolver:
+        createCamelotV3QualifiedAllowanceSpenderResolver(),
       ...(configuredTraceRpcEvidenceSource === undefined
         ? {}
         : { traceRpcEvidenceSource: configuredTraceRpcEvidenceSource }),

@@ -103,6 +103,21 @@ export function inspectCamelotV3Transaction(
       "Camelot prepared transaction calldata contains an invalid amount",
     );
   }
+  // Words the adapter always pins: word[3] is the execution deadline and word[6]
+  // is sqrtPriceLimitX96. The reverse-path qualification never sets a price
+  // limit, so a non-zero limit (or a missing deadline) must not pass binding.
+  const deadline = wordQuantity(words[3]);
+  const sqrtPriceLimitX96 = wordQuantity(words[6]);
+  if (deadline === undefined || BigInt(deadline) === 0n) {
+    return invalid(
+      "Camelot prepared transaction calldata has no execution deadline",
+    );
+  }
+  if (sqrtPriceLimitX96 === undefined || BigInt(sqrtPriceLimitX96) !== 0n) {
+    return invalid(
+      "Camelot prepared transaction calldata sets an unbounded price limit",
+    );
+  }
 
   const expectedTokenIn = protocolToken(intent.tokenIn);
   const expectedTokenOut = protocolToken(intent.tokenOut);

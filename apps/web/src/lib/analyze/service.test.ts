@@ -8,7 +8,12 @@ import {
   validateForm,
 } from "./form";
 import {
+  ARBITRUM_DEMO_SENDER,
+  ARBITRUM_SEPOLIA_USDC_ADDRESS,
+  ARBITRUM_SEPOLIA_WETH_ADDRESS,
   checkSwap,
+  DEFAULT_SENDER,
+  fetchAccountState,
   fetchQuote,
   formFromRunResult,
   loadReplay,
@@ -986,6 +991,394 @@ function mapRunForTest(raw: unknown) {
     return recovery.result;
   });
 }
+
+describe("camelot-v3 reverse leg (USDC -> WETH)", () => {
+  const reverseInput: QuoteSwapInput = {
+    protocol: "camelot-v3",
+    tokenIn: "USDC",
+    tokenOut: "WETH",
+    amountIn: "0.01",
+  };
+  const reverseCheckInput: CheckSwapInput = {
+    ...reverseInput,
+    slippage: "0.5",
+    minimumReceivedSource: "unavailable",
+  };
+  const reverseIntent = {
+    chainId: 421614,
+    protocol: "camelot-v3",
+    sender: DEFAULT_SENDER,
+    recipient: DEFAULT_SENDER,
+    recipientSource: "defaulted_from_sender",
+    tokenIn: { kind: "erc20", address: ARBITRUM_SEPOLIA_USDC_ADDRESS },
+    tokenOut: { kind: "erc20", address: ARBITRUM_SEPOLIA_WETH_ADDRESS },
+    amountInAtomic: "10000000000000000",
+    economicBoundary: { availability: "unavailable", source: "unavailable" },
+  };
+  const reverseRun = {
+    runId: "run-camelot-reverse-1",
+    createdAt: "2026-10-01T00:00:00.000Z",
+    replayMode: false,
+    intent: reverseIntent,
+    status: "completed",
+    systemStatus: "OK",
+    verdict: "UNKNOWN",
+    summary: "Backend completed the reverse check.",
+    ruleResults: [],
+    recommendedActions: [],
+    irrelevantActions: [],
+    evidence: [],
+    scope: [],
+    route: {
+      availability: "available",
+      path: [reverseIntent.tokenIn, reverseIntent.tokenOut],
+      blockNumber: "313622358",
+    },
+  };
+  const quoteAvailable = {
+    status: "available",
+    quote: {
+      estimatedAmountOut: "0.00029",
+      minimumAmountOut: "0.000288",
+      source: "quote",
+      blockNumber: "313622358",
+      fetchedAt: "2026-10-01T00:00:00.000Z",
+      runtimeVersion: "0.1.0",
+      runtimeRevision: "a".repeat(40),
+    },
+  };
+  /**
+   * The canonical P0 registry read. #126 makes trusted Backend metadata the
+   * single primary mapper, so every camelot-v3 request reads it first; the
+   * reverse leg keeps working because `asset()` still resolves USDC and WETH
+   * when the canonical pair does not cover the symbol.
+   */
+  const p0Metadata = {
+    chainId: 421614,
+    protocol: "camelot-v3",
+    tokenIn: {
+      asset: { kind: "native" },
+      symbol: "ETH",
+      decimals: 18,
+      decimalsSource: "chain_config",
+    },
+    tokenOut: {
+      asset: { kind: "erc20", address: ARBITRUM_SEPOLIA_USDC_ADDRESS },
+      symbol: "USDC",
+      // Arbitrum Sepolia test USDC publishes 18 decimals, never the Monad 6.
+      decimals: 18,
+      decimalsSource: "onchain_verified",
+      verifiedAtBlock: "313622300",
+    },
+  };
+  /** A reverse Run that also observed a simulated WETH output. */
+  const reverseRunWithOutput = {
+    ...reverseRun,
+    evidence: [
+      {
+        kind: "simulated_token_out",
+        amountReceivedAtomic: "500000000000000000",
+      },
+    ],
+  };
+
+  test("posts the exact erc20 USDC->WETH bodies to /api/quote and /api/check", async () => {
+    const request = vi.fn<typeof fetch>().mockImplementation(async (input) => {
+      const path = String(input);
+      if (path === "/api/p0/metadata") return jsonResponse(p0Metadata);
+      if (path === "/api/quote") return jsonResponse(quoteAvailable);
+      if (path === "/api/check") return jsonResponse(reverseRun);
+      throw new Error(`Unexpected request: ${path}`);
+    });
+
+    const quoteState = await fetchQuote(reverseInput, { fetch: request });
+    const result = await checkSwap(reverseCheckInput, { fetch: request });
+
+    expect(request.mock.calls.map(([url]) => String(url))).toEqual([
+      "/api/p0/metadata",
+      "/api/quote",
+      "/api/p0/metadata",
+      "/api/check",
+    ]);
+    expect(JSON.parse(String(request.mock.calls[1]?.[1]?.body))).toEqual({
+      chainId: 421614,
+      protocol: "camelot-v3",
+      sender: ARBITRUM_DEMO_SENDER,
+      tokenIn: { kind: "erc20", address: ARBITRUM_SEPOLIA_USDC_ADDRESS },
+      tokenOut: { kind: "erc20", address: ARBITRUM_SEPOLIA_WETH_ADDRESS },
+      amountIn: "0.01",
+    });
+    expect(JSON.parse(String(request.mock.calls[3]?.[1]?.body))).toEqual({
+      chainId: 421614,
+      protocol: "camelot-v3",
+      sender: ARBITRUM_DEMO_SENDER,
+      tokenIn: { kind: "erc20", address: ARBITRUM_SEPOLIA_USDC_ADDRESS },
+      tokenOut: { kind: "erc20", address: ARBITRUM_SEPOLIA_WETH_ADDRESS },
+      amountIn: "0.01",
+      economicBoundary: { availability: "unavailable", source: "unavailable" },
+    });
+    expect(quoteState.status).toBe("available");
+    expect(result.intent).toEqual({
+      tokenIn: "USDC",
+      tokenOut: "WETH",
+      // Registry metadata carries USDC at 18 decimals, so 1e16 is 0.01.
+      amountIn: "0.01",
+    });
+    expect(result.quote.route.en).toBe("USDC → WETH");
+  });
+
+  test("scales the reverse leg with trusted decimals, never the 6-decimal registry", async () => {
+    const request = vi
+      .fn<typeof fetch>()
+      .mockImplementation(async (url) =>
+        url === "/api/p0/metadata"
+          ? jsonResponse(p0Metadata)
+          : jsonResponse(reverseRunWithOutput),
+      );
+
+    // The Arbitrum Sepolia test USDC publishes 18 decimals through the Backend
+    // registry: applying the Monad registry's 6 here would be wrong by 10^12.
+    const usdcLeg = await checkSwap(reverseCheckInput, { fetch: request });
+    expect(usdcLeg.intent.amountIn).toBe("0.01");
+
+    // Ordered resolution: metadata covers USDC, so a stale account-state value
+    // can never re-scale it down to 6 decimals.
+    const staleRegistry = await checkSwap(reverseCheckInput, {
+      fetch: request,
+      decimalsBySymbol: { USDC: 6, WETH: 18 },
+    });
+    expect(staleRegistry.intent.amountIn).toBe("0.01");
+
+    // WETH is outside the canonical P0 pair, so only the trusted decimals read
+    // from `/api/account-state` may scale it. With no trusted value the amount is
+    // never guessed and never taken from the Monad registry.
+    const untrusted = await checkSwap(reverseCheckInput, { fetch: request });
+    expect(untrusted.simulatedOutput).toBe("unavailable");
+
+    const trusted = await checkSwap(reverseCheckInput, {
+      fetch: request,
+      decimalsBySymbol: { USDC: 18, WETH: 18 },
+    });
+    expect(trusted.simulatedOutput).toBe("0.5");
+  });
+
+  test("rejects WETH on the Monad chain instead of pointing at a foreign token", async () => {
+    const request = vi.fn<typeof fetch>();
+    const result = await checkSwap(
+      {
+        protocol: "kuru",
+        tokenIn: "MON",
+        tokenOut: "WETH",
+        amountIn: "0.01",
+        slippage: "0.5",
+      },
+      { fetch: request },
+    );
+
+    // The unsupported mapping is detected before any request leaves the app.
+    expect(request).not.toHaveBeenCalled();
+    expect(result.systemStatus).toBe("INTEGRATION_ERROR");
+    expect(result.apiFailure?.code).toBe("NETWORK_ERROR");
+  });
+});
+
+describe("fetchAccountState", () => {
+  const reverseInput: QuoteSwapInput = {
+    protocol: "camelot-v3",
+    tokenIn: "USDC",
+    tokenOut: "WETH",
+    amountIn: "0.01",
+  };
+  const blockHash = `0x${"a".repeat(64)}`;
+  const observedAt = "2026-10-01T00:00:03.000Z";
+  const spender = "0x3333333333333333333333333333333333333333";
+  const qualifiedSpender = {
+    status: "QUALIFIED",
+    address: spender,
+    qualificationRef: "camelot-v3-qualified-spender",
+  };
+  const verifiedBlock = {
+    status: "VERIFIED",
+    chainId: 421614,
+    blockNumber: "313622358",
+    blockHash,
+    observedAt,
+  };
+  const availableBalance = (symbol: string, amountAtomic: string) => ({
+    status: "AVAILABLE",
+    account: DEFAULT_SENDER,
+    asset: { kind: "erc20", address: ARBITRUM_SEPOLIA_USDC_ADDRESS },
+    metadata: {
+      symbol,
+      decimals: 18,
+      decimalsSource: "onchain_verified",
+      verifiedAtBlock: "313622300",
+    },
+    explorerUrls: {},
+    amountAtomic,
+  });
+  const snapshot = {
+    snapshotId: "0f8fad5b-d9cb-469f-a165-70867728950e",
+    status: "AVAILABLE",
+    context: {
+      chainId: 421614,
+      protocol: "camelot-v3",
+      sender: DEFAULT_SENDER,
+      recipient: DEFAULT_SENDER,
+      tokenIn: { kind: "erc20", address: ARBITRUM_SEPOLIA_USDC_ADDRESS },
+      tokenOut: { kind: "erc20", address: ARBITRUM_SEPOLIA_WETH_ADDRESS },
+      amountInAtomic: "10000000000000000",
+    },
+    block: verifiedBlock,
+    balances: {
+      inputToken: availableBalance("USDC", "2500000000000000000"),
+      outputToken: availableBalance("WETH", "0"),
+      native: availableBalance("ETH", "0"),
+    },
+    allowance: {
+      status: "SUFFICIENT",
+      owner: DEFAULT_SENDER,
+      tokenAddress: ARBITRUM_SEPOLIA_USDC_ADDRESS,
+      spender: qualifiedSpender,
+      allowanceAtomic: "5000000000000000000",
+      requiredAmountAtomic: "10000000000000000",
+      blockNumber: "313622358",
+    },
+    // Not part of the public observation; must never reach the normalized view.
+    providerData: {
+      providerId: "native-rpc",
+      rawPayload: "DO_NOT_RENDER_RAW_RPC",
+    },
+  };
+
+  test("normalizes trusted decimals, balance, allowance, and block binding", async () => {
+    const request = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(jsonResponse(snapshot));
+
+    const state = await fetchAccountState(reverseInput, { fetch: request });
+
+    expect(request.mock.calls[0]?.[0]).toBe("/api/account-state");
+    expect(JSON.parse(String(request.mock.calls[0]?.[1]?.body))).toEqual({
+      chainId: 421614,
+      protocol: "camelot-v3",
+      sender: ARBITRUM_DEMO_SENDER,
+      tokenIn: { kind: "erc20", address: ARBITRUM_SEPOLIA_USDC_ADDRESS },
+      tokenOut: { kind: "erc20", address: ARBITRUM_SEPOLIA_WETH_ADDRESS },
+      amountIn: "0.01",
+    });
+    expect(state).toEqual({
+      status: "available",
+      view: {
+        status: "AVAILABLE",
+        // The test USDC is 18 decimals; taking 6 from the Monad registry would
+        // be wrong by 10^12.
+        decimalsBySymbol: { USDC: 18, WETH: 18 },
+        inputToken: {
+          status: "AVAILABLE",
+          symbol: "USDC",
+          decimals: 18,
+          decimalsSource: "onchain_verified",
+          amountAtomic: "2500000000000000000",
+        },
+        outputToken: {
+          status: "AVAILABLE",
+          symbol: "WETH",
+          decimals: 18,
+          decimalsSource: "onchain_verified",
+          amountAtomic: "0",
+        },
+        allowance: {
+          status: "SUFFICIENT",
+          allowanceAtomic: "5000000000000000000",
+          requiredAmountAtomic: "10000000000000000",
+          spender: qualifiedSpender,
+          blockNumber: "313622358",
+        },
+        block: verifiedBlock,
+      },
+    });
+    expect(JSON.stringify(state)).not.toContain("DO_NOT_RENDER_RAW_RPC");
+  });
+
+  test("fails closed on a transport error, a non-200, and a malformed body", async () => {
+    const rejected = await fetchAccountState(reverseInput, {
+      fetch: vi.fn<typeof fetch>().mockRejectedValue(new TypeError("offline")),
+    });
+    expect(rejected).toEqual({
+      status: "unavailable",
+      reason: "REQUEST_FAILED",
+    });
+
+    const nonOk = await fetchAccountState(reverseInput, {
+      fetch: vi
+        .fn<typeof fetch>()
+        .mockResolvedValue(
+          jsonResponse({ error: { code: "RPC_UNAVAILABLE" } }, 503),
+        ),
+    });
+    expect(nonOk).toEqual({ status: "unavailable", reason: "REQUEST_FAILED" });
+
+    const malformed = await fetchAccountState(reverseInput, {
+      fetch: vi
+        .fn<typeof fetch>()
+        .mockResolvedValue(jsonResponse({ status: "AVAILABLE" })),
+    });
+    expect(malformed).toEqual({
+      status: "unavailable",
+      reason: "INVALID_RESPONSE",
+    });
+  });
+
+  test("reports an UNAVAILABLE snapshot as unknown without inventing decimals", async () => {
+    const unavailable = {
+      ...snapshot,
+      status: "UNAVAILABLE",
+      block: {
+        status: "UNAVAILABLE",
+        chainId: 421614,
+        observedAt,
+        reason: "BLOCK_CONTEXT_UNAVAILABLE",
+      },
+      balances: {
+        inputToken: {
+          ...availableBalance("USDC", "0"),
+          status: "UNAVAILABLE",
+          amountAtomic: undefined,
+          reason: "RPC_UNAVAILABLE",
+        },
+        outputToken: {
+          ...availableBalance("WETH", "0"),
+          status: "UNAVAILABLE",
+          amountAtomic: undefined,
+          reason: "RPC_UNAVAILABLE",
+        },
+        native: {
+          ...availableBalance("ETH", "0"),
+          status: "UNAVAILABLE",
+          amountAtomic: undefined,
+          reason: "RPC_UNAVAILABLE",
+        },
+      },
+      allowance: {
+        status: "UNAVAILABLE",
+        owner: DEFAULT_SENDER,
+        tokenAddress: ARBITRUM_SEPOLIA_USDC_ADDRESS,
+        spender: { status: "UNAVAILABLE", reason: "SPENDER_NOT_QUALIFIED" },
+        requiredAmountAtomic: "10000000000000000",
+        reason: "RPC_UNAVAILABLE",
+      },
+    };
+    const request = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(jsonResponse(unavailable));
+
+    expect(await fetchAccountState(reverseInput, { fetch: request })).toEqual({
+      status: "unavailable",
+      reason: "SNAPSHOT_UNAVAILABLE",
+    });
+  });
+});
 
 describe("Arbitrum Product P0 Backend consumption", () => {
   const usdc = "0xb893E3334D4Bd6C5ba8277Fd559e99Ed683A9FC7";

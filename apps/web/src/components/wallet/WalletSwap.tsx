@@ -2,14 +2,25 @@ import { useState } from "react";
 import { TokenIcon } from "@/components/analyze/TokenIcon";
 import { ChevronDownIcon, SwapIcon } from "@/components/wallet/WalletIcons";
 import {
-  balanceOf,
   DEMO_RECIPIENT,
   formatAmount,
+  knownBalanceOf,
 } from "@/components/wallet/walletData";
 import type { FieldFlag } from "@/lib/analyze/fields";
-import { receiveTokenFor } from "@/lib/analyze/fixtures";
+import {
+  payTokenFor,
+  receiveTokenFor,
+  SUPPORTED_TOKENS_OUT,
+  swapDirectionFor,
+} from "@/lib/analyze/fixtures";
 import type { FormFieldErrors, FormState } from "@/lib/analyze/form";
-import type { QuoteState } from "@/lib/analyze/types";
+import { atomicToDisplay } from "@/lib/analyze/service";
+import type {
+  AccountAllowance,
+  AccountStateState,
+  Protocol,
+  QuoteState,
+} from "@/lib/analyze/types";
 import { type Copy, type Language, say } from "@/lib/i18n";
 
 /** A token side of the swap. Locked when the fixture set offers one option. */
@@ -84,12 +95,107 @@ const QUOTE_UNAVAILABLE_REASON: Record<"NO_ROUTE" | "QUOTE_UNAVAILABLE", Copy> =
     },
   };
 
+/**
+ * The route the demo actually submits. Derived from the form's protocol so a
+ * camelot-v3 run is never labelled as Kuru.
+ */
+const ROUTE_LABEL: Record<Protocol, Copy> = {
+  kuru: { en: "Kuru (live API)", zh: "Kuru（实时 API）" },
+  pancake: {
+    en: "PancakeSwap V3 (live API)",
+    zh: "PancakeSwap V3（实时 API）",
+  },
+  "camelot-v3": { en: "Camelot V3 (live API)", zh: "Camelot V3（实时 API）" },
+};
+
+const ALLOWANCE_LINE: Record<AccountAllowance["status"], Copy> = {
+  SUFFICIENT: { en: "Sufficient", zh: "充足" },
+  INSUFFICIENT: { en: "Insufficient", zh: "不足" },
+  UNAVAILABLE: { en: "Unavailable", zh: "不可用" },
+  NOT_APPLICABLE: {
+    en: "Not needed (native input)",
+    zh: "不需要（原生币输入）",
+  },
+};
+
+const shortAddress = (address: string) =>
+  `${address.slice(0, 6)}…${address.slice(-4)}`;
+
+/**
+ * Pre-submit balance and allowance, read from the Backend account state. Fails
+ * closed: an unknown read says so instead of showing a guessed number.
+ */
+function AccountStateLine({
+  accountState,
+  language,
+}: {
+  accountState?: AccountStateState;
+  language: Language;
+}) {
+  if (!accountState || accountState.status === "idle") return null;
+
+  if (accountState.status === "loading") {
+    return (
+      <p className="mt-2 text-[12px] leading-[1.5] text-dim">
+        {say(language, {
+          en: "Reading balance and allowance…",
+          zh: "正在读取余额与授权额度…",
+        })}
+      </p>
+    );
+  }
+
+  if (accountState.status === "unavailable") {
+    return (
+      <p className="mt-2 text-[12px] leading-[1.5] text-risk-elevated">
+        {say(language, {
+          en: "Checked balance and allowance are unknown. The check still runs.",
+          zh: "已检查的余额与授权额度未知。检查仍会运行。",
+        })}
+      </p>
+    );
+  }
+
+  const { view } = accountState;
+  const side = view.inputToken;
+  const balance =
+    side.status === "AVAILABLE" && side.amountAtomic !== undefined
+      ? `${atomicToDisplay(side.amountAtomic, side.decimals)}${
+          side.symbol ? ` ${side.symbol}` : ""
+        }`
+      : say(language, { en: "unknown", zh: "未知" });
+  const spender =
+    view.allowance.status !== "NOT_APPLICABLE" &&
+    view.allowance.spender?.status === "QUALIFIED"
+      ? view.allowance.spender.address
+      : undefined;
+
+  return (
+    <p className="mt-2 text-[12px] leading-[1.5] text-dim">
+      {say(language, { en: "Checked balance", zh: "已检查余额" })}:{" "}
+      <span className="mono text-white">{balance}</span>
+      {" · "}
+      {say(language, { en: "Allowance", zh: "授权额度" })}:{" "}
+      <span className="text-white">
+        {say(language, ALLOWANCE_LINE[view.allowance.status])}
+      </span>
+      {spender && (
+        <>
+          {" "}
+          <span className="mono">{shortAddress(spender)}</span>
+        </>
+      )}
+    </p>
+  );
+}
+
 export function WalletSwap({
   form,
   language,
   errors = {},
   flags = [],
   quote = { status: "idle" },
+  accountState,
   onChange,
   onSubmit,
   onReplay,
@@ -101,6 +207,8 @@ export function WalletSwap({
   flags?: FieldFlag[];
   /** Pre-submit `/api/quote` state. Never a locally computed estimate. */
   quote?: QuoteState;
+  /** Trusted pre-submit account state. Unknown reads render as unknown. */
+  accountState?: AccountStateState;
   onChange: (form: FormState) => void;
   onSubmit: () => void;
   onReplay: () => void;
@@ -113,8 +221,41 @@ export function WalletSwap({
   const flagFor = (key: FieldFlag["field"]) =>
     flags.find((flag) => flag.field === key);
 
-  const balance = balanceOf(form.tokenIn);
-  const receiveToken = receiveTokenFor(form.tokenIn);
+  // The real Arbitrum/Camelot path has exactly one balance source: the checked
+  // account state. The demo wallet table is historical Monad fixture data (its
+  // USDC entry is 500) and must never be shown or spent as a real balance.
+  const realArbitrumPath = form.protocol === "camelot-v3";
+  const accountInputToken =
+    accountState?.status === "available"
+      ? accountState.view.inputToken
+      : undefined;
+  const trustedBalanceAtomic =
+    accountInputToken?.status === "AVAILABLE"
+      ? accountInputToken.amountAtomic
+      : undefined;
+  const trustedBalanceDecimals = accountInputToken?.decimals;
+  // Exact string conversion only: routing the atomic amount through a JS Number
+  // would lose precision on 18-decimal balances.
+  const trustedBalance =
+    trustedBalanceAtomic !== undefined && trustedBalanceDecimals !== undefined
+      ? atomicToDisplay(trustedBalanceAtomic, trustedBalanceDecimals)
+      : undefined;
+  const demoBalance = realArbitrumPath
+    ? undefined
+    : knownBalanceOf(form.tokenIn);
+  const balanceLabel =
+    trustedBalance ??
+    (demoBalance === undefined ? undefined : formatAmount(demoBalance));
+  const maxAmount =
+    trustedBalance ??
+    (demoBalance === undefined ? undefined : String(demoBalance));
+  const canUseMax = realArbitrumPath
+    ? trustedBalanceAtomic !== undefined && BigInt(trustedBalanceAtomic) > 0n
+    : demoBalance !== undefined && demoBalance > 0;
+  const receiveOptions = SUPPORTED_TOKENS_OUT.includes(form.tokenOut)
+    ? SUPPORTED_TOKENS_OUT
+    : [form.tokenOut, ...SUPPORTED_TOKENS_OUT];
+  const nextDirection = swapDirectionFor(form.tokenIn, form.tokenOut);
   const amountFlag = flagFor("amountIn");
   const amountError = errors.amountIn;
   const slippageError = errors.slippage;
@@ -133,12 +274,12 @@ export function WalletSwap({
           <span className="text-[12px] font-bold uppercase tracking-[0.08em] text-dim">
             {say(language, { en: "You pay", zh: "你支付" })}
           </span>
-          {form.protocol !== "camelot-v3" && (
-            <span className="text-[12px] text-dim">
-              {say(language, { en: "Balance", zh: "余额" })}{" "}
-              {formatAmount(balance)}
-            </span>
-          )}
+          <span className="text-[12px] text-dim">
+            {say(language, { en: "Balance", zh: "余额" })}{" "}
+            {balanceLabel === undefined
+              ? say(language, { en: "unknown", zh: "未知" })
+              : balanceLabel}
+          </span>
         </div>
         <div className="mt-3 flex items-center gap-3">
           <input
@@ -172,15 +313,18 @@ export function WalletSwap({
             }
           />
         </div>
-        {form.protocol !== "camelot-v3" && (
-          <button
-            type="button"
-            className="mt-1 text-[12px] font-bold uppercase tracking-[0.08em] text-monad-dim"
-            onClick={() => set("amountIn", String(balance))}
-          >
-            {say(language, { en: "Use max", zh: "使用全部" })}
-          </button>
-        )}
+        <button
+          type="button"
+          className="mt-1 text-[12px] font-bold uppercase tracking-[0.08em] text-monad-dim disabled:cursor-not-allowed disabled:opacity-50"
+          disabled={!canUseMax || maxAmount === undefined}
+          onClick={() => {
+            // Writes the exact trusted decimal string, never a rounded Number.
+            if (maxAmount !== undefined) set("amountIn", maxAmount);
+          }}
+        >
+          {say(language, { en: "Use max", zh: "使用全部" })}
+        </button>
+        <AccountStateLine accountState={accountState} language={language} />
         {amountError && (
           <p
             id="swap-amount-error"
@@ -196,10 +340,24 @@ export function WalletSwap({
         )}
       </section>
 
-      <div aria-hidden="true" className="flex justify-center">
-        <span className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-line-strong bg-ink-elev2 text-monad-dim">
+      <div className="flex justify-center">
+        <button
+          type="button"
+          aria-label={say(language, {
+            en: "Swap the pay and receive direction",
+            zh: "调换支付与接收方向",
+          })}
+          className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-line-strong bg-ink-elev2 text-monad-dim transition-all duration-200 ease-out hover:text-white active:scale-95"
+          onClick={() =>
+            onChange({
+              ...form,
+              tokenIn: nextDirection.tokenIn,
+              tokenOut: nextDirection.tokenOut,
+            })
+          }
+        >
           <SwapIcon size={18} />
-        </span>
+        </button>
       </div>
 
       <section className="rounded-[16px] border border-white/[0.08] bg-white/[0.02] p-5 backdrop-blur-xl">
@@ -226,9 +384,16 @@ export function WalletSwap({
           </strong>
           <TokenSelect
             language={language}
-            options={[receiveToken]}
-            value={receiveToken}
-            onSelect={() => undefined}
+            options={receiveOptions}
+            value={form.tokenOut}
+            onSelect={(value) => {
+              const pay = payTokenFor(value);
+              onChange({
+                ...form,
+                tokenOut: value,
+                tokenIn: pay ?? form.tokenIn,
+              });
+            }}
           />
         </div>
 
@@ -408,16 +573,7 @@ export function WalletSwap({
                 {say(language, { en: "Route", zh: "路径" })}
               </span>
               <span className="field-control text-white">
-                {say(language, {
-                  en:
-                    form.protocol === "camelot-v3"
-                      ? "Camelot V3 (live API)"
-                      : "Kuru (live API)",
-                  zh:
-                    form.protocol === "camelot-v3"
-                      ? "Camelot V3（实时 API）"
-                      : "Kuru（实时 API）",
-                })}
+                {say(language, ROUTE_LABEL[form.protocol])}
               </span>
               {flagFor("protocol") && (
                 <FlagNote
