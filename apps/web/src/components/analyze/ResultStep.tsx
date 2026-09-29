@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { EvidenceCoverageCard } from "@/components/analyze/EvidenceCoverageCard";
 import { ExecutionEconomicsCard } from "@/components/analyze/ExecutionEconomicsCard";
 import { QuoteFidelityCard } from "@/components/analyze/QuoteFidelityCard";
 import { VerdictIcon } from "@/components/analyze/StatusIcon";
@@ -125,14 +124,8 @@ function ScopeSummary({
       <div className="flex items-center justify-between gap-3">
         <div>
           <div className="text-[12px] font-bold uppercase tracking-[0.08em] text-dim">
-            {say(language, { en: "Result scope", zh: "结果范围" })}
+            {say(language, { en: "Check scope", zh: "检查范围" })}
           </div>
-          <p className="m-0 mt-1 text-[11px] leading-[1.4] text-dim">
-            {say(language, {
-              en: "These checks inform the result. Each source's capabilities are listed below.",
-              zh: "这些检查用于得出结果。各来源的检查能力列在下方。",
-            })}
-          </p>
           <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[13px] text-white">
             <span>
               {say(language, { en: "Checked", zh: "已检查" })}: {checked}
@@ -224,6 +217,9 @@ export function ResultStep({
   const hasOptions = Boolean(
     result.remediationOptions && result.remediationOptions.length > 0,
   );
+  const hasDiagnosis = Boolean(
+    result.quoteFidelity || result.executionEconomics,
+  );
   const hasMinimumBoundary = result.minimumReceivedSource !== "unavailable";
 
   return (
@@ -302,18 +298,22 @@ export function ResultStep({
         />
       )}
 
-      <ScopeSummary
-        expanded={scopeOpen}
-        language={language}
-        onToggle={() => setScopeOpen(!scopeOpen)}
-        result={result}
-      />
-
-      <EvidenceCoverageCard
-        language={language}
-        notice={result.evidenceCoverageNotice}
-        sources={result.evidenceCoverage}
-      />
+      {hasDiagnosis && (
+        <ScopeSummary
+          expanded={scopeOpen}
+          language={language}
+          onToggle={() => setScopeOpen(!scopeOpen)}
+          result={result}
+        />
+      )}
+      {!hasDiagnosis && (
+        <ScopeSummary
+          expanded={scopeOpen}
+          language={language}
+          onToggle={() => setScopeOpen(!scopeOpen)}
+          result={result}
+        />
+      )}
 
       <section className="rounded-[12px] border border-line bg-ink-elev2/30 p-3">
         <p className="m-0 text-[13px] leading-[1.6] text-dim">
