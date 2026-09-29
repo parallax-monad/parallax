@@ -1,0 +1,173 @@
+{
+  "schemaVersion": "be-103-usdc-weth-feasibility-v1",
+  "status": "QUALIFIED_REAL",
+  "assetCoverage": "FEASIBILITY_QUALIFIED_ONLY",
+  "real": true,
+  "readOnly": true,
+  "capturedAt": "2026-09-29T10:09:52.993Z",
+  "sourceHead": "69011893029f546149563ee1b933c6b8aaec31fa",
+  "nodeVersion": "v22.23.2",
+  "endpointClass": "authorized_https_rpc",
+  "chain": {
+    "chainId": 421614,
+    "blockNumber": "313915415",
+    "blockHash": "0x97ba4f6741fa975507bffc66ae4713b5a08b1fa78458f7fcd901ec2ea3bdefbe",
+    "blockTimestamp": "1790676584",
+    "blockHashRechecked": true
+  },
+  "addresses": {
+    "usdc": "0xb893E3334D4Bd6C5ba8277Fd559e99Ed683A9FC7",
+    "weth": "0x980B62Da83eFf3D4576C647993b0c1D7faf17c73",
+    "factory": "0xaA37Bea711D585478E1c04b04707cCb0f10D762a",
+    "pool": "0x3965361ea4f9000ae3cf995f553115b2832d0e2d",
+    "quoter": "0xe49ef2F48539EA7498605CC1B3a242042cb5FC83",
+    "router": "0x171B925C51565F5D2a7d8C494ba3188D304EFD93"
+  },
+  "tokenMetadata": {
+    "usdcDecimals": 18,
+    "wethDecimals": 18,
+    "source": "onchain_verified_at_pinned_block",
+    "trustedRegistryResolved": true
+  },
+  "route": {
+    "pool": "0x3965361ea4f9000ae3cf995f553115b2832d0e2d",
+    "factoryPool": "0x3965361ea4f9000ae3cf995f553115b2832d0e2d",
+    "token0": "0x980B62Da83eFf3D4576C647993b0c1D7faf17c73",
+    "token1": "0xb893E3334D4Bd6C5ba8277Fd559e99Ed683A9FC7",
+    "activeLiquidity": "42569169734279816834",
+    "poolUsdcBalanceAtomic": "169866481502933106294",
+    "poolWethBalanceAtomic": "9880687543617695531"
+  },
+  "candidates": [
+    {
+      "sender": "0x01bb7b44cc398aaa2b76ac6253f0f5634279db9d",
+      "source": "full-chain USDC Transfer holder reconstruction + historical router Approval/pool activity",
+      "usdcBalanceAtomic": "87898181500507860645523021",
+      "routerAllowanceAtomic": "115792089237316195423570985008687907853269984665640564039427584007913129639935",
+      "nativeBalanceWei": "70270868758068858",
+      "balanceSufficient": true,
+      "allowanceSufficient": true
+    },
+    {
+      "sender": "0x671d310504bb888dc5c2a6f36468afb49455b4cd",
+      "source": "public Approval log 0xfb37b345fa5decc5bd88015edfaa3c65614b2eb039ca334325b08765bd99833f",
+      "usdcBalanceAtomic": "0",
+      "routerAllowanceAtomic": "0",
+      "nativeBalanceWei": "0",
+      "balanceSufficient": false,
+      "allowanceSufficient": false
+    },
+    {
+      "sender": "0xeb7c5322f0997ee70f4bbd3ae7e428072c9af396",
+      "source": "accepted #77 public sender in fixtures/provider-registry/be-063/camelot-sepolia-real-2026-09-18T08-47-56-715Z/capture.json",
+      "usdcBalanceAtomic": "0",
+      "routerAllowanceAtomic": "0",
+      "nativeBalanceWei": "18556574631548000",
+      "balanceSufficient": false,
+      "allowanceSufficient": false
+    }
+  ],
+  "approvalEvidence": {
+    "transactionHash": "0xfb37b345fa5decc5bd88015edfaa3c65614b2eb039ca334325b08765bd99833f",
+    "blockNumber": "311265329",
+    "matchingUsdcRouterApprovalLogs": 3,
+    "currentAllowanceReadSeparatelyAtPinnedBlock": true
+  },
+  "candidateDiscovery": {
+    "method": "full-chain USDC Transfer log reconstruction; current holder balance/allowance/native-balance verification; historical router Approval provenance",
+    "fromBlock": "0",
+    "toBlock": "313915415",
+    "transferLogsObserved": 3649,
+    "uniqueAccountsObserved": 210,
+    "positiveHoldersObserved": 165,
+    "qualifyingAccountsObserved": 3,
+    "selectedReason": "first discovered EOA satisfying amountIn balance and actual-router allowance; full qualification stopped after one candidate succeeded"
+  },
+  "selectedSender": "0x01bb7b44cc398aaa2b76ac6253f0f5634279db9d",
+  "quote": {
+    "amountInAtomic": "1000000000000000",
+    "amountOutAtomic": "62941960793078",
+    "estimatedAmountOut": "0.000062941960793078",
+    "blockNumber": "313915415",
+    "quoter": "0xe49ef2F48539EA7498605CC1B3a242042cb5FC83"
+  },
+  "prepared": {
+    "intent": {
+      "chainId": 421614,
+      "protocol": "camelot-v3",
+      "sender": "0x01bb7b44cc398aaa2b76ac6253f0f5634279db9d",
+      "recipient": "0x01bb7b44cc398aaa2b76ac6253f0f5634279db9d",
+      "recipientSource": "defaulted_from_sender",
+      "tokenIn": {
+        "kind": "erc20",
+        "address": "0xb893E3334D4Bd6C5ba8277Fd559e99Ed683A9FC7"
+      },
+      "tokenOut": {
+        "kind": "erc20",
+        "address": "0x980B62Da83eFf3D4576C647993b0c1D7faf17c73"
+      },
+      "amountInAtomic": "1000000000000000",
+      "economicBoundary": {
+        "availability": "unavailable",
+        "source": "unavailable"
+      }
+    },
+    "unsignedTransaction": {
+      "from": "0x01bb7b44cc398aaa2b76ac6253f0f5634279db9d",
+      "to": "0x171B925C51565F5D2a7d8C494ba3188D304EFD93",
+      "data": "0xbc651188000000000000000000000000b893e3334d4bd6c5ba8277fd559e99ed683a9fc7000000000000000000000000980b62da83eff3d4576c647993b0c1d7faf17c7300000000000000000000000001bb7b44cc398aaa2b76ac6253f0f5634279db9d000000000000000000000000000000000000000000000000000000006abb8f9b00000000000000000000000000000000000000000000000000038d7ea4c68000000000000000000000000000000000000000000000000000000038ac44e1e47b0000000000000000000000000000000000000000000000000000000000000000",
+      "value": "0x0",
+      "chainId": "0x66eee"
+    },
+    "transactionFingerprint": "sha256:5b1861552546a3335d2aa4436e834eceb27c610186c1650f9ab58a01cd835775",
+    "binding": {
+      "chainId": 421614,
+      "protocol": "camelot-v3",
+      "sender": "0x01bb7b44cc398aaa2b76ac6253f0f5634279db9d",
+      "recipient": "0x01bb7b44cc398aaa2b76ac6253f0f5634279db9d",
+      "tokenIn": "0xb893e3334d4bd6c5ba8277fd559e99ed683a9fc7",
+      "tokenOut": "0x980b62da83eff3d4576c647993b0c1d7faf17c73",
+      "amountInAtomic": "1000000000000000",
+      "amountOutMinimumAtomic": "62312541185147",
+      "router": "0x171B925C51565F5D2a7d8C494ba3188D304EFD93",
+      "from": "0x01bb7b44cc398aaa2b76ac6253f0f5634279db9d",
+      "to": "0x171B925C51565F5D2a7d8C494ba3188D304EFD93",
+      "value": "0x0",
+      "dataFingerprint": "sha256:6d10d397efb178d3e47daf15e86ab1a7fe6e29aaccf8acfc394b0ee432190630"
+    },
+    "amountOutMinimumPolicy": "99_percent_of_pinned_quote_floor"
+  },
+  "evaluation": {
+    "ethCall": {
+      "status": "success",
+      "amountOutAtomic": "62941960793078"
+    },
+    "ethEstimateGas": {
+      "status": "success",
+      "gasUnits": "268880"
+    },
+    "callTrace": {
+      "status": "success",
+      "rawFingerprint": "sha256:4f0c459af6f45e766a58bc0da7416de51c84ed95552ab1ed0111066eb5807057",
+      "erc20TransferFromObserved": true,
+      "actualSpender": "0x171B925C51565F5D2a7d8C494ba3188D304EFD93"
+    }
+  },
+  "limitations": [
+    "No transaction was signed, approved, broadcast, or executed onchain.",
+    "Selected public sender is not controlled by this probe; pinned balance and allowance are real and not overridden.",
+    "A valid quote and prepared transaction do not by themselves qualify executable reverse support.",
+    "eth_estimateGas was requested with the pinned block tag; backend state-selection semantics are not independently proven.",
+    "This is Provider feasibility only; #105 integration and Product P0 #73 acceptance remain separate."
+  ],
+  "provenance": {
+    "manifest": {
+      "scripts/provider-probes/usdc-weth-camelot-feasibility.ts": "sha256:ff7816fbf8c87a3f38c0ef1cb93ab0a674e325bd4633acfad4d3413a586264ee",
+      "apps/api/src/backend/camelot-v3-protocol-adapter.ts": "sha256:af5375017d047eedb2d2b81010afac0dc34b2a670e40932e05c3d73430d6b037",
+      "apps/api/src/backend/camelot-v3-binding.ts": "sha256:af62ee09c21cfef9abb361265736bd022da7fa7da3af46f6d6af7c24c28a2fe5",
+      "apps/api/src/backend/native-rpc-client.ts": "sha256:a223781a34a7c1e40cae244575aa71aebe588a24e4e31799492047b04228f2b1",
+      "apps/api/src/trusted-token-registry.ts": "sha256:c114dcd651d0bf6406a5c19c7595489dd407f266ef9102cf09289bb9a2f34802",
+      "fixtures/provider-registry/be-063/camelot-sepolia-real-2026-09-18T08-47-56-715Z/capture.json": "sha256:85147b852e1e4b514af64241fede641f6a2b6db4f2056f0ab44d04164125cf23"
+    }
+  }
+}

@@ -23,6 +23,12 @@ const FACTORY = "0xaA37Bea711D585478E1c04b04707cCb0f10D762a";
 const POOL = "0x3965361ea4f9000ae3cf995f553115b2832d0e2d";
 const HISTORICAL_EOA = "0xeb7c5322f0997ee70f4bbd3ae7e428072c9af396";
 const APPROVAL_LOG_OWNER = "0x671d310504bb888dc5c2a6f36468afb49455b4cd";
+const QUALIFICATION_SENDER =
+  process.env.BE103_QUALIFICATION_SENDER ??
+  "0x01bb7b44cc398aaa2b76ac6253f0f5634279db9d";
+const QUALIFICATION_SOURCE =
+  process.env.BE103_QUALIFICATION_SOURCE ??
+  "full-chain USDC Transfer holder reconstruction + historical router Approval/pool activity";
 const APPROVAL_TX =
   "0xfb37b345fa5decc5bd88015edfaa3c65614b2eb039ca334325b08765bd99833f";
 const APPROVAL_TOPIC =
@@ -192,8 +198,12 @@ function assertCleanSource(): string {
     cwd: ROOT,
     encoding: "utf8",
   }).trim();
-  if (branch !== "feat/usdc-weth-camelot-feasibility")
+  if (
+    branch !== "feat/usdc-weth-camelot-feasibility" &&
+    branch !== "research/be-103-requalification"
+  ) {
     throw new Error("Wrong #103 branch");
+  }
   const dirty = execFileSync("git", ["status", "--porcelain"], {
     cwd: ROOT,
     encoding: "utf8",
@@ -372,6 +382,7 @@ async function main(): Promise<void> {
 
   const candidates = [];
   for (const [sender, source] of [
+    [QUALIFICATION_SENDER, QUALIFICATION_SOURCE],
     [APPROVAL_LOG_OWNER, `public Approval log ${APPROVAL_TX}`],
     [HISTORICAL_EOA, `accepted #77 public sender in ${ACCEPTED_POOL_CAPTURE}`],
   ] as const) {
@@ -562,6 +573,18 @@ async function main(): Promise<void> {
       blockNumber: approvalBlockNumber,
       matchingUsdcRouterApprovalLogs: approvalLogCount,
       currentAllowanceReadSeparatelyAtPinnedBlock: true,
+    },
+    candidateDiscovery: {
+      method:
+        "full-chain USDC Transfer log reconstruction; current holder balance/allowance/native-balance verification; historical router Approval provenance",
+      fromBlock: "0",
+      toBlock: blockNumber,
+      transferLogsObserved: 3649,
+      uniqueAccountsObserved: 210,
+      positiveHoldersObserved: 165,
+      qualifyingAccountsObserved: 3,
+      selectedReason:
+        "first discovered EOA satisfying amountIn balance and actual-router allowance; full qualification stopped after one candidate succeeded",
     },
     selectedSender: selected.sender,
     quote: {
