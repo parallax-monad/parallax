@@ -1,19 +1,10 @@
 import type { Copy } from "@/lib/i18n";
-import {
-  ARBITRUM_SEPOLIA_CHAIN_ID,
-  getChainIdForProtocol,
-} from "./api-helpers";
+import { getChainIdForProtocol } from "./api-helpers";
 import { evidenceCoverage } from "./evidence-coverage";
 import { type FormState, INITIAL_FORM, validateForm } from "./form";
 import { fetchP0Metadata, matchesToken, type P0Metadata } from "./p0-metadata";
 import type {
-  AccountAllowance,
-  AccountBlockBinding,
-  AccountStateState,
-  AccountStateView,
-  AccountTokenBalance,
   ActionSuggestion,
-  AllowanceSpender,
   ApiFailure,
   ApiFailureIssue,
   CheckSwapInput,
@@ -32,11 +23,6 @@ export const DEFAULT_SENDER = "0x1111111111111111111111111111111111111111";
 export const ARBITRUM_DEMO_SENDER =
   "0xeb7c5322f0997ee70f4bbd3ae7e428072c9af396";
 export const MONAD_USDC_ADDRESS = "0x754704Bc059F8C67012fEd69BC8A327a5aafb603";
-export const ARBITRUM_SEPOLIA_USDC_ADDRESS =
-  "0xb893E3334D4Bd6C5ba8277Fd559e99Ed683A9FC7";
-/** Canonical WETH on Arbitrum Sepolia, the reverse leg of the qualified pair. */
-export const ARBITRUM_SEPOLIA_WETH_ADDRESS =
-  "0x980B62Da83eFf3D4576C647993b0c1D7faf17c73";
 const API_BASE = "";
 const cp = (value: string) => ({ en: value, zh: value });
 const obj = (value: unknown): Record<string, unknown> | undefined =>
@@ -49,55 +35,37 @@ const unavailable = cp("unavailable");
 
 function symbol(value: unknown, chainId = 143, metadata?: P0Metadata): string {
   const asset = obj(value);
-  // The Backend registry metadata is the single primary naming source for the
-  // qualified P0 pair; nothing else may claim a P0 symbol for those assets.
-  if (chainId === 421614 && metadata) {
-    if (matchesToken(value, metadata.tokenIn)) return metadata.tokenIn.symbol;
-    if (matchesToken(value, metadata.tokenOut)) return metadata.tokenOut.symbol;
+  if (chainId === 421614) {
+    if (metadata && matchesToken(value, metadata.tokenIn))
+      return metadata.tokenIn.symbol;
+    if (metadata && matchesToken(value, metadata.tokenOut))
+      return metadata.tokenOut.symbol;
+    const address = str(asset?.address);
+    return address ? `${address.slice(0, 6)}…${address.slice(-4)}` : "unknown";
   }
   if (asset?.kind === "native") {
-    return chainId === ARBITRUM_SEPOLIA_CHAIN_ID ? "ETH" : "MON";
+    return "MON";
   }
   const address = str(asset?.address)?.toLowerCase();
   if (address === MONAD_USDC_ADDRESS.toLowerCase()) return "USDC";
-  // The reverse leg's WETH is outside the canonical P0 pair, so it is named from
-  // its canonical Arbitrum Sepolia address rather than invented.
-  if (address === ARBITRUM_SEPOLIA_USDC_ADDRESS.toLowerCase()) return "USDC";
-  if (address === ARBITRUM_SEPOLIA_WETH_ADDRESS.toLowerCase()) return "WETH";
   return address ? `${address.slice(0, 6)}…${address.slice(-4)}` : "unknown";
 }
 
 function asset(value: string, chainId: number, metadata?: P0Metadata) {
   if (chainId === 421614) {
-    // Trusted metadata stays primary for the canonical pair.
     if (metadata && value === metadata.tokenIn.symbol)
       return metadata.tokenIn.asset;
     if (metadata && value === metadata.tokenOut.symbol)
       return metadata.tokenOut.asset;
-    // The reverse flow must still be able to build its own request when metadata
-    // does not cover the symbol; every other symbol fails closed.
-    if (value === "MON" || value === "ETH") return { kind: "native" };
-    if (value === "USDC")
-      return { kind: "erc20", address: ARBITRUM_SEPOLIA_USDC_ADDRESS };
-    if (value === "WETH")
-      return { kind: "erc20", address: ARBITRUM_SEPOLIA_WETH_ADDRESS };
     throw new Error("Trusted P0 token metadata is unavailable");
   }
-  if (value === "MON" || value === "ETH") return { kind: "native" };
+  if (value === "MON") return { kind: "native" };
   if (value === "USDC") return { kind: "erc20", address: MONAD_USDC_ADDRESS };
-  if (value === "WETH") {
-    // WETH exists only on the Arbitrum Sepolia leg; mapping it on Monad would
-    // silently point the intent at a foreign chain's token.
-    throw new Error(`Unsupported token: WETH on chain ${chainId}`);
-  }
   throw new Error(`Unsupported token: ${value}`);
 }
 
 function decimal(value: unknown, decimals: number | undefined): string {
   const atomic = str(value);
-  // An atomic integer without a trusted scale is never guessed: applying the
-  // Monad registry's 6-decimal USDC to Arbitrum Sepolia's 18-decimal test token
-  // would be wrong by 10^12.
   if (!atomic || !/^\d+$/.test(atomic) || decimals === undefined)
     return "unavailable";
   if (decimals === 0) return atomic;
@@ -139,45 +107,19 @@ const ACTION_REASON: Record<string, Copy> = {
   },
 };
 
-/**
- * Historical Monad display only. Arbitrum always uses Backend registry metadata.
- * The 6-decimal USDC entry below must never be applied on Arbitrum Sepolia,
- * whose test USDC publishes 18 decimals.
- */
+/** Historical Monad display only. Arbitrum always uses Backend registry metadata. */
 const MONAD_DECIMALS: Record<string, number> = { MON: 18, USDC: 6 };
-
-/**
- * The single ordered trusted-decimals resolution:
- *   1. Backend registry `metadata`, when it covers the symbol;
- *   2. the trusted decimals read from `/api/account-state`, which covers the
- *      reverse USDC -> WETH pair the canonical metadata does not carry;
- *   3. the Monad-only historical fallback (never applied on chain 421614).
- */
 function decimalsFor(
   symbol: string,
   chainId: number,
   metadata?: P0Metadata,
-  accountDecimals?: Record<string, number>,
 ): number | undefined {
   if (chainId === 421614) {
     if (metadata?.tokenIn.symbol === symbol) return metadata.tokenIn.decimals;
     if (metadata?.tokenOut.symbol === symbol) return metadata.tokenOut.decimals;
-    return accountDecimals?.[symbol];
+    return undefined;
   }
-  return accountDecimals?.[symbol] ?? MONAD_DECIMALS[symbol];
-}
-
-/**
- * Converts an atomic integer for display using trusted decimals. With no
- * trusted value the atomic integer is returned verbatim with an explicit marker
- * so no screen implies a scale the Backend did not publish.
- */
-export function atomicToDisplay(
-  amountAtomic: string,
-  decimals: number | undefined,
-): string {
-  if (decimals === undefined) return `${amountAtomic} (atomic)`;
-  return decimal(amountAtomic, decimals);
+  return MONAD_DECIMALS[symbol];
 }
 
 /**
@@ -191,7 +133,6 @@ function displayChange(
   unit: string,
   chainId: number,
   metadata?: P0Metadata,
-  accountDecimals?: Record<string, number>,
 ) {
   const change = obj(value);
   const before = str(change?.before);
@@ -203,14 +144,8 @@ function displayChange(
   if (!isAmount) return { before, after, unit: "" };
 
   return {
-    before: decimal(
-      before,
-      decimalsFor(unit, chainId, metadata, accountDecimals),
-    ),
-    after: decimal(
-      after,
-      decimalsFor(unit, chainId, metadata, accountDecimals),
-    ),
+    before: decimal(before, decimalsFor(unit, chainId, metadata)),
+    after: decimal(after, decimalsFor(unit, chainId, metadata)),
     unit,
   };
 }
@@ -221,7 +156,6 @@ function suggestion(
   tokenOut: string,
   chainId: number,
   metadata?: P0Metadata,
-  accountDecimals?: Record<string, number>,
 ): ActionSuggestion | undefined {
   const evaluation = obj(value);
   const action = obj(evaluation?.action);
@@ -254,7 +188,6 @@ function suggestion(
       unit,
       chainId,
       metadata,
-      accountDecimals,
     ),
   };
 }
@@ -338,7 +271,6 @@ function diff(
   tokenIn: string,
   chainId: number,
   metadata?: P0Metadata,
-  accountDecimals?: Record<string, number>,
 ): RunDiff | undefined {
   const rows = arr(obj(value)?.changedFields).flatMap((raw) => {
     const item = obj(raw);
@@ -350,10 +282,7 @@ function diff(
     const isAmount = field === "amountInAtomic";
     const show = (atomic: string) =>
       isAmount
-        ? `${decimal(
-            atomic,
-            decimalsFor(tokenIn, chainId, metadata, accountDecimals),
-          )} ${tokenIn}`
+        ? `${decimal(atomic, decimalsFor(tokenIn, chainId, metadata))} ${tokenIn}`
         : atomic;
 
     return [
@@ -501,7 +430,6 @@ function mapRun(
   _rawResponse: unknown = raw,
   createdAtOverride?: string,
   metadata?: P0Metadata,
-  accountDecimals?: Record<string, number>,
 ): CheckSwapResult | undefined {
   const run = obj(raw);
   const intent = obj(run?.intent);
@@ -566,7 +494,7 @@ function mapRun(
             boundary?.availability === "available"
               ? decimal(
                   boundary.minimumReceivedAtomic,
-                  decimalsFor(tokenOut, chainId, metadata, accountDecimals),
+                  decimalsFor(tokenOut, chainId, metadata),
                 )
               : "",
         }
@@ -586,14 +514,10 @@ function mapRun(
               (apiFailure ? failureCopy(apiFailure).en : "No summary provided"),
           ),
     recommendedActions: arr(run?.recommendedActions)
-      .map((item) =>
-        suggestion(item, tokenIn, tokenOut, chainId, metadata, accountDecimals),
-      )
+      .map((item) => suggestion(item, tokenIn, tokenOut, chainId, metadata))
       .filter((item): item is ActionSuggestion => !!item),
     irrelevantActions: arr(run?.irrelevantActions)
-      .map((item) =>
-        suggestion(item, tokenIn, tokenOut, chainId, metadata, accountDecimals),
-      )
+      .map((item) => suggestion(item, tokenIn, tokenOut, chainId, metadata))
       .filter((item): item is ActionSuggestion => !!item),
     checked: scope
       .filter((item) => item.status === "checked")
@@ -666,10 +590,10 @@ function mapRun(
       tokenOut,
       amountIn: decimal(
         intent?.amountInAtomic,
-        decimalsFor(tokenIn, chainId, metadata, accountDecimals),
+        decimalsFor(tokenIn, chainId, metadata),
       ),
     },
-    diff: diff(run?.diff, tokenIn, chainId, metadata, accountDecimals),
+    diff: diff(run?.diff, tokenIn, chainId, metadata),
     quote: {
       // The handoff separates the QUOTE-stage observation from the simulated
       // output, so the top-level Quote wins for the "expected" figure and the
@@ -679,7 +603,7 @@ function mapRun(
         (output
           ? decimal(
               output.amountReceivedAtomic,
-              decimalsFor(tokenOut, chainId, metadata, accountDecimals),
+              decimalsFor(tokenOut, chainId, metadata),
             )
           : "unavailable"),
       route: routePath ? cp(routePath) : unavailable,
@@ -692,7 +616,7 @@ function mapRun(
     simulatedOutput: output
       ? decimal(
           output.amountReceivedAtomic,
-          decimalsFor(tokenOut, chainId, metadata, accountDecimals),
+          decimalsFor(tokenOut, chainId, metadata),
         )
       : "unavailable",
     minimumReceivedSource: (str(boundary?.source) ??
@@ -753,15 +677,7 @@ function body(input: CheckSwapInput, metadata?: P0Metadata) {
   };
 }
 
-export type CheckOptions = {
-  fetch?: typeof fetch;
-  signal?: AbortSignal;
-  /**
-   * Trusted decimals observed from `/api/account-state`, keyed by symbol. When
-   * present these override the Monad registry fallback for display conversion.
-   */
-  decimalsBySymbol?: Record<string, number>;
-};
+export type CheckOptions = { fetch?: typeof fetch; signal?: AbortSignal };
 
 /** `/api/quote` is a strict exact-input body: no boundary, no parent, no slippage. */
 function quoteBody(input: QuoteSwapInput, metadata?: P0Metadata) {
@@ -899,214 +815,6 @@ export async function fetchQuote(
   return { status: "available", quote: preview, request: input };
 }
 
-const int = (value: unknown): number | undefined =>
-  typeof value === "number" && Number.isInteger(value) ? value : undefined;
-const digits = (value: unknown): string | undefined => {
-  const text = str(value);
-  return text !== undefined && /^\d+$/.test(text) ? text : undefined;
-};
-
-/**
- * Normalizes one balance side. Only the public metadata and amount are kept:
- * the snapshot never carries provider data, and nothing else is copied.
- */
-function accountBalance(value: unknown): AccountTokenBalance | undefined {
-  const balance = obj(value);
-  const status = str(balance?.status);
-  if (status !== "AVAILABLE" && status !== "UNAVAILABLE") return undefined;
-  const metadata = obj(balance?.metadata);
-  const symbolValue = str(metadata?.symbol);
-  if (metadata === undefined || !symbolValue) return undefined;
-  const decimalsSource = str(metadata?.decimalsSource);
-  const view: AccountTokenBalance = {
-    status,
-    symbol: symbolValue,
-    decimals: int(metadata?.decimals),
-    decimalsSource:
-      decimalsSource === "chain_config" || decimalsSource === "onchain_verified"
-        ? decimalsSource
-        : undefined,
-  };
-  if (status === "AVAILABLE") {
-    const amountAtomic = digits(balance?.amountAtomic);
-    return amountAtomic === undefined ? undefined : { ...view, amountAtomic };
-  }
-  return { ...view, reason: str(balance?.reason) ?? "UNAVAILABLE" };
-}
-
-function allowanceSpender(value: unknown): AllowanceSpender | undefined {
-  const spender = obj(value);
-  const status = str(spender?.status);
-  if (status === "QUALIFIED") {
-    const address = str(spender?.address);
-    const qualificationRef = str(spender?.qualificationRef);
-    if (!address || !qualificationRef) return undefined;
-    return { status, address, qualificationRef };
-  }
-  if (status === "UNAVAILABLE") {
-    return {
-      status,
-      reason: str(spender?.reason) ?? "SPENDER_NOT_QUALIFIED",
-    };
-  }
-  if (status === "NOT_APPLICABLE") return { status };
-  return undefined;
-}
-
-function accountAllowance(value: unknown): AccountAllowance | undefined {
-  const allowance = obj(value);
-  const status = str(allowance?.status);
-  const spender = allowanceSpender(allowance?.spender);
-  if (status === "SUFFICIENT" || status === "INSUFFICIENT") {
-    const allowanceAtomic = digits(allowance?.allowanceAtomic);
-    const requiredAmountAtomic = digits(allowance?.requiredAmountAtomic);
-    if (
-      allowanceAtomic === undefined ||
-      requiredAmountAtomic === undefined ||
-      spender?.status !== "QUALIFIED"
-    )
-      return undefined;
-    return {
-      status,
-      allowanceAtomic,
-      requiredAmountAtomic,
-      spender,
-      blockNumber: digits(allowance?.blockNumber),
-    };
-  }
-  if (status === "UNAVAILABLE") {
-    return {
-      status,
-      reason: str(allowance?.reason) ?? "UNAVAILABLE",
-      requiredAmountAtomic: digits(allowance?.requiredAmountAtomic),
-      spender,
-      blockNumber: digits(allowance?.blockNumber),
-    };
-  }
-  if (status === "NOT_APPLICABLE") {
-    return { status, reason: "NATIVE_INPUT" };
-  }
-  return undefined;
-}
-
-function accountBlock(value: unknown): AccountBlockBinding | undefined {
-  const block = obj(value);
-  const status = str(block?.status);
-  const observedAt = str(block?.observedAt);
-  const chainId = int(block?.chainId);
-  if (status === "VERIFIED" || status === "STALE") {
-    const blockNumber = digits(block?.blockNumber);
-    const blockHash = str(block?.blockHash);
-    if (
-      blockNumber === undefined ||
-      !blockHash ||
-      !observedAt ||
-      chainId === undefined
-    )
-      return undefined;
-    return status === "VERIFIED"
-      ? { status, chainId, blockNumber, blockHash, observedAt }
-      : {
-          status,
-          chainId,
-          blockNumber,
-          blockHash,
-          observedAt,
-          reason: str(block?.reason) ?? "BLOCK_HASH_MISMATCH",
-        };
-  }
-  if (status === "UNAVAILABLE") {
-    return {
-      status,
-      chainId,
-      blockNumber: digits(block?.blockNumber),
-      blockHash: str(block?.blockHash),
-      observedAt,
-      reason: str(block?.reason),
-    };
-  }
-  return undefined;
-}
-
-/**
- * Maps a normalized `POST /api/account-state` snapshot. Returns undefined for a
- * payload that cannot be trusted, so the caller fails closed rather than showing
- * a partially invented observation.
- */
-export function mapAccountState(
-  payload: unknown,
-): AccountStateView | undefined {
-  const snapshot = obj(payload);
-  if (!snapshot) return undefined;
-  const status = str(snapshot.status);
-  if (
-    status !== "AVAILABLE" &&
-    status !== "PARTIAL" &&
-    status !== "UNAVAILABLE"
-  )
-    return undefined;
-  if (str(snapshot.snapshotId) === undefined) return undefined;
-  const balances = obj(snapshot.balances);
-  const inputToken = accountBalance(balances?.inputToken);
-  const outputToken = accountBalance(balances?.outputToken);
-  const allowance = accountAllowance(snapshot.allowance);
-  const block = accountBlock(snapshot.block);
-  if (!inputToken || !outputToken || !allowance || !block) return undefined;
-
-  const decimalsBySymbol: Record<string, number> = {};
-  for (const side of [inputToken, outputToken]) {
-    if (side.symbol && side.decimals !== undefined) {
-      decimalsBySymbol[side.symbol] = side.decimals;
-    }
-  }
-  return {
-    status,
-    decimalsBySymbol,
-    inputToken,
-    outputToken,
-    allowance,
-    block,
-  };
-}
-
-/**
- * Reads trusted account state for the same intent `/api/quote` accepts. The
- * endpoint is optional evidence: any transport error, non-200, malformed body,
- * or `UNAVAILABLE` snapshot fails closed with no decimals and no fabricated
- * amount, and never blocks submitting the Check.
- */
-export async function fetchAccountState(
-  input: QuoteSwapInput,
-  options: CheckOptions = {},
-): Promise<AccountStateState> {
-  let response: Response;
-  try {
-    response = await (options.fetch ?? fetch)(`${API_BASE}/api/account-state`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(quoteBody(input)),
-      signal: options.signal,
-    });
-  } catch {
-    return { status: "unavailable", reason: "REQUEST_FAILED" };
-  }
-
-  let payload: unknown;
-  try {
-    payload = await response.json();
-  } catch {
-    return { status: "unavailable", reason: "INVALID_RESPONSE" };
-  }
-  if (!response.ok) return { status: "unavailable", reason: "REQUEST_FAILED" };
-
-  const view = mapAccountState(payload);
-  if (!view) return { status: "unavailable", reason: "INVALID_RESPONSE" };
-  if (view.status === "UNAVAILABLE") {
-    return { status: "unavailable", reason: "SNAPSHOT_UNAVAILABLE" };
-  }
-  return { status: "available", view };
-}
-
 export async function checkSwap(
   input: CheckSwapInput,
   options: CheckOptions = {},
@@ -1173,14 +881,7 @@ export async function checkSwap(
   }
   if (response.ok)
     return (
-      mapRun(
-        payload,
-        undefined,
-        payload,
-        undefined,
-        metadata,
-        options.decimalsBySymbol,
-      ) ??
+      mapRun(payload, undefined, payload, undefined, metadata) ??
       failed(
         input,
         {
@@ -1202,14 +903,8 @@ export async function checkSwap(
     issues: failureIssues(error?.issues),
   };
   return (
-    mapRun(
-      envelope?.run,
-      apiFailure,
-      payload,
-      undefined,
-      metadata,
-      options.decimalsBySymbol,
-    ) ?? failed(input, apiFailure, payload)
+    mapRun(envelope?.run, apiFailure, payload, undefined, metadata) ??
+    failed(input, apiFailure, payload)
   );
 }
 

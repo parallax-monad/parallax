@@ -1,11 +1,10 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import { OptionsStep } from "@/components/analyze/OptionsStep";
 import { P0ExecutionCard } from "@/components/analyze/P0ExecutionCard";
 import { ResultStep } from "@/components/analyze/ResultStep";
 import { VerdictIcon } from "@/components/analyze/StatusIcon";
 import { StepTimeline } from "@/components/analyze/StepTimeline";
 import type {
-  AccountStateState,
   CheckSwapResult,
   ProductRunMode,
   RemediationOption,
@@ -50,7 +49,6 @@ const INTEGRATION_ERROR_COPY = {
 export function WalletResult({
   result,
   language,
-  accountState,
   onKeep,
   onRetry,
   onDiscard,
@@ -59,8 +57,6 @@ export function WalletResult({
 }: {
   result: CheckSwapResult;
   language: Language;
-  /** Trusted account state for the checked intent; unknown reads stay unknown. */
-  accountState?: AccountStateState;
   onKeep: () => void;
   onRetry?: () => void;
   onDiscard: () => void;
@@ -253,7 +249,6 @@ export function WalletResult({
 
       {currentStep === "result" ? (
         <ResultStep
-          accountState={accountState}
           language={language}
           result={result}
           onNext={() => setCurrentStep("options")}

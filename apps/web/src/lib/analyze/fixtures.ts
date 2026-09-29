@@ -25,54 +25,13 @@ export const SUPPORTED_PROTOCOLS: readonly ProtocolOption[] = [
   { value: "camelot-v3", label: "Camelot V3" },
 ];
 
-export type SupportedPair = { tokenIn: string; tokenOut: string };
-
-/**
- * The directions the P0 evidence set can express. `USDC -> WETH` is the reverse
- * leg of the qualified Arbitrum Sepolia path; the receive side is always derived
- * from this map so the form cannot offer a direction with no evidence.
- */
-export const SUPPORTED_PAIRS: readonly SupportedPair[] = [
-  { tokenIn: "ETH", tokenOut: "USDC" },
-  { tokenIn: "USDC", tokenOut: "WETH" },
-];
-
-export const SUPPORTED_TOKENS_IN: readonly string[] = [
-  ...new Set(SUPPORTED_PAIRS.map((pair) => pair.tokenIn)),
-];
-
-export const SUPPORTED_TOKENS_OUT: readonly string[] = [
-  ...new Set(SUPPORTED_PAIRS.map((pair) => pair.tokenOut)),
-];
+export const SUPPORTED_TOKENS_IN: readonly string[] = ["ETH", "USDC"];
 
 export function receiveTokenFor(tokenIn: string): string {
-  return (
-    SUPPORTED_PAIRS.find((pair) => pair.tokenIn === tokenIn)?.tokenOut ??
-    tokenIn
-  );
+  return tokenIn === "ETH" ? "USDC" : "ETH";
 }
 
-/** The pay side that reaches this receive token, or undefined when none does. */
-export function payTokenFor(tokenOut: string): string | undefined {
-  return SUPPORTED_PAIRS.find((pair) => pair.tokenOut === tokenOut)?.tokenIn;
-}
-
-/**
- * The other expressible direction for the swap control. A literal reversal wins
- * when that pair exists; otherwise the map's other pair is returned instead of
- * emitting an unsupported combination.
- */
-export function swapDirectionFor(
-  tokenIn: string,
-  tokenOut: string,
-): SupportedPair {
-  const literal = SUPPORTED_PAIRS.find(
-    (pair) => pair.tokenIn === tokenOut && pair.tokenOut === tokenIn,
-  );
-  if (literal) return literal;
-  const other = SUPPORTED_PAIRS.find((pair) => pair.tokenIn !== tokenIn);
-  return other ?? { tokenIn: tokenOut, tokenOut: tokenIn };
-}
+export const SUPPORTED_TOKENS_OUT: readonly string[] = ["USDC", "ETH"];
 
 export type ExecutionStatus = "SUCCESS" | "NO_ROUTE" | "REVERTED" | "UNKNOWN";
 
