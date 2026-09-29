@@ -66,9 +66,9 @@ export const arbitrumSampleProceed: CheckSwapResult = {
   ruleVersion: "0.2.0",
   mossVersion: "0.1.0",
   productRunMode: "LIVE",
-  presentationOrigin: "sample",
   replayMode: false,
   simulatorPinnedBlock: "92820100",
+  rawResponse: {},
 };
 
 /** STOP verdict: Blocking evidence found, do not proceed */
@@ -149,9 +149,9 @@ export const arbitrumSampleStop: CheckSwapResult = {
   ruleVersion: "0.2.0",
   mossVersion: "0.1.0",
   productRunMode: "LIVE",
-  presentationOrigin: "sample",
   replayMode: false,
   simulatorPinnedBlock: "92820200",
+  rawResponse: {},
 };
 
 /** UNKNOWN verdict: Missing critical fields, cannot make decision */
@@ -211,9 +211,9 @@ export const arbitrumSampleUnknown: CheckSwapResult = {
   ruleVersion: "0.2.0",
   mossVersion: "0.1.0",
   productRunMode: "LIVE",
-  presentationOrigin: "sample",
   replayMode: false,
   simulatorPinnedBlock: "92820300",
+  rawResponse: {},
 };
 
 /** INTEGRATION_ERROR: System-level failure, not user-actionable */
@@ -260,6 +260,6 @@ export const arbitrumSampleIntegrationError: CheckSwapResult = {
   ruleVersion: "0.2.0",
   mossVersion: "0.1.0",
   productRunMode: "LIVE",
-  presentationOrigin: "sample",
   replayMode: false,
+  rawResponse: {},
 };
