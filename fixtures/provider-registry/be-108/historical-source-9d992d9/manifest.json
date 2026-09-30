@@ -1,0 +1,51 @@
+{
+  "schemaVersion": "be-108-historical-source-v1",
+  "historicalCommit": "9d992d9533dc035d9fe6becc4abcc44f089e6400",
+  "recordedCaptureHead": "f8cc7beb4f899e0b8283e1e30a67814a4989c73e",
+  "worktreeDirtyAtCapture": true,
+  "historicalManifestCount": 59,
+  "historicalManifestSha256": "9d6ea554296fffff6c5dc570e95cf5ae921989e1c3dc46825527026300c02b17",
+  "sourceVerification": {
+    "historicalCommitMatches": 59,
+    "recordedCaptureHeadMatches": 58,
+    "dirtySourcePath": "apps/api/src/backend/explorer-evidence-source.ts"
+  },
+  "limitations": [
+    "Non-executable historical attachments; never import or run these files.",
+    "Archival preserves original defects; it does not fix or qualify the prototype.",
+    "Prototype provenance() copies caller context without an Explorer request and can incorrectly report checked/live_verified.",
+    "Prototype receipt normalization treats arbitrary non-0x1 status as reverted.",
+    "Prototype transfers query only blocks 0..99999999, page 1, offset 100.",
+    "Static surface/verification labels do not establish credentialed Etherscan V2 qualification.",
+    "MOCK tests are not LIVE qualification; historical duration is UNVERIFIABLE."
+  ],
+  "files": [
+    {
+      "originalPath": "scripts/provider-probes/explorer-evidence-feasibility.ts",
+      "originalCommit": "9d992d9533dc035d9fe6becc4abcc44f089e6400",
+      "gitBlobId": "636d78c0f5d0f5156075acf72f67d414c61b4b9d",
+      "sha256": "da94430818626e02fc5e9ae7838578fa15d01712239a15451348267b5a587f17",
+      "bytes": 23679,
+      "archiveFile": "explorer-evidence-feasibility.ts.txt",
+      "purpose": "Original network research runner; preserved for historical source verification only."
+    },
+    {
+      "originalPath": "apps/api/src/backend/explorer-evidence-source.ts",
+      "originalCommit": "9d992d9533dc035d9fe6becc4abcc44f089e6400",
+      "gitBlobId": "b1192f442728527b34da944e4f2a23fe3e9603b4",
+      "sha256": "feaca2fdd581a194bc35d4e54f8f32647bf457e5e7e32228f763e280ebb7b439",
+      "bytes": 30803,
+      "archiveFile": "explorer-evidence-source.ts.txt",
+      "purpose": "Unintegrated Backend feasibility prototype; not production-qualified."
+    },
+    {
+      "originalPath": "apps/api/src/backend/explorer-evidence-source.test.ts",
+      "originalCommit": "9d992d9533dc035d9fe6becc4abcc44f089e6400",
+      "gitBlobId": "65dc50f1bb4c836bf13281e8c80a5628945c5c4f",
+      "sha256": "32d30183f6affd12954e4808bcd1cdf5c0b35355f492c593509b96bc8172b464",
+      "bytes": 14350,
+      "archiveFile": "explorer-evidence-source.test.ts.txt",
+      "purpose": "Original MOCK unit tests; not LIVE endpoint qualification."
+    }
+  ]
+}
