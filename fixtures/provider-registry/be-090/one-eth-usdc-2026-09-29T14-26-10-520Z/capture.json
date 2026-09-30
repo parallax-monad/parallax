@@ -1,0 +1,195 @@
+{
+  "schemaVersion": "be-090-arbitrum-one-feasibility-v1",
+  "status": "ARBITRUM_ONE_FEASIBILITY_QUALIFIED",
+  "productionSupport": false,
+  "productAccepted": false,
+  "real": true,
+  "readOnly": true,
+  "noStateOverride": true,
+  "noWriteRpc": true,
+  "capturedAt": "2026-09-29T14:26:10.520Z",
+  "sourceHead": "f4bacf2d509e2b9f9de0365a7ee8ecedd799e609",
+  "endpointClass": "official_public_arbitrum_one_https_rpc",
+  "target": {
+    "chain": "Arbitrum One",
+    "chainId": 42161,
+    "protocol": "Camelot AMMv3",
+    "path": "native ETH to USDC",
+    "amountInWei": "1000000000000000",
+    "selectionReason": "official AMMv3 deployment facts; factory-linked WETH/USDC direct pool; nonzero liquidity; native input avoids unqualified ERC20 spender"
+  },
+  "authoritativeSources": {
+    "chain": "https://docs.arbitrum.io/arbitrum-bridge/quickstart",
+    "deployment": "https://docs.camelot.exchange/contracts/arbitrum/one-mainnet/"
+  },
+  "pinnedBlock": {
+    "number": "510054964",
+    "hash": "0x10244031ec7f830bfb8d81cc0310a8b60bb13919f73e1e000cfe2a690467b26d",
+    "timestamp": "1790691959",
+    "chainIdRechecked": true,
+    "blockHashRechecked": true
+  },
+  "contracts": {
+    "factory": "0x1a3c9B1d2F0529D97f2afC5136Cc23e58f1FD35B",
+    "quoter": "0x0Fc73040b26E9bC8514fA028D998E73A254Fa76E",
+    "router": "0x1F721E2E82F6676FCE4eA07A5958cF098D339e18",
+    "weth": "0x82aF49447D8a07e3bd95BD0d56f35241523fBab1",
+    "usdc": "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
+    "codeHashes": {
+      "factory": "sha256:628548adfe04aff3d028330af7c44f65082e24795922acb247cacc2a57f6738b",
+      "quoter": "sha256:d162d6e623b243e6a2e6579dbb1fdfa324e6f5fa1a27703425a9fb41a7881b1f",
+      "router": "sha256:6c499c4b0ff9dc9aded80698db763716762e63e6febaebcc96b8278e43d3fac2",
+      "weth": "sha256:d058f7f80f1da876d8230d412a4dd7d3ce80ace48078cdb799c586cde8cab791",
+      "usdc": "sha256:2806ceef5f6fb4b4dd8630deb055a197dcab2ec729936d35845627faed23a5a3"
+    },
+    "poolCodeHash": "sha256:6812b4ad912e883b85aad8cd9969237f955e6d323cd778c181f6400af5fc8809"
+  },
+  "tokens": {
+    "input": {
+      "kind": "native",
+      "symbol": "ETH",
+      "decimals": 18,
+      "wrappedForRoute": "0x82aF49447D8a07e3bd95BD0d56f35241523fBab1",
+      "nativeRepresentationSource": "Arbitrum chain currency plus Camelot WETH deployment"
+    },
+    "output": {
+      "kind": "erc20",
+      "address": "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
+      "symbol": "USDC",
+      "decimals": 6,
+      "decimalsSource": "onchain_at_pinned_block"
+    },
+    "weth": {
+      "address": "0x82aF49447D8a07e3bd95BD0d56f35241523fBab1",
+      "symbol": "WETH",
+      "decimals": 18,
+      "decimalsSource": "onchain_at_pinned_block"
+    }
+  },
+  "route": {
+    "factory": "0x1a3c9B1d2F0529D97f2afC5136Cc23e58f1FD35B",
+    "pool": "0xb1026b8e7276e7ac75410f1fcbbe21796e8f7526",
+    "token0": "0x82af49447d8a07e3bd95bd0d56f35241523fbab1",
+    "token1": "0xaf88d065e77c8cc2239327c5edb3a432268e5831",
+    "activeLiquidity": "54254103128208629",
+    "poolWethBalanceAtomic": "84979152616548767186",
+    "poolUsdcBalanceAtomic": "97393853201"
+  },
+  "sender": {
+    "address": "0x61094e6ac4285f18961db65927e0f8b3756379a2",
+    "provenance": "confirmed public third-party EOA transaction",
+    "provenanceTxHash": "0x37bb3de61f7b948af13af7810f8e3242ad1f057b213e3427d9834a6f8464ad01",
+    "provenanceTxBlockHash": "0x429f77188f370c8ed08e8280dc48dce8291154f423cc19c496b2b19f687663e9",
+    "eoaCodeEmptyAtPinnedBlock": true,
+    "nativeBalanceWei": "33317554783702000",
+    "allowance": "NOT_APPLICABLE",
+    "spender": "NOT_APPLICABLE",
+    "observedGasPriceWei": "20046000",
+    "nativeBalanceCoversInputAndObservedGas": true
+  },
+  "quote": {
+    "quoter": "0x0Fc73040b26E9bC8514fA028D998E73A254Fa76E",
+    "inputAtomic": "1000000000000000",
+    "outputAtomic": "2716115",
+    "outputDecimals": 6,
+    "blockNumber": "510054964",
+    "selector": "0x2d9ebd1d"
+  },
+  "prepared": {
+    "unsignedTransaction": {
+      "from": "0x61094e6ac4285f18961db65927e0f8b3756379a2",
+      "to": "0x1F721E2E82F6676FCE4eA07A5958cF098D339e18",
+      "data": "0xbc65118800000000000000000000000082af49447d8a07e3bd95bd0d56f35241523fbab1000000000000000000000000af88d065e77c8cc2239327c5edb3a432268e583100000000000000000000000061094e6ac4285f18961db65927e0f8b3756379a2000000000000000000000000000000000000000000000000000000006abbd88700000000000000000000000000000000000000000000000000038d7ea4c6800000000000000000000000000000000000000000000000000000000000002907b90000000000000000000000000000000000000000000000000000000000000000",
+      "value": "0x38d7ea4c68000",
+      "chainId": "0xa4b1"
+    },
+    "decoded": {
+      "tokenIn": "0x82af49447d8a07e3bd95bd0d56f35241523fbab1",
+      "tokenOut": "0xaf88d065e77c8cc2239327c5edb3a432268e5831",
+      "recipient": "0x61094e6ac4285f18961db65927e0f8b3756379a2",
+      "deadline": "1790695559",
+      "amountInAtomic": "1000000000000000",
+      "amountOutMinimumAtomic": "2688953",
+      "sqrtPriceLimitX96": "0"
+    },
+    "transactionFingerprint": "sha256:b33f592710fe52869298d6673eb2ffb1ffe74a61f7c686a6b880f6811813e1c5",
+    "binding": {
+      "chainId": 42161,
+      "protocol": "camelot-v3",
+      "factory": "0x1a3c9B1d2F0529D97f2afC5136Cc23e58f1FD35B",
+      "pool": "0xb1026b8e7276e7ac75410f1fcbbe21796e8f7526",
+      "router": "0x1F721E2E82F6676FCE4eA07A5958cF098D339e18",
+      "quoter": "0x0Fc73040b26E9bC8514fA028D998E73A254Fa76E",
+      "nativeInputWrappedAs": "0x82aF49447D8a07e3bd95BD0d56f35241523fBab1",
+      "tokenOut": "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
+      "inputAtomic": "1000000000000000",
+      "quoteOutputAtomic": "2716115",
+      "amountOutMinimumAtomic": "2688953",
+      "protectionPolicy": "99_percent_of_pinned_quote_floor",
+      "recipient": "0x61094e6ac4285f18961db65927e0f8b3756379a2",
+      "txValue": "0x38d7ea4c68000"
+    },
+    "construction": "explicit One deployment and AMMv3 ABI verified by pinned router eth_call; production Sepolia adapter not reused"
+  },
+  "evaluation": {
+    "ethCall": {
+      "status": "success",
+      "amountOutAtomic": "2716115"
+    },
+    "ethEstimateGas": {
+      "status": "success",
+      "gasUnits": "365025"
+    },
+    "debugTraceCall": {
+      "status": "unavailable",
+      "rawFingerprint": null
+    }
+  },
+  "abstractionAssessment": {
+    "classification": "BACKEND_ARCH_CHANGE",
+    "configOnly": false,
+    "reason": "Sepolia chain ID and deployments are fixed across runtime config, Camelot adapter/binding, chain adapter, NativeRpcProvider, Trace source, account-state reader, qualified spender, bootstrap, and frontend routing. The shared RPC transport and canonical Contract/Risk shapes are chain-bound but generic.",
+    "productChangeRequiredForFeasibility": false,
+    "contractSemanticChangeRequired": false,
+    "riskSemanticChangeRequired": false,
+    "backendPromotionImplemented": false
+  },
+  "limitations": [
+    "Read-only external RPC feasibility, not assembled NativeRpcProvider or Backend execution.",
+    "The public sender is not a Parallax user or controlled wallet.",
+    "The public RPC did not supply debug_traceCall; trace is supplementary and unavailable.",
+    "The gas price is an observed current value, not a pinned-block value.",
+    "No signing, approval, broadcast, custody, state override, or write RPC occurred.",
+    "No Product acceptance or production Arbitrum One support is claimed."
+  ],
+  "provenance": {
+    "manifest": {
+      "scripts/provider-probes/arbitrum-one-feasibility.ts": "sha256:2f35988c768b9c10ed376261b940c1b28ddb574396ab5b38aa2690514bb7de1e",
+      "apps/api/src/backend/native-rpc-client.ts": "sha256:a223781a34a7c1e40cae244575aa71aebe588a24e4e31799492047b04228f2b1",
+      "apps/api/src/backend/camelot-v3-protocol-adapter.ts": "sha256:0c509324edb0759bc269b846198a1cc39ff8b129e79c0003a33748ea476e6b0c",
+      "apps/api/src/backend/camelot-v3-binding.ts": "sha256:2dfc23a0269d0c834b4143a038762f2304727d7a6083e7b367309307d43d282a",
+      "apps/api/src/backend/native-rpc-provider.ts": "sha256:c066e836a7db832b27f0beb5a09cfe7c9c68a69cfdabaf7cb63a89e35130451b",
+      "apps/api/src/backend/trace-rpc-evidence-source.ts": "sha256:b0b24a6114c91ca703a4f1f7895cd3c4611bf6a265a1deb45d501d270949f719",
+      "apps/api/src/backend/arbitrum-chain-adapter.ts": "sha256:8341a1317a306492f954e16b5c12919ebaf8398a31ea09ccc726950b40c11f93",
+      "apps/api/src/backend/arbitrum-account-state-reader.ts": "sha256:620da489606a3149e506c3b392a8fe3862860e48ae7a7fac9e70afb0c7a6a8ee",
+      "apps/api/src/backend/camelot-v3-qualified-spender.ts": "sha256:8f0eb0f8d3ac056ced4aae4334909090f058e1582a2d25c99eef6e8281194839",
+      "apps/api/src/runtime-config.ts": "sha256:023b312de32c9f96a0353eaf90000884121051276dd7ac619d7518b8e6ac0c7b",
+      "apps/api/src/bootstrap/backend.ts": "sha256:4b53464547093a88d1464119c09bcc889457f27d3db0124c4391cc89f2a872b4",
+      "apps/web/src/lib/analyze/api-helpers.ts": "sha256:837154e8872edfcd292f97188f685fcd52ae5e098dd07bc01bdf034459774e1b",
+      "apps/web/src/lib/analyze/service.ts": "sha256:e470e53e0a78a4e20fd42a000f5b8a5515a3a47ed5f52ab20edc0e5d3fda0c47",
+      "packages/sdk/src/client.ts": "sha256:8fea01ffd3ad6e1f7dd271268a83e9b8ddae2d46efb6c04f58a94cba9a9a89d9",
+      "packages/contracts/src/common.ts": "sha256:345c9067724dc1ae9b25bdf276224921d41c24f1e85b67d4764a20c35e0bf8f2",
+      "packages/risk/src/verdict.ts": "sha256:11c29aca1c698541d446fd69f926d0da3ea77cf9ff263546f2d9d354dd5763fb",
+      "fixtures/provider-registry/be-103/usdc-weth-camelot-2026-09-29T10-09-52-993Z/capture.json": "sha256:5a7ed69ca2dcf0413f79ddd29749e6f0ae652da91493814fece00cb0963b7b20",
+      "fixtures/provider-registry/be-105/asset-coverage-reverse-2026-09-29T11-44-09.949Z/capture.json": "sha256:bd8d541cbd3097322a9fd5275b77924e1b0843c6ef15dddf3c4a6dee4ee6c045",
+      "fixtures/provider-registry/be-109/grail-usdc-2026-09-29T13-31-53-975Z/capture.json": "sha256:450fdb8d6adf4ed0c49b351cc8ab75614e589edb96bca01b7933ed3f8c4728d7"
+    }
+  },
+  "secretScan": {
+    "status": "PASS",
+    "scope": "normalized_capture_json",
+    "credentialPatternHits": 0,
+    "endpointRecorded": false,
+    "referenceUrlCount": 2
+  }
+}

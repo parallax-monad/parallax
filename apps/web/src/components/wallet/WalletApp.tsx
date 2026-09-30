@@ -30,7 +30,6 @@ import {
 } from "@/lib/analyze/form";
 import {
   checkSwap,
-  fetchAccountState,
   fetchQuote,
   formFromRunResult,
   loadReplay,
@@ -38,7 +37,6 @@ import {
 } from "@/lib/analyze/service";
 import { createStageScheduler } from "@/lib/analyze/stageScheduler";
 import type {
-  AccountStateState,
   CheckSwapResult,
   QuoteState,
   RemediationOption,
@@ -107,14 +105,21 @@ function setStoredRunId(runId: string | undefined): void {
 
 function backendRunId(result: CheckSwapResult): string | undefined {
   if (result.replayMode) return undefined;
-  return result.backendRunId === result.runId ? result.runId : undefined;
-}
-
-/** Identifies the intent an account-state read belongs to. */
-function intentKey(
-  form: Pick<FormState, "protocol" | "tokenIn" | "tokenOut" | "amountIn">,
-): string {
-  return [form.protocol, form.tokenIn, form.tokenOut, form.amountIn].join("|");
+  const raw =
+    typeof result.rawResponse === "object" && result.rawResponse !== null
+      ? (result.rawResponse as Record<string, unknown>)
+      : undefined;
+  const nested =
+    typeof raw?.run === "object" && raw.run !== null
+      ? (raw.run as Record<string, unknown>)
+      : undefined;
+  const runId =
+    typeof raw?.runId === "string"
+      ? raw.runId
+      : typeof nested?.runId === "string"
+        ? nested.runId
+        : undefined;
+  return runId === result.runId ? runId : undefined;
 }
 
 export function WalletApp({ language }: { language: Language }) {
@@ -134,12 +139,6 @@ export function WalletApp({ language }: { language: Language }) {
   /** Bumped on every return home, so the background replays its entrance. */
   const [homeVisit, setHomeVisit] = useState(0);
   const [quote, setQuote] = useState<QuoteState>({ status: "idle" });
-  /** Trusted balance/allowance for the current intent; optional evidence. */
-  const [accountState, setAccountState] = useState<AccountStateState>({
-    status: "idle",
-  });
-  /** The intent the current account state was read for; stale reads are dropped. */
-  const accountStateKeyRef = useRef<string | undefined>(undefined);
   const schedulerRef = useRef(createStageScheduler());
   // The mount-only recovery effect reads this from its eventual promise callback.
   screenRef.current = screen;
@@ -226,46 +225,6 @@ export function WalletApp({ language }: { language: Language }) {
     };
   }, [screen, protocol, tokenIn, tokenOut, amountIn]);
 
-  // Trusted decimals, balance, and allowance for the same intent. This is
-  // optional evidence: an unavailable read fails closed to "unknown" and never
-  // blocks submitting the Check.
-  useEffect(() => {
-    if (screen !== "swap" && screen !== "result") return;
-    if (
-      !validateForm({
-        protocol,
-        tokenIn,
-        tokenOut,
-        amountIn,
-        slippage: DEMO_SLIPPAGE,
-        minimumReceived: "",
-      }).valid
-    ) {
-      setAccountState({ status: "idle" });
-      return;
-    }
-
-    const controller = new AbortController();
-    const key = intentKey({ protocol, tokenIn, tokenOut, amountIn });
-    const timer = setTimeout(() => {
-      setAccountState({ status: "loading" });
-      fetchAccountState(
-        { protocol, tokenIn, tokenOut, amountIn },
-        { signal: controller.signal },
-      ).then((next) => {
-        if (controller.signal.aborted) return;
-        accountStateKeyRef.current = key;
-        setAccountState(next);
-      });
-    }, QUOTE_DEBOUNCE_MS);
-
-    return () => {
-      clearTimeout(timer);
-      controller.abort();
-      accountStateKeyRef.current = undefined;
-    };
-  }, [screen, protocol, tokenIn, tokenOut, amountIn]);
-
   const runCheck = (allowUnchanged = false) => {
     const plan = planSubmission(form, result ? submittedForm : undefined, {
       allowUnchanged,
@@ -278,14 +237,6 @@ export function WalletApp({ language }: { language: Language }) {
     recoveryCancelledRef.current = true;
     const parent = result?.systemStatus === "OK" ? result : undefined;
     const submitted = plan.submitted;
-    const selectedQuote =
-      quote.status === "available" &&
-      quote.request?.protocol === submitted.protocol &&
-      quote.request.tokenIn === submitted.tokenIn &&
-      quote.request.tokenOut === submitted.tokenOut &&
-      quote.request.amountIn === submitted.amountIn
-        ? quote.quote
-        : undefined;
     setFormErrors({});
     setStoredRunId(undefined);
     setResult(undefined);
@@ -299,24 +250,7 @@ export function WalletApp({ language }: { language: Language }) {
       stageMs: STAGE_MS,
       onStage: setStage,
       onSettle: async () => {
-        const nextResult = await checkSwap(
-          {
-            ...toInput(submitted, parent?.runId),
-            // The selected quote is an Expectation Baseline, never a constraint.
-            ...(selectedQuote
-              ? { expectationBaseline: { quote: selectedQuote } }
-              : {}),
-          },
-          {
-            // Use the trusted decimals the user already saw, and only when they
-            // were read for exactly this intent rather than a stale one.
-            decimalsBySymbol:
-              accountState.status === "available" &&
-              accountStateKeyRef.current === intentKey(submitted)
-                ? accountState.view.decimalsBySymbol
-                : undefined,
-          },
-        );
+        const nextResult = await checkSwap(toInput(submitted, parent?.runId));
         setStoredRunId(backendRunId(nextResult));
         setResult(nextResult);
         setSubmittedForm(submitted);
@@ -457,7 +391,6 @@ export function WalletApp({ language }: { language: Language }) {
                 )}
                 {screen === "swap" && (
                   <WalletSwap
-                    accountState={accountState}
                     errors={formErrors}
                     flags={flags}
                     form={form}
@@ -465,13 +398,6 @@ export function WalletApp({ language }: { language: Language }) {
                     quote={quote}
                     onChange={(nextForm) => {
                       setForm(nextForm);
-                      if (
-                        nextForm.protocol !== form.protocol ||
-                        nextForm.tokenIn !== form.tokenIn ||
-                        nextForm.tokenOut !== form.tokenOut ||
-                        nextForm.amountIn !== form.amountIn
-                      )
-                        setQuote({ status: "idle" });
                       if (Object.keys(formErrors).length > 0) setFormErrors({});
                     }}
                     onSubmit={runCheck}
@@ -487,7 +413,6 @@ export function WalletApp({ language }: { language: Language }) {
                 )}
                 {screen === "result" && result && (
                   <WalletResult
-                    accountState={accountState}
                     language={language}
                     result={result}
                     onDiscard={discard}

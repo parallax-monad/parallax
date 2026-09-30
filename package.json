@@ -19,7 +19,6 @@
   "devDependencies": {
     "@biomejs/biome": "^2.5.6",
     "@parallax/moss-bridge": "workspace:*",
-    "@parallax/sdk": "workspace:*",
     "@types/node": "22.13.14",
     "typescript": "^7.0.2",
     "vitest": "^4.1.10"

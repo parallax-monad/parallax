@@ -1,11 +1,9 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import { OptionsStep } from "@/components/analyze/OptionsStep";
-import { P0ExecutionCard } from "@/components/analyze/P0ExecutionCard";
 import { ResultStep } from "@/components/analyze/ResultStep";
 import { VerdictIcon } from "@/components/analyze/StatusIcon";
 import { StepTimeline } from "@/components/analyze/StepTimeline";
 import type {
-  AccountStateState,
   CheckSwapResult,
   ProductRunMode,
   RemediationOption,
@@ -15,11 +13,6 @@ import { type Copy, type Language, say } from "@/lib/i18n";
 const MODE_LABEL: Record<ProductRunMode, Copy> = {
   LIVE: { en: "Live check", zh: "实时检查" },
   RECORDED_REPLAY: { en: "Recorded replay", zh: "录制回放" },
-};
-const SAMPLE_LABEL: Copy = { en: "Sample result", zh: "示例结果" };
-const SAMPLE_EXPLANATION: Copy = {
-  en: "This is a sample result for exploring the steps. It is not current live evidence.",
-  zh: "这是用于了解步骤的示例结果，并非当前实时证据。",
 };
 
 const MODE_EXPLANATION: Record<ProductRunMode, Copy> = {
@@ -34,7 +27,6 @@ const MODE_EXPLANATION: Record<ProductRunMode, Copy> = {
 };
 
 const PRIMARY_ACTION: Copy = { en: "Review swap inputs", zh: "查看兑换输入" };
-const RECHECK_ACTION: Copy = { en: "Edit and re-check", zh: "修改并重新检查" };
 const DISCARD_ACTION: Copy = { en: "Discard this swap", zh: "放弃这笔兑换" };
 
 const INTEGRATION_ERROR_COPY = {
@@ -50,7 +42,6 @@ const INTEGRATION_ERROR_COPY = {
 export function WalletResult({
   result,
   language,
-  accountState,
   onKeep,
   onRetry,
   onDiscard,
@@ -59,8 +50,6 @@ export function WalletResult({
 }: {
   result: CheckSwapResult;
   language: Language;
-  /** Trusted account state for the checked intent; unknown reads stay unknown. */
-  accountState?: AccountStateState;
   onKeep: () => void;
   onRetry?: () => void;
   onDiscard: () => void;
@@ -82,12 +71,7 @@ export function WalletResult({
             {say(language, { en: "Integration error", zh: "集成错误" })}
           </span>
           <span className="pill">
-            {say(
-              language,
-              result.presentationOrigin === "sample"
-                ? SAMPLE_LABEL
-                : MODE_LABEL[result.productRunMode],
-            )}
+            {say(language, MODE_LABEL[result.productRunMode])}
           </span>
         </div>
 
@@ -160,14 +144,8 @@ export function WalletResult({
             )}
           </div>
         </section>
-        <P0ExecutionCard language={language} result={result} />
         <p className="text-[12px] leading-[1.6] text-dim">
-          {say(
-            language,
-            result.presentationOrigin === "sample"
-              ? SAMPLE_EXPLANATION
-              : MODE_EXPLANATION[result.productRunMode],
-          )}
+          {say(language, MODE_EXPLANATION[result.productRunMode])}
         </p>
 
         <div
@@ -223,12 +201,7 @@ export function WalletResult({
           {say(language, { en: "Before you sign", zh: "签名之前" })}
         </span>
         <span className="pill">
-          {say(
-            language,
-            result.presentationOrigin === "sample"
-              ? SAMPLE_LABEL
-              : MODE_LABEL[result.productRunMode],
-          )}
+          {say(language, MODE_LABEL[result.productRunMode])}
         </span>
       </div>
 
@@ -243,17 +216,11 @@ export function WalletResult({
       )}
 
       <p className="text-[12px] leading-[1.6] text-dim">
-        {say(
-          language,
-          result.presentationOrigin === "sample"
-            ? SAMPLE_EXPLANATION
-            : MODE_EXPLANATION[result.productRunMode],
-        )}
+        {say(language, MODE_EXPLANATION[result.productRunMode])}
       </p>
 
       {currentStep === "result" ? (
         <ResultStep
-          accountState={accountState}
           language={language}
           result={result}
           onNext={() => setCurrentStep("options")}
@@ -269,7 +236,7 @@ export function WalletResult({
 
       <div className="mt-1 grid grid-cols-2 gap-2">
         <button type="button" className="btn btn-monad" onClick={onKeep}>
-          {say(language, result.backendRunId ? RECHECK_ACTION : PRIMARY_ACTION)}
+          {say(language, PRIMARY_ACTION)}
         </button>
         <button
           type="button"

@@ -153,6 +153,35 @@ function decodeCalldata(data: string) {
   };
 }
 
+/** Audit only files present in the current research source tree. */
+export function collectArbitrumOneSourceManifest(root = ROOT) {
+  const manifestPaths = [
+    SCRIPT,
+    "apps/api/src/backend/native-rpc-client.ts",
+    "apps/api/src/backend/camelot-v3-protocol-adapter.ts",
+    "apps/api/src/backend/camelot-v3-binding.ts",
+    "apps/api/src/backend/native-rpc-provider.ts",
+    "apps/api/src/backend/trace-rpc-evidence-source.ts",
+    "apps/api/src/backend/arbitrum-chain-adapter.ts",
+    "apps/api/src/backend/arbitrum-account-state-reader.ts",
+    "apps/api/src/runtime-config.ts",
+    "apps/api/src/bootstrap/backend.ts",
+    "apps/web/src/lib/analyze/api-helpers.ts",
+    "apps/web/src/lib/analyze/service.ts",
+    "packages/contracts/src/common.ts",
+    "packages/risk/src/verdict.ts",
+    "fixtures/provider-registry/be-103/usdc-weth-camelot-2026-09-29T10-09-52-993Z/capture.json",
+    "fixtures/provider-registry/be-105/asset-coverage-reverse-2026-09-29T11-44-09.949Z/capture.json",
+    "fixtures/provider-registry/be-109/grail-usdc-2026-09-29T13-31-53-975Z/capture.json",
+  ];
+  // Main removed the qualified-spender and SDK client implementations. They
+  // remain historical inputs in the immutable 2026-09-29 capture, but must not
+  // be required by a new probe. Missing required current inputs still fail.
+  return Object.fromEntries(
+    manifestPaths.map((path) => [path, sha(readFileSync(join(root, path)))]),
+  );
+}
+
 async function main() {
   const dirty = execFileSync("git", ["status", "--porcelain"], {
     cwd: ROOT,
@@ -381,30 +410,7 @@ async function main() {
   const status = qualified
     ? "ARBITRUM_ONE_FEASIBILITY_QUALIFIED"
     : "BLOCKED_REAL_EXECUTION";
-  const manifestPaths = [
-    SCRIPT,
-    "apps/api/src/backend/native-rpc-client.ts",
-    "apps/api/src/backend/camelot-v3-protocol-adapter.ts",
-    "apps/api/src/backend/camelot-v3-binding.ts",
-    "apps/api/src/backend/native-rpc-provider.ts",
-    "apps/api/src/backend/trace-rpc-evidence-source.ts",
-    "apps/api/src/backend/arbitrum-chain-adapter.ts",
-    "apps/api/src/backend/arbitrum-account-state-reader.ts",
-    "apps/api/src/backend/camelot-v3-qualified-spender.ts",
-    "apps/api/src/runtime-config.ts",
-    "apps/api/src/bootstrap/backend.ts",
-    "apps/web/src/lib/analyze/api-helpers.ts",
-    "apps/web/src/lib/analyze/service.ts",
-    "packages/sdk/src/client.ts",
-    "packages/contracts/src/common.ts",
-    "packages/risk/src/verdict.ts",
-    "fixtures/provider-registry/be-103/usdc-weth-camelot-2026-09-29T10-09-52-993Z/capture.json",
-    "fixtures/provider-registry/be-105/asset-coverage-reverse-2026-09-29T11-44-09.949Z/capture.json",
-    "fixtures/provider-registry/be-109/grail-usdc-2026-09-29T13-31-53-975Z/capture.json",
-  ];
-  const manifest = Object.fromEntries(
-    manifestPaths.map((path) => [path, sha(readFileSync(join(ROOT, path)))]),
-  );
+  const manifest = collectArbitrumOneSourceManifest();
   const capture = {
     schemaVersion: "be-090-arbitrum-one-feasibility-v1",
     status,
@@ -539,7 +545,7 @@ async function main() {
       classification: "BACKEND_ARCH_CHANGE",
       configOnly: false,
       reason:
-        "Sepolia chain ID and deployments are fixed across runtime config, Camelot adapter/binding, chain adapter, NativeRpcProvider, Trace source, account-state reader, qualified spender, bootstrap, and frontend routing. The shared RPC transport and canonical Contract/Risk shapes are chain-bound but generic.",
+        "Sepolia chain ID and deployments are fixed across runtime config, Camelot adapter/binding, chain adapter, NativeRpcProvider, Trace source, account-state reader, bootstrap, and frontend routing. The shared RPC transport and canonical Contract/Risk shapes are chain-bound but generic.",
       productChangeRequiredForFeasibility: false,
       contractSemanticChangeRequired: false,
       riskSemanticChangeRequired: false,

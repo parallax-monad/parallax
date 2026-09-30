@@ -175,7 +175,6 @@ describe("Backend chain application routing", () => {
       chainAdapter: createFakeChainAdapter({
         chainId: 421614,
         blockNumber: "42",
-        observedAt: "2026-09-29T07:00:00.000Z",
         gasUnits: "21000",
         finality: { status: "finalized" },
       }),
@@ -226,7 +225,6 @@ describe("Backend chain application routing", () => {
       quote: {
         estimatedAmountOut: "0.2",
         blockNumber: "42",
-        fetchedAt: "2026-09-29T07:00:00.000Z",
       },
     });
   });

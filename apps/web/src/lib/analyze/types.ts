@@ -56,7 +56,6 @@ export type QuoteSwapInput = {
 export type QuotePreview = {
   estimatedAmountOut: string;
   minimumAmountOut?: string;
-  source: "quote";
   blockNumber: string;
   fetchedAt?: string;
   runtimeVersion: string;
@@ -66,102 +65,9 @@ export type QuotePreview = {
 export type QuoteState =
   | { status: "idle" }
   | { status: "loading" }
-  | { status: "available"; quote: QuotePreview; request?: QuoteSwapInput }
+  | { status: "available"; quote: QuotePreview }
   | { status: "unavailable"; reason: "NO_ROUTE" | "QUOTE_UNAVAILABLE" }
   | { status: "error"; apiFailure: ApiFailure };
-
-/** Trusted decimals provenance as published by the Backend account state. */
-export type TrustedDecimalsSource = "chain_config" | "onchain_verified";
-
-/**
- * One side of the checked account state. Only normalized public fields are kept:
- * never a Provider or RPC payload. `decimals` is undefined when the Backend did
- * not publish a trusted value, so callers must not guess one.
- */
-export type AccountTokenBalance = {
-  status: "AVAILABLE" | "UNAVAILABLE";
-  symbol?: string;
-  decimals?: number;
-  decimalsSource?: TrustedDecimalsSource;
-  amountAtomic?: string;
-  reason?: string;
-};
-
-export type AllowanceSpender =
-  | { status: "QUALIFIED"; address: string; qualificationRef: string }
-  | { status: "UNAVAILABLE"; reason: string }
-  | { status: "NOT_APPLICABLE" };
-
-export type AccountAllowance =
-  | {
-      status: "SUFFICIENT" | "INSUFFICIENT";
-      allowanceAtomic: string;
-      requiredAmountAtomic: string;
-      spender: AllowanceSpender;
-      blockNumber?: string;
-    }
-  | {
-      status: "UNAVAILABLE";
-      reason: string;
-      requiredAmountAtomic?: string;
-      spender?: AllowanceSpender;
-      blockNumber?: string;
-    }
-  | { status: "NOT_APPLICABLE"; reason: "NATIVE_INPUT" };
-
-export type AccountBlockBinding =
-  | {
-      status: "VERIFIED";
-      chainId: number;
-      blockNumber: string;
-      blockHash: string;
-      observedAt: string;
-    }
-  | {
-      status: "STALE";
-      chainId: number;
-      blockNumber: string;
-      blockHash: string;
-      observedAt: string;
-      reason: string;
-    }
-  | {
-      status: "UNAVAILABLE";
-      chainId?: number;
-      blockNumber?: string;
-      blockHash?: string;
-      observedAt?: string;
-      reason?: string;
-    };
-
-/**
- * Provider-neutral read of `POST /api/account-state` for one checked intent.
- * Deliberately separate from `CheckSwapResult` so the shared Check contract is
- * not widened.
- */
-export type AccountStateView = {
-  /** Top-level snapshot status. */
-  status: "AVAILABLE" | "PARTIAL" | "UNAVAILABLE";
-  /** Trusted decimals per published symbol; a missing symbol means unknown. */
-  decimalsBySymbol: Record<string, number>;
-  inputToken: AccountTokenBalance;
-  outputToken: AccountTokenBalance;
-  allowance: AccountAllowance;
-  block: AccountBlockBinding;
-};
-
-/** Why a trusted account state is not available. Never a provider detail. */
-export type AccountStateUnavailableReason =
-  | "REQUEST_FAILED"
-  | "INVALID_RESPONSE"
-  | "SNAPSHOT_UNAVAILABLE";
-
-/** Lifecycle the UI holds for the optional account-state read. */
-export type AccountStateState =
-  | { status: "idle" }
-  | { status: "loading" }
-  | { status: "available"; view: AccountStateView }
-  | { status: "unavailable"; reason: AccountStateUnavailableReason };
 
 export type EvidenceOrigin = "live" | "replay" | "derived" | "mock";
 export type EvidenceItem = {
@@ -194,21 +100,6 @@ export type RuleResult = {
 };
 
 export type UnknownItem = { id: string; label: Copy; reason: Copy };
-
-/** Display-only, provider-neutral coverage. No provider payload is retained. */
-export type EvidenceCoverage = {
-  sourceId: string;
-  source: Copy;
-  role: "primary" | "supplementary";
-  mode: ProductRunMode | "MOCK";
-  status?: "success" | "partial" | "unknown" | "unavailable" | "invalid";
-  blockNumber?: string;
-  observedAt?: string;
-  checked: Copy[];
-  notChecked: Copy[];
-  unknown: UnknownItem[];
-  unavailable: UnknownItem[];
-};
 export type IntentSummary = {
   tokenIn: string;
   tokenOut: string;
@@ -247,8 +138,6 @@ export type RunRecovery =
 export type CheckSwapResult = {
   runId: string;
   parentRunId?: string;
-  chainId?: number;
-  protocol?: Protocol;
   systemStatus: SystemStatus;
   verdict: Verdict;
   summary: Copy;
@@ -259,38 +148,6 @@ export type CheckSwapResult = {
   evidence: EvidenceItem[];
   ruleResults: RuleResult[];
   unknowns: UnknownItem[];
-  evidenceCoverage?: EvidenceCoverage[];
-  evidenceCoverageNotice?: Copy;
-  providerStatus?: "SUCCESS" | "UNKNOWN" | "UNSUPPORTED" | "FAILED" | "STALE";
-  executionStatus?: "SUCCESS" | "NO_ROUTE" | "REVERTED" | "UNKNOWN";
-  basicSimulation?: {
-    call: "SUCCEEDED" | "REVERTED" | "UNAVAILABLE" | "NOT_RUN";
-    gasEstimate: "AVAILABLE" | "UNAVAILABLE" | "NOT_RUN";
-    gasUnits?: string;
-    blockNumber: string;
-    observedAt: string;
-    validityAtExecution: "VALID" | "INVALID" | "UNKNOWN";
-    preparedTransactionFingerprint: string;
-    transactionBound: boolean;
-    sender?: string;
-    router?: string;
-    failureStage?: string;
-    reason?: string;
-  };
-  evidenceState?:
-    | "VERIFIED"
-    | "INCOMPLETE"
-    | "UNAVAILABLE"
-    | "STALE"
-    | "UNVERIFIED";
-  expectationBaselineStatus?: "AVAILABLE" | "MISSING";
-  quoteFidelityStatus?: "VERIFIED" | "UNKNOWN";
-  remediationStatus?:
-    | "NOT_RUN"
-    | "UNVERIFIED"
-    | "NO_VALID_CANDIDATE"
-    | "UNKNOWN"
-    | "VERIFIED";
   intent: IntentSummary;
   diff?: RunDiff;
   quote: { expectedOutput: string; route: Copy; blockNumber: string };
@@ -300,14 +157,10 @@ export type CheckSwapResult = {
   ruleVersion: string;
   mossVersion: string;
   productRunMode: ProductRunMode;
-  /** Frontend-only preset marker; never inferred from a Backend Run. */
-  presentationOrigin?: "sample";
   replayMode: boolean;
   simulatorPinnedBlock?: string;
   apiFailure?: ApiFailure;
-  /** Only the normalized fields needed for saved-Run recovery are retained. */
-  backendRunId?: string;
-  recoveryInput?: { protocol: Protocol; minimumReceived: string };
+  rawResponse: unknown;
   quoteFidelity?: QuoteFidelity;
   remediationOptions?: RemediationOption[];
   executionEconomics?: ExecutionEconomics;

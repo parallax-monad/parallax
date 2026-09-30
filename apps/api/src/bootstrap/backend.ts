@@ -29,8 +29,6 @@ import type {
   ArbitrumProductionComposition,
 } from "../backend/arbitrum-composition.js";
 import { createArbitrumProductionComposition } from "../backend/arbitrum-composition.js";
-import { CAMELOT_SEPOLIA_USDC } from "../backend/camelot-v3-protocol-adapter.js";
-import { createCamelotV3QualifiedAllowanceSpenderResolver } from "../backend/camelot-v3-qualified-spender.js";
 import type { BackendCompositionRuntime } from "../backend/composition.js";
 import {
   BackendPipeline,
@@ -218,33 +216,6 @@ export function createBackendApp(
       allowHeaders: ["Content-Type"],
     }),
   );
-  app.get("/api/p0/metadata", (context) => {
-    const chainId = ARBITRUM_SEPOLIA_CHAIN_ID;
-    const tokenIn = dependencies.runtime.tokenRegistry.resolve(chainId, {
-      kind: "native",
-    });
-    const tokenOut = dependencies.runtime.tokenRegistry.resolve(chainId, {
-      kind: "erc20",
-      address: CAMELOT_SEPOLIA_USDC,
-    });
-    if (tokenIn === undefined || tokenOut === undefined) {
-      return context.json(
-        {
-          error: {
-            code: "METADATA_UNAVAILABLE",
-            message: "P0 token metadata is unavailable",
-          },
-        },
-        503,
-        { "cache-control": "no-store" },
-      );
-    }
-    return context.json(
-      { chainId, protocol: "camelot-v3", tokenIn, tokenOut },
-      200,
-      { "cache-control": "no-store" },
-    );
-  });
   app.route("/", createCheckApp(checkService));
   app.route("/", createQuoteApp(quoteService));
   app.route("/", createRunQueryApp(runQueryService));
@@ -314,12 +285,9 @@ function createCompositionBackedQuoteFlow(
 }
 
 function projectCompositionQuote(input: {
-  blockContext: { readonly blockNumber: string; readonly observedAt?: string };
+  blockContext: { readonly blockNumber: string };
   quote: unknown;
 }): unknown {
-  // The quote contract already carries an optional `fetchedAt`; the pinned block
-  // context is where the composition observed it. Without it the public quote
-  // cannot form a provenance-complete Expectation Baseline.
   const parsedQuoteResult = quoteResultSchema.safeParse(input.quote);
   if (parsedQuoteResult.success) {
     if (parsedQuoteResult.data.status === "unavailable") {
@@ -331,9 +299,6 @@ function projectCompositionQuote(input: {
       quote: {
         ...parsedQuoteResult.data.quote,
         blockNumber: input.blockContext.blockNumber,
-        ...(input.blockContext.observedAt === undefined
-          ? {}
-          : { fetchedAt: input.blockContext.observedAt }),
       },
     };
   }
@@ -371,9 +336,6 @@ function projectCompositionQuote(input: {
       ...(minimumAmountOut === undefined ? {} : { minimumAmountOut }),
       source: "quote",
       blockNumber: input.blockContext.blockNumber,
-      ...(input.blockContext.observedAt === undefined
-        ? {}
-        : { fetchedAt: input.blockContext.observedAt }),
       runtimeVersion,
       runtimeRevision,
     },
@@ -487,11 +449,6 @@ export function bootstrapBackendApp(
       runtime,
       runStore: store,
       providerEnvironment: "production",
-      // The Camelot V3 allowance spender is now qualified by the real #103
-      // reverse-path evidence, so ERC-20 allowance state is readable instead of
-      // structurally unavailable. Other protocols still fail closed.
-      accountStateSpenderResolver:
-        createCamelotV3QualifiedAllowanceSpenderResolver(),
       ...(configuredTraceRpcEvidenceSource === undefined
         ? {}
         : { traceRpcEvidenceSource: configuredTraceRpcEvidenceSource }),

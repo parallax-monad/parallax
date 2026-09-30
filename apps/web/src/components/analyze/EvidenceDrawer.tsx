@@ -1,5 +1,4 @@
 import { useEffect, useRef } from "react";
-import { EvidenceCoverageCard } from "@/components/analyze/EvidenceCoverageCard";
 import type {
   CheckSwapResult,
   EvidenceItem,
@@ -35,7 +34,6 @@ const MODE_LABEL: Record<CheckSwapResult["productRunMode"], Copy> = {
   LIVE: { en: "Live check", zh: "实时检查" },
   RECORDED_REPLAY: { en: "Recorded replay", zh: "录制回放" },
 };
-const SAMPLE_LABEL: Copy = { en: "Sample result", zh: "示例结果" };
 
 export function EvidenceDrawer({
   result,
@@ -87,12 +85,7 @@ export function EvidenceDrawer({
                 {result.runId}
               </h2>
               <span className="pill">
-                {say(
-                  language,
-                  result.presentationOrigin === "sample"
-                    ? SAMPLE_LABEL
-                    : MODE_LABEL[result.productRunMode],
-                )}
+                {say(language, MODE_LABEL[result.productRunMode])}
               </span>
             </div>
           </div>
@@ -106,19 +99,11 @@ export function EvidenceDrawer({
           </button>
         </div>
 
-        <div className="mt-6">
-          <EvidenceCoverageCard
-            language={language}
-            notice={result.evidenceCoverageNotice}
-            sources={result.evidenceCoverage}
-          />
-        </div>
-
         <section className="mt-6">
           <h3 className="m-0 mb-2 text-[12px] font-bold uppercase tracking-[0.08em] text-dim">
             {say(language, {
-              en: "Check stages",
-              zh: "检查阶段",
+              en: "Moss workflow stages",
+              zh: "Moss 工作流阶段",
             })}
           </h3>
           <ul className="m-0 list-none border-t border-line p-0">
@@ -200,20 +185,15 @@ export function EvidenceDrawer({
           <p className="mt-4 text-[12px] leading-[1.6] text-dim">
             {say(
               language,
-              result.presentationOrigin === "sample"
+              result.productRunMode === "RECORDED_REPLAY"
                 ? {
-                    en: "This is a sample result, not current live or recorded real Evidence. Nothing here is signed or broadcast.",
-                    zh: "这是示例结果，不是当前实时或录制的真实证据。这里不会签名，也不会广播。",
+                    en: "This result reproduces previously recorded real Evidence. It is not a current Live Run. Nothing here is signed or broadcast.",
+                    zh: "此结果复现此前录制的真实证据，并非当前实时运行。这里不会签名，也不会广播。",
                   }
-                : result.productRunMode === "RECORDED_REPLAY"
-                  ? {
-                      en: "This result reproduces previously recorded real Evidence. It is not a current Live Run. Nothing here is signed or broadcast.",
-                      zh: "此结果复现此前录制的真实证据，并非当前实时运行。这里不会签名，也不会广播。",
-                    }
-                  : {
-                      en: "This is a live check result. Its observations may change; re-check before signing. Nothing here is signed or broadcast.",
-                      zh: "这是实时检查结果，观察结果可能变化；签名前请重新检查。这里不会签名，也不会广播。",
-                    },
+                : {
+                    en: "This result uses an explicitly labelled demo preset. It is not current Live Evidence. Nothing here is signed or broadcast.",
+                    zh: "此结果使用明确标注的演示预设，并非当前实时证据。这里不会签名，也不会广播。",
+                  },
             )}
           </p>
         </section>
