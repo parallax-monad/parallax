@@ -9,6 +9,23 @@ import { createNativeRpcClient } from "../../apps/api/src/backend/native-rpc-cli
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const SCRIPT = "scripts/provider-probes/arbitrum-one-feasibility.ts";
 const OFFICIAL_RPC = "https://arb1.arbitrum.io/rpc";
+
+/** Persist a source category only, never an endpoint or its credentials. */
+export function classifyArbitrumOneEndpoint(endpoint: string) {
+  let parsed: URL;
+  try {
+    parsed = new URL(endpoint);
+  } catch {
+    throw new Error("Invalid RPC endpoint");
+  }
+  assert(parsed.protocol === "https:", "HTTPS RPC required");
+  // URL parsing normalizes host case, default ports and path segments. Full
+  // equality also checks path, credentials, query and fragment; a lookalike
+  // host or a credential-bearing variation must not acquire official identity.
+  return parsed.href === new URL(OFFICIAL_RPC).href
+    ? "official_public_arbitrum_one_https_rpc"
+    : "custom_arbitrum_one_https_rpc";
+}
 const CHAIN_ID = 42161n;
 // Deployment identity comes from Camelot's One AMMv3 table, not Sepolia config.
 const FACTORY = "0x1a3c9B1d2F0529D97f2afC5136Cc23e58f1FD35B";
@@ -182,18 +199,69 @@ export function collectArbitrumOneSourceManifest(root = ROOT) {
   );
 }
 
+type ArbitrumOneSourceState = {
+  readonly sourceHead: string;
+  readonly worktreeStatus: string;
+  readonly manifest: Record<string, string>;
+};
+
+function readSourceState(): ArbitrumOneSourceState {
+  const git = (args: string[]) =>
+    execFileSync("git", args, { cwd: ROOT, encoding: "utf8" }).trim();
+  const sourceHead = git(["rev-parse", "HEAD"]);
+  const manifest = collectArbitrumOneSourceManifest();
+  const worktreeStatus = git([
+    "status",
+    "--porcelain=v1",
+    "--untracked-files=all",
+  ]);
+  assert(
+    sourceHead === git(["rev-parse", "HEAD"]),
+    "Source HEAD changed while reading the manifest",
+  );
+  return {
+    sourceHead,
+    worktreeStatus,
+    manifest,
+  };
+}
+
+function assertSameSource(
+  expected: ArbitrumOneSourceState,
+  actual: ArbitrumOneSourceState,
+) {
+  assert(
+    expected.worktreeStatus === "" && actual.worktreeStatus === "",
+    "Capture requires a clean committed source head",
+  );
+  assert(
+    expected.sourceHead === actual.sourceHead &&
+      JSON.stringify(expected.manifest) === JSON.stringify(actual.manifest),
+    "Source state changed during capture; refusing to write evidence",
+  );
+}
+
+/** Two complete reads bracket manifest collection before any RPC request. */
+export function snapshotArbitrumOneSourceState(read = readSourceState) {
+  const before = read();
+  assertSameSource(before, read());
+  return before;
+}
+
+/** Must succeed immediately before creating or writing a new capture. */
+export function assertArbitrumOneSourceUnchanged(
+  initial: ArbitrumOneSourceState,
+  read = readSourceState,
+) {
+  assertSameSource(initial, snapshotArbitrumOneSourceState(read));
+}
+
 async function main() {
-  const dirty = execFileSync("git", ["status", "--porcelain"], {
-    cwd: ROOT,
-    encoding: "utf8",
-  });
-  assert(dirty.trim() === "", "Capture requires a clean committed source head");
-  const sourceHead = execFileSync("git", ["rev-parse", "HEAD"], {
-    cwd: ROOT,
-    encoding: "utf8",
-  }).trim();
+  const startedAt = new Date().toISOString();
+  const startedNs = process.hrtime.bigint();
+  const sourceState = snapshotArbitrumOneSourceState();
   const rpcUrl = process.env.ARBITRUM_ONE_RPC_URL ?? OFFICIAL_RPC;
-  assert(new URL(rpcUrl).protocol === "https:", "HTTPS RPC required");
+  const endpointClass = classifyArbitrumOneEndpoint(rpcUrl);
   const rpc = createNativeRpcClient({ rpcUrl });
 
   // Chain identity is the first RPC observation; no address is queried earlier.
@@ -410,7 +478,7 @@ async function main() {
   const status = qualified
     ? "ARBITRUM_ONE_FEASIBILITY_QUALIFIED"
     : "BLOCKED_REAL_EXECUTION";
-  const manifest = collectArbitrumOneSourceManifest();
+  const finishedAt = new Date().toISOString();
   const capture = {
     schemaVersion: "be-090-arbitrum-one-feasibility-v1",
     status,
@@ -420,9 +488,15 @@ async function main() {
     readOnly: true,
     noStateOverride: true,
     noWriteRpc: true,
-    capturedAt: new Date().toISOString(),
-    sourceHead,
-    endpointClass: "official_public_arbitrum_one_https_rpc",
+    capturedAt: finishedAt,
+    probeTiming: {
+      startedAt,
+      finishedAt,
+      elapsedMs: Number(process.hrtime.bigint() - startedNs) / 1_000_000,
+      scope: "this_runner_observation_window_only",
+    },
+    sourceHead: sourceState.sourceHead,
+    endpointClass,
     target: {
       chain: "Arbitrum One",
       chainId: Number(CHAIN_ID),
@@ -559,7 +633,7 @@ async function main() {
       "No signing, approval, broadcast, custody, state override, or write RPC occurred.",
       "No Product acceptance or production Arbitrum One support is claimed.",
     ],
-    provenance: { manifest },
+    provenance: { manifest: sourceState.manifest, worktreeDirty: false },
   };
   const prescan = JSON.stringify(capture);
   const credentialPattern =
@@ -596,6 +670,7 @@ async function main() {
     "fixtures/provider-registry/be-090",
     `one-eth-usdc-${stamp}`,
   );
+  assertArbitrumOneSourceUnchanged(sourceState);
   mkdirSync(directory, { recursive: true });
   const path = join(directory, "capture.json");
   writeFileSync(path, serialized, { flag: "wx" });

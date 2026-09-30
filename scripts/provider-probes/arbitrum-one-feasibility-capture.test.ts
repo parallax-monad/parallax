@@ -1,8 +1,13 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { describe, expect, it } from "vitest";
-import { collectArbitrumOneSourceManifest } from "./arbitrum-one-feasibility.js";
+import { describe, expect, it, vi } from "vitest";
+import {
+  assertArbitrumOneSourceUnchanged,
+  classifyArbitrumOneEndpoint,
+  collectArbitrumOneSourceManifest,
+  snapshotArbitrumOneSourceState,
+} from "./arbitrum-one-feasibility.js";
 
 const root = resolve(import.meta.dirname, "../..");
 const bytes = readFileSync(
@@ -14,6 +19,109 @@ const bytes = readFileSync(
 const capture = JSON.parse(bytes.toString("utf8"));
 const sha = (data: string | Uint8Array) =>
   `sha256:${createHash("sha256").update(data).digest("hex")}`;
+
+describe("#90 endpoint source classification without network requests", () => {
+  it.each([
+    "https://arb1.arbitrum.io/rpc",
+    "https://ARB1.ARBITRUM.IO:443/rpc",
+    "https://arb1.arbitrum.io/path/../rpc",
+  ])("recognizes the normalized official endpoint: %s", (endpoint) => {
+    expect(classifyArbitrumOneEndpoint(endpoint)).toBe(
+      "official_public_arbitrum_one_https_rpc",
+    );
+  });
+
+  it.each([
+    "https://example.invalid/rpc",
+    "https://arb1.arbitrum.io.example.invalid/rpc",
+    "https://example.invalid/arb1.arbitrum.io/rpc",
+    "https://arb1.arbitrum.io:444/rpc",
+    "https://arb1.arbitrum.io/RPC",
+    "https://arb1.arbitrum.io/rpc/",
+    "https://arb1.arbitrum.io/rpc?token=fixture-only-value",
+    "https://fixture-user:fixture-password@arb1.arbitrum.io/rpc",
+    "https://arb1.arbitrum.io/rpc#fixture-fragment",
+  ])("classifies a custom endpoint without retaining it: %s", (endpoint) => {
+    const category = classifyArbitrumOneEndpoint(endpoint);
+    expect(category).toBe("custom_arbitrum_one_https_rpc");
+    expect(category).not.toContain(endpoint);
+    expect(category).not.toMatch(/https:\/\/|token|fixture|password/);
+  });
+
+  it("rejects invalid or insecure endpoints with bounded error text", () => {
+    expect(() =>
+      classifyArbitrumOneEndpoint("https://[invalid/?token=fixture-only-value"),
+    ).toThrowError(/^Invalid RPC endpoint$/);
+    expect(() =>
+      classifyArbitrumOneEndpoint("http://example.invalid/rpc"),
+    ).toThrowError(/^HTTPS RPC required$/);
+  });
+});
+
+describe("#90 simulated source consistency guards", () => {
+  const source = () => ({
+    sourceHead: "a".repeat(40),
+    worktreeStatus: "",
+    manifest: { "probe.ts": "sha256:original" },
+  });
+
+  it("records one stable clean snapshot and permits writing only after recheck", () => {
+    const read = vi.fn(source);
+    const initial = snapshotArbitrumOneSourceState(read);
+    expect(initial).toEqual(source());
+    expect(read).toHaveBeenCalledTimes(2);
+    const write = vi.fn();
+    assertArbitrumOneSourceUnchanged(initial, read);
+    write();
+    expect(read).toHaveBeenCalledTimes(4);
+    expect(write).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    ["HEAD", { sourceHead: "b".repeat(40) }],
+    ["unstaged work", { worktreeStatus: " M probe.ts" }],
+    ["staged work", { worktreeStatus: "M  probe.ts" }],
+    ["untracked work", { worktreeStatus: "?? added.ts" }],
+    ["manifest bytes", { manifest: { "probe.ts": "sha256:changed" } }],
+    ["manifest entries", { manifest: {} }],
+  ])("refuses capture writes after %s changes", (_label, change) => {
+    const initial = snapshotArbitrumOneSourceState(source);
+    const read = vi.fn(() => ({ ...source(), ...change }));
+    const write = vi.fn();
+    expect(() => {
+      assertArbitrumOneSourceUnchanged(initial, read);
+      write();
+    }).toThrow();
+    expect(write).not.toHaveBeenCalled();
+  });
+
+  it("rejects an initially dirty tree before any probe work", () => {
+    const probe = vi.fn();
+    expect(() => {
+      snapshotArbitrumOneSourceState(() => ({
+        ...source(),
+        worktreeStatus: " M probe.ts",
+      }));
+      probe();
+    }).toThrow(/clean committed source head/);
+    expect(probe).not.toHaveBeenCalled();
+  });
+
+  it.each(["initial snapshot", "final recheck"])(
+    "rejects source changes within the %s reads",
+    (phase) => {
+      const read = vi
+        .fn(source)
+        .mockReturnValueOnce(source())
+        .mockReturnValueOnce({ ...source(), sourceHead: "b".repeat(40) });
+      expect(() =>
+        phase === "initial snapshot"
+          ? snapshotArbitrumOneSourceState(read)
+          : assertArbitrumOneSourceUnchanged(source(), read),
+      ).toThrow(/Source state changed/);
+    },
+  );
+});
 
 describe("#90 historical Arbitrum One capture static integrity", () => {
   it("preserves immutable historical capture bytes and source identities", () => {

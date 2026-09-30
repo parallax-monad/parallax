@@ -81,10 +81,12 @@ test exercises that manifest collector without any RPC request. Other manifest
 entries remain historical audit inputs. The probe fix does not rewrite the
 capture or claim that its historical source digest matches the current probe.
 
-Independent GPT/Codex review on 2026-09-30 verified the official deployment
-addresses, source manifest, complete calldata and transaction fingerprint,
-protection floor, and sender balance/gas arithmetic. Live read-only requests
-confirmed chain 42161 and the historical block number, hash and timestamp.
+GPT/Codex work on 2026-09-30 was a **secondary static audit** of the official
+deployment addresses, source manifest, complete calldata and transaction
+fingerprint, protection floor, and sender balance/gas arithmetic. This static
+audit is not independent on-chain replay or independent execution evidence.
+Separately, read-only metadata requests confirmed chain 42161 and the historical
+block number, hash and timestamp; those reads do not verify historical execution.
 Historical state reads then failed: the original public RPC reported historical
 state unavailable, the deployment-document public RPC was unreachable, and a
 public archive service returned HTTP 403 for historical code. No credentials or
@@ -112,7 +114,23 @@ Ownership of any separately approved promotion:
   canonical Evidence semantics. No Contract or Risk semantic change is indicated
   by this scenario.
 
-This closeout stays within the four-hour feasibility limit and adds no
-production promotion implementation. No Issue status or shared context document
-is changed; any eventual research PR requires human review and must not be
-self-approved or merged by this task.
+The four-hour feasibility limit is the Issue's research budget, but reliable
+start/end and elapsed-time evidence for the original research window was not
+recorded. Historical compliance with that limit is therefore unverified; Git
+commit times and file timestamps are not substituted for actual research timing.
+Future runner captures record wall-clock start/end and monotonic elapsed time
+for that runner's observation window only. They cannot establish the duration of
+the historical research window or the whole research effort.
+
+The current runner derives a sanitized source category by comparing the selected
+endpoint's complete normalized URL with the official address. Custom URLs,
+including credential-bearing variations, are classified as custom without
+retaining their URL or credentials. Before RPC requests it snapshots a clean
+HEAD, worktree status and source manifest with two consistent reads. Immediately
+before capture creation it repeats those checks and refuses to write if the
+source state differs. The capture uses the initial manifest, not a later tree.
+These safeguards apply to future runs; the historical capture is unchanged.
+
+This closeout adds no production promotion implementation. No Issue status or
+shared context document is changed; any eventual research PR requires human
+review and must not be self-approved or merged by this task.
