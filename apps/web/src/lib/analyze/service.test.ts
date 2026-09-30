@@ -439,6 +439,55 @@ describe("checkSwap API adapter", () => {
     expect(result.summary.zh).toContain("原生币余额不足");
   });
 
+  test("shows a typed gas-preflight execution revert on the initial check", async () => {
+    const run = {
+      ...completed,
+      runId: "failed-revert-1",
+      status: "integration_error",
+      systemStatus: "INTEGRATION_ERROR",
+      verdict: "UNKNOWN",
+      summary: "The check could not be completed",
+      error: {
+        code: "EXECUTION_REVERT",
+        stage: "action",
+        message:
+          "The transaction reverted during gas preflight; the check was not completed.",
+        retryable: false,
+      },
+      scope: [
+        {
+          key: "P0-CHECK-ACTION-001",
+          label: "Transaction preparation",
+          status: "unknown",
+          reason: "REQUIRED_CHECK_INTERRUPTED",
+        },
+      ],
+    };
+    const request = vi.fn<typeof fetch>().mockResolvedValue(
+      jsonResponse(
+        {
+          error: {
+            code: "EXECUTION_REVERT",
+            message:
+              "The transaction reverted during gas preflight; the check was not completed.",
+          },
+          run,
+        },
+        502,
+      ),
+    );
+
+    const result = await checkSwap(input, { fetch: request });
+
+    expect(result.apiFailure).toMatchObject({
+      code: "EXECUTION_REVERT",
+      stage: "action",
+      retryable: false,
+    });
+    expect(result.summary.en).toContain("reverted during gas preflight");
+    expect(result.summary.zh).toContain("Gas 预检");
+  });
+
   test("surfaces backend field issues from a normalization failure", async () => {
     const request = vi.fn<typeof fetch>().mockResolvedValue(
       jsonResponse(
@@ -914,6 +963,61 @@ describe("loadRun", () => {
         },
         summary: {
           en: expect.stringContaining("does not have enough native currency"),
+        },
+      },
+    });
+  });
+
+  test("preserves a specific execution-revert error across failed Run recovery", async () => {
+    const failedRun = {
+      ...completed,
+      runId: "failed-revert-recovery",
+      status: "integration_error",
+      systemStatus: "INTEGRATION_ERROR",
+      verdict: "UNKNOWN",
+      summary: "The check could not be completed",
+      error: {
+        code: "EXECUTION_REVERT",
+        stage: "action",
+        message:
+          "The transaction reverted during gas preflight; the check was not completed.",
+        retryable: false,
+      },
+      scope: [
+        {
+          key: "P0-CHECK-ACTION-001",
+          label: "Transaction preparation",
+          status: "unknown",
+          reason: "REQUIRED_CHECK_INTERRUPTED",
+        },
+      ],
+    };
+    const recoveryRequest = vi.fn<typeof fetch>().mockResolvedValue(
+      jsonResponse({
+        runId: failedRun.runId,
+        createdAt: failedRun.createdAt,
+        intent,
+        status: "failed",
+        failure: "AGENT_FLOW_ERROR",
+        result: failedRun,
+      }),
+    );
+
+    const recovery = await loadRun(failedRun.runId, {
+      fetch: recoveryRequest,
+    });
+
+    expect(recovery).toMatchObject({
+      kind: "terminal",
+      result: {
+        apiFailure: {
+          code: "EXECUTION_REVERT",
+          stage: "action",
+          retryable: false,
+        },
+        summary: {
+          en: expect.stringContaining("reverted during gas preflight"),
+          zh: expect.stringContaining("Gas 预检"),
         },
       },
     });
