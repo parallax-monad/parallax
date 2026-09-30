@@ -110,6 +110,27 @@ const arbitrumTokenRegistry = {
     },
   ],
 };
+const reverseCamelotTokenRegistry = {
+  chains: [{ chainId: 421614, symbol: "ETH", decimals: 18 }],
+  tokens: [
+    {
+      chainId: 421614,
+      address: CAMELOT_SEPOLIA_USDC,
+      symbol: "USDC",
+      decimals: 18,
+      decimalsSource: "onchain_verified" as const,
+      verifiedAtBlock: "42",
+    },
+    {
+      chainId: 421614,
+      address: CAMELOT_SEPOLIA_WETH,
+      symbol: "WETH",
+      decimals: 18,
+      decimalsSource: "onchain_verified" as const,
+      verifiedAtBlock: "42",
+    },
+  ],
+};
 const arbitrumEnvironment = {
   MONAD_RPC_URL: "https://monad.example.test",
   ARBITRUM_RPC_URL: "https://arbitrum.example.test",
@@ -1802,6 +1823,272 @@ describe("Arbitrum production composition skeleton", () => {
       amountInAtomic: "1000000000000000000",
       economicBoundary: { availability: "unavailable" },
     });
+  });
+
+  it("preserves quote acquisition time and uses it instead of block observation time", async () => {
+    const blockObservedAt = "2026-09-30T12:00:00.000Z";
+    const sourceFetchedAt = "2026-09-30T12:01:00.000Z";
+    const runtime = bootstrapBackendRuntime({
+      environment: arbitrumEnvironment,
+      tokenRegistry: reverseCamelotTokenRegistry,
+    });
+    let quoteCount = 0;
+    const protocolAdapter = createCamelotV3ProtocolAdapter({
+      quote: async () => {
+        quoteCount += 1;
+        const quote = {
+          estimatedAmountOut: "0.000062941960793078",
+          source: "quote",
+          blockNumber: "42",
+          ...(quoteCount === 1 || quoteCount === 3
+            ? { fetchedAt: sourceFetchedAt }
+            : {}),
+          ...(quoteCount === 3 ? { adapterQuoteId: "adapter-quote-3" } : {}),
+          runtimeVersion: "camelot-reverse-fixture-runtime",
+          runtimeRevision: "camelot-reverse-fixture-revision",
+        };
+        return quoteCount === 3 ? quote : { status: "available", quote };
+      },
+    });
+    const composition = createArbitrumProductionComposition({
+      ...arbitrumCompositionOptions(runtime, protocolAdapter),
+      chainAdapter: createFakeChainAdapter({
+        chainId: 421614,
+        blockNumber: "42",
+        observedAt: blockObservedAt,
+        gasUnits: "21000",
+        finality: { status: "finalized" },
+      }),
+    });
+    const app = createBackendApp({
+      runtime,
+      composition: composition as unknown as BackendCompositionRuntime,
+    });
+
+    const fetchQuote = async () => {
+      const response = await app.fetch(
+        new Request("https://api.example.test/api/quote", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            chainId: 421614,
+            protocol: "camelot-v3",
+            sender: "0x01bb7b44cc398aaa2b76ac6253f0f5634279db9d",
+            tokenIn: { kind: "erc20", address: CAMELOT_SEPOLIA_USDC },
+            tokenOut: { kind: "erc20", address: CAMELOT_SEPOLIA_WETH },
+            amountIn: "0.001",
+          }),
+        }),
+      );
+      return {
+        response,
+        body: (await response.json()) as {
+          quote?: { fetchedAt?: string; estimatedAmountOut?: string };
+        },
+      };
+    };
+
+    try {
+      const withSourceTime = await fetchQuote();
+      expect(quoteCount).toBe(1);
+      expect(
+        withSourceTime.response.status,
+        JSON.stringify(withSourceTime.body),
+      ).toBe(200);
+      expect(withSourceTime.body.quote).toMatchObject({
+        estimatedAmountOut: "0.000062941960793078",
+        blockNumber: "42",
+        fetchedAt: sourceFetchedAt,
+      });
+
+      const fallbackWindowStart = Date.now();
+      const withoutSourceTime = await fetchQuote();
+      expect(withoutSourceTime.response.status).toBe(200);
+      expect(withoutSourceTime.body.quote).toMatchObject({
+        estimatedAmountOut: "0.000062941960793078",
+        blockNumber: "42",
+      });
+      expect(
+        Date.parse(withoutSourceTime.body.quote?.fetchedAt ?? ""),
+      ).toBeGreaterThanOrEqual(fallbackWindowStart);
+      expect(
+        Date.parse(withoutSourceTime.body.quote?.fetchedAt ?? ""),
+      ).toBeLessThanOrEqual(Date.now());
+
+      const fallbackShape = await fetchQuote();
+      expect(fallbackShape.response.status).toBe(200);
+      expect(fallbackShape.body.quote).toMatchObject({
+        estimatedAmountOut: "0.000062941960793078",
+        blockNumber: "42",
+        fetchedAt: sourceFetchedAt,
+      });
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("checks USDC to WETH through the public route with exact unsigned binding and immutable history", async () => {
+    const sender = "0x01bb7b44cc398aaa2b76ac6253f0f5634279db9d";
+    const recipient = "0x2222222222222222222222222222222222222222";
+    const blockHash = `0x${"ab".repeat(32)}`;
+    const blockNumber = "0x2a";
+    const amountOutAtomic = 62_941_960_793_078n;
+    const minimumReceivedAtomic = "60000000000000";
+    const calls: Array<{ method: string; params: readonly unknown[] }> = [];
+    const rpcClient: ArbitrumRpcClient = {
+      async request(method, params = []) {
+        calls.push({ method, params });
+        if (method === "eth_chainId") return "0x66eee";
+        if (method === "eth_getBlockByNumber") {
+          return { number: blockNumber, hash: blockHash };
+        }
+        if (method === "eth_estimateGas") return "0x426b4";
+        if (method === "eth_call") {
+          const transaction = params[0] as { readonly to?: unknown };
+          if (
+            typeof transaction?.to === "string" &&
+            transaction.to.toLowerCase() ===
+              CAMELOT_SEPOLIA_QUOTER.toLowerCase()
+          ) {
+            return `0x${amountOutAtomic.toString(16).padStart(64, "0")}${"0".repeat(64)}`;
+          }
+          return "0x";
+        }
+        throw new Error(`unexpected RPC method ${method}`);
+      },
+    };
+    const runtime = bootstrapBackendRuntime({
+      environment: arbitrumEnvironment,
+      tokenRegistry: reverseCamelotTokenRegistry,
+    });
+    const store = new InMemoryRunStore();
+    const composition = createArbitrumProductionComposition({
+      runtime,
+      runStore: store,
+      rpcClient,
+    });
+    const app = createBackendApp({
+      runtime,
+      composition: composition as unknown as BackendCompositionRuntime,
+    });
+
+    const response = await app.fetch(
+      new Request("https://api.example.test/api/check", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          chainId: 421614,
+          protocol: "camelot-v3",
+          sender,
+          recipient,
+          tokenIn: { kind: "erc20", address: CAMELOT_SEPOLIA_USDC },
+          tokenOut: { kind: "erc20", address: CAMELOT_SEPOLIA_WETH },
+          amountIn: "0.001",
+          economicBoundary: {
+            availability: "available",
+            minimumReceived: "0.00006",
+            source: "user_declared",
+          },
+        }),
+      }),
+    );
+    const body = runResultSchema.parse(await response.json());
+
+    expect(response.status).toBe(200);
+    expect(body).toMatchObject({
+      status: "completed",
+      verdict: "UNKNOWN",
+      intent: {
+        sender,
+        recipient,
+      },
+      providerEvidence: {
+        provider: {
+          providerId: NATIVE_RPC_ARBITRUM_PROVIDER_ID,
+          status: "UNKNOWN",
+        },
+        quote: {
+          value: { estimatedAmountOut: "0.000062941960793078" },
+          blockNumber: "42",
+        },
+      },
+      p0: {
+        transactionProtection: {
+          minimumReceivedAtomic,
+          source: "user_declared",
+        },
+      },
+    });
+
+    const quoteCall = calls.find(
+      ({ method, params }) =>
+        method === "eth_call" &&
+        (params[0] as { readonly to?: unknown } | undefined)?.to ===
+          CAMELOT_SEPOLIA_QUOTER,
+    );
+    expect(quoteCall).toMatchObject({
+      params: [
+        {
+          data: expect.stringContaining(
+            `${CAMELOT_SEPOLIA_USDC.slice(2).toLowerCase().padStart(64, "0")}${CAMELOT_SEPOLIA_WETH.slice(2).toLowerCase().padStart(64, "0")}${1000000000000000n.toString(16).padStart(64, "0")}`,
+          ),
+        },
+        blockNumber,
+      ],
+    });
+
+    const routerCalls = calls.filter(
+      ({ method, params }) =>
+        method === "eth_call" &&
+        (params[0] as { readonly to?: unknown } | undefined)?.to ===
+          CAMELOT_SEPOLIA_ROUTER,
+    );
+    expect(routerCalls).toHaveLength(1);
+    const transaction = routerCalls[0]?.params[0] as {
+      readonly chainId: string;
+      readonly data: string;
+      readonly from: string;
+      readonly to: string;
+      readonly value: string;
+    };
+    const calldataWord = (index: number) =>
+      transaction.data.slice(10 + index * 64, 10 + (index + 1) * 64);
+    expect(transaction).toMatchObject({
+      from: sender,
+      to: CAMELOT_SEPOLIA_ROUTER,
+      chainId: "0x66eee",
+      value: "0x0",
+    });
+    expect(transaction.data).toMatch(/^0xbc651188/);
+    expect(calldataWord(0)).toBe(
+      CAMELOT_SEPOLIA_USDC.slice(2).toLowerCase().padStart(64, "0"),
+    );
+    expect(calldataWord(1)).toBe(
+      CAMELOT_SEPOLIA_WETH.slice(2).toLowerCase().padStart(64, "0"),
+    );
+    expect(calldataWord(2)).toBe(
+      recipient.slice(2).toLowerCase().padStart(64, "0"),
+    );
+    expect(BigInt(`0x${calldataWord(3)}`)).toBeGreaterThan(0n);
+    expect(BigInt(`0x${calldataWord(4)}`)).toBe(1000000000000000n);
+    expect(BigInt(`0x${calldataWord(5)}`)).toBe(BigInt(minimumReceivedAtomic));
+    expect(BigInt(`0x${calldataWord(6)}`)).toBe(0n);
+    expect(
+      calls.some(({ method }) => method === "eth_sendRawTransaction"),
+    ).toBe(false);
+
+    const callsBeforeHistoryRead = calls.length;
+    const historyResponse = await app.fetch(
+      new Request(`https://api.example.test/api/runs/${body.runId}`),
+    );
+    const historyRecord = (await historyResponse.json()) as {
+      readonly result?: unknown;
+    };
+    const history = runResultSchema.parse(historyRecord.result);
+    expect(historyResponse.status).toBe(200);
+    expect(history.p0).toEqual(body.p0);
+    expect(history.providerEvidence).toEqual(body.providerEvidence);
+    expect(calls).toHaveLength(callsBeforeHistoryRead);
   });
 
   it("continues to normalize Arbitrum checks at the public app boundary", async () => {

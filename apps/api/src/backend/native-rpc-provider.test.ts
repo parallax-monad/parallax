@@ -293,6 +293,28 @@ const controlledCases: readonly ControlledCase[] = [
 ];
 
 describe("Backend Native RPC evidence seam", () => {
+  it("preserves quote acquisition time separately from Provider observation time", () => {
+    const quoteFetchedAt = "2026-09-10T00:00:30.000Z";
+    const evidence = toNativeRpcGenericEvidence({
+      intent,
+      tokenInDecimals: 18,
+      tokenOutDecimals: 6,
+      preparedExecution: {
+        ...prepared,
+        quote: {
+          estimatedAmountOut: "0.5",
+          amountOutAtomic: "500000000000000000",
+          minimumAmountOut: "0.4",
+          fetchedAt: quoteFetchedAt,
+        },
+      },
+      providerResult: result("success"),
+    });
+
+    expect(evidence.quote.fetchedAt).toBe(quoteFetchedAt);
+    expect(evidence.provenance.fetchedAt).toBe("2026-09-10T00:01:00.000Z");
+  });
+
   it("reports the same Transaction Protection the prepared Camelot calldata encodes", async () => {
     const amountOutQuoted = 2n * 10n ** 18n;
     const declaredMinimumAtomic = "1750000000000000000";

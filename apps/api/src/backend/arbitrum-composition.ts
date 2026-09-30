@@ -164,7 +164,7 @@ export type ArbitrumProductionCompositionOptions = {
   readonly p0Risk?: ArbitrumP0RiskContext;
   readonly receiptSigner?: ReceiptSigner;
   readonly receiptAnchorer?: ReceiptAnchorer;
-  /** Backend-only protocol spender qualification; absent until evidence exists. */
+  /** Backend-only qualification mapping; never populated from request data. */
   readonly accountStateSpenderResolver?: QualifiedAllowanceSpenderResolver;
 };
 

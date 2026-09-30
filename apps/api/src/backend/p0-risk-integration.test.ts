@@ -752,7 +752,7 @@ describe("Backend P0 Risk bridge: current quote identity", () => {
     expect(context.observedAt).toBe(OBSERVED_AT);
   });
 
-  it("rejects quote block and observation time drift from the pipeline context", () => {
+  it("rejects quote block drift but uses the quote acquisition time", () => {
     expect(
       buildBackendCurrentQuoteContext(
         currentQuoteInput({
@@ -760,15 +760,28 @@ describe("Backend P0 Risk bridge: current quote identity", () => {
         }),
       ),
     ).toEqual({ status: "unavailable", reason: "BLOCK_NUMBER_MISMATCH" });
-    expect(
-      buildBackendCurrentQuoteContext(
-        currentQuoteInput({
-          quote: executionQuote({
-            fetchedAt: "2026-09-18T00:00:00.000Z",
-          }),
-        }),
-      ),
-    ).toEqual({ status: "unavailable", reason: "OBSERVED_AT_MISMATCH" });
+
+    const quoteFetchedAt = "2026-09-17T00:00:30.000Z";
+    const withProviderTime = buildBackendCurrentQuoteContext(
+      currentQuoteInput({
+        quote: executionQuote({ fetchedAt: quoteFetchedAt }),
+      }),
+    );
+    expect(withProviderTime).toMatchObject({
+      status: "available",
+      quote: { observedAt: quoteFetchedAt },
+    });
+
+    const withoutProviderTime = buildBackendCurrentQuoteContext(
+      currentQuoteInput({
+        quote: executionQuote({ fetchedAt: quoteFetchedAt }),
+        observedAt: undefined,
+      }),
+    );
+    expect(withoutProviderTime).toMatchObject({
+      status: "available",
+      quote: { observedAt: quoteFetchedAt },
+    });
   });
 
   it("fails closed instead of inventing a block, time, or runtime identity", () => {
