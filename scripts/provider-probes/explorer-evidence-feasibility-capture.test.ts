@@ -216,6 +216,49 @@ describe("CURRENT_IMPLEMENTATION_VERIFICATION (offline interpretation only)", ()
     ).toBe(true);
   });
 
+  it("preserves missing and malformed raw is_verified as unknown, not false", async () => {
+    const { restFacts, buildExplorerCapabilityMatrix } = await implementation();
+    const rawCases = [undefined, null, "true", "false", 0, 1, {}, []];
+    for (const value of rawCases) {
+      const input: Record<string, unknown> = {
+        compiler_version: "test-compiler",
+      };
+      if (value !== undefined) input.is_verified = value;
+      const normalized = restFacts("contract-verification", input);
+      expect(normalized.isVerified).toBeNull();
+      const altered = structuredClone(rest);
+      const contract = altered.find(
+        (entry) => entry.capability === "contract-verification",
+      );
+      if (!contract) throw new Error("Expected contract fixture");
+      contract.facts = normalized;
+      expect(
+        buildExplorerCapabilityMatrix(compatible, altered, target)[0]
+          .verification,
+      ).toBe("UNVERIFIED");
+    }
+    for (const [rawFlag, summary] of [
+      [true, "true"],
+      [false, "false"],
+    ] as const) {
+      const normalized = restFacts("contract-verification", {
+        compiler_version: "test-compiler",
+        is_verified: rawFlag,
+      });
+      expect(normalized.isVerified).toBe(summary);
+      const altered = structuredClone(rest);
+      const contract = altered.find(
+        (entry) => entry.capability === "contract-verification",
+      );
+      if (!contract) throw new Error("Expected contract fixture");
+      contract.facts = normalized;
+      expect(
+        buildExplorerCapabilityMatrix(compatible, altered, target)[0]
+          .verification,
+      ).toBe("OBSERVED");
+    }
+  });
+
   it("keeps ABI count distinct from a missing independent fingerprint", async () => {
     const { buildExplorerCapabilityMatrix } = await implementation();
     expect(capture.capabilityMatrix[1].normalizedFacts).toEqual({

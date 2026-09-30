@@ -540,7 +540,7 @@ async function main(): Promise<void> {
   );
 }
 
-function restFacts(
+export function restFacts(
   capability: string,
   body: Record<string, unknown>,
 ): Record<string, string | number | null> {
@@ -565,7 +565,8 @@ function restFacts(
   }
   if (capability === "contract-verification") {
     return {
-      isVerified: body.is_verified === true ? "true" : "false",
+      isVerified:
+        typeof body.is_verified === "boolean" ? String(body.is_verified) : null,
       language: typeof body.language === "string" ? body.language : null,
       compilerVersion:
         typeof body.compiler_version === "string"
