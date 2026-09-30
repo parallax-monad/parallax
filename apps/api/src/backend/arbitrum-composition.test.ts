@@ -1055,7 +1055,7 @@ describe("Arbitrum production composition skeleton", () => {
     ]);
   });
 
-  it("returns pinned execution-revert evidence when the unpinned gas preflight reverts", async () => {
+  it("stops before Native RPC evaluation when the chain gas preflight reverts", async () => {
     const blockHash = `0x${"a".repeat(64)}`;
     const calls: Array<{ method: string; params: readonly unknown[] }> = [];
     let gasRequests = 0;
@@ -1109,50 +1109,36 @@ describe("Arbitrum production composition skeleton", () => {
     });
     const pipeline = new BackendPipeline({ runtime: composition });
 
-    const execution = await pipeline.executeNormalized(
-      {
-        ...normalizedIntent,
-        tokenOut: { kind: "erc20", address: CAMELOT_SEPOLIA_USDC },
-        amountInAtomic: "1000000000000000",
-      },
-      {
-        rawInput: normalizedIntent as never,
-        runId: "arbitrum-preflight-revert",
-        chainId: 421614,
-        protocol: "camelot-v3",
-        capability: "simulate",
-      },
-    );
-
-    expect(execution.providerResult.status).toBe("unknown");
-    expect(execution.gasEstimate).toMatchObject({ status: "UNAVAILABLE" });
-    expect(execution.providerEvidence).toMatchObject({
-      provider: { status: "UNKNOWN", integrationStatus: "OK" },
-      execution: { status: "UNKNOWN" },
-      checkedScope: expect.arrayContaining(["native-rpc.pinned-block"]),
-      providerData: {
-        nativeRpc: { status: "unknown", checked: ["native-rpc.pinned-block"] },
-      },
-    });
-    expect(execution.decisionOutput).toMatchObject({
-      status: "completed",
-      verdict: "UNKNOWN",
-      p0: {
-        basicSimulation: {
-          call: { status: "REVERTED" },
-          gasEstimate: { status: "NOT_RUN" },
-          validityAtExecution: "INVALID",
-          failureStage: "CALL",
+    await expect(
+      pipeline.executeNormalized(
+        {
+          ...normalizedIntent,
+          tokenOut: { kind: "erc20", address: CAMELOT_SEPOLIA_USDC },
+          amountInAtomic: "1000000000000000",
         },
-      },
+        {
+          rawInput: normalizedIntent as never,
+          runId: "arbitrum-preflight-execution-revert",
+          chainId: 421614,
+          protocol: "camelot-v3",
+          capability: "simulate",
+        },
+      ),
+    ).rejects.toMatchObject({
+      code: "EXECUTION_REVERT",
+      operation: "estimateGas",
+      chainId: 421614,
     });
+
     expect(gasRequests).toBe(1);
     expect(
-      calls.filter(
-        ({ method, params }) =>
-          method === "eth_getBlockByNumber" && params[0] === "0x2a",
-      ),
-    ).toHaveLength(2);
+      calls.filter(({ method }) => method === "eth_estimateGas"),
+    ).toHaveLength(1);
+    const callRequests = calls.filter(({ method }) => method === "eth_call");
+    expect(callRequests).toHaveLength(1);
+    expect(callRequests[0]?.params[0]).toMatchObject({
+      to: CAMELOT_SEPOLIA_QUOTER,
+    });
   });
 
   it("replays the committed QUALIFIED_REAL Camelot fixture through the production path", async () => {

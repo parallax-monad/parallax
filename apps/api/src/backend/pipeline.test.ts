@@ -310,11 +310,7 @@ describe("BackendPipeline", () => {
     );
   });
 
-  it.each([
-    "INSUFFICIENT_NATIVE_BALANCE",
-    "UNAVAILABLE",
-    "EXECUTION_REVERT",
-  ] as const)(
+  it.each(["INSUFFICIENT_NATIVE_BALANCE", "UNAVAILABLE"] as const)(
     "continues to a provider-owned pinned gas check for %s preflight failures",
     async (code) => {
       const fixture = fakeBackendFixture();
@@ -443,19 +439,22 @@ describe("BackendPipeline", () => {
     expect(provider.evaluations).toHaveLength(0);
   });
 
-  it("does not hand an execution revert to a Provider without pinned gas ownership", async () => {
+  it("stops before Provider evaluation for an execution-revert gas preflight failure even when the Provider owns pinned gas estimation", async () => {
     const error = new ChainAdapterError({
       chainId: 901,
       operation: "estimateGas",
       code: "EXECUTION_REVERT",
       message: "transaction execution reverted during gas preflight",
     });
-    const { pipeline, provider } = createPipelineWithGasPreflightFailure(error);
+    const { pipeline, provider } = createPipelineWithGasPreflightFailure(
+      error,
+      { providerOwnsGasEstimate: true },
+    );
 
     await expect(
       pipeline.execute({
         rawInput: {},
-        runId: "gas-preflight-revert-no-provider-capability",
+        runId: "gas-preflight-execution-revert",
         chainId: 901,
         protocol: "kuru",
       }),
