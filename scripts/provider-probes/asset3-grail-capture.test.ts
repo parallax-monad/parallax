@@ -6,6 +6,8 @@ import { describe, expect, it } from "vitest";
 const root = resolve(import.meta.dirname, "../..");
 const path =
   "fixtures/provider-registry/be-109/grail-usdc-2026-09-29T13-31-53-975Z/capture.json";
+const sourceSnapshotRoot =
+  "fixtures/provider-registry/be-109/grail-usdc-2026-09-29T13-31-53-975Z/source-snapshot";
 const bytes = readFileSync(resolve(root, path));
 const capture = JSON.parse(bytes.toString("utf8"));
 const sha = (data: string | Uint8Array) =>
@@ -32,6 +34,19 @@ describe("#109 bounded GRAIL feasibility capture", () => {
       "fixtures/provider-registry/be-103/usdc-weth-camelot-2026-09-29T10-09-52-993Z/capture.json":
         "sha256:5a7ed69ca2dcf0413f79ddd29749e6f0ae652da91493814fece00cb0963b7b20",
     });
+  });
+
+  it("verifies archived sourceHead bytes against the captured manifest", () => {
+    for (const [sourcePath, expectedDigest] of Object.entries(
+      capture.provenance.manifest,
+    )) {
+      const snapshot = readFileSync(
+        resolve(root, sourceSnapshotRoot, sourcePath),
+      );
+      expect(sha(snapshot), `historical source snapshot: ${sourcePath}`).toBe(
+        expectedDigest,
+      );
+    }
   });
 
   it("records discovery before one selected real route", () => {
