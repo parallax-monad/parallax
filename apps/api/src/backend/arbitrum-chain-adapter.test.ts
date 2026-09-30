@@ -353,6 +353,31 @@ describe("ArbitrumChainAdapter", () => {
     });
   });
 
+  it.each([
+    "execution reverted: network failure while executing the request",
+    "execution reverted: fetch failed in the upstream error details",
+  ])(
+    "prioritizes JSON-RPC execution reverts over generic network text: %s",
+    async (message) => {
+      const adapter = createArbitrumChainAdapter({
+        client: clientFor({
+          eth_estimateGas: Object.assign(new Error(message), { rpcCode: 3 }),
+        }),
+      });
+
+      await expect(
+        adapter.estimateGas({ to: "0xrouter", data: "0x", value: "0x0" }),
+      ).rejects.toSatisfy((error: unknown) => {
+        return (
+          isChainAdapterError(error) &&
+          error.operation === "estimateGas" &&
+          error.code === "EXECUTION_REVERT" &&
+          !error.retryable
+        );
+      });
+    },
+  );
+
   it("does not classify JSON-RPC code 3 as a revert without revert semantics", async () => {
     const adapter = createArbitrumChainAdapter({
       client: clientFor({

@@ -369,7 +369,8 @@ export function projectNativeRpcBasicSimulation(
         : "UNKNOWN";
   const reason = basicSimulationReason(
     failureStage,
-    call.status,
+    call,
+    gasEstimate,
     bindingInspection,
   );
 
@@ -482,14 +483,21 @@ function basicSimulationFailureStage(input: {
 
 function basicSimulationReason(
   stage: P0BasicSimulation["failureStage"],
-  callStatus: P0BasicSimulation["call"]["status"],
+  call: ProjectionStatus,
+  gasEstimate: GasProjection,
   bindingInspection: ReturnType<typeof inspectCamelotV3Transaction>,
 ): string | undefined {
   if (!bindingInspection.ok) return "Prepared transaction binding is invalid";
-  if (callStatus === "REVERTED") {
+  if (call.status === "REVERTED") {
     return stage === "BLOCK"
       ? "Native RPC eth_call reverted but the pinned block could not be verified throughout evaluation"
       : "Native RPC eth_call reverted";
+  }
+  if (stage === "BLOCK" && gasEstimate.status === "UNAVAILABLE") {
+    return "Native RPC gas estimation was unavailable; the pinned execution block could not be verified before and after evaluation";
+  }
+  if (stage === "BLOCK" && call.status === "UNAVAILABLE") {
+    return "Native RPC eth_call was unavailable; the pinned execution block could not be verified before and after evaluation";
   }
   switch (stage) {
     case "BLOCK":

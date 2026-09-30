@@ -439,14 +439,14 @@ function classifyRpcFailure(
     }
     return "UNKNOWN";
   }
+  if (isEstimateGasExecutionRevert(operation, error)) {
+    return "EXECUTION_REVERT";
+  }
   if (candidate?.name === "AbortError" || /timeout|timed out/i.test(message)) {
     return "TIMEOUT";
   }
   if (candidate?.name === "TypeError" || /fetch|network/i.test(message)) {
     return "UNAVAILABLE";
-  }
-  if (isEstimateGasExecutionRevert(operation, error)) {
-    return "EXECUTION_REVERT";
   }
   if (
     operation === "estimateGas" &&

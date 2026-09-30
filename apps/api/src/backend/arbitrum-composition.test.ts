@@ -1068,7 +1068,9 @@ describe("Arbitrum production composition skeleton", () => {
         if (method === "eth_estimateGas") {
           gasRequests += 1;
           throw Object.assign(
-            new Error("execution reverted: insufficient allowance"),
+            new Error(
+              "execution reverted: network fetch failed while checking allowance",
+            ),
             { rpcCode: 3 },
           );
         }

@@ -895,6 +895,11 @@ describe("NativeRpcProvider", () => {
       validityAtExecution: "UNKNOWN",
       failureStage: "BLOCK",
     });
+    expect(simulation.reason).toBe(
+      "Native RPC gas estimation was unavailable; the pinned execution block could not be verified before and after evaluation",
+    );
+    expect(simulation.reason).not.toContain("execution reverted");
+    expect(simulation.reason).not.toContain("endpoint unavailable");
   });
 
   it("does not fall back to latest when estimateGas rejects the block parameter", async () => {
