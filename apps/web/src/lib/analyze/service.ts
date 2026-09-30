@@ -266,6 +266,12 @@ function failureIssues(value: unknown): ApiFailureIssue[] | undefined {
 }
 
 function failureCopy(failure: ApiFailure) {
+  if (failure.code === "EXECUTION_REVERT") {
+    return {
+      en: "The transaction reverted during gas preflight. The check was not completed, so this is not a transaction-risk verdict.",
+      zh: "交易在 Gas 预检阶段发生回退，检查未完成；这不是交易风险结论。",
+    };
+  }
   if (failure.code === "INSUFFICIENT_NATIVE_BALANCE") {
     return {
       en: "The sender does not have enough native currency to cover the transaction amount and gas. The check was not completed, so this is not a transaction-risk verdict.",
@@ -391,7 +397,8 @@ function mapRun(
     systemStatus: systemStatus as CheckSwapResult["systemStatus"],
     verdict: verdict as Verdict,
     summary:
-      apiFailure?.code === "INSUFFICIENT_NATIVE_BALANCE"
+      apiFailure?.code === "INSUFFICIENT_NATIVE_BALANCE" ||
+      apiFailure?.code === "EXECUTION_REVERT"
         ? failureCopy(apiFailure)
         : cp(
             str(run?.summary) ??
@@ -812,7 +819,9 @@ export async function loadRun(
   const storedResult = obj(record?.result);
   const storedErrorCode = str(obj(storedResult?.error)?.code);
   const persistedFailure =
-    status === "failed" && storedErrorCode !== "INSUFFICIENT_NATIVE_BALANCE"
+    status === "failed" &&
+    storedErrorCode !== "INSUFFICIENT_NATIVE_BALANCE" &&
+    storedErrorCode !== "EXECUTION_REVERT"
       ? str(record?.failure)
       : undefined;
   const result = mapRun(

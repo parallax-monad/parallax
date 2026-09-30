@@ -273,6 +273,7 @@ Illustrative completed skeleton (fields truncated):
 | 405 | `METHOD_NOT_ALLOWED` | Non-POST on `/api/check` |
 | 502 | `UNSUPPORTED` | Live Agent Flow not configured |
 | 502 | `INSUFFICIENT_NATIVE_BALANCE` | A typed chain preflight balance failure that could not continue through an eligible Provider-owned pinned gas check; no Risk verdict was produced |
+| 502 | `EXECUTION_REVERT` | A same-chain typed `estimateGas` preflight reported an execution revert; the check stops before simulation and produces no Risk verdict |
 | 502 | `AGENT_FLOW_ERROR` | Structured/unstructured Agent Flow failure mapped to a failed Run |
 | 502 | `INVALID_AGENT_FLOW_RESPONSE` | Agent Flow returned a non-contract RunResult |
 | 500 | `RUN_STORE_ERROR` / `INTERNAL_ERROR` | Store or unexpected transport failure |
@@ -311,6 +312,7 @@ nested under a 502 `run` envelope), public codes include:
 | `UNSUPPORTED` | `false` | Live flow not wired |
 | `INVALID_RESPONSE` | `false` | Invalid Agent Flow payload |
 | `INSUFFICIENT_NATIVE_BALANCE` | `false` | A typed chain gas-preflight failure for which no eligible Provider-owned pinned estimate could continue the check; this is not a Risk Verdict or a guaranteed remediation. |
+| `EXECUTION_REVERT` | `false` | A same-chain typed gas-preflight execution revert; the check stops before simulation, and the public message must not expose raw RPC revert data. This is not a Risk Verdict. |
 | `INTERNAL_ERROR` | `false` | Internal Agent Flow failure |
 
 `error.stage` is a closed set: `quote` | `action` | `simulation` |

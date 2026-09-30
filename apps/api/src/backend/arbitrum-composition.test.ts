@@ -1055,6 +1055,94 @@ describe("Arbitrum production composition skeleton", () => {
     ]);
   });
 
+  it("stops before Native RPC evaluation when the chain gas preflight reverts", async () => {
+    const blockHash = `0x${"a".repeat(64)}`;
+    const calls: Array<{ method: string; params: readonly unknown[] }> = [];
+    let gasRequests = 0;
+    const rpcClient: ArbitrumRpcClient = {
+      async request(method, params = []) {
+        calls.push({ method, params });
+        if (method === "eth_getBlockByNumber") {
+          return { number: "0x2a", hash: blockHash };
+        }
+        if (method === "eth_estimateGas") {
+          gasRequests += 1;
+          throw Object.assign(
+            new Error(
+              "execution reverted: network fetch failed while checking allowance",
+            ),
+            { rpcCode: 3 },
+          );
+        }
+        if (method === "eth_chainId") return "0x66eee";
+        if (method === "eth_call") {
+          const transaction = params[0] as { to?: string } | undefined;
+          if (
+            transaction?.to?.toLowerCase() ===
+            CAMELOT_SEPOLIA_QUOTER.toLowerCase()
+          ) {
+            return `0x${15882896725531551n.toString(16).padStart(64, "0")}${"0".repeat(64)}`;
+          }
+          throw new NativeRpcClientError("RPC_ERROR", "execution reverted", 3);
+        }
+        throw new Error(`unexpected RPC method ${method}`);
+      },
+    };
+    const runtime = bootstrapBackendRuntime({
+      environment: arbitrumEnvironment,
+      tokenRegistry: {
+        chains: [{ chainId: 421614, symbol: "ETH", decimals: 18 }],
+        tokens: [
+          {
+            chainId: 421614,
+            address: CAMELOT_SEPOLIA_USDC,
+            symbol: "USDC",
+            decimals: 18,
+            decimalsSource: "onchain_verified" as const,
+            verifiedAtBlock: "42",
+          },
+        ],
+      },
+    });
+    const composition = createArbitrumProductionComposition({
+      runtime,
+      runStore: new InMemoryRunStore(),
+      rpcClient,
+    });
+    const pipeline = new BackendPipeline({ runtime: composition });
+
+    await expect(
+      pipeline.executeNormalized(
+        {
+          ...normalizedIntent,
+          tokenOut: { kind: "erc20", address: CAMELOT_SEPOLIA_USDC },
+          amountInAtomic: "1000000000000000",
+        },
+        {
+          rawInput: normalizedIntent as never,
+          runId: "arbitrum-preflight-execution-revert",
+          chainId: 421614,
+          protocol: "camelot-v3",
+          capability: "simulate",
+        },
+      ),
+    ).rejects.toMatchObject({
+      code: "EXECUTION_REVERT",
+      operation: "estimateGas",
+      chainId: 421614,
+    });
+
+    expect(gasRequests).toBe(1);
+    expect(
+      calls.filter(({ method }) => method === "eth_estimateGas"),
+    ).toHaveLength(1);
+    const callRequests = calls.filter(({ method }) => method === "eth_call");
+    expect(callRequests).toHaveLength(1);
+    expect(callRequests[0]?.params[0]).toMatchObject({
+      to: CAMELOT_SEPOLIA_QUOTER,
+    });
+  });
+
   it("replays the committed QUALIFIED_REAL Camelot fixture through the production path", async () => {
     const replay = canonicalRealRpcReplay();
     const blockNumber = String(

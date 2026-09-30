@@ -24,6 +24,7 @@ export type ChainErrorCode =
   | "CANCELLED"
   | "INVALID_REQUEST"
   | "INSUFFICIENT_NATIVE_BALANCE"
+  | "EXECUTION_REVERT"
   | "UNKNOWN";
 
 /** Options shared by every potentially long-running chain operation. */
@@ -144,6 +145,7 @@ function isChainErrorCode(value: unknown): value is ChainErrorCode {
     value === "CANCELLED" ||
     value === "INVALID_REQUEST" ||
     value === "INSUFFICIENT_NATIVE_BALANCE" ||
+    value === "EXECUTION_REVERT" ||
     value === "UNKNOWN"
   );
 }

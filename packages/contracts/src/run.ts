@@ -1406,6 +1406,7 @@ export const integrationErrorSchema = z
       "UNSUPPORTED",
       "INVALID_RESPONSE",
       "INSUFFICIENT_NATIVE_BALANCE",
+      "EXECUTION_REVERT",
       "INTERNAL_ERROR",
     ]),
     stage: z.enum([
