@@ -10,13 +10,6 @@ import { CloseIcon } from "@/components/wallet/WalletIcons";
 import { WalletIntro } from "@/components/wallet/WalletIntro";
 import { WalletResult } from "@/components/wallet/WalletResult";
 import { WalletSwap } from "@/components/wallet/WalletSwap";
-import {
-  arbitrumSampleAdjust,
-  arbitrumSampleIntegrationError,
-  arbitrumSampleProceed,
-  arbitrumSampleStop,
-  arbitrumSampleUnknown,
-} from "@/lib/analyze/arbitrum-samples";
 import { flaggedFields } from "@/lib/analyze/fields";
 import {
   applyRemediationOption,
@@ -30,9 +23,9 @@ import {
 } from "@/lib/analyze/form";
 import {
   checkSwap,
+  expectationBaseline,
   fetchQuote,
   formFromRunResult,
-  loadReplay,
   loadRun,
 } from "@/lib/analyze/service";
 import { createStageScheduler } from "@/lib/analyze/stageScheduler";
@@ -250,66 +243,28 @@ export function WalletApp({ language }: { language: Language }) {
       stageMs: STAGE_MS,
       onStage: setStage,
       onSettle: async () => {
-        const nextResult = await checkSwap(toInput(submitted, parent?.runId));
+        const nextResult = await checkSwap({
+          ...toInput(submitted, parent?.runId),
+          ...(quote.status === "available"
+            ? {
+                expectationBaseline: expectationBaseline(
+                  {
+                    protocol: submitted.protocol,
+                    tokenIn: submitted.tokenIn,
+                    tokenOut: submitted.tokenOut,
+                    amountIn: submitted.amountIn,
+                  },
+                  quote.quote,
+                ),
+              }
+            : {}),
+        });
         setStoredRunId(backendRunId(nextResult));
         setResult(nextResult);
         setSubmittedForm(submitted);
         setScreen("result");
       },
     });
-  };
-
-  const runReplay = () => {
-    recoveryCancelledRef.current = true;
-    setFormErrors({});
-    setStoredRunId(undefined);
-    setResult(undefined);
-    setDrawerOpen(false);
-    setStage(0);
-    setCheckingMode("replay");
-    setScreen("checking");
-
-    schedulerRef.current.run({
-      stageCount: WALLET_STAGE_COUNT,
-      stageMs: STAGE_MS,
-      onStage: setStage,
-      onSettle: async () => {
-        const nextResult = await loadReplay("mon-to-usdc");
-        setResult(nextResult);
-        setSubmittedForm(form);
-        setScreen("result");
-      },
-    });
-  };
-
-  const loadArbitrumSample = (
-    verdict: "ADJUST" | "PROCEED" | "STOP" | "UNKNOWN" | "ERROR",
-  ) => {
-    const sampleMap = {
-      ADJUST: arbitrumSampleAdjust,
-      PROCEED: arbitrumSampleProceed,
-      STOP: arbitrumSampleStop,
-      UNKNOWN: arbitrumSampleUnknown,
-      ERROR: arbitrumSampleIntegrationError,
-    };
-    const sample = sampleMap[verdict];
-
-    recoveryCancelledRef.current = true;
-    schedulerRef.current.cancel();
-    const sampleForm: FormState = {
-      ...INITIAL_FORM,
-      tokenIn: sample.intent.tokenIn,
-      tokenOut: sample.intent.tokenOut,
-      amountIn: sample.intent.amountIn,
-    };
-    setFormErrors({});
-    setStoredRunId(undefined);
-    setDrawerOpen(false);
-    setCheckingMode("live");
-    setForm(sampleForm);
-    setSubmittedForm(sampleForm);
-    setResult(sample);
-    setScreen("result");
   };
 
   const applyOption = (option: RemediationOption) => {
@@ -382,7 +337,6 @@ export function WalletApp({ language }: { language: Language }) {
                 {screen === "home" && (
                   <WalletHome
                     language={language}
-                    onLoadArbitrumSample={loadArbitrumSample}
                     onSwap={() => {
                       recoveryCancelledRef.current = true;
                       setScreen("swap");
@@ -401,7 +355,6 @@ export function WalletApp({ language }: { language: Language }) {
                       if (Object.keys(formErrors).length > 0) setFormErrors({});
                     }}
                     onSubmit={runCheck}
-                    onReplay={runReplay}
                   />
                 )}
                 {screen === "checking" && (

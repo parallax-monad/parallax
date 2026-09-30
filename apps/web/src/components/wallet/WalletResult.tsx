@@ -4,6 +4,7 @@ import { ResultStep } from "@/components/analyze/ResultStep";
 import { VerdictIcon } from "@/components/analyze/StatusIcon";
 import { StepTimeline } from "@/components/analyze/StepTimeline";
 import type {
+  BasicSimulation,
   CheckSwapResult,
   ProductRunMode,
   RemediationOption,
@@ -38,6 +39,107 @@ const INTEGRATION_ERROR_COPY = {
   retry: { en: "Retry", zh: "重试" },
   details: { en: "View details", zh: "查看详情" },
 } satisfies Record<string, Copy>;
+
+function FactRow({ label, value }: { label: Copy; value: string }) {
+  return (
+    <div className="flex flex-wrap justify-between gap-x-4 gap-y-1 border-b border-line py-2 last:border-0">
+      <dt className="text-dim">{label.en}</dt>
+      <dd className="mono m-0 min-w-0 break-all text-right text-white">
+        {value}
+      </dd>
+    </div>
+  );
+}
+
+function P0Facts({
+  result,
+  language,
+}: {
+  result: CheckSwapResult;
+  language: Language;
+}) {
+  const simulation: BasicSimulation | undefined = result.basicSimulation;
+  const callStatus = simulation?.call.status ?? "UNAVAILABLE";
+  const gasStatus = simulation?.gasEstimate.status ?? "UNAVAILABLE";
+  const evidenceState = result.evidenceState ?? "UNKNOWN";
+  const providerStatus = result.providerEvidence?.status ?? "UNKNOWN";
+  const remediation = result.remediationStatus ?? "UNKNOWN";
+
+  return (
+    <section
+      className="border-y border-line py-3"
+      aria-label="P0 execution facts"
+    >
+      <h3 className="m-0 text-[12px] font-bold uppercase text-dim">
+        {say(language, {
+          en: "Arbitrum Sepolia · Camelot V3",
+          zh: "Arbitrum Sepolia · Camelot V3",
+        })}
+      </h3>
+      <dl className="m-0 mt-2">
+        <FactRow
+          label={{ en: "Provider status", zh: "Provider 狀態" }}
+          value={providerStatus}
+        />
+        <FactRow
+          label={{ en: "basicSimulation call", zh: "basicSimulation 呼叫" }}
+          value={callStatus}
+        />
+        <FactRow
+          label={{ en: "Gas status", zh: "Gas 狀態" }}
+          value={gasStatus}
+        />
+        <FactRow
+          label={{ en: "Evidence quality", zh: "Evidence 品質" }}
+          value={evidenceState}
+        />
+        <FactRow
+          label={{ en: "Risk verdict", zh: "風險判定" }}
+          value={result.verdict}
+        />
+        <FactRow
+          label={{ en: "Remediation", zh: "修復狀態" }}
+          value={remediation}
+        />
+        <FactRow label={{ en: "Run ID", zh: "Run ID" }} value={result.runId} />
+        {result.parentRunId && (
+          <FactRow
+            label={{ en: "Parent Run", zh: "Parent Run" }}
+            value={result.parentRunId}
+          />
+        )}
+        <FactRow
+          label={{ en: "Block", zh: "區塊" }}
+          value={
+            simulation?.call.blockNumber ??
+            result.simulatorPinnedBlock ??
+            "UNAVAILABLE"
+          }
+        />
+        <FactRow
+          label={{ en: "Observed at", zh: "觀測時間" }}
+          value={result.providerEvidence?.observedAt ?? "UNAVAILABLE"}
+        />
+      </dl>
+      {simulation?.call.status === "SUCCEEDED" && (
+        <p className="mb-0 mt-3 border-l-2 border-risk-elevated pl-3 text-[12px] leading-[1.5] text-dim">
+          {say(language, {
+            en: "eth_call success is an execution fact, not a safety or Risk pass.",
+            zh: "eth_call 成功只代表執行檢查結果，不代表安全或風險通過。",
+          })}
+        </p>
+      )}
+      {(evidenceState === "INCOMPLETE" || result.verdict === "UNKNOWN") && (
+        <p className="mb-0 mt-2 text-[12px] font-semibold text-risk-elevated">
+          {say(language, {
+            en: "UNKNOWN is not a pass.",
+            zh: "UNKNOWN 不代表通過。",
+          })}
+        </p>
+      )}
+    </section>
+  );
+}
 
 export function WalletResult({
   result,
@@ -204,6 +306,8 @@ export function WalletResult({
           {say(language, MODE_LABEL[result.productRunMode])}
         </span>
       </div>
+
+      <P0Facts language={language} result={result} />
 
       {hasOptions && (
         <div className="sticky top-0 z-30 -mx-5 border-b border-line/50 bg-gradient-to-b from-ink-elev/95 via-ink-elev/80 to-transparent px-5 pb-2 pt-1 backdrop-blur-xl">

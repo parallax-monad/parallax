@@ -1,18 +1,19 @@
 import { useState } from "react";
 import { TokenIcon } from "@/components/analyze/TokenIcon";
 import { ChevronDownIcon, SwapIcon } from "@/components/wallet/WalletIcons";
-import {
-  balanceOf,
-  DEMO_RECIPIENT,
-  formatAmount,
-} from "@/components/wallet/walletData";
+import { DEMO_RECIPIENT } from "@/components/wallet/walletData";
 import type { FieldFlag } from "@/lib/analyze/fields";
-import { receiveTokenFor, SUPPORTED_TOKENS_IN } from "@/lib/analyze/fixtures";
 import type { FormFieldErrors, FormState } from "@/lib/analyze/form";
 import type { QuoteState } from "@/lib/analyze/types";
 import { type Copy, type Language, say } from "@/lib/i18n";
 
-/** A token side of the swap. Locked when the fixture set offers one option. */
+const P0_TOKENS_IN = ["ETH"] as const;
+const P0_TOKEN_OUT = "USDC";
+
+function receiveTokenFor(_tokenIn: string): string {
+  return P0_TOKEN_OUT;
+}
+
 function TokenSelect({
   language,
   options,
@@ -92,7 +93,6 @@ export function WalletSwap({
   quote = { status: "idle" },
   onChange,
   onSubmit,
-  onReplay,
 }: {
   form: FormState;
   language: Language;
@@ -103,7 +103,6 @@ export function WalletSwap({
   quote?: QuoteState;
   onChange: (form: FormState) => void;
   onSubmit: () => void;
-  onReplay: () => void;
 }) {
   const [advancedOpen, setAdvancedOpen] = useState(false);
 
@@ -113,7 +112,6 @@ export function WalletSwap({
   const flagFor = (key: FieldFlag["field"]) =>
     flags.find((flag) => flag.field === key);
 
-  const balance = balanceOf(form.tokenIn);
   const receiveToken = receiveTokenFor(form.tokenIn);
   const amountFlag = flagFor("amountIn");
   const amountError = errors.amountIn;
@@ -128,14 +126,25 @@ export function WalletSwap({
         onSubmit();
       }}
     >
+      <section className="border-y border-line py-3">
+        <div className="text-[11px] font-bold uppercase tracking-[0.08em] text-dim">
+          {say(language, { en: "Active P0 path", zh: "当前 P0 路径" })}
+        </div>
+        <div className="mt-1 text-[13px] font-semibold text-white">
+          {say(language, {
+            en: "Arbitrum Sepolia · Camelot V3 · ETH → USDC",
+            zh: "Arbitrum Sepolia · Camelot V3 · ETH → USDC",
+          })}
+        </div>
+      </section>
+
       <section className="rounded-[16px] border border-white/[0.08] bg-white/[0.02] p-5 backdrop-blur-xl">
         <div className="flex items-baseline justify-between gap-3">
           <span className="text-[12px] font-bold uppercase tracking-[0.08em] text-dim">
             {say(language, { en: "You pay", zh: "你支付" })}
           </span>
           <span className="text-[12px] text-dim">
-            {say(language, { en: "Balance", zh: "余额" })}{" "}
-            {formatAmount(balance)}
+            {say(language, { en: "Balance unavailable", zh: "余额不可用" })}
           </span>
         </div>
         <div className="mt-3 flex items-center gap-3">
@@ -159,7 +168,7 @@ export function WalletSwap({
           />
           <TokenSelect
             language={language}
-            options={SUPPORTED_TOKENS_IN}
+            options={P0_TOKENS_IN}
             value={form.tokenIn}
             onSelect={(value) =>
               onChange({
@@ -172,10 +181,10 @@ export function WalletSwap({
         </div>
         <button
           type="button"
-          className="mt-1 text-[12px] font-bold uppercase tracking-[0.08em] text-monad-dim"
-          onClick={() => set("amountIn", String(balance))}
+          className="mt-1 text-[12px] font-bold uppercase tracking-[0.08em] text-dim"
+          disabled
         >
-          {say(language, { en: "Use max", zh: "使用全部" })}
+          {say(language, { en: "Balance unavailable", zh: "余额不可用" })}
         </button>
         {amountError && (
           <p
@@ -405,8 +414,8 @@ export function WalletSwap({
               </span>
               <span className="field-control text-white">
                 {say(language, {
-                  en: "Kuru (live API)",
-                  zh: "Kuru（实时 API）",
+                  en: "Camelot V3 · Arbitrum Sepolia",
+                  zh: "Camelot V3 · Arbitrum Sepolia",
                 })}
               </span>
               {flagFor("protocol") && (
@@ -433,16 +442,6 @@ export function WalletSwap({
         {say(language, {
           en: "Submit live check",
           zh: "提交实时检查",
-        })}
-      </button>
-      <button
-        type="button"
-        className="btn btn-monad-outline mt-2 w-full"
-        onClick={onReplay}
-      >
-        {say(language, {
-          en: "Load recorded replay",
-          zh: "载入录制回放",
         })}
       </button>
       <p className="text-center text-[12px] leading-[1.5] text-dim">

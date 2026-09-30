@@ -7,6 +7,7 @@ import {
   validateForm,
 } from "./form";
 import {
+  ARBITRUM_SEPOLIA_USDC_ADDRESS,
   checkSwap,
   fetchQuote,
   formFromRunResult,
@@ -197,7 +198,7 @@ describe("checkSwap API adapter", () => {
     // QUOTE-stage observation and simulation output are separate claims.
     expect(result.quote.expectedOutput).toBe("0.000230");
     expect(result.quote.blockNumber).toBe("91383505");
-    expect(result.simulatedOutput).toBe("0.000223");
+    expect(result.simulatedOutput).toBe("unavailable");
   });
 
   test("falls back to the simulated output when no Quote is projected", async () => {
@@ -223,10 +224,84 @@ describe("checkSwap API adapter", () => {
 
     const result = await checkSwap(input, { fetch: request });
 
-    expect(result.quote.expectedOutput).toBe("0.000223");
-    expect(result.simulatedOutput).toBe("0.000223");
+    expect(result.quote.expectedOutput).toBe("unavailable");
+    expect(result.simulatedOutput).toBe("unavailable");
   });
 
+  test("keeps atomic output unavailable without trusted token metadata", async () => {
+    const request = vi.fn<typeof fetch>().mockResolvedValue(
+      jsonResponse({
+        ...completed,
+        evidence: [
+          ...completed.evidence,
+          {
+            key: "sim-out-1",
+            kind: "simulated_token_out",
+            status: "confirmed",
+            summary: "Simulated output",
+            source: "simulation",
+            stage: "SIMULATE",
+            amountReceivedAtomic: "223",
+            isReplay: false,
+            isMock: false,
+          },
+        ],
+      }),
+    );
+
+    const result = await checkSwap(input, { fetch: request });
+
+    expect(result.quote.expectedOutput).toBe("unavailable");
+    expect(result.simulatedOutput).toBe("unavailable");
+  });
+
+  test("sends the selected quote as an expectation baseline", async () => {
+    const request = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(jsonResponse(completed));
+    const quote = {
+      estimatedAmountOut: "0.000230",
+      minimumAmountOut: "0.000228",
+      blockNumber: "91383505",
+      fetchedAt: "2026-08-08T12:00:00.000Z",
+      runtimeVersion: "arbitrum-camelot-v3",
+      runtimeRevision: "native-rpc",
+    };
+
+    await checkSwap(
+      {
+        ...input,
+        protocol: "camelot-v3",
+        tokenIn: "ETH",
+        tokenOut: "USDC",
+        expectationBaseline: {
+          chainId: 421614,
+          protocol: "camelot-v3",
+          tokenIn: { kind: "native" },
+          tokenOut: {
+            kind: "erc20",
+            address: ARBITRUM_SEPOLIA_USDC_ADDRESS,
+          },
+          amountIn: "0.001",
+          quote,
+        },
+      },
+      { fetch: request },
+    );
+
+    const sent = JSON.parse(String(request.mock.calls[0]?.[1]?.body));
+    expect(sent.expectationBaseline).toEqual({
+      chainId: 421614,
+      protocol: "camelot-v3",
+      tokenIn: { kind: "native" },
+      tokenOut: {
+        kind: "erc20",
+        address: ARBITRUM_SEPOLIA_USDC_ADDRESS,
+      },
+      amountIn: "0.001",
+      quote,
+    });
+  });
   test("preserves a terminal NO_ROUTE STOP without pinned-block provenance", async () => {
     const request = vi.fn<typeof fetch>().mockResolvedValue(
       jsonResponse({

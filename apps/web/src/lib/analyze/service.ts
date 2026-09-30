@@ -45,7 +45,10 @@ function symbol(value: unknown, chainId = 143): string {
   return address ? `${address.slice(0, 6)}…${address.slice(-4)}` : "unknown";
 }
 
-function asset(value: string, chainId: number) {
+function asset(
+  value: string,
+  chainId: number,
+): { kind: "native" } | { kind: "erc20"; address: string } {
   if (value === "MON" || value === "ETH") return { kind: "native" };
   if (value === "USDC") {
     return {
@@ -57,9 +60,10 @@ function asset(value: string, chainId: number) {
   throw new Error(`Unsupported token: ${value}`);
 }
 
-function decimal(value: unknown, decimals: number): string {
+function decimal(value: unknown, decimals: number | undefined): string {
   const atomic = str(value);
-  if (!atomic || !/^\d+$/.test(atomic)) return "unavailable";
+  if (!atomic || !/^\d+$/.test(atomic) || decimals === undefined)
+    return "unavailable";
   const padded = atomic.padStart(decimals + 1, "0");
   const fraction = padded.slice(-decimals).replace(/0+$/, "");
   return `${padded.slice(0, -decimals)}${fraction ? `.${fraction}` : ""}`;
@@ -99,8 +103,11 @@ const ACTION_REASON: Record<string, Copy> = {
 };
 
 /** Registry decimals for the P0 pair, so atomic values never reach a screen. */
-const DECIMALS: Record<string, number> = { MON: 18, USDC: 6 };
-const decimalsFor = (symbol: string) => DECIMALS[symbol] ?? 18;
+const decimalsFor = (symbol: string, chainId?: number): number | undefined => {
+  if (symbol === "ETH" || symbol === "MON") return 18;
+  if (symbol === "USDC" && chainId === 421614) return 18;
+  return undefined;
+};
 
 /**
  * Converts an atomic `proposedChange` into display units. The handoff requires
@@ -385,6 +392,11 @@ function mapRun(
   const tokenIn = symbol(intent?.tokenIn, chainId);
   const tokenOut = symbol(intent?.tokenOut, chainId);
   const boundary = obj(intent?.economicBoundary);
+  const p0 = obj(run?.p0);
+  const basicSimulation = obj(p0?.basicSimulation);
+  const call = obj(basicSimulation?.call);
+  const gasEstimate = obj(basicSimulation?.gasEstimate);
+  const provider = obj(obj(run?.providerEvidence)?.provider);
   return {
     runId,
     parentRunId: str(run?.parentRunId),
@@ -423,7 +435,7 @@ function mapRun(
     intent: {
       tokenIn,
       tokenOut,
-      amountIn: decimal(intent?.amountInAtomic, tokenIn === "USDC" ? 6 : 18),
+      amountIn: decimal(intent?.amountInAtomic, decimalsFor(tokenIn, chainId)),
     },
     diff: diff(run?.diff, tokenIn),
     quote: {
@@ -433,7 +445,7 @@ function mapRun(
       expectedOutput:
         str(runQuote?.estimatedAmountOut) ??
         (output
-          ? decimal(output.amountReceivedAtomic, tokenOut === "USDC" ? 6 : 18)
+          ? decimal(output.amountReceivedAtomic, decimalsFor(tokenOut, chainId))
           : "unavailable"),
       route: routePath ? cp(routePath) : unavailable,
       blockNumber:
@@ -443,7 +455,7 @@ function mapRun(
         "unavailable",
     },
     simulatedOutput: output
-      ? decimal(output.amountReceivedAtomic, tokenOut === "USDC" ? 6 : 18)
+      ? decimal(output.amountReceivedAtomic, decimalsFor(tokenOut, chainId))
       : "unavailable",
     minimumReceivedSource: (str(boundary?.source) ??
       "unavailable") as CheckSwapResult["minimumReceivedSource"],
@@ -463,10 +475,39 @@ function mapRun(
     simulatorPinnedBlock: str(run?.simulatorPinnedBlock),
     apiFailure,
     rawResponse,
+    chainId,
+    protocol: str(intent?.protocol),
+    evidenceState: str(p0?.evidenceState),
+    basicSimulation:
+      call || gasEstimate
+        ? {
+            call: {
+              status: str(call?.status) ?? "UNKNOWN",
+              blockNumber: str(call?.blockNumber),
+              blockHash: str(call?.blockHash),
+              returnDataFingerprint: str(call?.returnDataFingerprint),
+            },
+            gasEstimate: {
+              status: str(gasEstimate?.status) ?? "UNKNOWN",
+              value: str(gasEstimate?.value),
+            },
+          }
+        : undefined,
+    providerEvidence: provider
+      ? {
+          status: str(provider?.status) ?? "UNKNOWN",
+          source: str(provider?.source),
+          observedAt: str(provider?.observedAt),
+          blockNumber: str(provider?.blockNumber),
+          blockHash: str(provider?.blockHash),
+        }
+      : undefined,
+    remediationStatus: str(p0?.remediation),
   };
 }
 
 function body(input: CheckSwapInput) {
+  const baseline = input.expectationBaseline;
   return {
     ...(input.parentRunId ? { parentRunId: input.parentRunId } : {}),
     chainId: getChainIdForProtocol(input.protocol),
@@ -482,10 +523,26 @@ function body(input: CheckSwapInput) {
           source: "user_declared",
         }
       : { availability: "unavailable", source: "unavailable" },
+    ...(baseline ? { expectationBaseline: baseline } : {}),
   };
 }
 
 export type CheckOptions = { fetch?: typeof fetch; signal?: AbortSignal };
+
+export function expectationBaseline(
+  input: QuoteSwapInput,
+  quote: QuotePreview,
+): NonNullable<CheckSwapInput["expectationBaseline"]> {
+  const chainId = getChainIdForProtocol(input.protocol);
+  return {
+    chainId,
+    protocol: input.protocol,
+    tokenIn: asset(input.tokenIn, chainId),
+    tokenOut: asset(input.tokenOut, chainId),
+    amountIn: input.amountIn,
+    quote,
+  };
+}
 
 /** `/api/quote` is a strict exact-input body: no boundary, no parent, no slippage. */
 function quoteBody(input: QuoteSwapInput) {

@@ -40,6 +40,11 @@ export type CheckSwapInput = {
   minimumReceivedSource?: BoundarySource;
   slippage?: string;
   expectationBaseline?: {
+    chainId: number;
+    protocol: Protocol;
+    tokenIn: { kind: "native" } | { kind: "erc20"; address: string };
+    tokenOut: { kind: "native" } | { kind: "erc20"; address: string };
+    amountIn: string;
     quote: QuotePreview;
   };
 };
@@ -135,6 +140,25 @@ export type RunRecovery =
   | { kind: "started"; runId: string }
   | { kind: "error"; failure: ApiFailure };
 
+export type BasicSimulation = {
+  call: {
+    status: string;
+    blockNumber?: string;
+    blockHash?: string;
+    returnDataFingerprint?: string;
+  };
+  gasEstimate: { status: string; value?: string };
+  preparedTransaction?: { fingerprint?: string; status?: string };
+};
+
+export type ProviderEvidenceSummary = {
+  status: string;
+  source?: string;
+  observedAt?: string;
+  blockNumber?: string;
+  blockHash?: string;
+};
+
 export type CheckSwapResult = {
   runId: string;
   parentRunId?: string;
@@ -164,6 +188,12 @@ export type CheckSwapResult = {
   quoteFidelity?: QuoteFidelity;
   remediationOptions?: RemediationOption[];
   executionEconomics?: ExecutionEconomics;
+  chainId?: number;
+  protocol?: string;
+  evidenceState?: string;
+  basicSimulation?: BasicSimulation;
+  providerEvidence?: ProviderEvidenceSummary;
+  remediationStatus?: string;
 };
 
 /** Optional swap-form patch when a user chooses this option. */

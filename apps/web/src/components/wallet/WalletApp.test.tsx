@@ -196,7 +196,7 @@ describe("WalletApp persisted Run recovery", () => {
     expect(container.textContent).not.toContain("Before you sign");
   });
 
-  test("loads the Arbitrum sample result from the wallet home", async () => {
+  test("opens the real Arbitrum P0 swap path from wallet home", async () => {
     const container = document.createElement("div");
     document.body.append(container);
     root = createRoot(container);
@@ -206,34 +206,23 @@ describe("WalletApp persisted Run recovery", () => {
       await Promise.resolve();
     });
 
-    const sampleButton = Array.from(container.querySelectorAll("button")).find(
-      (button) => button.textContent?.includes("ADJUST"),
+    const swapButton = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent?.trim() === "Swap",
     );
-    expect(sampleButton).toBeDefined();
+    expect(swapButton).toBeDefined();
 
     await act(async () => {
-      sampleButton?.click();
+      swapButton?.click();
     });
 
-    expect(container.textContent).toContain("Your quote has changed");
-    expect(container.textContent).toContain("Adjust before proceeding");
-    expect(container.textContent).toContain("View verified options →");
-    expect(container.textContent).toContain("Execution economics");
-
-    const timelineOptionsButton = Array.from(
-      container.querySelectorAll("button"),
-    ).find((button) => button.textContent?.includes("View verified options"));
-    expect(timelineOptionsButton).toBeDefined();
-
-    await act(async () => {
-      timelineOptionsButton?.click();
-    });
-
-    expect(container.textContent).toContain("Your options");
-    expect(container.textContent).toContain("Keep spending 10,000 USDC");
+    expect(container.textContent).toContain(
+      "Arbitrum Sepolia · Camelot V3 · ETH → USDC",
+    );
+    expect(container.textContent).not.toContain("ADJUST");
+    expect(container.textContent).not.toContain("Load recorded replay");
   });
 
-  test("applies a verified option to the swap sheet", async () => {
+  test("does not expose fixture-only remediation controls in the active P0 path", async () => {
     const container = document.createElement("div");
     document.body.append(container);
     root = createRoot(container);
@@ -243,41 +232,11 @@ describe("WalletApp persisted Run recovery", () => {
       await Promise.resolve();
     });
 
-    const sampleButton = Array.from(container.querySelectorAll("button")).find(
-      (button) => button.textContent?.includes("ADJUST"),
+    expect(container.textContent).toContain(
+      "This demo checks a supported swap intent before signing",
     );
-    expect(sampleButton).toBeDefined();
-
-    await act(async () => {
-      sampleButton?.click();
-    });
-
-    const timelineOptionsButton = Array.from(
-      container.querySelectorAll("button"),
-    ).find((button) => button.textContent?.includes("View verified options"));
-    expect(timelineOptionsButton).toBeDefined();
-
-    await act(async () => {
-      timelineOptionsButton?.click();
-    });
-
-    const applyButtons = Array.from(
-      container.querySelectorAll("button"),
-    ).filter((button) =>
-      button.textContent?.includes("Preserve a similar effective rate"),
-    );
-    expect(applyButtons.length).toBeGreaterThan(0);
-
-    await act(async () => {
-      applyButtons[0]?.click();
-    });
-
-    const amountInput = container.querySelector<HTMLInputElement>(
-      'input[aria-label="Amount to pay"]',
-    );
-    expect(amountInput?.value).toBe("7200");
-    expect(container.textContent).toContain("USDC");
-    expect(container.textContent).toContain("ETH");
-    expect(container.textContent).toContain("Submit live check");
+    expect(container.textContent).not.toContain("Your quote has changed");
+    expect(container.textContent).not.toContain("View verified options");
+    expect(container.textContent).not.toContain("Load recorded replay");
   });
 });
