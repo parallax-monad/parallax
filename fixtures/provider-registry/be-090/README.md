@@ -12,6 +12,24 @@ Independent historical-state replay remains blocked as described below.
 SHA-256: `da79405cbf55d49d71df568371ba6af222e3d82669e172ea526e867f1560760c`.
 Source head: `f4bacf2d509e2b9f9de0365a7ee8ecedd799e609`.
 
+### Legacy endpoint provenance (unverified)
+
+The immutable historical capture retains `endpointClass:
+official_public_arbitrum_one_https_rpc` exactly as originally written, **but this
+historical label is unverified as endpoint provenance**. Its source revision
+accepted the optional `ARBITRUM_ONE_RPC_URL` environment override while always
+writing the official endpoint class, irrespective of the selected URL. The
+capture intentionally contains no endpoint URL or independently authenticated
+contemporaneous run record identifying which RPC was actually selected.
+Therefore the recorded label alone **must not be used as proof that the
+historical requests went to the official public Arbitrum RPC**. No available
+capture field independently resolves the selected endpoint.
+
+The current runner corrects endpoint classification for future captures by
+comparing the complete normalized selected URL and stores only the sanitized
+source class. This change is prospective: it does **not** retroactively
+authenticate the historical endpoint or change the historical capture bytes.
+
 ## Target and evidence boundary
 
 [Arbitrum's public documentation](https://docs.arbitrum.io/arbitrum-bridge/quickstart)
@@ -25,7 +43,7 @@ and `eth_estimateGas`. The public third-party EOA's confirmed transaction,
 empty account code, and native balance supply read-only sender provenance and
 account state. Allowance and spender are `NOT_APPLICABLE` for native input.
 The pinned chain and block hash were rechecked. `debug_traceCall` was
-unavailable on the public RPC; Trace remains supplementary.
+unavailable in the historical probe; Trace remains supplementary.
 
 The probe uses the generic Native RPC transport and One-specific, official
 deployment facts. It does not run the assembled Sepolia Backend or

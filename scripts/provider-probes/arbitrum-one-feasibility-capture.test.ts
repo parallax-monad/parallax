@@ -277,6 +277,24 @@ describe("#90 historical Arbitrum One capture static integrity", () => {
     );
   });
 
+  it("does not treat the immutable legacy endpointClass as verified endpoint provenance", () => {
+    // Historical bytes are immutable, including the old hard-coded class.
+    // No authenticated capture-time selected endpoint was retained.
+    expect(capture.endpointClass).toBe(
+      "official_public_arbitrum_one_https_rpc",
+    );
+    expect(capture.secretScan.endpointRecorded).toBe(false);
+    const readme = readFileSync(
+      resolve(root, "fixtures/provider-registry/be-090/README.md"),
+      "utf8",
+    );
+    expect(readme).toContain(
+      "historical label is unverified as endpoint provenance",
+    );
+    expect(readme).toContain("must not be used as proof");
+    expect(readme).toContain("does **not** retroactively");
+  });
+
   it("retains only bounded feasibility and secret-safe normalized evidence", () => {
     expect(capture.productionSupport).toBe(false);
     expect(capture.productAccepted).toBe(false);
