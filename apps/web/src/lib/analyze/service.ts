@@ -64,6 +64,7 @@ function decimal(value: unknown, decimals: number | undefined): string {
   const atomic = str(value);
   if (!atomic || !/^\d+$/.test(atomic) || decimals === undefined)
     return "unavailable";
+  if (decimals === 0) return atomic;
   const padded = atomic.padStart(decimals + 1, "0");
   const fraction = padded.slice(-decimals).replace(/0+$/, "");
   return `${padded.slice(0, -decimals)}${fraction ? `.${fraction}` : ""}`;
@@ -409,6 +410,7 @@ function mapRun(
   const basicSimulationObservedAt = str(basicSimulation?.observedAt);
   return {
     runId,
+    parentRunId: str(run?.parentRunId),
     systemStatus: systemStatus as CheckSwapResult["systemStatus"],
     verdict: verdict as Verdict,
     summary:

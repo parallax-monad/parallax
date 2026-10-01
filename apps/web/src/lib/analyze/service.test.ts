@@ -293,6 +293,31 @@ describe("checkSwap API adapter", () => {
     expect(sent.expectationBaseline.quote).toEqual(quote);
   });
 
+  test("preserves child Run identity and diff", async () => {
+    const request = vi.fn<typeof fetch>().mockResolvedValue(
+      jsonResponse({
+        ...completed,
+        runId: "run-child-1",
+        parentRunId: "run-live-1",
+        diff: {
+          previousRunId: "run-live-1",
+          previousVerdict: "UNKNOWN",
+          changedFields: [
+            {
+              field: "amountInAtomic",
+              before: "10000000000000000",
+              after: "11000000000000000",
+            },
+          ],
+        },
+      }),
+    );
+
+    const result = await checkSwap(input, { fetch: request });
+
+    expect(result.parentRunId).toBe("run-live-1");
+    expect(result.diff?.[0]).toMatchObject({ field: { en: "amountIn" } });
+  });
   test("does not send a client expectation baseline when quote is unavailable", async () => {
     const request = vi
       .fn<typeof fetch>()
