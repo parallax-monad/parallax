@@ -22,6 +22,7 @@ import type {
   ProvisionalCandidateFieldInput,
   ProvisionalJsonValue,
 } from "./provider-result-boundary.js";
+import { validatedQuoteFetchedAt } from "./quote-timestamp.js";
 
 export { ARBITRUM_SEPOLIA_CHAIN_ID };
 
@@ -358,7 +359,7 @@ export function projectNativeRpcBasicSimulation(
     gasEstimate,
   });
   const validityAtExecution =
-    call.status === "REVERTED"
+    call.status === "REVERTED" && blockVerified
       ? "INVALID"
       : input.providerResult.status === "success" &&
           call.status === "SUCCEEDED" &&
@@ -369,7 +370,8 @@ export function projectNativeRpcBasicSimulation(
         : "UNKNOWN";
   const reason = basicSimulationReason(
     failureStage,
-    call.status,
+    call,
+    gasEstimate,
     bindingInspection,
   );
 
@@ -452,7 +454,14 @@ function basicSimulationFailureStage(input: {
   if (
     input.blockNumberField?.status !== "observed" ||
     input.blockHashField?.status !== "observed" ||
-    input.revalidatedBlockField?.status === "invalid"
+    (input.revalidatedBlockField !== undefined &&
+      input.revalidatedBlockField.status !== "observed")
+  ) {
+    return "BLOCK";
+  }
+  if (
+    input.call.status === "REVERTED" &&
+    input.revalidatedBlockField?.status !== "observed"
   ) {
     return "BLOCK";
   }
@@ -475,11 +484,22 @@ function basicSimulationFailureStage(input: {
 
 function basicSimulationReason(
   stage: P0BasicSimulation["failureStage"],
-  callStatus: P0BasicSimulation["call"]["status"],
+  call: ProjectionStatus,
+  gasEstimate: GasProjection,
   bindingInspection: ReturnType<typeof inspectCamelotV3Transaction>,
 ): string | undefined {
   if (!bindingInspection.ok) return "Prepared transaction binding is invalid";
-  if (callStatus === "REVERTED") return "Native RPC eth_call reverted";
+  if (call.status === "REVERTED") {
+    return stage === "BLOCK"
+      ? "Native RPC eth_call reverted but the pinned block could not be verified throughout evaluation"
+      : "Native RPC eth_call reverted";
+  }
+  if (stage === "BLOCK" && gasEstimate.status === "UNAVAILABLE") {
+    return "Native RPC gas estimation was unavailable; the pinned execution block could not be verified before and after evaluation";
+  }
+  if (stage === "BLOCK" && call.status === "UNAVAILABLE") {
+    return "Native RPC eth_call was unavailable; the pinned execution block could not be verified before and after evaluation";
+  }
   switch (stage) {
     case "BLOCK":
       return "Pinned execution block could not be verified before and after evaluation";
@@ -581,6 +601,7 @@ function quoteField(
   fetchedAt: string,
 ) {
   if (!isRecord(quote)) return jsonField(null, source, blockNumber, fetchedAt);
+  const quoteFetchedAt = validatedQuoteFetchedAt(quote.fetchedAt) ?? fetchedAt;
   const estimatedAmountOut = quote.estimatedAmountOut;
   const minimumAmountOut = quote.minimumAmountOut;
   if (
@@ -590,7 +611,7 @@ function quoteField(
       (typeof minimumAmountOut !== "string" ||
         !/^\d+(?:\.\d+)?$/.test(minimumAmountOut)))
   ) {
-    return jsonField(null, source, blockNumber, fetchedAt);
+    return jsonField(null, source, blockNumber, quoteFetchedAt);
   }
   return {
     value: {
@@ -600,7 +621,7 @@ function quoteField(
     source: source === "mock" ? "mock" : "quote",
     reproducibility: source === "mock" ? "NOT_REPRODUCIBLE" : "REPRODUCIBLE",
     blockNumber,
-    fetchedAt,
+    fetchedAt: quoteFetchedAt,
   };
 }
 

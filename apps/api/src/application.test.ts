@@ -2130,6 +2130,70 @@ describe("CheckApplicationService", () => {
     expect(JSON.stringify(persisted)).not.toContain("50883771891842106");
   });
 
+  it("preserves a typed gas-preflight execution revert without leaking RPC details", async () => {
+    const store = new InMemoryRunStore();
+    const diagnostic = "execution reverted: pool state 0xdeadbeef";
+    const service = createService(
+      {
+        async check() {
+          throw new ChainAdapterError({
+            chainId: 143,
+            operation: "estimateGas",
+            code: "EXECUTION_REVERT",
+            message: diagnostic,
+            retryable: false,
+          });
+        },
+      },
+      store,
+    );
+
+    const response = await service.check(publicRequest());
+
+    expect(response).toMatchObject({
+      status: 502,
+      body: {
+        error: {
+          code: "EXECUTION_REVERT",
+          message:
+            "The transaction reverted during gas preflight; the check was not completed.",
+        },
+        run: {
+          status: "integration_error",
+          systemStatus: "INTEGRATION_ERROR",
+          verdict: "UNKNOWN",
+          error: {
+            code: "EXECUTION_REVERT",
+            stage: "action",
+            retryable: false,
+            message:
+              "The transaction reverted during gas preflight; the check was not completed.",
+          },
+          scope: [
+            {
+              key: "P0-CHECK-ACTION-001",
+              label: "Transaction preparation",
+              status: "unknown",
+              reason: "REQUIRED_CHECK_INTERRUPTED",
+            },
+          ],
+        },
+      },
+    });
+    expect(JSON.stringify(response)).not.toContain(diagnostic);
+    expect(await store.get("run-1")).toMatchObject({
+      status: "failed",
+      failure: "AGENT_FLOW_ERROR",
+      result: {
+        error: {
+          code: "EXECUTION_REVERT",
+          stage: "action",
+          retryable: false,
+        },
+      },
+    });
+  });
+
   it("does not expose native-balance errors from untyped or mismatched-chain failures", async () => {
     const failures = [
       Object.assign(new Error("estimate failed"), {

@@ -163,14 +163,18 @@ describe("CamelotV3ProtocolAdapter", () => {
 
     const blockContext = { blockNumber: "42" };
     const quote = await adapter.quote(canonicalIntent, { blockContext });
-    expect(quote).toEqual({
+    expect(quote).toMatchObject({
       estimatedAmountOut: "2",
       amountOutAtomic: "2000000000000000000",
       source: "quote",
       blockNumber: "42",
       runtimeVersion: "test-runtime",
       runtimeRevision: "test-revision",
+      fetchedAt: expect.any(String),
     });
+    expect(
+      Date.parse((quote as { fetchedAt: string }).fetchedAt),
+    ).not.toBeNaN();
     const transaction = await adapter.buildTransaction(canonicalIntent, {
       blockContext,
       quote,

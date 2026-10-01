@@ -125,6 +125,15 @@ importers:
         specifier: workspace:*
         version: link:../contracts
 
+  packages/sdk:
+    dependencies:
+      '@parallax/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      zod:
+        specifier: 3.25.76
+        version: 3.25.76
+
   packages/orchestrator:
     dependencies:
       '@parallax/contracts':

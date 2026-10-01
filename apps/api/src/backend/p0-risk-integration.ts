@@ -18,6 +18,7 @@ import {
   type Verdict,
   type VerifiedCandidate,
 } from "@parallax/risk";
+import { validatedQuoteFetchedAt } from "./quote-timestamp.js";
 
 /**
  * Backend-owned Provider-neutral Evidence → P0 Risk bridge (P0-D Slice 1).
@@ -61,7 +62,6 @@ export type BackendCurrentQuoteUnavailableReason =
   | "BLOCK_NUMBER_UNAVAILABLE"
   | "BLOCK_NUMBER_MISMATCH"
   | "OBSERVED_AT_UNAVAILABLE"
-  | "OBSERVED_AT_MISMATCH"
   | "RUNTIME_PROVENANCE_UNAVAILABLE"
   | "RUNTIME_PROVENANCE_MISMATCH";
 
@@ -115,18 +115,12 @@ export function buildBackendCurrentQuoteContext(
     }
   }
 
-  const observedAt = firstTimestamp(input.observedAt);
+  const observedAt =
+    quote.fetchedAt === undefined
+      ? firstTimestamp(input.observedAt)
+      : validatedQuoteFetchedAt(quote.fetchedAt);
   if (observedAt === undefined) {
     return unavailable("OBSERVED_AT_UNAVAILABLE");
-  }
-  if (quote.fetchedAt !== undefined) {
-    const quoteObservedAt = firstTimestamp(quote.fetchedAt);
-    if (quoteObservedAt === undefined) {
-      return unavailable("OBSERVED_AT_UNAVAILABLE");
-    }
-    if (quoteObservedAt !== observedAt) {
-      return unavailable("OBSERVED_AT_MISMATCH");
-    }
   }
   const runtime = input.evidence.provenance.runtime;
   const quoteRuntimeVersion = firstText(quote.runtimeVersion);

@@ -137,6 +137,7 @@ describe("ChainAdapter port", () => {
     ["UNKNOWN", "unknown"],
     ["CANCELLED", "failed"],
     ["INVALID_REQUEST", "invalid"],
+    ["EXECUTION_REVERT", "failed"],
   ] as const)("maps %s to the shared %s control status", (code, status) => {
     const error = new ChainAdapterError({
       chainId: 901,

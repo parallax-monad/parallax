@@ -29,12 +29,14 @@ import type {
   ArbitrumProductionComposition,
 } from "../backend/arbitrum-composition.js";
 import { createArbitrumProductionComposition } from "../backend/arbitrum-composition.js";
+import { createCamelotV3QualifiedAllowanceSpenderResolver } from "../backend/camelot-v3-qualified-spender.js";
 import type { BackendCompositionRuntime } from "../backend/composition.js";
 import {
   BackendPipeline,
   createBackendCheckFlow,
   createBackendQuoteFlow,
 } from "../backend/pipeline.js";
+import { validatedQuoteFetchedAt } from "../backend/quote-timestamp.js";
 import {
   createTraceRpcEvidenceSource,
   type TraceRpcEvidenceSource,
@@ -73,7 +75,6 @@ const serverEnvironmentSchema = z.object({
     z.coerce.number().int().min(0).max(65_535).optional(),
   ),
 });
-
 const defaultCorsOrigin = "http://localhost:5173";
 
 const listenerConfigSchema = z.object({
@@ -280,14 +281,19 @@ function createCompositionBackedQuoteFlow(
       projectCompositionQuote({
         blockContext,
         quote,
+        fetchedAt: new Date().toISOString(),
       }),
   });
 }
 
 function projectCompositionQuote(input: {
-  blockContext: { readonly blockNumber: string };
+  blockContext: {
+    readonly blockNumber: string;
+  };
   quote: unknown;
+  fetchedAt: string;
 }): unknown {
+  const fetchedAt = quoteFetchedAt(input.quote) ?? input.fetchedAt;
   const parsedQuoteResult = quoteResultSchema.safeParse(input.quote);
   if (parsedQuoteResult.success) {
     if (parsedQuoteResult.data.status === "unavailable") {
@@ -299,6 +305,7 @@ function projectCompositionQuote(input: {
       quote: {
         ...parsedQuoteResult.data.quote,
         blockNumber: input.blockContext.blockNumber,
+        fetchedAt,
       },
     };
   }
@@ -336,10 +343,17 @@ function projectCompositionQuote(input: {
       ...(minimumAmountOut === undefined ? {} : { minimumAmountOut }),
       source: "quote",
       blockNumber: input.blockContext.blockNumber,
+      fetchedAt,
       runtimeVersion,
       runtimeRevision,
     },
   };
+}
+
+function quoteFetchedAt(quote: unknown): string | undefined {
+  if (!isRecord(quote)) return undefined;
+  const quoteValue = isRecord(quote.quote) ? quote.quote : quote;
+  return validatedQuoteFetchedAt(quoteValue.fetchedAt);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -449,6 +463,8 @@ export function bootstrapBackendApp(
       runtime,
       runStore: store,
       providerEnvironment: "production",
+      accountStateSpenderResolver:
+        createCamelotV3QualifiedAllowanceSpenderResolver(),
       ...(configuredTraceRpcEvidenceSource === undefined
         ? {}
         : { traceRpcEvidenceSource: configuredTraceRpcEvidenceSource }),
