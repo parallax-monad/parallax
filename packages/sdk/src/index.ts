@@ -15,6 +15,7 @@ export type {
   QuoteResult,
   RunResult,
 } from "@parallax/contracts";
+export { accountStateSnapshotSchema } from "@parallax/contracts";
 export {
   type AccountStateRequest,
   ParallaxClient,

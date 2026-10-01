@@ -66,6 +66,73 @@ function firstRequest(requests: RecordedRequest[]): RecordedRequest {
   return request;
 }
 
+function unavailableAccountStateSnapshot(): AccountStateSnapshot {
+  return {
+    context: {
+      chainId: 143,
+      protocol: "kuru",
+      sender,
+      recipient: sender,
+      tokenIn: { kind: "native" },
+      tokenOut: { kind: "erc20", address: usdc },
+      amountInAtomic: "10000000000000000",
+    },
+    block: {
+      status: "UNAVAILABLE",
+      chainId: 143,
+      observedAt: "2026-09-29T20:00:00.000Z",
+      reason: "RPC_UNAVAILABLE",
+    },
+    balances: {
+      inputToken: {
+        account: sender,
+        asset: { kind: "native" },
+        metadata: {
+          symbol: "MON",
+          decimals: 18,
+          decimalsSource: "chain_config",
+        },
+        explorerUrls: {},
+        status: "UNAVAILABLE",
+        reason: "RPC_UNAVAILABLE",
+      },
+      outputToken: {
+        account: sender,
+        asset: { kind: "erc20", address: usdc },
+        metadata: {
+          symbol: "USDC",
+          decimals: 6,
+          decimalsSource: "onchain_verified",
+          verifiedAtBlock: "100",
+        },
+        explorerUrls: {},
+        status: "UNAVAILABLE",
+        reason: "RPC_UNAVAILABLE",
+      },
+      native: {
+        account: sender,
+        asset: { kind: "native" },
+        metadata: {
+          symbol: "MON",
+          decimals: 18,
+          decimalsSource: "chain_config",
+        },
+        explorerUrls: {},
+        status: "UNAVAILABLE",
+        reason: "RPC_UNAVAILABLE",
+      },
+    },
+    allowance: {
+      status: "NOT_APPLICABLE",
+      owner: sender,
+      spender: { status: "NOT_APPLICABLE" },
+      reason: "NATIVE_INPUT",
+    },
+    snapshotId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    status: "UNAVAILABLE",
+  };
+}
+
 describe("ParallaxClient", () => {
   it("posts a canonical Quote request and parses the public response", async () => {
     const result = {
@@ -134,71 +201,8 @@ describe("ParallaxClient", () => {
     });
   });
 
-  it("posts Account State while leaving the API-local snapshot opaque", async () => {
-    const snapshot: AccountStateSnapshot = {
-      context: {
-        chainId: 143,
-        protocol: "kuru",
-        sender,
-        recipient: sender,
-        tokenIn: { kind: "native" },
-        tokenOut: { kind: "erc20", address: usdc },
-        amountInAtomic: "10000000000000000",
-      },
-      block: {
-        status: "UNAVAILABLE",
-        chainId: 143,
-        observedAt: "2026-09-29T20:00:00.000Z",
-        reason: "RPC_UNAVAILABLE",
-      },
-      balances: {
-        inputToken: {
-          account: sender,
-          asset: { kind: "native" },
-          metadata: {
-            symbol: "MON",
-            decimals: 18,
-            decimalsSource: "chain_config",
-          },
-          explorerUrls: {},
-          status: "UNAVAILABLE",
-          reason: "RPC_UNAVAILABLE",
-        },
-        outputToken: {
-          account: sender,
-          asset: { kind: "erc20", address: usdc },
-          metadata: {
-            symbol: "USDC",
-            decimals: 6,
-            decimalsSource: "onchain_verified",
-            verifiedAtBlock: "100",
-          },
-          explorerUrls: {},
-          status: "UNAVAILABLE",
-          reason: "RPC_UNAVAILABLE",
-        },
-        native: {
-          account: sender,
-          asset: { kind: "native" },
-          metadata: {
-            symbol: "MON",
-            decimals: 18,
-            decimalsSource: "chain_config",
-          },
-          explorerUrls: {},
-          status: "UNAVAILABLE",
-          reason: "RPC_UNAVAILABLE",
-        },
-      },
-      allowance: {
-        status: "NOT_APPLICABLE",
-        owner: sender,
-        spender: { status: "NOT_APPLICABLE" },
-        reason: "NATIVE_INPUT",
-      },
-      snapshotId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
-      status: "UNAVAILABLE",
-    };
+  it("posts Account State and validates the shared snapshot Contract", async () => {
+    const snapshot = unavailableAccountStateSnapshot();
     const request: AccountStateRequest = { ...quoteRequest, recipient: sender };
     const { client, requests } = makeClient(snapshot);
 
@@ -209,6 +213,52 @@ describe("ParallaxClient", () => {
     expect(requests[0]?.url).toBe("https://api.example.test/api/account-state");
     expect(requests[0]?.init?.method).toBe("POST");
     expect(postedBody(firstRequest(requests))).toEqual(request);
+  });
+
+  it("rejects malformed Account State snapshots returned by the API", async () => {
+    const request: AccountStateRequest = { ...quoteRequest, recipient: sender };
+    const { client } = makeClient({});
+
+    await expect(client.getAccountState(request)).rejects.toMatchObject({
+      name: "ZodError",
+    });
+  });
+
+  it("gets and validates a persisted Account State snapshot", async () => {
+    const snapshot = unavailableAccountStateSnapshot();
+    const { client, requests } = makeClient(snapshot);
+
+    await expect(
+      client.getAccountStateSnapshot(snapshot.snapshotId),
+    ).resolves.toEqual(snapshot);
+    expect(requests[0]?.url).toBe(
+      `https://api.example.test/api/account-state/${snapshot.snapshotId}`,
+    );
+    expect(requests[0]?.init?.method).toBe("GET");
+  });
+
+  it("rejects malformed persisted Account State snapshots", async () => {
+    const { client } = makeClient({});
+
+    await expect(
+      client.getAccountStateSnapshot("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"),
+    ).rejects.toMatchObject({ name: "ZodError" });
+  });
+
+  it("rejects invalid Account State snapshot IDs before sending", async () => {
+    let fetchCalled = false;
+    const client = new ParallaxClient({
+      baseUrl: "https://api.example.test",
+      fetch: async () => {
+        fetchCalled = true;
+        return new Response("{}");
+      },
+    });
+
+    await expect(
+      client.getAccountStateSnapshot("not-a-uuid"),
+    ).rejects.toThrow();
+    expect(fetchCalled).toBe(false);
   });
 
   it("preserves HTTP status, body, and Backend error code", async () => {

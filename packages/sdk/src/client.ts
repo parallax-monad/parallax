@@ -1,5 +1,7 @@
 import {
   type AccountStateSnapshot,
+  accountStateSnapshotIdSchema,
+  accountStateSnapshotSchema,
   addressSchema,
   type CheckSwapRequest,
   checkSwapRequestSchema,
@@ -101,7 +103,7 @@ export class ParallaxClient {
     return runResultSchema.parse(await this.postJson("/api/check", payload));
   }
 
-  /** POST /api/account-state. The API validates the snapshot before returning it. */
+  /** POST /api/account-state. The response is checked against the shared Contract. */
   public async getAccountState(
     request: AccountStateRequest,
   ): Promise<AccountStateSnapshot> {
@@ -112,7 +114,19 @@ export class ParallaxClient {
         ? payload
         : { ...payload, recipient: addressSchema.parse(recipient) };
     const response = await this.postJson("/api/account-state", body);
-    return response as AccountStateSnapshot;
+    return accountStateSnapshotSchema.parse(response);
+  }
+
+  /** GET /api/account-state/:snapshotId. */
+  public async getAccountStateSnapshot(
+    snapshotId: string,
+  ): Promise<AccountStateSnapshot> {
+    const parsedSnapshotId = accountStateSnapshotIdSchema.parse(snapshotId);
+    const body = await this.requestJson(
+      `/api/account-state/${encodeURIComponent(parsedSnapshotId)}`,
+      { method: "GET" },
+    );
+    return accountStateSnapshotSchema.parse(body);
   }
 
   private async postJson(path: string, payload: unknown): Promise<unknown> {
