@@ -103,6 +103,54 @@ export const publicTokenMetadataSchema = trustedTokenMetadataSchema;
 export type TrustedTokenMetadata = z.infer<typeof trustedTokenMetadataSchema>;
 export type PublicTokenMetadata = z.infer<typeof publicTokenMetadataSchema>;
 
+/** Backend-owned display metadata for the exact input and output assets. */
+export const tokenMetadataPairSchema = z
+  .object({
+    tokenIn: trustedTokenMetadataSchema,
+    tokenOut: trustedTokenMetadataSchema,
+  })
+  .strict()
+  .refine((pair) => pair.tokenIn.chainId === pair.tokenOut.chainId, {
+    message: "Token metadata must belong to the same chain",
+    path: ["tokenOut", "chainId"],
+  });
+
+export type TokenMetadataPair = z.infer<typeof tokenMetadataPairSchema>;
+
+/** Configured P0 identity; availability does not imply live execution success. */
+export const p0ConfigSchema = z
+  .discriminatedUnion("status", [
+    z
+      .object({
+        status: z.literal("AVAILABLE"),
+        chainId: z.literal(421614),
+        protocol: z.literal("camelot-v3"),
+        tokenMetadata: tokenMetadataPairSchema,
+      })
+      .strict(),
+    z
+      .object({
+        status: z.literal("UNAVAILABLE"),
+        reason: z.enum(["ROUTE_NOT_CONFIGURED", "TOKEN_METADATA_UNAVAILABLE"]),
+      })
+      .strict(),
+  ])
+  .superRefine((config, context) => {
+    if (
+      config.status === "AVAILABLE" &&
+      (config.tokenMetadata.tokenIn.chainId !== config.chainId ||
+        config.tokenMetadata.tokenIn.asset.kind !== "native" ||
+        config.tokenMetadata.tokenOut.asset.kind !== "erc20")
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          "P0 metadata must describe the configured native-to-ERC20 route",
+        path: ["tokenMetadata"],
+      });
+    }
+  });
+
 export type TrustedTokenRegistry = {
   hasChain(chainId: number): boolean;
   resolve(

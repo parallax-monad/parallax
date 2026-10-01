@@ -20,7 +20,7 @@ import { genericEvidenceSchema } from "./generic-evidence.js";
 import { normalizedSwapIntentSchema } from "./intent.js";
 import { p0RunResultSchema } from "./p0-run-result.js";
 import { quoteSchema } from "./quote.js";
-import { publicTokenMetadataSchema } from "./registry.js";
+import { tokenMetadataPairSchema } from "./registry.js";
 import { routeSchema } from "./route.js";
 
 export const runDiffFieldSchema = z.enum([
@@ -56,11 +56,30 @@ const runIdentitySchema = z.object({
   createdAt: z.string().datetime().optional(),
   replayMode: z.boolean(),
   intent: normalizedSwapIntentSchema,
+  /** Absent on legacy Runs; present only as a persisted Backend snapshot. */
+  tokenMetadata: tokenMetadataPairSchema.optional(),
 });
 
 type RunIdentity = z.infer<typeof runIdentitySchema>;
 
 function validateRunIdentity(result: RunIdentity, context: z.RefinementCtx) {
+  for (const field of ["tokenIn", "tokenOut"] as const) {
+    const metadata = result.tokenMetadata?.[field];
+    if (
+      metadata !== undefined &&
+      assetIdentity({ chainId: metadata.chainId, asset: metadata.asset }) !==
+        assetIdentity({
+          chainId: result.intent.chainId,
+          asset: result.intent[field],
+        })
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Token metadata must match the Run Intent asset",
+        path: ["tokenMetadata", field],
+      });
+    }
+  }
   if (result.parentRunId === result.runId) {
     context.addIssue({
       code: z.ZodIssueCode.custom,
@@ -1336,7 +1355,6 @@ export const completedRunResultSchema = runIdentitySchema
     p0: p0RunResultSchema.optional(),
     /** Provisional Backend provider evidence; not part of canonical rule input. */
     providerEvidence: genericEvidenceSchema.optional(),
-    tokenMetadata: z.array(publicTokenMetadataSchema).max(2).optional(),
     diff: runDiffSchema.optional(),
   })
   .strict()
@@ -1431,7 +1449,6 @@ export const failedRunResultSchema = runIdentitySchema
     verdict: z.literal("UNKNOWN"),
     summary: z.string().trim().min(1),
     error: integrationErrorSchema,
-    tokenMetadata: z.array(publicTokenMetadataSchema).max(2).optional(),
     diff: runDiffSchema.optional(),
     ruleResults: z.array(ruleResultSchema),
     recommendedActions: z.array(actionEvaluationSchema),

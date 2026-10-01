@@ -507,6 +507,23 @@ describe("Backend composition application boundary", () => {
     await expect(response.json()).resolves.toEqual({
       status: "unavailable",
       reason: "QUOTE_UNAVAILABLE",
+      tokenMetadata: {
+        tokenIn: {
+          chainId: 143,
+          asset: { kind: "native" },
+          symbol: "MON",
+          decimals: 18,
+          decimalsSource: "chain_config",
+        },
+        tokenOut: {
+          chainId: 143,
+          asset: { kind: "erc20", address: usdcAddress },
+          symbol: "USDC",
+          decimals: 6,
+          decimalsSource: "onchain_verified",
+          verifiedAtBlock: "90000000",
+        },
+      },
     });
     expect(chain.calls.map((call) => call.operation)).toEqual([
       "connect",
