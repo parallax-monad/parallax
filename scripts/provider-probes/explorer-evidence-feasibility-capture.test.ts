@@ -9,8 +9,15 @@ const capturePath =
 const archivePath =
   "fixtures/provider-registry/be-108/historical-source-9d992d9/";
 const bytes = (path: string) => readFileSync(new URL(path, root));
+const canonicalGitTextBytes = (value: Uint8Array) =>
+  Buffer.from(
+    Buffer.from(value).toString("utf8").replace(/\r\n/g, "\n"),
+    "utf8",
+  );
 const hash = (value: string | Uint8Array) =>
-  createHash("sha256").update(value).digest("hex");
+  createHash("sha256")
+    .update(typeof value === "string" ? value : canonicalGitTextBytes(value))
+    .digest("hex");
 const capture = JSON.parse(bytes(capturePath).toString());
 const archive = JSON.parse(bytes(`${archivePath}manifest.json`).toString());
 const originalCommit = "9d992d9533dc035d9fe6becc4abcc44f089e6400";
@@ -43,6 +50,15 @@ describe("HISTORICAL_SOURCE_VERIFICATION (static integrity, not chain replay)", 
     expect(capture.runner.sha256).toBe(originalFiles[0].sha);
   });
 
+  it("canonicalizes CRLF checkouts to the historical Git LF bytes", () => {
+    const lf = bytes(capturePath);
+    const crlf = Buffer.from(
+      lf.toString("utf8").replace(/(?<!\r)\n/g, "\r\n"),
+      "utf8",
+    );
+    expect(hash(crlf)).toBe(hash(lf));
+  });
+
   it("retains the 59-entry manifest and dirty capture-time state", () => {
     const provenance = capture.sourceProvenance;
     expect(provenance.files).toHaveLength(59);
@@ -70,7 +86,9 @@ describe("HISTORICAL_SOURCE_VERIFICATION (static integrity, not chain replay)", 
   it.each(originalFiles)(
     "preserves $file SHA256 and Git blob identity",
     (original) => {
-      const content = bytes(`${archivePath}${original.file}`);
+      const content = canonicalGitTextBytes(
+        bytes(`${archivePath}${original.file}`),
+      );
       expect(hash(content)).toBe(original.sha);
       // Git blob identity is portable: no fetch or deep CI checkout required.
       expect(
