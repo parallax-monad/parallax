@@ -1,3 +1,4 @@
+import type { AssetReference } from "@parallax/contracts";
 import type { AgentFlowPort, QuoteAgentFlowPort } from "../ports.js";
 import type { RunStore } from "../store.js";
 import type { BackendOperationResult } from "./composition.js";
@@ -9,6 +10,12 @@ import type { BackendOperationResult } from "./composition.js";
  */
 export type BackendApplicationRoute = {
   readonly chainId: number;
+  /** Exact pre-submit capability declared by the selected application route. */
+  readonly p0Route?: {
+    readonly protocol: "camelot-v3";
+    readonly tokenIn: AssetReference;
+    readonly tokenOut: AssetReference;
+  };
   readonly composition: {
     readonly runStore: RunStore;
     normalize(input: unknown): BackendOperationResult<unknown>;

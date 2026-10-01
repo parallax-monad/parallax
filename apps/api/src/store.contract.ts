@@ -137,6 +137,55 @@ export function runStoreContract(
 ): void {
   const contractIt = options.skip === true ? it.skip : it;
   describe(`${implementationName} RunStore contract`, () => {
+    contractIt(
+      "round-trips trusted metadata for completed and failed Runs, preserving legacy absence",
+      async () => {
+        const store = await createStore();
+        const metadata = {
+          tokenIn: {
+            chainId: 143,
+            asset: { kind: "native" as const },
+            symbol: "MON",
+            decimals: 18,
+            decimalsSource: "chain_config" as const,
+          },
+          tokenOut: {
+            chainId: 143,
+            asset: intent.tokenOut as { kind: "erc20"; address: string },
+            symbol: "USDC",
+            decimals: 6,
+            decimalsSource: "onchain_verified" as const,
+            verifiedAtBlock: "42",
+          },
+        };
+        for (const mode of ["completed", "failed"] as const) {
+          const result =
+            mode === "completed"
+              ? completedResultWithBasicSimulation(`metadata-${mode}`)
+              : failureResult(`metadata-${mode}`);
+          result.tokenMetadata = metadata;
+          await store.start(result.runId, result.intent);
+          if (mode === "failed" && result.status === "integration_error")
+            await store.fail(result.runId, "AGENT_FLOW_ERROR", result);
+          else await store.complete(result);
+          const record = await store.get(result.runId);
+          expect(
+            record?.status === "started"
+              ? undefined
+              : record?.result.tokenMetadata,
+          ).toEqual(metadata);
+        }
+        const legacy = failureResult("legacy-no-metadata");
+        await store.start(legacy.runId, legacy.intent);
+        await store.fail(legacy.runId, "AGENT_FLOW_ERROR", legacy);
+        const record = await store.get(legacy.runId);
+        expect(
+          record?.status === "started"
+            ? undefined
+            : record?.result.tokenMetadata,
+        ).toBeUndefined();
+      },
+    );
     contractIt("reads records asynchronously", async () => {
       const store = await createStore();
       await store.start("async-run", intent);

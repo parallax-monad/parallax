@@ -7,6 +7,7 @@ import {
   positiveDecimalSchema,
   protocolSchema,
 } from "./common.js";
+import { tokenMetadataPairSchema } from "./registry.js";
 
 function distinctAssets<T extends z.ZodRawShape>(schema: z.ZodObject<T>) {
   return schema.superRefine((request, context) => {
@@ -85,12 +86,14 @@ export const quoteResultSchema = z.discriminatedUnion("status", [
     .object({
       status: z.literal("available"),
       quote: quoteSchema,
+      tokenMetadata: tokenMetadataPairSchema.optional(),
     })
     .strict(),
   z
     .object({
       status: z.literal("unavailable"),
       reason: quoteUnavailableReasonSchema,
+      tokenMetadata: tokenMetadataPairSchema.optional(),
     })
     .strict(),
 ]);
