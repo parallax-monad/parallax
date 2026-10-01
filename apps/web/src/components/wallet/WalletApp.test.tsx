@@ -222,6 +222,126 @@ describe("WalletApp persisted Run recovery", () => {
     expect(container.textContent).not.toContain("Load recorded replay");
   });
 
+  test("rejects quote after user edits the input during debounce window", async () => {
+    let quoteRequestCount = 0;
+    const request = vi.fn<typeof fetch>().mockImplementation((url) => {
+      if (typeof url === "string" && url.includes("/api/quote")) {
+        quoteRequestCount += 1;
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              status: "available",
+              quote: {
+                source: "quote",
+                estimatedAmountOut: "1500000",
+                minimumAmountOut: "1485000",
+                blockNumber: "12345",
+                fetchedAt: "2026-01-01T00:00:00.000Z",
+                runtimeVersion: "arbitrum-camelot-v3",
+                runtimeRevision: "native-rpc",
+              },
+            }),
+            { status: 200, headers: { "content-type": "application/json" } },
+          ),
+        );
+      }
+      return Promise.resolve(new Response("", { status: 404 }));
+    });
+    vi.stubGlobal("fetch", request);
+
+    const container = document.createElement("div");
+    document.body.append(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(<WalletApp language="en" />);
+      await Promise.resolve();
+    });
+
+    const swapButton = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent?.trim() === "Swap",
+    );
+    expect(swapButton).toBeDefined();
+
+    await act(async () => {
+      swapButton?.click();
+    });
+
+    const amountInput = container.querySelector<HTMLInputElement>(
+      'input[aria-label="Amount to pay"]',
+    );
+    expect(amountInput).toBeDefined();
+    const inputElement = amountInput as HTMLInputElement;
+
+    await act(async () => {
+      inputElement.value = "0.02";
+      inputElement.dispatchEvent(new Event("input", { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 550));
+    });
+
+    expect(quoteRequestCount).toBeGreaterThanOrEqual(1);
+
+    await act(async () => {
+      inputElement.value = "0.03";
+      inputElement.dispatchEvent(new Event("input", { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    const submitButton = Array.from(
+      container.querySelectorAll<HTMLButtonElement>('button[type="submit"]'),
+    ).find((button) => button.textContent?.includes("Submit live check"));
+    expect(submitButton).toBeDefined();
+
+    const checkRequest = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          runId: "test-run",
+          createdAt: "2026-01-01T00:00:00.000Z",
+          intent: {
+            chainId: 421614,
+            protocol: "camelot-v3",
+            sender: "0x1111111111111111111111111111111111111111",
+            recipient: "0x1111111111111111111111111111111111111111",
+            recipientSource: "defaulted_from_sender",
+            tokenIn: { kind: "native" },
+            tokenOut: {
+              kind: "erc20",
+              address: "0x75faf114eafb1BDbe2F0316DF893fd58CE46AA4d",
+            },
+            amountInAtomic: "30000000000000000",
+            economicBoundary: {
+              availability: "unavailable",
+              source: "unavailable",
+            },
+          },
+          status: "completed",
+          result: recoveredRun,
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      ),
+    );
+    vi.stubGlobal("fetch", checkRequest);
+
+    await act(async () => {
+      submitButton?.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const checkPayload = checkRequest.mock.calls.find(
+      (call) => typeof call[0] === "string" && call[0].includes("/api/check"),
+    )?.[1];
+    const checkBody = checkPayload
+      ? JSON.parse(checkPayload.body as string)
+      : undefined;
+
+    expect(checkBody?.expectationBaseline).toBeUndefined();
+  });
+
   test("does not expose fixture-only remediation controls in the active P0 path", async () => {
     const container = document.createElement("div");
     document.body.append(container);

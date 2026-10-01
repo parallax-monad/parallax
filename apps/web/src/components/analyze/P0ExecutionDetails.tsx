@@ -20,6 +20,29 @@ function FactRow({
   );
 }
 
+function routeLabel(result: CheckSwapResult): string {
+  const chainId = result.chainId ?? 421614;
+  const protocol = result.protocol ?? "camelot-v3";
+
+  const chainName =
+    chainId === 421614
+      ? "Arbitrum Sepolia"
+      : chainId === 42161
+        ? "Arbitrum One"
+        : `Chain ${chainId}`;
+
+  const protocolName =
+    protocol === "camelot-v3"
+      ? "Camelot V3"
+      : protocol === "kuru"
+        ? "Kuru"
+        : protocol === "pancake"
+          ? "PancakeSwap"
+          : protocol;
+
+  return `${chainName} · ${protocolName}`;
+}
+
 export function P0ExecutionDetails({
   result,
   language,
@@ -32,33 +55,41 @@ export function P0ExecutionDetails({
   const gasStatus = simulation?.gasEstimate.status ?? "UNAVAILABLE";
   const evidenceState = result.evidenceState ?? "UNKNOWN";
   const providerStatus = result.providerEvidence?.status ?? "UNKNOWN";
+  const executionStatus = result.executionEvidence?.status ?? "UNKNOWN";
   const remediation = result.remediationStatus ?? "UNKNOWN";
 
   return (
     <details className="border-y border-line" aria-label="P0 execution facts">
-      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 py-3 text-[12px] font-bold uppercase text-dim">
-        <span>
+      <summary className="flex min-h-11 w-full cursor-pointer list-none items-center justify-between gap-3 overflow-hidden py-3 text-left text-[12px] font-bold uppercase text-dim marker:hidden focus-visible:outline focus-visible:outline-2 focus-visible:outline-monad-dim focus-visible:outline-offset-2">
+        <span className="min-w-0 flex-1 break-words">
           {say(language, {
             en: "Execution details",
             zh: "执行详情",
           })}
         </span>
-        <span aria-hidden="true" className="text-monad-dim">
+        <span aria-hidden="true" className="shrink-0 text-monad-dim">
           +
         </span>
       </summary>
       <div className="border-t border-line pb-2">
         <h3 className="m-0 pt-3 text-[12px] font-bold uppercase text-dim">
-          {say(language, {
-            en: "Arbitrum Sepolia · Camelot V3",
-            zh: "Arbitrum Sepolia · Camelot V3",
-          })}
+          {routeLabel(result)}
         </h3>
         <dl className="m-0 mt-2">
           <FactRow
             language={language}
             label={{ en: "Provider status", zh: "Provider 状态" }}
             value={providerStatus}
+          />
+          <FactRow
+            language={language}
+            label={{ en: "Execution status", zh: "执行状态" }}
+            value={executionStatus}
+          />
+          <FactRow
+            language={language}
+            label={{ en: "Provider execution", zh: "Provider 执行结果" }}
+            value={executionStatus}
           />
           <FactRow
             language={language}
@@ -109,12 +140,23 @@ export function P0ExecutionDetails({
           />
           <FactRow
             language={language}
-            label={{ en: "Observed at", zh: "观测时间" }}
-            value={
-              simulation?.observedAt ??
-              result.providerEvidence?.observedAt ??
-              "UNAVAILABLE"
-            }
+            label={{ en: "Baseline quote ID", zh: "基线报价 ID" }}
+            value={result.expectationBaseline?.quoteId ?? "UNAVAILABLE"}
+          />
+          <FactRow
+            language={language}
+            label={{ en: "Baseline provenance", zh: "基线来源" }}
+            value={result.expectationBaseline?.provenance ?? "UNAVAILABLE"}
+          />
+          <FactRow
+            language={language}
+            label={{ en: "Baseline fetched at", zh: "基线获取时间" }}
+            value={result.expectationBaseline?.fetchedAt ?? "UNAVAILABLE"}
+          />
+          <FactRow
+            language={language}
+            label={{ en: "Provider observed at", zh: "Provider 观测时间" }}
+            value={result.providerEvidence?.observedAt ?? "UNAVAILABLE"}
           />
         </dl>
         {simulation?.call.status === "SUCCEEDED" && (

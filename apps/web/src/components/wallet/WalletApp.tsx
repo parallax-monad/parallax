@@ -243,9 +243,16 @@ export function WalletApp({ language }: { language: Language }) {
       stageMs: STAGE_MS,
       onStage: setStage,
       onSettle: async () => {
+        const matchesQuoteRequest =
+          quote.status === "available" &&
+          quote.requestIdentity.protocol === submitted.protocol &&
+          quote.requestIdentity.tokenIn === submitted.tokenIn &&
+          quote.requestIdentity.tokenOut === submitted.tokenOut &&
+          quote.requestIdentity.amountIn === submitted.amountIn;
+
         const nextResult = await checkSwap({
           ...toInput(submitted, parent?.runId),
-          ...(quote.status === "available"
+          ...(matchesQuoteRequest
             ? {
                 expectationBaseline: expectationBaseline(
                   {

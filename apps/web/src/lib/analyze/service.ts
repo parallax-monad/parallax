@@ -103,7 +103,12 @@ const ACTION_REASON: Record<string, Copy> = {
   },
 };
 
-/** Registry decimals for the P0 pair, so atomic values never reach a screen. */
+/**
+ * Returns decimals from trusted Backend token metadata.
+ * The active P0 path uses the Backend-resolved atomic values directly.
+ * This helper is only used when rendering diffs or recovered Runs that
+ * already contain atomic values but no separate metadata response.
+ */
 const decimalsFor = (symbol: string, chainId?: number): number | undefined => {
   if (symbol === "ETH" || symbol === "MON") return 18;
   if (symbol === "USDC" && chainId === 421614) return 18;
@@ -403,8 +408,12 @@ function mapRun(
   const basicSimulation = obj(p0?.basicSimulation);
   const call = obj(basicSimulation?.call);
   const gasEstimate = obj(basicSimulation?.gasEstimate);
-  const provider = obj(obj(run?.providerEvidence)?.provider);
+  const providerEvidence = obj(run?.providerEvidence);
+  const provider = obj(providerEvidence?.provider);
+  const execution = obj(providerEvidence?.execution);
+  const providerProvenance = obj(providerEvidence?.provenance);
   const remediation = obj(p0?.remediation);
+  const baseline = obj(p0?.expectationBaseline);
   const basicSimulationBlockNumber = str(basicSimulation?.blockNumber);
   const basicSimulationBlockHash = str(basicSimulation?.blockHash);
   const basicSimulationObservedAt = str(basicSimulation?.observedAt);
@@ -513,11 +522,26 @@ function mapRun(
       ? {
           status: str(provider?.status) ?? "UNKNOWN",
           source: str(provider?.providerId),
-          observedAt: str(obj(provider?.errors)?.fetchedAt),
-          blockNumber: str(obj(provider?.errors)?.blockNumber),
+          observedAt: str(providerProvenance?.fetchedAt),
+          blockNumber: str(providerProvenance?.blockNumber),
+        }
+      : undefined,
+    executionEvidence: execution
+      ? {
+          status: str(execution?.status) ?? "UNKNOWN",
         }
       : undefined,
     remediationStatus: str(remediation?.status),
+    expectationBaseline: baseline
+      ? {
+          quoteId: str(baseline?.quoteId),
+          amountOutAtomic: str(baseline?.amountOutAtomic),
+          source: str(baseline?.source),
+          blockNumber: str(baseline?.blockNumber),
+          observedAt: str(baseline?.observedAt),
+          provenance: str(baseline?.provenance),
+        }
+      : undefined,
   };
 }
 
@@ -651,8 +675,6 @@ export async function fetchQuote(
         httpStatus: response.status,
         code,
         reason: str(error?.reason),
-        // UNSUPPORTED means the live Quote flow is not wired, so retrying the
-        // same request cannot change the outcome.
         retryable: response.status >= 500 && code !== "UNSUPPORTED",
         message: str(error?.message),
         issues: failureIssues(error?.issues),
@@ -681,7 +703,16 @@ export async function fetchQuote(
       },
     };
 
-  return { status: "available", quote: preview };
+  return {
+    status: "available",
+    quote: preview,
+    requestIdentity: {
+      protocol: input.protocol,
+      tokenIn: input.tokenIn,
+      tokenOut: input.tokenOut,
+      amountIn: input.amountIn,
+    },
+  };
 }
 
 export async function checkSwap(

@@ -318,6 +318,79 @@ describe("checkSwap API adapter", () => {
     expect(result.parentRunId).toBe("run-live-1");
     expect(result.diff?.[0]).toMatchObject({ field: { en: "amountIn" } });
   });
+
+  test("preserves Provider status and execution status as separate fields", async () => {
+    const request = vi.fn<typeof fetch>().mockResolvedValue(
+      jsonResponse({
+        ...completed,
+        providerEvidence: {
+          provider: {
+            providerId: "arbitrum-camelot-v3",
+            status: "UNKNOWN",
+            integrationStatus: "OK",
+            errors: {
+              value: null,
+              source: "unknown",
+              reproducibility: "REPRODUCIBLE",
+            },
+          },
+          execution: {
+            status: "SUCCESS",
+          },
+          provenance: {
+            mode: "LIVE",
+            source: "quote",
+            fetchedAt: "2026-08-15T08:00:00.000Z",
+            simulationBlock: "92820000",
+          },
+        },
+        p0: {
+          evidenceState: "INCOMPLETE",
+        },
+      }),
+    );
+
+    const result = await checkSwap(input, { fetch: request });
+
+    expect(result.providerEvidence?.status).toBe("UNKNOWN");
+    expect(result.executionEvidence?.status).toBe("SUCCESS");
+    expect(result.evidenceState).toBe("INCOMPLETE");
+    expect(result.verdict).toBe("UNKNOWN");
+  });
+
+  test("keeps provider execution distinct from provider and Risk status", async () => {
+    const request = vi.fn<typeof fetch>().mockResolvedValue(
+      jsonResponse({
+        ...completed,
+        providerEvidence: {
+          provider: {
+            providerId: "native-rpc",
+            status: "UNKNOWN",
+          },
+          execution: { status: "SUCCESS" },
+          provenance: {
+            fetchedAt: "2026-01-01T00:00:00.000Z",
+            blockNumber: "12345",
+          },
+        },
+        p0: {
+          evidenceState: "INCOMPLETE",
+          remediation: { status: "NOT_RUN" },
+        },
+      }),
+    );
+
+    const result = await checkSwap(input, { fetch: request });
+
+    expect(result.providerEvidence?.status).toBe("UNKNOWN");
+    expect(result.executionEvidence?.status).toBe("SUCCESS");
+    expect(result.evidenceState).toBe("INCOMPLETE");
+    expect(result.verdict).toBe("UNKNOWN");
+    expect(result.providerEvidence?.observedAt).toBe(
+      "2026-01-01T00:00:00.000Z",
+    );
+  });
+
   test("does not send a client expectation baseline when quote is unavailable", async () => {
     const request = vi
       .fn<typeof fetch>()
@@ -771,6 +844,12 @@ describe("fetchQuote", () => {
         fetchedAt: "2026-08-08T12:00:00.000Z",
         runtimeVersion: "0.1.0",
         runtimeRevision: "a".repeat(40),
+      },
+      requestIdentity: {
+        protocol: "kuru",
+        tokenIn: "MON",
+        tokenOut: "USDC",
+        amountIn: "0.01",
       },
     });
   });

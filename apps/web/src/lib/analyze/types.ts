@@ -71,7 +71,16 @@ export type QuotePreview = {
 export type QuoteState =
   | { status: "idle" }
   | { status: "loading" }
-  | { status: "available"; quote: QuotePreview }
+  | {
+      status: "available";
+      quote: QuotePreview;
+      requestIdentity: {
+        protocol: Protocol;
+        tokenIn: string;
+        tokenOut: string;
+        amountIn: string;
+      };
+    }
   | { status: "unavailable"; reason: "NO_ROUTE" | "QUOTE_UNAVAILABLE" }
   | { status: "error"; apiFailure: ApiFailure };
 
@@ -162,6 +171,22 @@ export type ProviderEvidenceSummary = {
   blockHash?: string;
 };
 
+export type ExecutionEvidenceSummary = {
+  status: string;
+};
+
+export type ExpectationBaselineSummary = {
+  quoteId?: string;
+  amountOutAtomic?: string;
+  source?: string;
+  estimatedAmountOut?: string;
+  minimumAmountOut?: string;
+  blockNumber?: string;
+  observedAt?: string;
+  provenance?: string;
+  fetchedAt?: string;
+};
+
 export type CheckSwapResult = {
   runId: string;
   parentRunId?: string;
@@ -196,7 +221,9 @@ export type CheckSwapResult = {
   evidenceState?: string;
   basicSimulation?: BasicSimulation;
   providerEvidence?: ProviderEvidenceSummary;
+  executionEvidence?: ExecutionEvidenceSummary;
   remediationStatus?: string;
+  expectationBaseline?: ExpectationBaselineSummary;
 };
 
 /** Optional swap-form patch when a user chooses this option. */
