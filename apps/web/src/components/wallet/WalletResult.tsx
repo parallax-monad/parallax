@@ -156,11 +156,7 @@ export function WalletResult({
           }
         >
           {result.apiFailure?.retryable && (
-            <button
-              type="button"
-              className="btn btn-monad"
-              onClick={onRetry ?? onKeep}
-            >
+            <button type="button" className="btn btn-monad" onClick={onRetry}>
               {say(language, INTEGRATION_ERROR_COPY.retry)}
             </button>
           )}

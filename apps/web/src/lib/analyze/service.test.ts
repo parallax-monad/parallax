@@ -8,6 +8,7 @@ import {
 } from "./form";
 import {
   checkSwap,
+  fetchP0Config,
   fetchQuote,
   formFromRunResult,
   loadReplay,
@@ -39,11 +40,33 @@ const intent = {
   economicBoundary: { availability: "unavailable", source: "unavailable" },
 };
 
+const tokenMetadata = {
+  tokenIn: {
+    chainId: 143,
+    asset: { kind: "native" },
+    symbol: "MON",
+    decimals: 18,
+    decimalsSource: "chain_config",
+  },
+  tokenOut: {
+    chainId: 143,
+    asset: {
+      kind: "erc20",
+      address: "0x754704Bc059F8C67012fEd69BC8A327a5aafb603",
+    },
+    symbol: "USDC",
+    decimals: 6,
+    decimalsSource: "onchain_verified",
+    verifiedAtBlock: "92820000",
+  },
+};
+
 const completed = {
   runId: "run-live-1",
   createdAt: "2026-08-15T08:00:00.000Z",
   replayMode: false,
   intent,
+  tokenMetadata,
   simulatorPinnedBlock: "92820000",
   status: "completed",
   systemStatus: "OK",
@@ -128,6 +151,8 @@ describe("checkSwap API adapter", () => {
     expect(result.createdAt).toBe(completed.createdAt);
     expect(result.quote.route.en).toBe("MON → USDC");
     expect(result.rawResponse).toEqual(completed);
+    expect(result.tokenMetadata).toEqual(tokenMetadata);
+    expect(result.intent.amountIn).toBe("0.01");
   });
 
   test("maps a malformed successful Check response to INVALID_RESPONSE", async () => {
@@ -196,7 +221,6 @@ describe("checkSwap API adapter", () => {
 
     // QUOTE-stage observation and simulation output are separate claims.
     expect(result.quote.expectedOutput).toBe("0.000230");
-    expect(result.quote.blockNumber).toBe("91383505");
     expect(result.simulatedOutput).toBe("0.000223");
   });
 
@@ -227,6 +251,233 @@ describe("checkSwap API adapter", () => {
     expect(result.simulatedOutput).toBe("0.000223");
   });
 
+  test("keeps atomic output unavailable without trusted token metadata", async () => {
+    const request = vi.fn<typeof fetch>().mockResolvedValue(
+      jsonResponse({
+        ...completed,
+        tokenMetadata: undefined,
+        evidence: [
+          ...completed.evidence,
+          {
+            key: "sim-out-1",
+            kind: "simulated_token_out",
+            status: "confirmed",
+            summary: "Simulated output",
+            source: "simulation",
+            stage: "SIMULATE",
+            amountReceivedAtomic: "223",
+            isReplay: false,
+            isMock: false,
+          },
+        ],
+      }),
+    );
+
+    const result = await checkSwap(input, { fetch: request });
+
+    expect(result.quote.expectedOutput).toBe("unavailable");
+    expect(result.simulatedOutput).toBe("unavailable");
+    expect(result.intent.amountIn).toBe("unavailable");
+    expect(result.intent.tokenIn).toBe("unknown");
+    expect(result.tokenMetadata).toBeUndefined();
+  });
+
+  test("sends the selected quote as an expectation baseline", async () => {
+    const request = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(jsonResponse(completed));
+    const quote = {
+      source: "quote" as const,
+      estimatedAmountOut: "0.000230",
+      minimumAmountOut: "0.000228",
+      blockNumber: "91383505",
+      fetchedAt: "2026-08-08T12:00:00.000Z",
+      runtimeVersion: "arbitrum-camelot-v3",
+      runtimeRevision: "native-rpc",
+    };
+
+    await checkSwap(
+      {
+        ...input,
+        protocol: "camelot-v3",
+        tokenIn: "ETH",
+        tokenOut: "USDC",
+        expectationBaseline: {
+          chainId: 421614,
+          protocol: "camelot-v3",
+          tokenIn: { kind: "native" },
+          tokenOut: {
+            kind: "erc20",
+            address: "0xb893E3334D4Bd6C5ba8277Fd559e99Ed683A9FC7",
+          },
+          amountIn: "0.01",
+          quote,
+        },
+      },
+      { fetch: request },
+    );
+
+    const sent = JSON.parse(String(request.mock.calls[0]?.[1]?.body));
+    expect(sent.expectationBaseline.quote).toEqual(quote);
+  });
+
+  test("maps baseline observedAt for initial and recovered Runs", async () => {
+    const observedAt = "2026-08-15T08:05:00.000Z";
+    const response = {
+      ...completed,
+      p0: {
+        expectationBaseline: {
+          status: "AVAILABLE",
+          chainId: 143,
+          protocol: "kuru",
+          tokenIn: "native",
+          tokenOut: "0x754704Bc059F8C67012fEd69BC8A327a5aafb603",
+          amountInAtomic: "10000000000000000",
+          amountOutAtomic: "123456",
+          quoteId: "quote-1",
+          blockNumber: "92820000",
+          observedAt,
+          provenance: "quote/native-rpc",
+        },
+        evidenceState: "INCOMPLETE",
+      },
+    };
+
+    const checkRequest = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(jsonResponse(response));
+    const initial = await checkSwap(input, { fetch: checkRequest });
+
+    const recoveryRequest = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(
+        jsonResponse({ status: "completed", result: response }),
+      );
+    const recovered = await loadRun("run-live-1", { fetch: recoveryRequest });
+
+    expect(initial.expectationBaseline?.observedAt).toBe(observedAt);
+    expect(recovered.kind).toBe("terminal");
+    if (recovered.kind === "terminal") {
+      expect(recovered.result.expectationBaseline?.observedAt).toBe(observedAt);
+    }
+  });
+
+  test("preserves child Run identity and diff", async () => {
+    const request = vi.fn<typeof fetch>().mockResolvedValue(
+      jsonResponse({
+        ...completed,
+        runId: "run-child-1",
+        parentRunId: "run-live-1",
+        diff: {
+          previousRunId: "run-live-1",
+          previousVerdict: "UNKNOWN",
+          changedFields: [
+            {
+              field: "amountInAtomic",
+              before: "10000000000000000",
+              after: "11000000000000000",
+            },
+          ],
+        },
+      }),
+    );
+
+    const result = await checkSwap(input, { fetch: request });
+
+    expect(result.parentRunId).toBe("run-live-1");
+    expect(result.diff?.[0]).toMatchObject({ field: { en: "amountIn" } });
+  });
+
+  test("preserves Provider status and execution status as separate fields", async () => {
+    const request = vi.fn<typeof fetch>().mockResolvedValue(
+      jsonResponse({
+        ...completed,
+        providerEvidence: {
+          provider: {
+            providerId: "arbitrum-camelot-v3",
+            status: "UNKNOWN",
+            integrationStatus: "OK",
+            errors: {
+              value: null,
+              source: "unknown",
+              reproducibility: "REPRODUCIBLE",
+            },
+          },
+          execution: {
+            status: "SUCCESS",
+          },
+          provenance: {
+            mode: "LIVE",
+            source: "quote",
+            fetchedAt: "2026-08-15T08:00:00.000Z",
+            simulationBlock: "92820000",
+          },
+        },
+        p0: {
+          evidenceState: "INCOMPLETE",
+        },
+      }),
+    );
+
+    const result = await checkSwap(input, { fetch: request });
+
+    expect(result.providerEvidence?.status).toBe("UNKNOWN");
+    expect(result.executionEvidence?.status).toBe("SUCCESS");
+    expect(result.evidenceState).toBe("INCOMPLETE");
+    expect(result.verdict).toBe("UNKNOWN");
+  });
+
+  test("keeps provider execution distinct from provider and Risk status", async () => {
+    const request = vi.fn<typeof fetch>().mockResolvedValue(
+      jsonResponse({
+        ...completed,
+        providerEvidence: {
+          provider: {
+            providerId: "native-rpc",
+            status: "UNKNOWN",
+          },
+          execution: { status: "SUCCESS" },
+          provenance: {
+            fetchedAt: "2026-01-01T00:00:00.000Z",
+            blockNumber: "12345",
+          },
+        },
+        p0: {
+          evidenceState: "INCOMPLETE",
+          remediation: { status: "NOT_RUN" },
+        },
+      }),
+    );
+
+    const result = await checkSwap(input, { fetch: request });
+
+    expect(result.providerEvidence?.status).toBe("UNKNOWN");
+    expect(result.executionEvidence?.status).toBe("SUCCESS");
+    expect(result.evidenceState).toBe("INCOMPLETE");
+    expect(result.verdict).toBe("UNKNOWN");
+    expect(result.providerEvidence?.observedAt).toBe(
+      "2026-01-01T00:00:00.000Z",
+    );
+  });
+
+  test("does not send a client expectation baseline when quote is unavailable", async () => {
+    const request = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(jsonResponse(completed));
+
+    await checkSwap(
+      {
+        ...input,
+        protocol: "camelot-v3",
+        tokenIn: "ETH",
+        tokenOut: "USDC",
+      },
+      { fetch: request },
+    );
+
+    const sent = JSON.parse(String(request.mock.calls[0]?.[1]?.body));
+    expect(sent.expectationBaseline).toBeUndefined();
+  });
   test("preserves a terminal NO_ROUTE STOP without pinned-block provenance", async () => {
     const request = vi.fn<typeof fetch>().mockResolvedValue(
       jsonResponse({
@@ -655,12 +906,19 @@ describe("fetchQuote", () => {
     expect(state).toEqual({
       status: "available",
       quote: {
+        source: "quote",
         estimatedAmountOut: "0.000223",
         minimumAmountOut: "0.000221",
         blockNumber: "91383505",
         fetchedAt: "2026-08-08T12:00:00.000Z",
         runtimeVersion: "0.1.0",
         runtimeRevision: "a".repeat(40),
+      },
+      requestIdentity: {
+        protocol: "kuru",
+        tokenIn: "MON",
+        tokenOut: "USDC",
+        amountIn: "0.01",
       },
     });
   });
@@ -723,10 +981,84 @@ describe("fetchQuote", () => {
       apiFailure: { code: "UNSUPPORTED", retryable: false },
     });
   });
+
+  test("preserves quote tokenMetadata without rescaling human-unit amounts", async () => {
+    const request = vi.fn<typeof fetch>().mockResolvedValue(
+      jsonResponse({
+        ...available,
+        tokenMetadata,
+      }),
+    );
+
+    const state = await fetchQuote(quoteInput, { fetch: request });
+
+    expect(state).toMatchObject({
+      status: "available",
+      quote: { estimatedAmountOut: "0.000223" },
+      tokenMetadata,
+    });
+  });
+});
+
+describe("fetchP0Config", () => {
+  const p0Metadata = {
+    tokenIn: {
+      chainId: 421614,
+      asset: { kind: "native" as const },
+      symbol: "ETH",
+      decimals: 18,
+      decimalsSource: "chain_config",
+    },
+    tokenOut: {
+      chainId: 421614,
+      asset: {
+        kind: "erc20" as const,
+        address: "0xb893E3334D4Bd6C5ba8277Fd559e99Ed683A9FC7",
+      },
+      symbol: "USDC",
+      decimals: 6,
+      decimalsSource: "onchain_verified",
+      verifiedAtBlock: "42",
+    },
+  };
+
+  test("maps AVAILABLE as configured route identity, not a live success", async () => {
+    const request = vi.fn<typeof fetch>().mockResolvedValue(
+      jsonResponse({
+        status: "AVAILABLE",
+        chainId: 421614,
+        protocol: "camelot-v3",
+        tokenMetadata: p0Metadata,
+      }),
+    );
+
+    await expect(fetchP0Config({ fetch: request })).resolves.toEqual({
+      status: "AVAILABLE",
+      chainId: 421614,
+      protocol: "camelot-v3",
+      tokenMetadata: p0Metadata,
+    });
+    expect(request.mock.calls[0]?.[0]).toBe("/api/p0-config");
+  });
+
+  test("keeps UNAVAILABLE as configuration discovery", async () => {
+    const request = vi.fn<typeof fetch>().mockResolvedValue(
+      jsonResponse({
+        status: "UNAVAILABLE",
+        reason: "TOKEN_METADATA_UNAVAILABLE",
+      }),
+    );
+
+    await expect(fetchP0Config({ fetch: request })).resolves.toEqual({
+      status: "UNAVAILABLE",
+      reason: "TOKEN_METADATA_UNAVAILABLE",
+    });
+  });
 });
 
 describe("loadReplay", () => {
   const recorded = {
+    tokenMetadata,
     runId: "recorded-kuru-mon-to-usdc-91383505",
     replayMode: true,
     intent: {

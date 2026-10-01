@@ -35,6 +35,26 @@ const intent = {
 };
 
 const recoveredRun = {
+  tokenMetadata: {
+    tokenIn: {
+      chainId: 143,
+      asset: { kind: "native" },
+      symbol: "MON",
+      decimals: 18,
+      decimalsSource: "chain_config",
+    },
+    tokenOut: {
+      chainId: 143,
+      asset: {
+        kind: "erc20",
+        address: "0x754704Bc059F8C67012fEd69BC8A327a5aafb603",
+      },
+      symbol: "USDC",
+      decimals: 6,
+      decimalsSource: "onchain_verified",
+      verifiedAtBlock: "92820000",
+    },
+  },
   runId: RUN_ID,
   createdAt: CREATED_AT,
   replayMode: false,
@@ -49,6 +69,55 @@ const recoveredRun = {
   evidence: [],
   scope: [],
 };
+
+function jsonResponse(body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "content-type": "application/json" },
+  });
+}
+
+function mockFetch(handlers: {
+  config?: unknown;
+  run?: unknown;
+  quote?: unknown;
+  check?: unknown;
+  fallback?: (url: string) => Response | Promise<Response>;
+}) {
+  return vi.fn<typeof fetch>().mockImplementation((url) => {
+    const path = typeof url === "string" ? url : "";
+    if (path.includes("/api/p0-config")) {
+      return Promise.resolve(
+        jsonResponse(
+          handlers.config ?? {
+            status: "UNAVAILABLE",
+            reason: "ROUTE_NOT_CONFIGURED",
+          },
+        ),
+      );
+    }
+    if (path.includes("/api/runs/") && handlers.run !== undefined) {
+      return Promise.resolve(jsonResponse(handlers.run));
+    }
+    if (path.includes("/api/quote") && handlers.quote !== undefined) {
+      return Promise.resolve(jsonResponse(handlers.quote));
+    }
+    if (path.includes("/api/check") && handlers.check !== undefined) {
+      return Promise.resolve(jsonResponse(handlers.check));
+    }
+    if (handlers.fallback) return Promise.resolve(handlers.fallback(path));
+    return Promise.resolve(new Response("", { status: 404 }));
+  });
+}
+
+function setInputValue(input: HTMLInputElement, value: string): void {
+  const setter = Object.getOwnPropertyDescriptor(
+    HTMLInputElement.prototype,
+    "value",
+  )?.set;
+  setter?.call(input, value);
+  input.dispatchEvent(new Event("input", { bubbles: true }));
+}
 
 describe("WalletApp persisted Run recovery", () => {
   let root: Root | undefined;
@@ -88,18 +157,15 @@ describe("WalletApp persisted Run recovery", () => {
   });
 
   test("restores the persisted result and editable form after mount", async () => {
-    const request = vi.fn<typeof fetch>().mockResolvedValue(
-      new Response(
-        JSON.stringify({
-          runId: RUN_ID,
-          createdAt: CREATED_AT,
-          intent,
-          status: "completed",
-          result: recoveredRun,
-        }),
-        { status: 200, headers: { "content-type": "application/json" } },
-      ),
-    );
+    const request = mockFetch({
+      run: {
+        runId: RUN_ID,
+        createdAt: CREATED_AT,
+        intent,
+        status: "completed",
+        result: recoveredRun,
+      },
+    });
     vi.stubGlobal("fetch", request);
     window.sessionStorage.setItem("parallax:last-run-id", RUN_ID);
 
@@ -113,8 +179,10 @@ describe("WalletApp persisted Run recovery", () => {
       await Promise.resolve();
     });
 
-    expect(request).toHaveBeenCalledOnce();
-    expect(request.mock.calls[0]?.[0]).toBe(`/api/runs/${RUN_ID}`);
+    expect(request).toHaveBeenCalled();
+    expect(
+      request.mock.calls.some((call) => call[0] === `/api/runs/${RUN_ID}`),
+    ).toBe(true);
     expect(container.textContent).toContain("Before you sign");
     expect(container.textContent).toContain("Live check");
 
@@ -138,9 +206,18 @@ describe("WalletApp persisted Run recovery", () => {
     const recoveryResponse = new Promise<Response>((resolve) => {
       resolveRecovery = resolve;
     });
-    const request = vi
-      .fn<typeof fetch>()
-      .mockImplementation(() => recoveryResponse);
+    const request = vi.fn<typeof fetch>().mockImplementation((url) => {
+      const path = typeof url === "string" ? url : "";
+      if (path.includes("/api/p0-config")) {
+        return Promise.resolve(
+          jsonResponse({
+            status: "UNAVAILABLE",
+            reason: "ROUTE_NOT_CONFIGURED",
+          }),
+        );
+      }
+      return recoveryResponse;
+    });
     vi.stubGlobal("fetch", request);
     window.sessionStorage.setItem("parallax:last-run-id", RUN_ID);
 
@@ -196,7 +273,7 @@ describe("WalletApp persisted Run recovery", () => {
     expect(container.textContent).not.toContain("Before you sign");
   });
 
-  test("loads the Arbitrum sample result from the wallet home", async () => {
+  test("opens the real Arbitrum P0 swap path from wallet home", async () => {
     const container = document.createElement("div");
     document.body.append(container);
     root = createRoot(container);
@@ -206,34 +283,54 @@ describe("WalletApp persisted Run recovery", () => {
       await Promise.resolve();
     });
 
-    const sampleButton = Array.from(container.querySelectorAll("button")).find(
-      (button) => button.textContent?.includes("ADJUST"),
+    const swapButton = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent?.trim() === "Swap",
     );
-    expect(sampleButton).toBeDefined();
+    expect(swapButton).toBeDefined();
 
     await act(async () => {
-      sampleButton?.click();
+      swapButton?.click();
     });
 
-    expect(container.textContent).toContain("Your quote has changed");
-    expect(container.textContent).toContain("Adjust before proceeding");
-    expect(container.textContent).toContain("View verified options →");
-    expect(container.textContent).toContain("Execution economics");
-
-    const timelineOptionsButton = Array.from(
-      container.querySelectorAll("button"),
-    ).find((button) => button.textContent?.includes("View verified options"));
-    expect(timelineOptionsButton).toBeDefined();
-
-    await act(async () => {
-      timelineOptionsButton?.click();
-    });
-
-    expect(container.textContent).toContain("Your options");
-    expect(container.textContent).toContain("Keep spending 10,000 USDC");
+    expect(container.textContent).toContain(
+      "Arbitrum Sepolia · Camelot V3 · ETH → USDC",
+    );
+    expect(container.textContent).not.toContain("ADJUST");
+    expect(container.textContent).not.toContain("Load recorded replay");
   });
 
-  test("applies a verified option to the swap sheet", async () => {
+  test("rejects quote after user edits the input during debounce window", async () => {
+    let quoteRequestCount = 0;
+    const request = vi.fn<typeof fetch>().mockImplementation((url) => {
+      if (typeof url === "string" && url.includes("/api/quote")) {
+        quoteRequestCount += 1;
+        return Promise.resolve(
+          jsonResponse({
+            status: "available",
+            quote: {
+              source: "quote",
+              estimatedAmountOut: "1500000",
+              minimumAmountOut: "1485000",
+              blockNumber: "12345",
+              fetchedAt: "2026-01-01T00:00:00.000Z",
+              runtimeVersion: "arbitrum-camelot-v3",
+              runtimeRevision: "native-rpc",
+            },
+          }),
+        );
+      }
+      if (typeof url === "string" && url.includes("/api/p0-config")) {
+        return Promise.resolve(
+          jsonResponse({
+            status: "UNAVAILABLE",
+            reason: "ROUTE_NOT_CONFIGURED",
+          }),
+        );
+      }
+      return Promise.resolve(new Response("", { status: 404 }));
+    });
+    vi.stubGlobal("fetch", request);
+
     const container = document.createElement("div");
     document.body.append(container);
     root = createRoot(container);
@@ -243,41 +340,135 @@ describe("WalletApp persisted Run recovery", () => {
       await Promise.resolve();
     });
 
-    const sampleButton = Array.from(container.querySelectorAll("button")).find(
-      (button) => button.textContent?.includes("ADJUST"),
+    const swapButton = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent?.trim() === "Swap",
     );
-    expect(sampleButton).toBeDefined();
+    expect(swapButton).toBeDefined();
 
     await act(async () => {
-      sampleButton?.click();
-    });
-
-    const timelineOptionsButton = Array.from(
-      container.querySelectorAll("button"),
-    ).find((button) => button.textContent?.includes("View verified options"));
-    expect(timelineOptionsButton).toBeDefined();
-
-    await act(async () => {
-      timelineOptionsButton?.click();
-    });
-
-    const applyButtons = Array.from(
-      container.querySelectorAll("button"),
-    ).filter((button) =>
-      button.textContent?.includes("Preserve a similar effective rate"),
-    );
-    expect(applyButtons.length).toBeGreaterThan(0);
-
-    await act(async () => {
-      applyButtons[0]?.click();
+      swapButton?.click();
     });
 
     const amountInput = container.querySelector<HTMLInputElement>(
       'input[aria-label="Amount to pay"]',
     );
-    expect(amountInput?.value).toBe("7200");
-    expect(container.textContent).toContain("USDC");
-    expect(container.textContent).toContain("ETH");
-    expect(container.textContent).toContain("Submit live check");
+    expect(amountInput).toBeDefined();
+    const inputElement = amountInput as HTMLInputElement;
+
+    await act(async () => {
+      setInputValue(inputElement, "0.02");
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 550));
+    });
+
+    expect(quoteRequestCount).toBe(1);
+
+    await act(async () => {
+      setInputValue(inputElement, "0.03");
+      await Promise.resolve();
+    });
+
+    const submitButton = Array.from(
+      container.querySelectorAll<HTMLButtonElement>('button[type="submit"]'),
+    ).find((button) => button.textContent?.includes("Submit live check"));
+    expect(submitButton).toBeDefined();
+
+    const checkRequest = vi.fn<typeof fetch>().mockImplementation((url) => {
+      if (typeof url === "string" && url.includes("/api/check")) {
+        return Promise.resolve(
+          jsonResponse({
+            runId: "test-run",
+            createdAt: "2026-01-01T00:00:00.000Z",
+            intent: {
+              chainId: 421614,
+              protocol: "camelot-v3",
+              sender: "0x1111111111111111111111111111111111111111",
+              recipient: "0x1111111111111111111111111111111111111111",
+              recipientSource: "defaulted_from_sender",
+              tokenIn: { kind: "native" },
+              tokenOut: {
+                kind: "erc20",
+                address: "0x75faf114eafb1BDbe2F0316DF893fd58CE46AA4d",
+              },
+              amountInAtomic: "30000000000000000",
+              economicBoundary: {
+                availability: "unavailable",
+                source: "unavailable",
+              },
+            },
+            status: "completed",
+            result: recoveredRun,
+          }),
+        );
+      }
+      if (typeof url === "string" && url.includes("/api/quote")) {
+        return Promise.resolve(
+          jsonResponse({
+            status: "available",
+            quote: {
+              source: "quote",
+              estimatedAmountOut: "1500000",
+              minimumAmountOut: "1485000",
+              blockNumber: "12345",
+              fetchedAt: "2026-01-01T00:00:00.000Z",
+              runtimeVersion: "arbitrum-camelot-v3",
+              runtimeRevision: "native-rpc",
+            },
+          }),
+        );
+      }
+      if (typeof url === "string" && url.includes("/api/p0-config")) {
+        return Promise.resolve(
+          jsonResponse({
+            status: "UNAVAILABLE",
+            reason: "ROUTE_NOT_CONFIGURED",
+          }),
+        );
+      }
+      return Promise.resolve(new Response("", { status: 404 }));
+    });
+    vi.stubGlobal("fetch", checkRequest);
+
+    await act(async () => {
+      submitButton?.click();
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 2300));
+    });
+
+    const checkCalls = checkRequest.mock.calls.filter(
+      (call) => typeof call[0] === "string" && call[0].includes("/api/check"),
+    );
+    const checkPayload = checkCalls[0]?.[1];
+    const checkBody = checkPayload
+      ? JSON.parse(checkPayload.body as string)
+      : undefined;
+
+    expect(checkCalls).toHaveLength(1);
+    expect(checkBody?.amountIn).toBe("0.03");
+    expect(checkBody?.expectationBaseline).toBeUndefined();
+  });
+
+  test("does not expose fixture-only remediation controls in the active P0 path", async () => {
+    const container = document.createElement("div");
+    document.body.append(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(<WalletApp language="en" />);
+      await Promise.resolve();
+    });
+
+    expect(container.textContent).toContain(
+      "This demo checks a supported swap intent before signing",
+    );
+    expect(container.textContent).not.toContain("Your quote has changed");
+    expect(container.textContent).not.toContain("View verified options");
+    expect(container.textContent).not.toContain("Load recorded replay");
   });
 });
