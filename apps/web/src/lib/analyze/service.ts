@@ -1,5 +1,5 @@
 import type { Copy } from "@/lib/i18n";
-import { getChainIdForProtocol } from "./api-helpers";
+import { getChainIdForProtocol, symbolToAsset } from "./api-helpers";
 import { type FormState, INITIAL_FORM, validateForm } from "./form";
 import type {
   ActionSuggestion,
@@ -19,9 +19,6 @@ import type {
 } from "./types";
 
 export const DEFAULT_SENDER = "0x1111111111111111111111111111111111111111";
-export const MONAD_USDC_ADDRESS = "0x754704Bc059F8C67012fEd69BC8A327a5aafb603";
-export const ARBITRUM_SEPOLIA_USDC_ADDRESS =
-  "0xb893E3334D4Bd6C5ba8277Fd559e99Ed683A9FC7";
 const API_BASE = "";
 const cp = (value: string) => ({ en: value, zh: value });
 const obj = (value: unknown): Record<string, unknown> | undefined =>
@@ -41,7 +38,7 @@ function metadataAssetKey(value: unknown): string {
 function symbol(
   value: unknown,
   chainId: number,
-  metadata: Map<string, TokenMetadata> = new Map(),
+  metadata: Map<string, TokenMetadata>,
 ): string {
   const resolved = metadata.get(`${chainId}:${metadataAssetKey(value)}`);
   if (resolved) return resolved.symbol;
@@ -51,21 +48,18 @@ function symbol(
   return address ? `${address.slice(0, 6)}…${address.slice(-4)}` : "unknown";
 }
 
-function asset(
+function requestAsset(
   value: string,
   chainId: number,
 ): { kind: "native" } | { kind: "erc20"; address: string } {
-  if (value === "MON" || value === "ETH") return { kind: "native" };
-  if (value === "USDC") {
-    return {
-      kind: "erc20",
-      address:
-        chainId === 421614 ? ARBITRUM_SEPOLIA_USDC_ADDRESS : MONAD_USDC_ADDRESS,
-    };
-  }
-  throw new Error(`Unsupported token: ${value}`);
+  return symbolToAsset(value, chainId);
 }
 
+/**
+ * Converts atomic token amounts to human-readable decimal strings using trusted
+ * Backend token metadata. Returns "unavailable" if metadata is missing or the
+ * atomic value is malformed.
+ */
 function decimal(value: unknown, decimals: number | undefined): string {
   const atomic = str(value);
   if (!atomic || !/^\d+$/.test(atomic) || decimals === undefined)
@@ -110,10 +104,8 @@ const ACTION_REASON: Record<string, Copy> = {
 };
 
 /**
- * Returns decimals from trusted Backend token metadata.
- * The active P0 path uses the Backend-resolved atomic values directly.
- * This helper is only used when rendering diffs or recovered Runs that
- * already contain atomic values but no separate metadata response.
+ * Looks up decimals from the trusted Run tokenMetadata map. Missing metadata
+ * must stay unavailable; the frontend never invents ETH/MON/USDC decimals.
  */
 function decimalsFor(
   value: string,
@@ -623,13 +615,14 @@ function mapRun(
 
 function body(input: CheckSwapInput) {
   const baseline = input.expectationBaseline;
+  const chainId = getChainIdForProtocol(input.protocol);
   return {
     ...(input.parentRunId ? { parentRunId: input.parentRunId } : {}),
-    chainId: getChainIdForProtocol(input.protocol),
+    chainId,
     protocol: input.protocol,
     sender: input.sender ?? DEFAULT_SENDER,
-    tokenIn: asset(input.tokenIn, getChainIdForProtocol(input.protocol)),
-    tokenOut: asset(input.tokenOut, getChainIdForProtocol(input.protocol)),
+    tokenIn: requestAsset(input.tokenIn, chainId),
+    tokenOut: requestAsset(input.tokenOut, chainId),
     amountIn: input.amountIn,
     economicBoundary: input.minimumReceived
       ? {
@@ -652,8 +645,8 @@ export function expectationBaseline(
   return {
     chainId,
     protocol: input.protocol,
-    tokenIn: asset(input.tokenIn, chainId),
-    tokenOut: asset(input.tokenOut, chainId),
+    tokenIn: requestAsset(input.tokenIn, chainId),
+    tokenOut: requestAsset(input.tokenOut, chainId),
     amountIn: input.amountIn,
     quote,
   };
@@ -661,12 +654,13 @@ export function expectationBaseline(
 
 /** `/api/quote` is a strict exact-input body: no boundary, no parent, no slippage. */
 function quoteBody(input: QuoteSwapInput) {
+  const chainId = getChainIdForProtocol(input.protocol);
   return {
-    chainId: getChainIdForProtocol(input.protocol),
+    chainId,
     protocol: input.protocol,
     sender: input.sender ?? DEFAULT_SENDER,
-    tokenIn: asset(input.tokenIn, getChainIdForProtocol(input.protocol)),
-    tokenOut: asset(input.tokenOut, getChainIdForProtocol(input.protocol)),
+    tokenIn: requestAsset(input.tokenIn, chainId),
+    tokenOut: requestAsset(input.tokenOut, chainId),
     amountIn: input.amountIn,
   };
 }
