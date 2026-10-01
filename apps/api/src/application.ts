@@ -7,10 +7,10 @@ import {
   type FailedRunResult,
   failedRunResultSchema,
   type IntentNormalizationResult,
-  type PublicTokenMetadata,
   type RerunRejectionReason,
   type RunResult,
   runResultSchema,
+  type TokenMetadataPair,
 } from "@parallax/contracts";
 import {
   actionGateVerificationRunIds,
@@ -42,7 +42,7 @@ import {
 } from "./ports.js";
 import type { BackendRuntime } from "./runtime-config.js";
 import type { CheckRunFailureCode, CheckRunRecord, RunStore } from "./store.js";
-import { tokenDecimals } from "./token-decimals.js";
+import { resolveTokenMetadata } from "./token-metadata.js";
 
 export type CheckApiErrorCode =
   | "INVALID_REQUEST"
@@ -223,6 +223,7 @@ export class CheckApplicationService {
         publicError,
         invoked.error,
         partialRunResultFrom(invoked.error),
+        invoked.tokenMetadata,
       );
     }
 
@@ -243,6 +244,9 @@ export class CheckApplicationService {
           code: "INVALID_AGENT_FLOW_RESPONSE",
           message: interpreted.message,
         },
+        undefined,
+        undefined,
+        invoked.tokenMetadata,
       );
     }
 
@@ -250,7 +254,7 @@ export class CheckApplicationService {
       ...interpreted.result,
       ...childFields,
       createdAt,
-      ...tokenMetadataFields(interpreted.result, this.dependencies.runtime),
+      tokenMetadata: invoked.tokenMetadata,
     });
     if (resultWithRerun.status === "completed") {
       const gated = await this.maybeApplyVerifiedActionGate(resultWithRerun);
@@ -347,6 +351,7 @@ export class CheckApplicationService {
           ? "UNSUPPORTED"
           : "AGENT_FLOW_ERROR",
         invoked.error,
+        invoked.tokenMetadata,
       );
       return persisted === "non_terminal"
         ? { kind: "blocked" }
@@ -366,6 +371,8 @@ export class CheckApplicationService {
         childFields,
         childCreatedAt,
         "INVALID_AGENT_FLOW_RESPONSE",
+        undefined,
+        invoked.tokenMetadata,
       );
       return persisted === "non_terminal"
         ? { kind: "blocked" }
@@ -381,6 +388,7 @@ export class CheckApplicationService {
           ...child,
           ...childFields,
           createdAt: childCreatedAt,
+          tokenMetadata: invoked.tokenMetadata,
         }),
       );
       return persisted === "non_terminal"
@@ -395,6 +403,8 @@ export class CheckApplicationService {
         childFields,
         childCreatedAt,
         "INVALID_AGENT_FLOW_RESPONSE",
+        undefined,
+        invoked.tokenMetadata,
       );
       return persisted === "non_terminal"
         ? { kind: "blocked" }
@@ -405,6 +415,7 @@ export class CheckApplicationService {
       ...child,
       ...childFields,
       createdAt: childCreatedAt,
+      tokenMetadata: invoked.tokenMetadata,
     });
     const persisted = await this.persistVerificationChildResult(
       childRunId,
@@ -444,28 +455,29 @@ export class CheckApplicationService {
       AgentFlowPort["check"]
     >[0]["expectationBaseline"],
     executionPurpose: AgentFlowCheckInput["executionPurpose"] = "primary",
-  ): Promise<{ ok: true; candidate: unknown } | { ok: false; error: unknown }> {
+  ): Promise<
+    ({ ok: true; candidate: unknown } | { ok: false; error: unknown }) & {
+      tokenMetadata?: TokenMetadataPair;
+    }
+  > {
+    let tokenMetadata: TokenMetadataPair | undefined;
     try {
+      tokenMetadata = resolveTokenMetadata(
+        this.dependencies.runtime.tokenRegistry,
+        intent,
+      );
       const candidate = await agentFlow.check({
         runId,
         intent,
         executionPurpose,
         ...(expectationBaseline === undefined ? {} : { expectationBaseline }),
-        tokenInDecimals: tokenDecimals(
-          this.dependencies.runtime,
-          intent.tokenIn,
-          intent.chainId,
-        ),
-        tokenOutDecimals: tokenDecimals(
-          this.dependencies.runtime,
-          intent.tokenOut,
-          intent.chainId,
-        ),
+        tokenInDecimals: tokenMetadata.tokenIn.decimals,
+        tokenOutDecimals: tokenMetadata.tokenOut.decimals,
         moss: this.dependencies.runtime.config.moss,
       });
-      return { ok: true, candidate };
+      return { ok: true, candidate, tokenMetadata };
     } catch (error) {
-      return { ok: false, error };
+      return { ok: false, error, tokenMetadata };
     }
   }
 
@@ -487,16 +499,19 @@ export class CheckApplicationService {
       if (result.parentRunId === undefined || result.diff === undefined) {
         return "non_terminal";
       }
-      const failed = createIntegrationErrorResult(
-        childRunId,
-        intent,
-        "INVALID_AGENT_FLOW_RESPONSE",
-        {
-          parentRunId: result.parentRunId,
-          diff: result.diff,
-        },
-        result.createdAt,
-      );
+      const failed = failedRunResultSchema.parse({
+        ...createIntegrationErrorResult(
+          childRunId,
+          intent,
+          "INVALID_AGENT_FLOW_RESPONSE",
+          {
+            parentRunId: result.parentRunId,
+            diff: result.diff,
+          },
+          result.createdAt,
+        ),
+        tokenMetadata: result.tokenMetadata,
+      });
       try {
         await this.dependencies.store.fail(
           childRunId,
@@ -517,15 +532,19 @@ export class CheckApplicationService {
     createdAt: string,
     failure: CheckRunFailureCode,
     cause?: unknown,
+    tokenMetadata?: TokenMetadataPair,
   ): Promise<"terminal_error" | "non_terminal"> {
-    const result = createIntegrationErrorResult(
-      childRunId,
-      intent,
-      failure,
-      childFields,
-      createdAt,
-      cause,
-    );
+    const result = failedRunResultSchema.parse({
+      ...createIntegrationErrorResult(
+        childRunId,
+        intent,
+        failure,
+        childFields,
+        createdAt,
+        cause,
+      ),
+      tokenMetadata,
+    });
     try {
       await this.dependencies.store.fail(childRunId, failure, result);
       return "terminal_error";
@@ -543,9 +562,15 @@ export class CheckApplicationService {
     apiError: CheckApiErrorBody["error"],
     cause?: unknown,
     partialRunResult?: FailedRunResult,
+    tokenMetadata?: TokenMetadataPair,
   ): Promise<CheckApplicationResponse> {
-    const result =
-      partialRunResult === undefined
+    const matchingPartial =
+      partialRunResult?.runId === runId &&
+      isDeepStrictEqual(partialRunResult.intent, intent)
+        ? partialRunResult
+        : undefined;
+    const failureResult =
+      matchingPartial === undefined
         ? createIntegrationErrorResult(
             runId,
             intent,
@@ -554,13 +579,15 @@ export class CheckApplicationService {
             createdAt,
             cause,
           )
-        : failedRunResultSchema.parse({
-            ...partialRunResult,
-            runId,
-            intent,
+        : {
+            ...matchingPartial,
             ...(childFields ?? {}),
             createdAt,
-          });
+          };
+    const result = failedRunResultSchema.parse({
+      ...failureResult,
+      tokenMetadata,
+    });
     try {
       await this.dependencies.store.fail(runId, failure, result);
     } catch {
@@ -594,7 +621,11 @@ function isUnsupportedCheckError(error: unknown): boolean {
 
 function partialRunResultFrom(error: unknown): FailedRunResult | undefined {
   const candidate = asRecord(error)?.partialRunResult;
-  const parsed = failedRunResultSchema.safeParse(candidate);
+  const candidateRecord = asRecord(candidate);
+  if (candidateRecord === undefined) return undefined;
+  const withoutUntrustedMetadata = { ...candidateRecord };
+  delete withoutUntrustedMetadata.tokenMetadata;
+  const parsed = failedRunResultSchema.safeParse(withoutUntrustedMetadata);
   return parsed.success ? parsed.data : undefined;
 }
 
@@ -888,22 +919,6 @@ function integrationErrorForFailure(
     stage,
     message: "Agent Flow failed internally",
     retryable: false,
-  };
-}
-
-function tokenMetadataFields(
-  result: RunResult,
-  runtime: BackendRuntime,
-): { tokenMetadata: PublicTokenMetadata[] } {
-  const assets = [result.intent.tokenIn, result.intent.tokenOut];
-  const metadata = assets.map((asset) =>
-    runtime.tokenRegistry.resolve(result.intent.chainId, asset),
-  );
-  if (metadata.some((item) => item === undefined)) {
-    throw new Error("Trusted token metadata is unavailable for this Run");
-  }
-  return {
-    tokenMetadata: metadata as PublicTokenMetadata[],
   };
 }
 
