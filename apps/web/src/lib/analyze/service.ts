@@ -14,6 +14,7 @@ import type {
   RuleResult,
   RunDiff,
   RunRecovery,
+  TokenMetadata,
   Verdict,
 } from "./types";
 
@@ -31,17 +32,22 @@ const str = (value: unknown) => (typeof value === "string" ? value : undefined);
 const arr = (value: unknown): unknown[] => (Array.isArray(value) ? value : []);
 const unavailable = cp("unavailable");
 
-function symbol(value: unknown, chainId = 143): string {
+function metadataAssetKey(value: unknown): string {
   const asset = obj(value);
-  if (asset?.kind === "native") {
-    return chainId === 421614 ? "ETH" : "MON";
-  }
+  if (asset?.kind === "native") return "native";
+  return str(asset?.address)?.toLowerCase() ?? "unknown";
+}
+
+function symbol(
+  value: unknown,
+  chainId: number,
+  metadata: Map<string, TokenMetadata> = new Map(),
+): string {
+  const resolved = metadata.get(`${chainId}:${metadataAssetKey(value)}`);
+  if (resolved) return resolved.symbol;
+  const asset = obj(value);
+  if (asset?.kind === "native") return "unknown";
   const address = str(asset?.address)?.toLowerCase();
-  if (
-    address === MONAD_USDC_ADDRESS.toLowerCase() ||
-    address === ARBITRUM_SEPOLIA_USDC_ADDRESS.toLowerCase()
-  )
-    return "USDC";
   return address ? `${address.slice(0, 6)}…${address.slice(-4)}` : "unknown";
 }
 
@@ -109,18 +115,24 @@ const ACTION_REASON: Record<string, Copy> = {
  * This helper is only used when rendering diffs or recovered Runs that
  * already contain atomic values but no separate metadata response.
  */
-const decimalsFor = (symbol: string, chainId?: number): number | undefined => {
-  if (symbol === "ETH" || symbol === "MON") return 18;
-  if (symbol === "USDC" && chainId === 421614) return 18;
-  return undefined;
-};
+function decimalsFor(
+  value: string,
+  metadata: Map<string, number>,
+): number | undefined {
+  return metadata.get(value.toLowerCase());
+}
 
 /**
  * Converts an atomic `proposedChange` into display units. The handoff requires
  * rendering human copy from the Intent plus token registry rather than showing
  * atomic strings or reverse-engineering Diff values.
  */
-function displayChange(value: unknown, field: string, unit: string) {
+function displayChange(
+  value: unknown,
+  field: string,
+  unit: string,
+  metadata: Map<string, number>,
+) {
   const change = obj(value);
   const before = str(change?.before);
   const after = str(change?.after);
@@ -131,8 +143,8 @@ function displayChange(value: unknown, field: string, unit: string) {
   if (!isAmount) return { before, after, unit: "" };
 
   return {
-    before: decimal(before, decimalsFor(unit)),
-    after: decimal(after, decimalsFor(unit)),
+    before: decimal(before, decimalsFor(unit, metadata)),
+    after: decimal(after, decimalsFor(unit, metadata)),
     unit,
   };
 }
@@ -141,6 +153,7 @@ function suggestion(
   value: unknown,
   tokenIn: string,
   tokenOut: string,
+  metadata: Map<string, number>,
 ): ActionSuggestion | undefined {
   const evaluation = obj(value);
   const action = obj(evaluation?.action);
@@ -167,7 +180,12 @@ function suggestion(
     reason:
       ACTION_REASON[reasonCode ?? ""] ??
       cp("This action carries no recognized reason code."),
-    proposedChange: displayChange(evaluation?.proposedChange, field, unit),
+    proposedChange: displayChange(
+      evaluation?.proposedChange,
+      field,
+      unit,
+      metadata,
+    ),
   };
 }
 
@@ -234,7 +252,11 @@ function evidence(value: unknown, replay: boolean): EvidenceItem | undefined {
  * strings. The handoff requires human copy from the Intent plus token registry,
  * so the row is relabeled `amountIn` and converted with trusted decimals.
  */
-function diff(value: unknown, tokenIn: string): RunDiff | undefined {
+function diff(
+  value: unknown,
+  tokenIn: string,
+  metadata: Map<string, number>,
+): RunDiff | undefined {
   const rows = arr(obj(value)?.changedFields).flatMap((raw) => {
     const item = obj(raw);
     const field = str(item?.field);
@@ -244,7 +266,9 @@ function diff(value: unknown, tokenIn: string): RunDiff | undefined {
 
     const isAmount = field === "amountInAtomic";
     const show = (atomic: string) =>
-      isAmount ? `${decimal(atomic, decimalsFor(tokenIn))} ${tokenIn}` : atomic;
+      isAmount
+        ? `${decimal(atomic, decimalsFor(tokenIn, metadata))} ${tokenIn}`
+        : atomic;
 
     return [
       {
@@ -394,15 +418,55 @@ function mapRun(
     .filter((item): item is Record<string, unknown> => !!item);
   const route = obj(run?.route);
   const runQuote = obj(run?.quote);
-  const chainId = typeof intent?.chainId === "number" ? intent.chainId : 143;
+  const tokenMetadata = arr(run?.tokenMetadata)
+    .map(obj)
+    .filter((item): item is Record<string, unknown> => !!item);
+  const decimalMetadata = new Map<string, number>();
+  tokenMetadata.forEach((item) => {
+    const metadataAsset = obj(item.asset);
+    const symbolValue = str(item.symbol);
+    const decimalsValue = item.decimals;
+    if (typeof decimalsValue !== "number") return;
+    if (symbolValue)
+      decimalMetadata.set(symbolValue.toLowerCase(), decimalsValue);
+    if (metadataAsset?.kind === "native") {
+      decimalMetadata.set("native", decimalsValue);
+    } else {
+      const address = str(metadataAsset?.address)?.toLowerCase();
+      if (address) decimalMetadata.set(address, decimalsValue);
+    }
+  });
+  const metadataByAsset = new Map<string, TokenMetadata>();
+  tokenMetadata.forEach((item) => {
+    const metadataAsset = obj(item.asset);
+    const chain = item.chainId;
+    const decimalsValue = item.decimals;
+    const symbolValue = str(item.symbol);
+    if (
+      typeof chain !== "number" ||
+      typeof decimalsValue !== "number" ||
+      !symbolValue
+    )
+      return;
+    metadataByAsset.set(`${chain}:${metadataAssetKey(metadataAsset)}`, {
+      chainId: chain,
+      asset: metadataAsset as TokenMetadata["asset"],
+      symbol: symbolValue,
+      decimals: decimalsValue,
+      decimalsSource: str(item.decimalsSource) ?? "unknown",
+      verifiedAtBlock: str(item.verifiedAtBlock),
+    });
+  });
+  const chainId =
+    typeof intent?.chainId === "number" ? intent.chainId : undefined;
   const routePath = arr(route?.path)
-    .map((item) => symbol(item, chainId))
+    .map((item) => symbol(item, chainId ?? 0, metadataByAsset))
     .join(" → ");
   const output = arr(run?.evidence)
     .map(obj)
     .find((item) => item?.kind === "simulated_token_out");
-  const tokenIn = symbol(intent?.tokenIn, chainId);
-  const tokenOut = symbol(intent?.tokenOut, chainId);
+  const tokenIn = symbol(intent?.tokenIn, chainId ?? 0, metadataByAsset);
+  const tokenOut = symbol(intent?.tokenOut, chainId ?? 0, metadataByAsset);
   const boundary = obj(intent?.economicBoundary);
   const p0 = obj(run?.p0);
   const basicSimulation = obj(p0?.basicSimulation);
@@ -431,10 +495,10 @@ function mapRun(
               (apiFailure ? failureCopy(apiFailure).en : "No summary provided"),
           ),
     recommendedActions: arr(run?.recommendedActions)
-      .map((item) => suggestion(item, tokenIn, tokenOut))
+      .map((item) => suggestion(item, tokenIn, tokenOut, decimalMetadata))
       .filter((item): item is ActionSuggestion => !!item),
     irrelevantActions: arr(run?.irrelevantActions)
-      .map((item) => suggestion(item, tokenIn, tokenOut))
+      .map((item) => suggestion(item, tokenIn, tokenOut, decimalMetadata))
       .filter((item): item is ActionSuggestion => !!item),
     checked: scope
       .filter((item) => item.status === "checked")
@@ -456,9 +520,12 @@ function mapRun(
     intent: {
       tokenIn,
       tokenOut,
-      amountIn: decimal(intent?.amountInAtomic, decimalsFor(tokenIn, chainId)),
+      amountIn: decimal(
+        intent?.amountInAtomic,
+        decimalsFor(tokenIn, decimalMetadata),
+      ),
     },
-    diff: diff(run?.diff, tokenIn),
+    diff: diff(run?.diff, tokenIn, decimalMetadata),
     quote: {
       // The handoff separates the QUOTE-stage observation from the simulated
       // output, so the top-level Quote wins for the "expected" figure and the
@@ -466,7 +533,10 @@ function mapRun(
       expectedOutput:
         str(runQuote?.estimatedAmountOut) ??
         (output
-          ? decimal(output.amountReceivedAtomic, decimalsFor(tokenOut, chainId))
+          ? decimal(
+              output.amountReceivedAtomic,
+              decimalsFor(tokenOut, decimalMetadata),
+            )
           : "unavailable"),
       route: routePath ? cp(routePath) : unavailable,
       blockNumber:
@@ -476,7 +546,10 @@ function mapRun(
         "unavailable",
     },
     simulatedOutput: output
-      ? decimal(output.amountReceivedAtomic, decimalsFor(tokenOut, chainId))
+      ? decimal(
+          output.amountReceivedAtomic,
+          decimalsFor(tokenOut, decimalMetadata),
+        )
       : "unavailable",
     minimumReceivedSource: (str(boundary?.source) ??
       "unavailable") as CheckSwapResult["minimumReceivedSource"],
@@ -498,6 +571,9 @@ function mapRun(
     rawResponse,
     chainId,
     protocol: str(intent?.protocol),
+    tokenMetadata: tokenMetadata.length
+      ? (tokenMetadata as unknown as TokenMetadata[])
+      : undefined,
     evidenceState: str(p0?.evidenceState),
     basicSimulation:
       call || gasEstimate
@@ -953,6 +1029,13 @@ export function formFromRunResult(result: CheckSwapResult): FormState {
   const rawIntent = obj(rawRun?.intent);
   const rawBoundary = obj(rawIntent?.economicBoundary);
   const protocol = str(rawIntent?.protocol);
+  const decimalMetadata = new Map<string, number>();
+  result.tokenMetadata?.forEach((item) => {
+    decimalMetadata.set(item.symbol.toLowerCase(), item.decimals);
+    if (item.asset.kind === "erc20") {
+      decimalMetadata.set(item.asset.address.toLowerCase(), item.decimals);
+    }
+  });
 
   return {
     ...INITIAL_FORM,
@@ -967,7 +1050,7 @@ export function formFromRunResult(result: CheckSwapResult): FormState {
       rawBoundary?.availability === "available"
         ? decimal(
             rawBoundary.minimumReceivedAtomic,
-            decimalsFor(result.intent.tokenOut),
+            decimalsFor(result.intent.tokenOut, decimalMetadata),
           )
         : "",
   };

@@ -7,6 +7,7 @@ import {
   type FailedRunResult,
   failedRunResultSchema,
   type IntentNormalizationResult,
+  type PublicTokenMetadata,
   type RerunRejectionReason,
   type RunResult,
   runResultSchema,
@@ -249,6 +250,7 @@ export class CheckApplicationService {
       ...interpreted.result,
       ...childFields,
       createdAt,
+      ...tokenMetadataFields(interpreted.result, this.dependencies.runtime),
     });
     if (resultWithRerun.status === "completed") {
       const gated = await this.maybeApplyVerifiedActionGate(resultWithRerun);
@@ -886,6 +888,22 @@ function integrationErrorForFailure(
     stage,
     message: "Agent Flow failed internally",
     retryable: false,
+  };
+}
+
+function tokenMetadataFields(
+  result: RunResult,
+  runtime: BackendRuntime,
+): { tokenMetadata: PublicTokenMetadata[] } {
+  const assets = [result.intent.tokenIn, result.intent.tokenOut];
+  const metadata = assets.map((asset) =>
+    runtime.tokenRegistry.resolve(result.intent.chainId, asset),
+  );
+  if (metadata.some((item) => item === undefined)) {
+    throw new Error("Trusted token metadata is unavailable for this Run");
+  }
+  return {
+    tokenMetadata: metadata as PublicTokenMetadata[],
   };
 }
 

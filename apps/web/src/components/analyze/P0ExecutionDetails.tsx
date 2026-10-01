@@ -21,18 +21,18 @@ function FactRow({
 }
 
 function routeLabel(result: CheckSwapResult): string {
-  const chainId = result.chainId ?? 421614;
-  const protocol = result.protocol ?? "camelot-v3";
-
   const chainName =
-    chainId === 421614
-      ? "Arbitrum Sepolia"
-      : chainId === 42161
-        ? "Arbitrum One"
-        : `Chain ${chainId}`;
-
-  const protocolName =
-    protocol === "camelot-v3"
+    typeof result.chainId !== "number" || !Number.isFinite(result.chainId)
+      ? "UNAVAILABLE"
+      : result.chainId === 421614
+        ? "Arbitrum Sepolia"
+        : result.chainId === 42161
+          ? "Arbitrum One"
+          : `Chain ${result.chainId}`;
+  const protocol = result.protocol?.trim();
+  const protocolName = !protocol
+    ? "UNAVAILABLE"
+    : protocol === "camelot-v3"
       ? "Camelot V3"
       : protocol === "kuru"
         ? "Kuru"
@@ -80,11 +80,6 @@ export function P0ExecutionDetails({
             language={language}
             label={{ en: "Provider status", zh: "Provider 状态" }}
             value={providerStatus}
-          />
-          <FactRow
-            language={language}
-            label={{ en: "Execution status", zh: "执行状态" }}
-            value={executionStatus}
           />
           <FactRow
             language={language}
@@ -150,8 +145,8 @@ export function P0ExecutionDetails({
           />
           <FactRow
             language={language}
-            label={{ en: "Baseline fetched at", zh: "基线获取时间" }}
-            value={result.expectationBaseline?.fetchedAt ?? "UNAVAILABLE"}
+            label={{ en: "Baseline observed at", zh: "基线观测时间" }}
+            value={result.expectationBaseline?.observedAt ?? "UNAVAILABLE"}
           />
           <FactRow
             language={language}

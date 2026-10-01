@@ -171,6 +171,30 @@ describe("WalletResult", () => {
     expect(html).not.toContain("Below your Minimum Received");
   });
 
+  test("shows unavailable route identity instead of a default route when identity is missing", () => {
+    const html = render(
+      result({
+        chainId: undefined,
+        protocol: "   ",
+      }),
+    );
+
+    expect(html).toContain("UNAVAILABLE · UNAVAILABLE");
+    expect(html).not.toContain("Arbitrum Sepolia");
+    expect(html).not.toContain("Camelot V3");
+  });
+
+  test("preserves unknown populated route identity", () => {
+    const html = render(
+      result({
+        chainId: 999,
+        protocol: "other-protocol",
+      }),
+    );
+
+    expect(html).toContain("Chain 999 · other-protocol");
+  });
+
   test("renders the Arbitrum diagnosis in Result and keeps options on the next step", () => {
     const html = render(arbitrumSampleSuccess, () => undefined);
     expect(html).toContain("Your quote has changed");

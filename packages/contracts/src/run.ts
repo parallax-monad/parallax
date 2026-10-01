@@ -17,6 +17,7 @@ import {
   scopeDisclosureSchema,
 } from "./evidence.js";
 import { genericEvidenceSchema } from "./generic-evidence.js";
+import { publicTokenMetadataSchema } from "./registry.js";
 import { normalizedSwapIntentSchema } from "./intent.js";
 import { p0RunResultSchema } from "./p0-run-result.js";
 import { quoteSchema } from "./quote.js";
@@ -1335,6 +1336,7 @@ export const completedRunResultSchema = runIdentitySchema
     p0: p0RunResultSchema.optional(),
     /** Provisional Backend provider evidence; not part of canonical rule input. */
     providerEvidence: genericEvidenceSchema.optional(),
+    tokenMetadata: z.array(publicTokenMetadataSchema).max(2).optional(),
     diff: runDiffSchema.optional(),
   })
   .strict()
@@ -1429,6 +1431,7 @@ export const failedRunResultSchema = runIdentitySchema
     verdict: z.literal("UNKNOWN"),
     summary: z.string().trim().min(1),
     error: integrationErrorSchema,
+    tokenMetadata: z.array(publicTokenMetadataSchema).max(2).optional(),
     diff: runDiffSchema.optional(),
     ruleResults: z.array(ruleResultSchema),
     recommendedActions: z.array(actionEvaluationSchema),

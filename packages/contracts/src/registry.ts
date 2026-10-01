@@ -98,7 +98,10 @@ export type Erc20TokenRegistryEntry = z.infer<
   typeof erc20TokenRegistryEntrySchema
 >;
 export type TokenRegistryConfig = z.infer<typeof tokenRegistryConfigSchema>;
+export const publicTokenMetadataSchema = trustedTokenMetadataSchema;
+
 export type TrustedTokenMetadata = z.infer<typeof trustedTokenMetadataSchema>;
+export type PublicTokenMetadata = z.infer<typeof publicTokenMetadataSchema>;
 
 export type TrustedTokenRegistry = {
   hasChain(chainId: number): boolean;

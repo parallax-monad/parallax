@@ -163,6 +163,15 @@ export type BasicSimulation = {
   observedAt?: string;
 };
 
+export type TokenMetadata = {
+  chainId: number;
+  asset: { kind: "native" } | { kind: "erc20"; address: string };
+  symbol: string;
+  decimals: number;
+  decimalsSource: string;
+  verifiedAtBlock?: string;
+};
+
 export type ProviderEvidenceSummary = {
   status: string;
   source?: string;
@@ -220,6 +229,7 @@ export type CheckSwapResult = {
   protocol?: string;
   evidenceState?: string;
   basicSimulation?: BasicSimulation;
+  tokenMetadata?: TokenMetadata[];
   providerEvidence?: ProviderEvidenceSummary;
   executionEvidence?: ExecutionEvidenceSummary;
   remediationStatus?: string;

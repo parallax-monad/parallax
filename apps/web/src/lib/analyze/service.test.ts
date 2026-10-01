@@ -39,11 +39,33 @@ const intent = {
   economicBoundary: { availability: "unavailable", source: "unavailable" },
 };
 
+const tokenMetadata = [
+  {
+    chainId: 143,
+    asset: { kind: "native" },
+    symbol: "MON",
+    decimals: 18,
+    decimalsSource: "chain_config",
+  },
+  {
+    chainId: 143,
+    asset: {
+      kind: "erc20",
+      address: "0x754704Bc059F8C67012fEd69BC8A327a5aafb603",
+    },
+    symbol: "USDC",
+    decimals: 6,
+    decimalsSource: "onchain_verified",
+    verifiedAtBlock: "92820000",
+  },
+];
+
 const completed = {
   runId: "run-live-1",
   createdAt: "2026-08-15T08:00:00.000Z",
   replayMode: false,
   intent,
+  tokenMetadata,
   simulatorPinnedBlock: "92820000",
   status: "completed",
   systemStatus: "OK",
@@ -196,8 +218,7 @@ describe("checkSwap API adapter", () => {
 
     // QUOTE-stage observation and simulation output are separate claims.
     expect(result.quote.expectedOutput).toBe("0.000230");
-    expect(result.quote.blockNumber).toBe("91383505");
-    expect(result.simulatedOutput).toBe("unavailable");
+    expect(result.simulatedOutput).toBe("0.000223");
   });
 
   test("falls back to the simulated output when no Quote is projected", async () => {
@@ -223,14 +244,15 @@ describe("checkSwap API adapter", () => {
 
     const result = await checkSwap(input, { fetch: request });
 
-    expect(result.quote.expectedOutput).toBe("unavailable");
-    expect(result.simulatedOutput).toBe("unavailable");
+    expect(result.quote.expectedOutput).toBe("0.000223");
+    expect(result.simulatedOutput).toBe("0.000223");
   });
 
   test("keeps atomic output unavailable without trusted token metadata", async () => {
     const request = vi.fn<typeof fetch>().mockResolvedValue(
       jsonResponse({
         ...completed,
+        tokenMetadata: undefined,
         evidence: [
           ...completed.evidence,
           {
@@ -291,6 +313,47 @@ describe("checkSwap API adapter", () => {
 
     const sent = JSON.parse(String(request.mock.calls[0]?.[1]?.body));
     expect(sent.expectationBaseline.quote).toEqual(quote);
+  });
+
+  test("maps baseline observedAt for initial and recovered Runs", async () => {
+    const observedAt = "2026-08-15T08:05:00.000Z";
+    const response = {
+      ...completed,
+      p0: {
+        expectationBaseline: {
+          status: "AVAILABLE",
+          chainId: 143,
+          protocol: "kuru",
+          tokenIn: "native",
+          tokenOut: "0x754704Bc059F8C67012fEd69BC8A327a5aafb603",
+          amountInAtomic: "10000000000000000",
+          amountOutAtomic: "123456",
+          quoteId: "quote-1",
+          blockNumber: "92820000",
+          observedAt,
+          provenance: "quote/native-rpc",
+        },
+        evidenceState: "INCOMPLETE",
+      },
+    };
+
+    const checkRequest = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(jsonResponse(response));
+    const initial = await checkSwap(input, { fetch: checkRequest });
+
+    const recoveryRequest = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(
+        jsonResponse({ status: "completed", result: response }),
+      );
+    const recovered = await loadRun("run-live-1", { fetch: recoveryRequest });
+
+    expect(initial.expectationBaseline?.observedAt).toBe(observedAt);
+    expect(recovered.kind).toBe("terminal");
+    if (recovered.kind === "terminal") {
+      expect(recovered.result.expectationBaseline?.observedAt).toBe(observedAt);
+    }
   });
 
   test("preserves child Run identity and diff", async () => {
@@ -916,6 +979,7 @@ describe("fetchQuote", () => {
 
 describe("loadReplay", () => {
   const recorded = {
+    tokenMetadata,
     runId: "recorded-kuru-mon-to-usdc-91383505",
     replayMode: true,
     intent: {
