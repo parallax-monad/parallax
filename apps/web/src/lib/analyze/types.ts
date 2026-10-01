@@ -40,6 +40,11 @@ export type CheckSwapInput = {
   minimumReceivedSource?: BoundarySource;
   slippage?: string;
   expectationBaseline?: {
+    chainId: number;
+    protocol: Protocol;
+    tokenIn: { kind: "native" } | { kind: "erc20"; address: string };
+    tokenOut: { kind: "native" } | { kind: "erc20"; address: string };
+    amountIn: string;
     quote: QuotePreview;
   };
 };
@@ -54,6 +59,7 @@ export type QuoteSwapInput = {
 };
 
 export type QuotePreview = {
+  source: "quote";
   estimatedAmountOut: string;
   minimumAmountOut?: string;
   blockNumber: string;
@@ -65,8 +71,22 @@ export type QuotePreview = {
 export type QuoteState =
   | { status: "idle" }
   | { status: "loading" }
-  | { status: "available"; quote: QuotePreview }
-  | { status: "unavailable"; reason: "NO_ROUTE" | "QUOTE_UNAVAILABLE" }
+  | {
+      status: "available";
+      quote: QuotePreview;
+      requestIdentity: {
+        protocol: Protocol;
+        tokenIn: string;
+        tokenOut: string;
+        amountIn: string;
+      };
+      tokenMetadata?: TokenMetadataPair;
+    }
+  | {
+      status: "unavailable";
+      reason: "NO_ROUTE" | "QUOTE_UNAVAILABLE";
+      tokenMetadata?: TokenMetadataPair;
+    }
   | { status: "error"; apiFailure: ApiFailure };
 
 export type EvidenceOrigin = "live" | "replay" | "derived" | "mock";
@@ -155,6 +175,75 @@ export type RunRecovery =
   | { kind: "started"; runId: string }
   | { kind: "error"; failure: ApiFailure };
 
+export type BasicSimulation = {
+  call: {
+    status: string;
+    blockNumber?: string;
+    blockHash?: string;
+    returnDataFingerprint?: string;
+  };
+  gasEstimate: { status: string; value?: string; gasUnits?: string };
+  blockNumber?: string;
+  blockHash?: string;
+  observedAt?: string;
+};
+
+export type TokenMetadata = {
+  chainId: number;
+  asset: { kind: "native" } | { kind: "erc20"; address: string };
+  symbol: string;
+  decimals: number;
+  decimalsSource: string;
+  verifiedAtBlock?: string;
+};
+
+/** Backend-owned display metadata for the exact input and output assets. */
+export type TokenMetadataPair = {
+  tokenIn: TokenMetadata;
+  tokenOut: TokenMetadata;
+};
+
+/**
+ * Read-only P0 configuration. AVAILABLE means the configured route and
+ * registry metadata resolved; it is not a live quote, RPC, or Product pass.
+ */
+export type P0ConfigState =
+  | {
+      status: "AVAILABLE";
+      chainId: 421614;
+      protocol: "camelot-v3";
+      tokenMetadata: TokenMetadataPair;
+    }
+  | {
+      status: "UNAVAILABLE";
+      reason: "ROUTE_NOT_CONFIGURED" | "TOKEN_METADATA_UNAVAILABLE";
+    }
+  | { status: "error"; apiFailure: ApiFailure };
+
+export type ProviderEvidenceSummary = {
+  status: string;
+  source?: string;
+  observedAt?: string;
+  blockNumber?: string;
+  blockHash?: string;
+};
+
+export type ExecutionEvidenceSummary = {
+  status: string;
+};
+
+export type ExpectationBaselineSummary = {
+  quoteId?: string;
+  amountOutAtomic?: string;
+  source?: string;
+  estimatedAmountOut?: string;
+  minimumAmountOut?: string;
+  blockNumber?: string;
+  observedAt?: string;
+  provenance?: string;
+  fetchedAt?: string;
+};
+
 export type CheckSwapResult = {
   runId: string;
   parentRunId?: string;
@@ -184,6 +273,15 @@ export type CheckSwapResult = {
   quoteFidelity?: QuoteFidelity;
   remediationOptions?: RemediationOption[];
   executionEconomics?: ExecutionEconomics;
+  chainId?: number;
+  protocol?: string;
+  evidenceState?: string;
+  basicSimulation?: BasicSimulation;
+  tokenMetadata?: TokenMetadataPair;
+  providerEvidence?: ProviderEvidenceSummary;
+  executionEvidence?: ExecutionEvidenceSummary;
+  remediationStatus?: string;
+  expectationBaseline?: ExpectationBaselineSummary;
 };
 
 /** Optional swap-form patch when a user chooses this option. */

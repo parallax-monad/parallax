@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { ExecutionEconomicsCard } from "@/components/analyze/ExecutionEconomicsCard";
+import { P0ExecutionDetails } from "@/components/analyze/P0ExecutionDetails";
 import { QuoteFidelityCard } from "@/components/analyze/QuoteFidelityCard";
 import { VerdictIcon } from "@/components/analyze/StatusIcon";
 import { TokenIcon } from "@/components/analyze/TokenIcon";
@@ -314,6 +315,8 @@ export function ResultStep({
           result={result}
         />
       )}
+
+      <P0ExecutionDetails language={language} result={result} />
 
       <section className="rounded-[12px] border border-line bg-ink-elev2/30 p-3">
         <p className="m-0 text-[13px] leading-[1.6] text-dim">

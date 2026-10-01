@@ -12,13 +12,9 @@ import { type Language, say } from "@/lib/i18n";
 export function WalletHome({
   language,
   onSwap,
-  onLoadArbitrumSample,
 }: {
   language: Language;
   onSwap: () => void;
-  onLoadArbitrumSample?: (
-    verdict: "ADJUST" | "PROCEED" | "STOP" | "UNKNOWN" | "ERROR",
-  ) => void;
 }) {
   return (
     <div className="flex flex-col gap-5 px-5 pb-6 pt-2">
@@ -49,76 +45,6 @@ export function WalletHome({
             {say(language, { en: "Swap", zh: "兑换" })}
           </span>
         </button>
-
-        {onLoadArbitrumSample && (
-          <>
-            <button
-              type="button"
-              className="btn btn-monad-outline flex h-[76px] w-[76px] shrink-0 flex-col items-center justify-center gap-2 rounded-2xl px-2 py-2"
-              onClick={() => onLoadArbitrumSample("ADJUST")}
-            >
-              <SwapIcon size={21} />
-              <span className="text-[11px] font-bold leading-none">
-                {say(language, {
-                  en: "ADJUST",
-                  zh: "调整",
-                })}
-              </span>
-            </button>
-            <button
-              type="button"
-              className="btn btn-monad-outline flex h-[76px] w-[76px] shrink-0 flex-col items-center justify-center gap-2 rounded-2xl px-2 py-2"
-              onClick={() => onLoadArbitrumSample("PROCEED")}
-            >
-              <SwapIcon size={21} />
-              <span className="text-[11px] font-bold leading-none">
-                {say(language, {
-                  en: "PROCEED",
-                  zh: "继续",
-                })}
-              </span>
-            </button>
-            <button
-              type="button"
-              className="btn btn-monad-outline flex h-[76px] w-[76px] shrink-0 flex-col items-center justify-center gap-2 rounded-2xl px-2 py-2"
-              onClick={() => onLoadArbitrumSample("STOP")}
-            >
-              <SwapIcon size={21} />
-              <span className="text-[11px] font-bold leading-none">
-                {say(language, {
-                  en: "STOP",
-                  zh: "停止",
-                })}
-              </span>
-            </button>
-            <button
-              type="button"
-              className="btn btn-monad-outline flex h-[76px] w-[76px] shrink-0 flex-col items-center justify-center gap-2 rounded-2xl px-2 py-2"
-              onClick={() => onLoadArbitrumSample("UNKNOWN")}
-            >
-              <SwapIcon size={21} />
-              <span className="text-[11px] font-bold leading-none">
-                {say(language, {
-                  en: "UNKNOWN",
-                  zh: "未知",
-                })}
-              </span>
-            </button>
-            <button
-              type="button"
-              className="btn btn-monad-outline flex h-[76px] w-[76px] shrink-0 flex-col items-center justify-center gap-2 rounded-2xl px-2 py-2"
-              onClick={() => onLoadArbitrumSample("ERROR")}
-            >
-              <SwapIcon size={21} />
-              <span className="text-[11px] font-bold leading-none">
-                {say(language, {
-                  en: "ERROR",
-                  zh: "错误",
-                })}
-              </span>
-            </button>
-          </>
-        )}
       </div>
 
       <section

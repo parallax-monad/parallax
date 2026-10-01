@@ -80,12 +80,3 @@ export function assetToSymbol(asset: unknown, chainId: number): string {
 
   return address ? `${address.slice(0, 6)}…${address.slice(-4)}` : "unknown";
 }
-
-/**
- * Get token decimals for display conversion
- */
-export function getTokenDecimals(symbol: string, chainId: number): number {
-  if (symbol === "USDC") return 6;
-  if (symbol === getNativeTokenSymbol(chainId)) return 18;
-  return 18; // default
-}
