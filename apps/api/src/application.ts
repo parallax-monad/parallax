@@ -51,6 +51,7 @@ export type CheckApiErrorCode =
   | "AGENT_FLOW_ERROR"
   | "INVALID_AGENT_FLOW_RESPONSE"
   | "INSUFFICIENT_NATIVE_BALANCE"
+  | "EXECUTION_REVERT"
   | "RUN_STORE_ERROR";
 
 export type CheckApiError =
@@ -200,7 +201,8 @@ export class CheckApplicationService {
         normalized.intent.chainId,
       );
       const publicError: CheckApiError =
-        mappedError.code === "INSUFFICIENT_NATIVE_BALANCE"
+        mappedError.code === "INSUFFICIENT_NATIVE_BALANCE" ||
+        mappedError.code === "EXECUTION_REVERT"
           ? {
               code: mappedError.code,
               message: mappedError.message,
@@ -836,6 +838,16 @@ function integrationErrorForFailure(
     };
   }
 
+  if (isExecutionRevertFailure(cause, expectedChainId)) {
+    return {
+      code: "EXECUTION_REVERT",
+      stage: "action",
+      message:
+        "The transaction reverted during gas preflight; the check was not completed.",
+      retryable: false,
+    };
+  }
+
   if (rawCode === "TIMEOUT" || rawStatus === "TIMEOUT") {
     return {
       code: "TIMEOUT",
@@ -913,6 +925,17 @@ function integrationScope(
   cause: unknown,
   expectedChainId: number,
 ): FailedRunResult["scope"] {
+  if (isExecutionRevertFailure(cause, expectedChainId)) {
+    return [
+      {
+        key: "P0-CHECK-ACTION-001",
+        label: "Transaction preparation",
+        status: "unknown",
+        reason: "REQUIRED_CHECK_INTERRUPTED",
+      },
+    ];
+  }
+
   if (isInsufficientNativeBalanceFailure(cause, expectedChainId)) {
     return [
       {
@@ -956,6 +979,18 @@ function isInsufficientNativeBalanceFailure(
     cause.chainId === expectedChainId &&
     cause.code === "INSUFFICIENT_NATIVE_BALANCE" &&
     cause.operation === "estimateGas"
+  );
+}
+
+function isExecutionRevertFailure(
+  cause: unknown,
+  expectedChainId: number,
+): boolean {
+  return (
+    isChainAdapterError(cause) &&
+    cause.chainId === expectedChainId &&
+    cause.operation === "estimateGas" &&
+    cause.code === "EXECUTION_REVERT"
   );
 }
 
