@@ -17,10 +17,10 @@ import {
   scopeDisclosureSchema,
 } from "./evidence.js";
 import { genericEvidenceSchema } from "./generic-evidence.js";
-import { publicTokenMetadataSchema } from "./registry.js";
 import { normalizedSwapIntentSchema } from "./intent.js";
 import { p0RunResultSchema } from "./p0-run-result.js";
 import { quoteSchema } from "./quote.js";
+import { publicTokenMetadataSchema } from "./registry.js";
 import { routeSchema } from "./route.js";
 
 export const runDiffFieldSchema = z.enum([
