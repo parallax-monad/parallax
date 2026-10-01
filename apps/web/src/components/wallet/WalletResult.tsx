@@ -111,6 +111,7 @@ function P0Facts({
         <FactRow
           label={{ en: "Block", zh: "區塊" }}
           value={
+            simulation?.blockNumber ??
             simulation?.call.blockNumber ??
             result.simulatorPinnedBlock ??
             "UNAVAILABLE"
@@ -118,7 +119,11 @@ function P0Facts({
         />
         <FactRow
           label={{ en: "Observed at", zh: "觀測時間" }}
-          value={result.providerEvidence?.observedAt ?? "UNAVAILABLE"}
+          value={
+            simulation?.observedAt ??
+            result.providerEvidence?.observedAt ??
+            "UNAVAILABLE"
+          }
         />
       </dl>
       {simulation?.call.status === "SUCCEEDED" && (

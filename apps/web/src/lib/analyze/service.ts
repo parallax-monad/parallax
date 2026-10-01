@@ -397,9 +397,12 @@ function mapRun(
   const call = obj(basicSimulation?.call);
   const gasEstimate = obj(basicSimulation?.gasEstimate);
   const provider = obj(obj(run?.providerEvidence)?.provider);
+  const remediation = obj(p0?.remediation);
+  const basicSimulationBlockNumber = str(basicSimulation?.blockNumber);
+  const basicSimulationBlockHash = str(basicSimulation?.blockHash);
+  const basicSimulationObservedAt = str(basicSimulation?.observedAt);
   return {
     runId,
-    parentRunId: str(run?.parentRunId),
     systemStatus: systemStatus as CheckSwapResult["systemStatus"],
     verdict: verdict as Verdict,
     summary:
@@ -490,19 +493,22 @@ function mapRun(
             gasEstimate: {
               status: str(gasEstimate?.status) ?? "UNKNOWN",
               value: str(gasEstimate?.value),
+              gasUnits: str(gasEstimate?.gasUnits),
             },
+            blockNumber: basicSimulationBlockNumber,
+            blockHash: basicSimulationBlockHash,
+            observedAt: basicSimulationObservedAt,
           }
         : undefined,
     providerEvidence: provider
       ? {
           status: str(provider?.status) ?? "UNKNOWN",
-          source: str(provider?.source),
-          observedAt: str(provider?.observedAt),
-          blockNumber: str(provider?.blockNumber),
-          blockHash: str(provider?.blockHash),
+          source: str(provider?.providerId),
+          observedAt: str(obj(provider?.errors)?.fetchedAt),
+          blockNumber: str(obj(provider?.errors)?.blockNumber),
         }
       : undefined,
-    remediationStatus: str(p0?.remediation),
+    remediationStatus: str(remediation?.status),
   };
 }
 
@@ -558,6 +564,7 @@ function quoteBody(input: QuoteSwapInput) {
 
 function quotePreview(value: unknown): QuotePreview | undefined {
   const quote = obj(value);
+  const source = str(quote?.source);
   const estimatedAmountOut = str(quote?.estimatedAmountOut);
   const blockNumber = str(quote?.blockNumber);
   const runtimeVersion = str(quote?.runtimeVersion);
@@ -565,6 +572,7 @@ function quotePreview(value: unknown): QuotePreview | undefined {
   // An available Quote is only publishable with its stage block and runtime
   // identity, so a partial payload is treated as an invalid response instead.
   if (
+    source !== "quote" ||
     !estimatedAmountOut ||
     !blockNumber ||
     !runtimeVersion ||
@@ -572,6 +580,7 @@ function quotePreview(value: unknown): QuotePreview | undefined {
   )
     return;
   return {
+    source: "quote",
     estimatedAmountOut,
     minimumAmountOut: str(quote?.minimumAmountOut),
     blockNumber,

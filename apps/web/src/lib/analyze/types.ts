@@ -59,6 +59,7 @@ export type QuoteSwapInput = {
 };
 
 export type QuotePreview = {
+  source: "quote";
   estimatedAmountOut: string;
   minimumAmountOut?: string;
   blockNumber: string;
@@ -147,8 +148,10 @@ export type BasicSimulation = {
     blockHash?: string;
     returnDataFingerprint?: string;
   };
-  gasEstimate: { status: string; value?: string };
-  preparedTransaction?: { fingerprint?: string; status?: string };
+  gasEstimate: { status: string; value?: string; gasUnits?: string };
+  blockNumber?: string;
+  blockHash?: string;
+  observedAt?: string;
 };
 
 export type ProviderEvidenceSummary = {

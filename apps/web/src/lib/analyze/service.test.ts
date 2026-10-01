@@ -260,6 +260,7 @@ describe("checkSwap API adapter", () => {
       .fn<typeof fetch>()
       .mockResolvedValue(jsonResponse(completed));
     const quote = {
+      source: "quote" as const,
       estimatedAmountOut: "0.000230",
       minimumAmountOut: "0.000228",
       blockNumber: "91383505",
@@ -681,6 +682,7 @@ describe("fetchQuote", () => {
     expect(state).toEqual({
       status: "available",
       quote: {
+        source: "quote",
         estimatedAmountOut: "0.000223",
         minimumAmountOut: "0.000221",
         blockNumber: "91383505",
