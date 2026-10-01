@@ -1,5 +1,11 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { accountStateSnapshotSchema } from "./account-state-model.js";
+import { CAMELOT_V3_ROUTER_ADDRESS } from "./backend/camelot-v3-binding.js";
+import {
+  CAMELOT_SEPOLIA_USDC,
+  CAMELOT_SEPOLIA_WETH,
+} from "./backend/camelot-v3-protocol-adapter.js";
+import { CAMELOT_V3_ALLOWANCE_SPENDER_QUALIFICATION_REF } from "./backend/camelot-v3-qualified-spender.js";
 import { createPostgresPool, PostgresRunStore } from "./postgres-run-store.js";
 import { migratePostgres } from "./storage/migrations.js";
 import { runStoreContract } from "./store.contract.js";
@@ -192,6 +198,104 @@ integration("PostgresRunStore", () => {
     await expect(
       store.getAccountState("AAAAAAAA-AAAA-4AAA-8AAA-AAAAAAAAAAAA"),
     ).resolves.toEqual(snapshot);
+  });
+
+  it("persists the qualified spender in a reverse USDC to WETH snapshot", async () => {
+    if (pool === undefined) return;
+    const store = new PostgresRunStore({ pool, poolOwnership: "borrowed" });
+    const sender = "0x01bb7b44cc398aaa2b76ac6253f0f5634279db9d";
+    const recipient = "0x2222222222222222222222222222222222222222";
+    const blockNumber = "313328152";
+    const snapshot = accountStateSnapshotSchema.parse({
+      snapshotId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+      status: "AVAILABLE",
+      context: {
+        chainId: 421614,
+        protocol: "camelot-v3",
+        sender,
+        recipient,
+        tokenIn: { kind: "erc20", address: CAMELOT_SEPOLIA_USDC },
+        tokenOut: { kind: "erc20", address: CAMELOT_SEPOLIA_WETH },
+        amountInAtomic: "1000000000000000",
+      },
+      block: {
+        status: "VERIFIED",
+        chainId: 421614,
+        blockNumber,
+        blockHash: `0x${"b".repeat(64)}`,
+        observedAt: "2026-09-30T10:00:00.000Z",
+      },
+      balances: {
+        inputToken: {
+          account: sender,
+          asset: { kind: "erc20", address: CAMELOT_SEPOLIA_USDC },
+          metadata: {
+            symbol: "USDC",
+            decimals: 18,
+            decimalsSource: "onchain_verified",
+            verifiedAtBlock: "100",
+          },
+          explorerUrls: {},
+          status: "AVAILABLE",
+          amountAtomic: "2000000000000000",
+        },
+        outputToken: {
+          account: recipient,
+          asset: { kind: "erc20", address: CAMELOT_SEPOLIA_WETH },
+          metadata: {
+            symbol: "WETH",
+            decimals: 18,
+            decimalsSource: "onchain_verified",
+            verifiedAtBlock: "100",
+          },
+          explorerUrls: {},
+          status: "AVAILABLE",
+          amountAtomic: "0",
+        },
+        native: {
+          account: sender,
+          asset: { kind: "native" },
+          metadata: {
+            symbol: "ETH",
+            decimals: 18,
+            decimalsSource: "chain_config",
+          },
+          explorerUrls: {},
+          status: "AVAILABLE",
+          amountAtomic: "1000000000000000000",
+        },
+      },
+      allowance: {
+        status: "SUFFICIENT",
+        owner: sender,
+        tokenAddress: CAMELOT_SEPOLIA_USDC,
+        spender: {
+          status: "QUALIFIED",
+          address: CAMELOT_V3_ROUTER_ADDRESS,
+          qualificationRef: CAMELOT_V3_ALLOWANCE_SPENDER_QUALIFICATION_REF,
+        },
+        requiredAmountAtomic: "1000000000000000",
+        allowanceAtomic: "1000000000000000",
+        blockNumber,
+      },
+    });
+
+    await store.saveAccountState(snapshot);
+
+    const restored = await store.getAccountState(snapshot.snapshotId);
+    expect(restored).toEqual(snapshot);
+    expect(restored?.allowance).toMatchObject({
+      status: "SUFFICIENT",
+      tokenAddress: CAMELOT_SEPOLIA_USDC,
+      spender: {
+        status: "QUALIFIED",
+        address: CAMELOT_V3_ROUTER_ADDRESS,
+        qualificationRef: CAMELOT_V3_ALLOWANCE_SPENDER_QUALIFICATION_REF,
+      },
+      requiredAmountAtomic: "1000000000000000",
+      allowanceAtomic: "1000000000000000",
+      blockNumber,
+    });
   });
 
   it("surfaces database errors instead of falling back to memory", async () => {

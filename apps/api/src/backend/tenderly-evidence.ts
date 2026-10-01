@@ -9,6 +9,7 @@ import {
 } from "@parallax/contracts";
 import type { ProviderEvaluationResult } from "./provider-adapter.js";
 import type { ProvisionalJsonValue } from "./provider-result-boundary.js";
+import { validatedQuoteFetchedAt } from "./quote-timestamp.js";
 import type { TenderlyPreparedExecution } from "./tenderly-provider.js";
 
 export type TenderlyGenericEvidenceInput = {
@@ -314,6 +315,7 @@ function quoteField(
 ) {
   if (!isRecord(quote))
     return jsonField(null, source, reproducibility, blockNumber, fetchedAt);
+  const quoteFetchedAt = validatedQuoteFetchedAt(quote.fetchedAt) ?? fetchedAt;
   const estimatedAmountOut = quote.estimatedAmountOut;
   const minimumAmountOut = quote.minimumAmountOut;
   if (
@@ -323,7 +325,13 @@ function quoteField(
       (typeof minimumAmountOut !== "string" ||
         !/^\d+(?:\.\d+)?$/.test(minimumAmountOut)))
   ) {
-    return jsonField(null, source, reproducibility, blockNumber, fetchedAt);
+    return jsonField(
+      null,
+      source,
+      reproducibility,
+      blockNumber,
+      quoteFetchedAt,
+    );
   }
   return {
     value: {
@@ -333,7 +341,7 @@ function quoteField(
     source: source === "mock" ? ("mock" as const) : ("quote" as const),
     reproducibility,
     blockNumber,
-    fetchedAt,
+    fetchedAt: quoteFetchedAt,
   };
 }
 

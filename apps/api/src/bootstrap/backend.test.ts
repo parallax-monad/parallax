@@ -36,6 +36,75 @@ const environment = {
   MOSS_RUNTIME_VERSION: "confirmed-portable-baseline",
   MOSS_RUNTIME_REVISION: "moss-commit-123",
 };
+const reverseSender = "0x01bb7b44cc398aaa2b76ac6253f0f5634279db9d";
+const reverseUsdc = "0xb893E3334D4Bd6C5ba8277Fd559e99Ed683A9FC7";
+const reverseWeth = "0x980B62Da83eFf3D4576C647993b0c1D7faf17c73";
+const unqualifiedErc20 = "0x0000000000000000000000000000000000000abc";
+const qualifiedCamelotRouter = "0x171B925C51565F5D2a7d8C494ba3188D304EFD93";
+const qualifiedSpenderRef =
+  "be-103:usdc-weth-camelot-2026-09-29T10-09-52-993Z#evaluation.callTrace.actualSpender";
+const reverseTokenRegistry = {
+  chains: [{ chainId: 421614, symbol: "ETH", decimals: 18 }],
+  tokens: [
+    {
+      chainId: 421614,
+      address: reverseUsdc,
+      symbol: "USDC",
+      decimals: 18,
+      decimalsSource: "onchain_verified" as const,
+      verifiedAtBlock: "100",
+    },
+    {
+      chainId: 421614,
+      address: reverseWeth,
+      symbol: "WETH",
+      decimals: 18,
+      decimalsSource: "onchain_verified" as const,
+      verifiedAtBlock: "100",
+    },
+  ],
+};
+
+function createAccountStateRpcFetch(allowanceAtomic = "1000000000000000") {
+  const calls: Array<{
+    method: string;
+    params: readonly unknown[];
+  }> = [];
+  const fetchImplementation = vi.fn<typeof fetch>(async (_input, init) => {
+    const request = JSON.parse(String(init?.body)) as {
+      id: number;
+      method: string;
+      params: readonly unknown[];
+    };
+    calls.push({ method: request.method, params: request.params });
+
+    let result: unknown;
+    if (request.method === "eth_chainId") {
+      result = "0x66eee";
+    } else if (request.method === "eth_getBlockByNumber") {
+      result = { number: "0x64", hash: `0x${"ab".repeat(32)}` };
+    } else if (request.method === "eth_getBalance") {
+      result = "0xde0b6b3a7640000";
+    } else if (request.method === "eth_call") {
+      const transaction = request.params[0] as { data: string };
+      const amount = transaction.data.startsWith("0xdd62ed3e")
+        ? allowanceAtomic
+        : transaction.data.startsWith("0x70a08231")
+          ? "2000000000000000"
+          : undefined;
+      if (amount === undefined) throw new Error("Unexpected eth_call selector");
+      result = `0x${BigInt(amount).toString(16).padStart(64, "0")}`;
+    } else {
+      throw new Error(`Unexpected RPC method: ${request.method}`);
+    }
+
+    return new Response(
+      JSON.stringify({ jsonrpc: "2.0", id: request.id, result }),
+      { status: 200, headers: { "content-type": "application/json" } },
+    );
+  });
+  return { calls, fetchImplementation };
+}
 
 function checkRequest() {
   return {
@@ -53,6 +122,136 @@ function checkRequest() {
 }
 
 describe("backend Node runtime", () => {
+  it("exposes the #103-qualified spender through production account-state and immutable history", async () => {
+    const rpc = createAccountStateRpcFetch();
+    vi.stubGlobal("fetch", rpc.fetchImplementation);
+    const app = bootstrapBackendApp({
+      environment: {
+        ...environment,
+        ARBITRUM_RPC_URL: "https://arbitrum.example.test",
+      },
+      tokenRegistry: reverseTokenRegistry,
+    });
+
+    try {
+      const response = await app.fetch(
+        new Request("https://api.example.test/api/account-state", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            chainId: 421614,
+            protocol: "camelot-v3",
+            sender: reverseSender,
+            tokenIn: { kind: "erc20", address: reverseUsdc },
+            tokenOut: { kind: "erc20", address: reverseWeth },
+            amountIn: "0.001",
+          }),
+        }),
+      );
+      const snapshot = (await response.json()) as {
+        snapshotId: string;
+        allowance: unknown;
+      };
+
+      expect(response.status).toBe(200);
+      expect(snapshot.allowance).toMatchObject({
+        status: "SUFFICIENT",
+        spender: {
+          status: "QUALIFIED",
+          address: qualifiedCamelotRouter.toLowerCase(),
+          qualificationRef: qualifiedSpenderRef,
+        },
+        requiredAmountAtomic: "1000000000000000",
+        allowanceAtomic: "1000000000000000",
+        blockNumber: "100",
+      });
+      const allowanceCall = rpc.calls.find(
+        ({ method, params }) =>
+          method === "eth_call" &&
+          (params[0] as { data: string }).data.startsWith("0xdd62ed3e"),
+      );
+      expect(allowanceCall?.params[0]).toEqual({
+        to: reverseUsdc.toLowerCase(),
+        data: `0xdd62ed3e${reverseSender.slice(2).toLowerCase().padStart(64, "0")}${qualifiedCamelotRouter.slice(2).toLowerCase().padStart(64, "0")}`,
+      });
+
+      const requestCountAfterObservation = rpc.calls.length;
+      const historicalResponse = await app.fetch(
+        new Request(
+          `https://api.example.test/api/account-state/${snapshot.snapshotId}`,
+        ),
+      );
+      expect(historicalResponse.status).toBe(200);
+      await expect(historicalResponse.json()).resolves.toEqual(snapshot);
+      expect(rpc.calls).toHaveLength(requestCountAfterObservation);
+    } finally {
+      await app.close();
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("keeps an unqualified ERC-20 pair unavailable without querying allowance", async () => {
+    const rpc = createAccountStateRpcFetch();
+    vi.stubGlobal("fetch", rpc.fetchImplementation);
+    const app = bootstrapBackendApp({
+      environment: {
+        ...environment,
+        ARBITRUM_RPC_URL: "https://arbitrum.example.test",
+      },
+      tokenRegistry: {
+        ...reverseTokenRegistry,
+        tokens: [
+          ...reverseTokenRegistry.tokens,
+          {
+            chainId: 421614,
+            address: unqualifiedErc20,
+            symbol: "OTHER",
+            decimals: 18,
+            decimalsSource: "onchain_verified" as const,
+            verifiedAtBlock: "100",
+          },
+        ],
+      },
+    });
+
+    try {
+      const response = await app.fetch(
+        new Request("https://api.example.test/api/account-state", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            chainId: 421614,
+            protocol: "camelot-v3",
+            sender: reverseSender,
+            tokenIn: { kind: "erc20", address: unqualifiedErc20 },
+            tokenOut: { kind: "erc20", address: reverseWeth },
+            amountIn: "0.001",
+          }),
+        }),
+      );
+      const snapshot = (await response.json()) as {
+        allowance: unknown;
+      };
+
+      expect(response.status).toBe(200);
+      expect(snapshot.allowance).toMatchObject({
+        status: "UNAVAILABLE",
+        reason: "SPENDER_NOT_QUALIFIED",
+        spender: { status: "UNAVAILABLE", reason: "SPENDER_NOT_QUALIFIED" },
+      });
+      expect(
+        rpc.calls.some(
+          ({ method, params }) =>
+            method === "eth_call" &&
+            (params[0] as { data: string }).data.startsWith("0xdd62ed3e"),
+        ),
+      ).toBe(false);
+    } finally {
+      await app.close();
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("rejects a Trace source that would be silently ignored by a supplied composition", () => {
     const source = createTraceRpcEvidenceSource({
       client: { request: async () => undefined },

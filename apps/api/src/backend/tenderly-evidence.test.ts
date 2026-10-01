@@ -38,6 +38,7 @@ const prepared: TenderlyPreparedExecution = {
   quote: {
     estimatedAmountOut: "0.2",
     minimumAmountOut: "0.19",
+    fetchedAt: "2026-09-17T00:00:30.000Z",
     runtimeVersion: "camelot-v3",
     runtimeRevision: "revision-1",
   },
@@ -122,6 +123,7 @@ describe("Tenderly provider-neutral Evidence mapping", () => {
     expect(evidence.quote).toMatchObject({
       source: "quote",
       value: { estimatedAmountOut: "0.2", minimumAmountOut: "0.19" },
+      fetchedAt: "2026-09-17T00:00:30.000Z",
     });
     expect(evidence.action.source).toBe("external");
     expect(evidence.simulation.value).toMatchObject({

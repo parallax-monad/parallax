@@ -202,7 +202,6 @@ export class CamelotV3ProtocolAdapter
       { to: CAMELOT_SEPOLIA_QUOTER, data: `0x${data}` },
       blockTag(options),
     ]);
-    const fetchedAt = new Date().toISOString();
     const decoded = decodeQuote(raw);
     return {
       estimatedAmountOut: convertAtomicAmountToHuman(
@@ -217,7 +216,6 @@ export class CamelotV3ProtocolAdapter
       ...(options?.blockContext === undefined
         ? {}
         : { blockNumber: options.blockContext.blockNumber }),
-      fetchedAt,
       runtimeVersion: metadata.runtimeVersion,
       runtimeRevision: metadata.runtimeRevision,
     };

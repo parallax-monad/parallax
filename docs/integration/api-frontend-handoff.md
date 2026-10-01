@@ -562,11 +562,11 @@ integration or the complete P0 Demo Gate is accepted.
 
 The launcher reads the repository-root `.env` (`pnpm --filter @parallax/api
 start`). For the Arbitrum Native RPC route, set `ARBITRUM_RPC_URL` and include
-the chain and Camelot test USDC metadata in `PARALLAX_TOKEN_REGISTRY_JSON`:
+the chain and Camelot test USDC/WETH metadata in `PARALLAX_TOKEN_REGISTRY_JSON`:
 
 ```dotenv
 ARBITRUM_RPC_URL=https://sepolia-rollup.arbitrum.io/rpc
-PARALLAX_TOKEN_REGISTRY_JSON={"chains":[{"chainId":421614,"symbol":"ETH","decimals":18}],"tokens":[{"chainId":421614,"address":"0xb893E3334D4Bd6C5ba8277Fd559e99Ed683A9FC7","symbol":"USDC","decimals":18,"decimalsSource":"onchain_verified","verifiedAtBlock":"310131879"}]}
+PARALLAX_TOKEN_REGISTRY_JSON={"chains":[{"chainId":421614,"symbol":"ETH","decimals":18}],"tokens":[{"chainId":421614,"address":"0xb893E3334D4Bd6C5ba8277Fd559e99Ed683A9FC7","symbol":"USDC","decimals":18,"decimalsSource":"onchain_verified","verifiedAtBlock":"313915415"},{"chainId":421614,"address":"0x980B62Da83eFf3D4576C647993b0c1D7faf17c73","symbol":"WETH","decimals":18,"decimalsSource":"onchain_verified","verifiedAtBlock":"313915415"}]}
 CORS_ORIGIN=http://localhost:5173
 RUN_STORE_BACKEND=memory
 HOST=127.0.0.1
@@ -625,11 +625,93 @@ Invoke-RestMethod -Method Post `
   -Body $body
 ```
 
-For the UI's preselected quote flow, obtain a fresh `/api/quote` first and pass
-that quote with its matching request context as `expectationBaseline` to
-`/api/check`. Do not reuse a dated quote as if it were current. The selected
-quote is an expectation baseline, not a user-declared minimum or a guaranteed
-output.
+### Reverse ERC-20 route: USDC → WETH (#105)
+
+The qualified Arbitrum Sepolia pair is test USDC
+(`0xb893E3334D4Bd6C5ba8277Fd559e99Ed683A9FC7`) → WETH
+(`0x980B62Da83eFf3D4576C647993b0c1D7faf17c73`). Both are ERC-20 assets and
+their trusted registry metadata records 18 decimals (verified at block
+`313915415` in the
+[#105 reverse-asset qualification capture](../../fixtures/provider-registry/be-105/asset-coverage-reverse-2026-09-29T10-58-23.716Z/capture.json).
+The backend must have both addresses in its trusted token registry; a correct
+symbol or frontend token list alone is not sufficient.
+
+Fetch the selected quote with the exact input context. `/api/quote` requires a
+sender but has no `recipient` or `economicBoundary` field:
+
+```ts
+const quoteRequest = {
+  chainId: 421614,
+  protocol: "camelot-v3",
+  sender: connectedWalletAddress,
+  tokenIn: {
+    kind: "erc20",
+    address: "0xb893E3334D4Bd6C5ba8277Fd559e99Ed683A9FC7",
+  },
+  tokenOut: {
+    kind: "erc20",
+    address: "0x980B62Da83eFf3D4576C647993b0c1D7faf17c73",
+  },
+  amountIn: "0.001",
+};
+
+const quoteResponse = await post("/api/quote", quoteRequest);
+if (quoteResponse.status !== "available") {
+  // Show the unavailable reason; do not fabricate a quote baseline.
+  return;
+}
+```
+
+`amountIn` is a human-unit decimal string, not an atomic integer. For the
+qualified test USDC, `"0.001"` is interpreted using its trusted 18 decimals.
+Use an explicit `recipient` on `/api/check` even though the backend currently
+defaults an omitted recipient to `sender`; this makes the destination part of
+the submitted swap intent unambiguous.
+
+```ts
+const checkRequest = {
+  ...quoteRequest,
+  recipient: connectedWalletAddress,
+  economicBoundary: {
+    availability: "available",
+    minimumReceived: "0.00006",
+    source: "user_declared",
+  },
+  expectationBaseline: {
+    chainId: quoteRequest.chainId,
+    protocol: quoteRequest.protocol,
+    tokenIn: quoteRequest.tokenIn,
+    tokenOut: quoteRequest.tokenOut,
+    amountIn: quoteRequest.amountIn,
+    quote: quoteResponse.quote,
+  },
+};
+
+const checkResponse = await post("/api/check", checkRequest);
+```
+
+`minimumReceived` is expressed in human units of the **output token**. Here,
+`"0.00006"` means 0.00006 WETH (60,000,000,000,000 atomic units at 18
+decimals). When supplied, this user-declared threshold is bound to the
+prepared Camelot call's `amountOutMinimum`; it is not a quote value, a
+guaranteed result, or an automatically calculated slippage setting. Do not
+silently derive it from `estimatedAmountOut`. If no user threshold is set, use
+the contract's `unavailable` Economic Boundary variant instead. In that case,
+the current backend applies its existing 99%-of-pinned-quote floor; do not
+present that backend fallback as a user-declared minimum.
+
+Copy the exact `quoteResponse.quote` object into `expectationBaseline.quote`,
+including its `blockNumber`, `fetchedAt`, `runtimeVersion`, and
+`runtimeRevision`. Use `fetchedAt` as the backend quote-observation time for
+freshness context; do not replace it with the browser clock or reuse a stale
+quote. The baseline also repeats the exact chain, protocol, token pair, and
+`amountIn` used to fetch it. A selected quote is an expectation baseline, not
+transaction protection.
+
+For this ERC-20 → ERC-20 route, the backend-prepared unsigned router call has
+native `value: "0x0"`. That is a backend transaction invariant, not a request
+field for the frontend to construct or override. The check remains pre-sign:
+it does not sign, broadcast, or establish that an ERC-20 allowance is present.
 
 ### Reading the response correctly
 

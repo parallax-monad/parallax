@@ -6,19 +6,46 @@ import { describe, expect, it } from "vitest";
 const root = resolve(import.meta.dirname, "../..");
 const path =
   "fixtures/provider-registry/be-109/grail-usdc-2026-09-29T13-31-53-975Z/capture.json";
+const sourceSnapshotRoot =
+  "fixtures/provider-registry/be-109/grail-usdc-2026-09-29T13-31-53-975Z/source-snapshot";
 const bytes = readFileSync(resolve(root, path));
 const capture = JSON.parse(bytes.toString("utf8"));
 const sha = (data: string | Uint8Array) =>
   `sha256:${createHash("sha256").update(data).digest("hex")}`;
 
 describe("#109 bounded GRAIL feasibility capture", () => {
-  it("binds the source, immutable capture, and manifest", () => {
+  it("binds the historical source, immutable capture, and manifest", () => {
     expect(sha(bytes)).toBe(
       "sha256:450fdb8d6adf4ed0c49b351cc8ab75614e589edb96bca01b7933ed3f8c4728d7",
     );
     expect(capture.sourceHead).toBe("fab582d3ebdc33fc171a40bc79e0ec506162a855");
-    for (const [file, digest] of Object.entries(capture.provenance.manifest)) {
-      expect(sha(readFileSync(resolve(root, file)))).toBe(digest);
+    // This immutable capture describes sourceHead, not whatever code is current today.
+    expect(capture.provenance.manifest).toEqual({
+      "scripts/provider-probes/asset3-grail-feasibility.ts":
+        "sha256:0125f6bc267cdfd28a5d30c2aefe7aad82df2b1f3bb85b018faddabf56983f9a",
+      "apps/api/src/backend/camelot-v3-protocol-adapter.ts":
+        "sha256:0c509324edb0759bc269b846198a1cc39ff8b129e79c0003a33748ea476e6b0c",
+      "apps/api/src/backend/camelot-v3-binding.ts":
+        "sha256:2dfc23a0269d0c834b4143a038762f2304727d7a6083e7b367309307d43d282a",
+      "apps/api/src/backend/native-rpc-client.ts":
+        "sha256:a223781a34a7c1e40cae244575aa71aebe588a24e4e31799492047b04228f2b1",
+      "apps/api/src/trusted-token-registry.ts":
+        "sha256:c114dcd651d0bf6406a5c19c7595489dd407f266ef9102cf09289bb9a2f34802",
+      "fixtures/provider-registry/be-103/usdc-weth-camelot-2026-09-29T10-09-52-993Z/capture.json":
+        "sha256:5a7ed69ca2dcf0413f79ddd29749e6f0ae652da91493814fece00cb0963b7b20",
+    });
+  });
+
+  it("verifies archived sourceHead bytes against the captured manifest", () => {
+    for (const [sourcePath, expectedDigest] of Object.entries(
+      capture.provenance.manifest,
+    )) {
+      const snapshot = readFileSync(
+        resolve(root, sourceSnapshotRoot, sourcePath),
+      );
+      expect(sha(snapshot), `historical source snapshot: ${sourcePath}`).toBe(
+        expectedDigest,
+      );
     }
   });
 

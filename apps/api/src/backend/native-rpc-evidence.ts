@@ -22,6 +22,7 @@ import type {
   ProvisionalCandidateFieldInput,
   ProvisionalJsonValue,
 } from "./provider-result-boundary.js";
+import { validatedQuoteFetchedAt } from "./quote-timestamp.js";
 
 export { ARBITRUM_SEPOLIA_CHAIN_ID };
 
@@ -600,6 +601,7 @@ function quoteField(
   fetchedAt: string,
 ) {
   if (!isRecord(quote)) return jsonField(null, source, blockNumber, fetchedAt);
+  const quoteFetchedAt = validatedQuoteFetchedAt(quote.fetchedAt) ?? fetchedAt;
   const estimatedAmountOut = quote.estimatedAmountOut;
   const minimumAmountOut = quote.minimumAmountOut;
   if (
@@ -609,7 +611,7 @@ function quoteField(
       (typeof minimumAmountOut !== "string" ||
         !/^\d+(?:\.\d+)?$/.test(minimumAmountOut)))
   ) {
-    return jsonField(null, source, blockNumber, fetchedAt);
+    return jsonField(null, source, blockNumber, quoteFetchedAt);
   }
   return {
     value: {
@@ -619,7 +621,7 @@ function quoteField(
     source: source === "mock" ? "mock" : "quote",
     reproducibility: source === "mock" ? "NOT_REPRODUCIBLE" : "REPRODUCIBLE",
     blockNumber,
-    fetchedAt,
+    fetchedAt: quoteFetchedAt,
   };
 }
 
