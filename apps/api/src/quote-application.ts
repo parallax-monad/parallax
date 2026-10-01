@@ -19,7 +19,7 @@ import {
   type QuoteAgentFlowPort,
 } from "./ports.js";
 import type { BackendRuntime } from "./runtime-config.js";
-import { tokenDecimals } from "./token-decimals.js";
+import { resolveTokenMetadata } from "./token-metadata.js";
 
 export type QuoteApiErrorCode =
   | "INVALID_REQUEST"
@@ -106,20 +106,17 @@ export class QuoteApplicationService {
     }
 
     let candidate: unknown;
+    let tokenMetadata: ReturnType<typeof resolveTokenMetadata>;
     try {
+      tokenMetadata = resolveTokenMetadata(
+        this.dependencies.runtime.tokenRegistry,
+        normalized.intent,
+      );
       candidate = await quoteFlow.quote({
         runId: this.createRunId(),
         intent: normalized.intent,
-        tokenInDecimals: tokenDecimals(
-          this.dependencies.runtime,
-          normalized.intent.tokenIn,
-          normalized.intent.chainId,
-        ),
-        tokenOutDecimals: tokenDecimals(
-          this.dependencies.runtime,
-          normalized.intent.tokenOut,
-          normalized.intent.chainId,
-        ),
+        tokenInDecimals: tokenMetadata.tokenIn.decimals,
+        tokenOutDecimals: tokenMetadata.tokenOut.decimals,
         moss: this.dependencies.runtime.config.moss,
       });
     } catch (error) {
@@ -139,7 +136,7 @@ export class QuoteApplicationService {
       });
     }
 
-    return { status: 200, body: result.data };
+    return { status: 200, body: { ...result.data, tokenMetadata } };
   }
 }
 

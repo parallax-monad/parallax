@@ -1,5 +1,10 @@
 import { type ServerType, serve as serveNode } from "@hono/node-server";
-import { quoteResultSchema, serializeJson } from "@parallax/contracts";
+import {
+  assetIdentity,
+  CAMELOT_V3_PROTOCOL_ID,
+  quoteResultSchema,
+  serializeJson,
+} from "@parallax/contracts";
 import { validateMossRuntimePathSync } from "@parallax/moss-bridge";
 import type {
   KuruLiveQuoteRunner,
@@ -29,6 +34,7 @@ import type {
   ArbitrumProductionComposition,
 } from "../backend/arbitrum-composition.js";
 import { createArbitrumProductionComposition } from "../backend/arbitrum-composition.js";
+import { CAMELOT_SEPOLIA_USDC } from "../backend/camelot-v3-protocol-adapter.js";
 import { createCamelotV3QualifiedAllowanceSpenderResolver } from "../backend/camelot-v3-qualified-spender.js";
 import type { BackendCompositionRuntime } from "../backend/composition.js";
 import {
@@ -50,6 +56,7 @@ import {
 import { QuoteApplicationService } from "../quote-application.js";
 import { createAccountStateApp } from "../routes/account-state.js";
 import { createHealthApp, type ReadinessCheck } from "../routes/health.js";
+import { createP0ConfigApp } from "../routes/p0-config.js";
 import { createReplayApp } from "../routes/replay.js";
 import { createRunQueryApp } from "../routes/runs.js";
 import { RunQueryApplicationService } from "../run-query.js";
@@ -219,6 +226,51 @@ export function createBackendApp(
   );
   app.route("/", createCheckApp(checkService));
   app.route("/", createQuoteApp(quoteService));
+  app.route(
+    "/",
+    createP0ConfigApp(
+      dependencies.runtime.tokenRegistry,
+      (() => {
+        const selectedRoute = dependencies.routes?.find(
+          (route) => route.chainId === ARBITRUM_SEPOLIA_CHAIN_ID,
+        );
+        if (selectedRoute !== undefined) {
+          const capability = selectedRoute.p0Route;
+          return (
+            capability?.protocol === CAMELOT_V3_PROTOCOL_ID &&
+            assetIdentity({
+              chainId: selectedRoute.chainId,
+              asset: capability.tokenIn,
+            }) ===
+              assetIdentity({
+                chainId: ARBITRUM_SEPOLIA_CHAIN_ID,
+                asset: { kind: "native" },
+              }) &&
+            assetIdentity({
+              chainId: selectedRoute.chainId,
+              asset: capability.tokenOut,
+            }) ===
+              assetIdentity({
+                chainId: ARBITRUM_SEPOLIA_CHAIN_ID,
+                asset: {
+                  kind: "erc20",
+                  address: CAMELOT_SEPOLIA_USDC,
+                },
+              })
+          );
+        }
+        return (
+          dependencies.composition?.chainRegistry?.has(
+            ARBITRUM_SEPOLIA_CHAIN_ID,
+          ) === true &&
+          dependencies.composition.protocolRegistry?.has(
+            ARBITRUM_SEPOLIA_CHAIN_ID,
+            CAMELOT_V3_PROTOCOL_ID,
+          ) === true
+        );
+      })(),
+    ),
+  );
   app.route("/", createRunQueryApp(runQueryService));
   app.route("/", createAccountStateApp(accountStateService));
   app.route("/", createReplayApp(replayService));
@@ -482,6 +534,24 @@ export function bootstrapBackendApp(
       : [
           {
             chainId: ARBITRUM_SEPOLIA_CHAIN_ID,
+            ...(arbitrumComposition.chainRegistry.has(
+              ARBITRUM_SEPOLIA_CHAIN_ID,
+            ) &&
+            arbitrumComposition.protocolRegistry.has(
+              ARBITRUM_SEPOLIA_CHAIN_ID,
+              CAMELOT_V3_PROTOCOL_ID,
+            )
+              ? {
+                  p0Route: {
+                    protocol: CAMELOT_V3_PROTOCOL_ID,
+                    tokenIn: { kind: "native" as const },
+                    tokenOut: {
+                      kind: "erc20" as const,
+                      address: CAMELOT_SEPOLIA_USDC,
+                    },
+                  },
+                }
+              : {}),
             composition: {
               runStore: arbitrumComposition.runStore,
               normalize: (input: unknown) =>

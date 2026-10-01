@@ -902,6 +902,23 @@ describe("BackendPipeline", () => {
     await expect(response.json()).resolves.toEqual({
       status: "unavailable",
       reason: "QUOTE_UNAVAILABLE",
+      tokenMetadata: {
+        tokenIn: {
+          chainId: 143,
+          asset: { kind: "native" },
+          symbol: "MON",
+          decimals: 18,
+          decimalsSource: "chain_config",
+        },
+        tokenOut: {
+          chainId: 143,
+          asset: { kind: "erc20", address: tokenRegistry.tokens[0].address },
+          symbol: "USDC",
+          decimals: 6,
+          decimalsSource: "onchain_verified",
+          verifiedAtBlock: "90000000",
+        },
+      },
     });
   });
 });
