@@ -7,7 +7,6 @@ import {
   validateForm,
 } from "./form";
 import {
-  ARBITRUM_SEPOLIA_USDC_ADDRESS,
   checkSwap,
   fetchQuote,
   formFromRunResult,
@@ -255,19 +254,10 @@ describe("checkSwap API adapter", () => {
     expect(result.simulatedOutput).toBe("unavailable");
   });
 
-  test("sends the selected quote as an expectation baseline", async () => {
+  test("does not send a client expectation baseline", async () => {
     const request = vi
       .fn<typeof fetch>()
       .mockResolvedValue(jsonResponse(completed));
-    const quote = {
-      source: "quote" as const,
-      estimatedAmountOut: "0.000230",
-      minimumAmountOut: "0.000228",
-      blockNumber: "91383505",
-      fetchedAt: "2026-08-08T12:00:00.000Z",
-      runtimeVersion: "arbitrum-camelot-v3",
-      runtimeRevision: "native-rpc",
-    };
 
     await checkSwap(
       {
@@ -275,33 +265,12 @@ describe("checkSwap API adapter", () => {
         protocol: "camelot-v3",
         tokenIn: "ETH",
         tokenOut: "USDC",
-        expectationBaseline: {
-          chainId: 421614,
-          protocol: "camelot-v3",
-          tokenIn: { kind: "native" },
-          tokenOut: {
-            kind: "erc20",
-            address: ARBITRUM_SEPOLIA_USDC_ADDRESS,
-          },
-          amountIn: "0.001",
-          quote,
-        },
       },
       { fetch: request },
     );
 
     const sent = JSON.parse(String(request.mock.calls[0]?.[1]?.body));
-    expect(sent.expectationBaseline).toEqual({
-      chainId: 421614,
-      protocol: "camelot-v3",
-      tokenIn: { kind: "native" },
-      tokenOut: {
-        kind: "erc20",
-        address: ARBITRUM_SEPOLIA_USDC_ADDRESS,
-      },
-      amountIn: "0.001",
-      quote,
-    });
+    expect(sent.expectationBaseline).toBeUndefined();
   });
   test("preserves a terminal NO_ROUTE STOP without pinned-block provenance", async () => {
     const request = vi.fn<typeof fetch>().mockResolvedValue(
@@ -731,7 +700,6 @@ describe("fetchQuote", () => {
     expect(state).toEqual({
       status: "available",
       quote: {
-        source: "quote",
         estimatedAmountOut: "0.000223",
         minimumAmountOut: "0.000221",
         blockNumber: "91383505",

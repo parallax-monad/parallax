@@ -40,11 +40,6 @@ export type CheckSwapInput = {
   minimumReceivedSource?: BoundarySource;
   slippage?: string;
   expectationBaseline?: {
-    chainId: number;
-    protocol: Protocol;
-    tokenIn: { kind: "native" } | { kind: "erc20"; address: string };
-    tokenOut: { kind: "native" } | { kind: "erc20"; address: string };
-    amountIn: string;
     quote: QuotePreview;
   };
 };
@@ -59,7 +54,6 @@ export type QuoteSwapInput = {
 };
 
 export type QuotePreview = {
-  source: "quote";
   estimatedAmountOut: string;
   minimumAmountOut?: string;
   blockNumber: string;
