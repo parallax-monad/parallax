@@ -254,7 +254,46 @@ describe("checkSwap API adapter", () => {
     expect(result.simulatedOutput).toBe("unavailable");
   });
 
-  test("does not send a client expectation baseline", async () => {
+  test("sends the selected quote as an expectation baseline", async () => {
+    const request = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(jsonResponse(completed));
+    const quote = {
+      source: "quote" as const,
+      estimatedAmountOut: "0.000230",
+      minimumAmountOut: "0.000228",
+      blockNumber: "91383505",
+      fetchedAt: "2026-08-08T12:00:00.000Z",
+      runtimeVersion: "arbitrum-camelot-v3",
+      runtimeRevision: "native-rpc",
+    };
+
+    await checkSwap(
+      {
+        ...input,
+        protocol: "camelot-v3",
+        tokenIn: "ETH",
+        tokenOut: "USDC",
+        expectationBaseline: {
+          chainId: 421614,
+          protocol: "camelot-v3",
+          tokenIn: { kind: "native" },
+          tokenOut: {
+            kind: "erc20",
+            address: "0xb893E3334D4Bd6C5ba8277Fd559e99Ed683A9FC7",
+          },
+          amountIn: "0.01",
+          quote,
+        },
+      },
+      { fetch: request },
+    );
+
+    const sent = JSON.parse(String(request.mock.calls[0]?.[1]?.body));
+    expect(sent.expectationBaseline.quote).toEqual(quote);
+  });
+
+  test("does not send a client expectation baseline when quote is unavailable", async () => {
     const request = vi
       .fn<typeof fetch>()
       .mockResolvedValue(jsonResponse(completed));
@@ -700,6 +739,7 @@ describe("fetchQuote", () => {
     expect(state).toEqual({
       status: "available",
       quote: {
+        source: "quote",
         estimatedAmountOut: "0.000223",
         minimumAmountOut: "0.000221",
         blockNumber: "91383505",

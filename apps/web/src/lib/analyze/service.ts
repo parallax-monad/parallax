@@ -520,6 +520,7 @@ function mapRun(
 }
 
 function body(input: CheckSwapInput) {
+  const baseline = input.expectationBaseline;
   return {
     ...(input.parentRunId ? { parentRunId: input.parentRunId } : {}),
     chainId: getChainIdForProtocol(input.protocol),
@@ -535,10 +536,26 @@ function body(input: CheckSwapInput) {
           source: "user_declared",
         }
       : { availability: "unavailable", source: "unavailable" },
+    ...(baseline ? { expectationBaseline: baseline } : {}),
   };
 }
 
 export type CheckOptions = { fetch?: typeof fetch; signal?: AbortSignal };
+
+export function expectationBaseline(
+  input: QuoteSwapInput,
+  quote: QuotePreview,
+): NonNullable<CheckSwapInput["expectationBaseline"]> {
+  const chainId = getChainIdForProtocol(input.protocol);
+  return {
+    chainId,
+    protocol: input.protocol,
+    tokenIn: asset(input.tokenIn, chainId),
+    tokenOut: asset(input.tokenOut, chainId),
+    amountIn: input.amountIn,
+    quote,
+  };
+}
 
 /** `/api/quote` is a strict exact-input body: no boundary, no parent, no slippage. */
 function quoteBody(input: QuoteSwapInput) {
@@ -554,6 +571,7 @@ function quoteBody(input: QuoteSwapInput) {
 
 function quotePreview(value: unknown): QuotePreview | undefined {
   const quote = obj(value);
+  const source = str(quote?.source);
   const estimatedAmountOut = str(quote?.estimatedAmountOut);
   const blockNumber = str(quote?.blockNumber);
   const runtimeVersion = str(quote?.runtimeVersion);
@@ -561,6 +579,7 @@ function quotePreview(value: unknown): QuotePreview | undefined {
   // An available Quote is only publishable with its stage block and runtime
   // identity, so a partial payload is treated as an invalid response instead.
   if (
+    source !== "quote" ||
     !estimatedAmountOut ||
     !blockNumber ||
     !runtimeVersion ||
@@ -568,6 +587,7 @@ function quotePreview(value: unknown): QuotePreview | undefined {
   )
     return;
   return {
+    source: "quote",
     estimatedAmountOut,
     minimumAmountOut: str(quote?.minimumAmountOut),
     blockNumber,

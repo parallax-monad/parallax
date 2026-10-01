@@ -23,6 +23,7 @@ import {
 } from "@/lib/analyze/form";
 import {
   checkSwap,
+  expectationBaseline,
   fetchQuote,
   formFromRunResult,
   loadRun,
@@ -244,6 +245,19 @@ export function WalletApp({ language }: { language: Language }) {
       onSettle: async () => {
         const nextResult = await checkSwap({
           ...toInput(submitted, parent?.runId),
+          ...(quote.status === "available"
+            ? {
+                expectationBaseline: expectationBaseline(
+                  {
+                    protocol: submitted.protocol,
+                    tokenIn: submitted.tokenIn,
+                    tokenOut: submitted.tokenOut,
+                    amountIn: submitted.amountIn,
+                  },
+                  quote.quote,
+                ),
+              }
+            : {}),
         });
         setStoredRunId(backendRunId(nextResult));
         setResult(nextResult);
