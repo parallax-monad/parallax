@@ -17,8 +17,12 @@ const bytes = readFileSync(
   ),
 );
 const capture = JSON.parse(bytes.toString("utf8"));
+const canonicalGitText = (data: Uint8Array) =>
+  Buffer.from(data).toString("utf8").replace(/\r\n/g, "\n");
 const sha = (data: string | Uint8Array) =>
-  `sha256:${createHash("sha256").update(data).digest("hex")}`;
+  `sha256:${createHash("sha256")
+    .update(typeof data === "string" ? data : canonicalGitText(data))
+    .digest("hex")}`;
 
 describe("#90 endpoint source classification without network requests", () => {
   it.each([
@@ -124,6 +128,14 @@ describe("#90 simulated source consistency guards", () => {
 });
 
 describe("#90 historical Arbitrum One capture static integrity", () => {
+  it("canonicalizes CRLF checkouts to the historical Git LF bytes", () => {
+    const crlf = Buffer.from(
+      bytes.toString("utf8").replace(/(?<!\r)\n/g, "\r\n"),
+      "utf8",
+    );
+    expect(sha(crlf)).toBe(sha(bytes));
+  });
+
   it("preserves immutable historical capture bytes and source identities", () => {
     expect(sha(bytes)).toBe(
       "sha256:da79405cbf55d49d71df568371ba6af222e3d82669e172ea526e867f1560760c",
