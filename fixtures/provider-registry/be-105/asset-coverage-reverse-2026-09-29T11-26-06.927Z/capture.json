@@ -1,0 +1,424 @@
+{
+  "schemaVersion": "be-105-asset-coverage-reverse-live-v1",
+  "exerciseStatus": "COMPLETED",
+  "gateStatus": "PASS",
+  "real": true,
+  "readOnly": true,
+  "signed": false,
+  "broadcast": false,
+  "endpointClass": "environment-supplied",
+  "baseReference": "origin/main",
+  "repositoryHeadAtCapture": "40be2a4078b980246d981e31a429512de1091991",
+  "repositoryTreeAtCapture": "51bc8d14f8359db8c6f0c2d0ca98b8ba5dc57a41",
+  "originMainAtCapture": "811e2b80fd6d6db6ccee5da6f4a518a6b66ba6c7",
+  "startedAt": "2026-09-29T11:25:58.139Z",
+  "completedAt": "2026-09-29T11:26:06.927Z",
+  "source": {
+    "acceptedIssueScenario": "#105 / BE-103 real USDC -> WETH Camelot V3 qualification",
+    "fixture": "fixtures/provider-registry/be-103/usdc-weth-camelot-2026-09-29T10-09-52-993Z/capture.json",
+    "fixtureSha256": "5a7ed69ca2dcf0413f79ddd29749e6f0ae652da91493814fece00cb0963b7b20",
+    "fixtureStatus": "QUALIFIED_REAL",
+    "selectedSender": "0x01bb7b44cc398aaa2b76ac6253f0f5634279db9d",
+    "addresses": {
+      "usdc": "0xb893E3334D4Bd6C5ba8277Fd559e99Ed683A9FC7",
+      "weth": "0x980B62Da83eFf3D4576C647993b0c1D7faf17c73",
+      "factory": "0xaA37Bea711D585478E1c04b04707cCb0f10D762a",
+      "pool": "0x3965361ea4f9000ae3cf995f553115b2832d0e2d",
+      "quoter": "0xe49ef2F48539EA7498605CC1B3a242042cb5FC83",
+      "router": "0x171B925C51565F5D2a7d8C494ba3188D304EFD93"
+    },
+    "expected": {
+      "amountInAtomic": "1000000000000000",
+      "amountOutAtomic": "62941960793078",
+      "amountOutMinimumAtomic": "62312541185147",
+      "amountOutMinimumPolicy": "99_percent_of_pinned_quote_floor",
+      "quoteBlockNumber": "313915415"
+    },
+    "request": {
+      "chainId": 421614,
+      "protocol": "camelot-v3",
+      "sender": "0x01bb7b44cc398aaa2b76ac6253f0f5634279db9d",
+      "tokenIn": {
+        "kind": "erc20",
+        "address": "0xb893E3334D4Bd6C5ba8277Fd559e99Ed683A9FC7"
+      },
+      "tokenOut": {
+        "kind": "erc20",
+        "address": "0x980B62Da83eFf3D4576C647993b0c1D7faf17c73"
+      },
+      "amountIn": "0.001"
+    },
+    "baseline": {
+      "chainId": 421614,
+      "protocol": "camelot-v3",
+      "tokenIn": {
+        "kind": "erc20",
+        "address": "0xb893E3334D4Bd6C5ba8277Fd559e99Ed683A9FC7"
+      },
+      "tokenOut": {
+        "kind": "erc20",
+        "address": "0x980B62Da83eFf3D4576C647993b0c1D7faf17c73"
+      },
+      "amountIn": "0.001",
+      "quote": {
+        "estimatedAmountOut": "0.000062941960793078",
+        "source": "quote",
+        "blockNumber": "313933597",
+        "fetchedAt": "2026-09-29T11:25:59.907Z",
+        "runtimeVersion": "arbitrum-camelot-v3",
+        "runtimeRevision": "native-rpc"
+      }
+    },
+    "productConstantsAgreeWithScenario": true
+  },
+  "tokenRegistry": {
+    "chains": [
+      {
+        "chainId": 421614,
+        "symbol": "ETH",
+        "decimals": 18
+      }
+    ],
+    "tokens": [
+      {
+        "chainId": 421614,
+        "address": "0xb893E3334D4Bd6C5ba8277Fd559e99Ed683A9FC7",
+        "symbol": "USDC",
+        "decimals": 18,
+        "decimalsSource": "onchain_verified",
+        "verifiedAtBlock": "313915415"
+      },
+      {
+        "chainId": 421614,
+        "address": "0x980B62Da83eFf3D4576C647993b0c1D7faf17c73",
+        "symbol": "WETH",
+        "decimals": 18,
+        "decimalsSource": "onchain_verified",
+        "verifiedAtBlock": "313915415"
+      }
+    ]
+  },
+  "quoteEndpoint": {
+    "httpStatus": 200,
+    "status": "available",
+    "blockNumber": "313933597",
+    "fetchedAt": "2026-09-29T11:25:59.907Z",
+    "fetchedAtExposed": true,
+    "runtimeVersion": "arbitrum-camelot-v3",
+    "runtimeRevision": "native-rpc",
+    "estimatedAmountOut": "0.000062941960793078",
+    "amountOutAtomic": "62941960793078",
+    "observedRpcRequests": 3
+  },
+  "run": {
+    "runId": "e61468b9-079e-4652-b784-a5ec0a04531d",
+    "httpStatus": 200,
+    "status": "completed",
+    "verdict": "UNKNOWN",
+    "summary": "Live check could not establish a trustworthy result",
+    "simulatorPinnedBlock": "313933600",
+    "createdAt": "2026-09-29T11:26:00.198Z",
+    "responseSha256": "sha256:8d88615715cf278463cf25edc6cc010af8056fa3294c6663f61598b1b3ec7ecd",
+    "persistedRunHttpStatus": 200,
+    "persistedRunStatus": "completed",
+    "persistedResultSha256": "sha256:8d88615715cf278463cf25edc6cc010af8056fa3294c6663f61598b1b3ec7ecd",
+    "parentRunId": null,
+    "realizedQuote": {
+      "status": "AVAILABLE",
+      "estimatedAmountOut": "0.000062941960793078",
+      "amountOutAtomic": "62941960793078",
+      "blockNumber": "313933600",
+      "fetchedAt": "2026-09-29T11:26:03.344Z",
+      "runtimeVersion": "arbitrum-camelot-v3",
+      "runtimeRevision": "native-rpc"
+    },
+    "observedRpcRequests": 14
+  },
+  "p0": {
+    "expectationBaseline": {
+      "status": "AVAILABLE",
+      "chainId": 421614,
+      "protocol": "camelot-v3",
+      "tokenIn": "0xb893e3334d4bd6c5ba8277fd559e99ed683a9fc7",
+      "tokenOut": "0x980b62da83eff3d4576c647993b0c1d7faf17c73",
+      "amountInAtomic": "1000000000000000",
+      "amountOutAtomic": "62941960793078",
+      "quoteId": "sha256:5ad19df78f29b900d9dda3a50394c24b8b53df49dcadc4ef1625cf92f6057684",
+      "blockNumber": "313933597",
+      "observedAt": "2026-09-29T11:25:59.907Z",
+      "provenance": "source=quote;runtime=arbitrum-camelot-v3@native-rpc"
+    },
+    "quoteFidelity": {
+      "status": "UNKNOWN",
+      "reason": "EVIDENCE_NOT_VERIFIED"
+    },
+    "cause": {
+      "status": "NOT_VERIFIED"
+    },
+    "constraints": [],
+    "evidenceState": "INCOMPLETE",
+    "transactionProtection": {
+      "status": "NOT_APPLICABLE",
+      "source": "unavailable"
+    },
+    "remediation": {
+      "status": "NOT_RUN"
+    }
+  },
+  "execution": {
+    "callStatus": "SUCCEEDED",
+    "callReturnDataFingerprint": "sha256:f14c8e19d34e8655893299dc687a50ce1ae493d5a2794d0ae31631f7434cac58",
+    "gasStatus": "AVAILABLE",
+    "gasUnits": "269171",
+    "validityAtExecution": "VALID",
+    "blockNumber": "313933600",
+    "blockHash": "0x764979bba753a384fdc9d8d35cb5a16dd9b74c590f6021da07243b6b661e59a6",
+    "observedAt": "2026-09-29T11:26:03.344Z",
+    "simulatorPinnedBlock": "313933600",
+    "transactionBindingPresent": true,
+    "preparedTransactionFingerprint": "sha256:48bebbf5c6155cf5d286b1708d98cfee9d638fca2318b26ff7b2a5090ca9a65b",
+    "failureStage": null,
+    "reason": null,
+    "uncheckedCapabilities": [
+      "receipt",
+      "outcome",
+      "assetChanges",
+      "state-diff",
+      "logs",
+      "traces"
+    ],
+    "executionBindingLevel": "BOUND",
+    "executionBindingCriteria": {
+      "callSucceeded": true,
+      "callFingerprintRecorded": true,
+      "gasAvailable": true,
+      "gasUnitsPositive": true,
+      "validityValid": true,
+      "blockHashRecorded": true,
+      "transactionBindingPresent": true,
+      "independentInspectionOk": true,
+      "bindingMatchesPublic": true
+    }
+  },
+  "preparedTransaction": {
+    "selector": "0xbc651188",
+    "inspectionOk": true,
+    "inspectionReason": null,
+    "intentNormalized": true,
+    "tokenIn": "0xb893e3334d4bd6c5ba8277fd559e99ed683a9fc7",
+    "tokenOut": "0x980b62da83eff3d4576c647993b0c1d7faf17c73",
+    "sender": "0x01bb7b44cc398aaa2b76ac6253f0f5634279db9d",
+    "recipient": "0x01bb7b44cc398aaa2b76ac6253f0f5634279db9d",
+    "amountInAtomic": "1000000000000000",
+    "amountOutMinimumAtomic": "62312541185147",
+    "expectedAmountOutMinimumAtomic": "62312541185147",
+    "router": "0x171B925C51565F5D2a7d8C494ba3188D304EFD93",
+    "from": "0x01bb7b44cc398aaa2b76ac6253f0f5634279db9d",
+    "to": "0x171B925C51565F5D2a7d8C494ba3188D304EFD93",
+    "value": "0x0",
+    "rawValue": "0x0",
+    "dataFingerprint": "sha256:34cdd3c306b7b6ce85d1d34756ad3f5c31770da8d314532cb684038cfd04838d",
+    "preparedTransactionFingerprint": "sha256:48bebbf5c6155cf5d286b1708d98cfee9d638fca2318b26ff7b2a5090ca9a65b",
+    "productPreparedTransactionFingerprint": "sha256:48bebbf5c6155cf5d286b1708d98cfee9d638fca2318b26ff7b2a5090ca9a65b",
+    "traceRpcTransactionFingerprint": "sha256:48bebbf5c6155cf5d286b1708d98cfee9d638fca2318b26ff7b2a5090ca9a65b",
+    "publicBindingMatchesInspection": true,
+    "publicBinding": {
+      "chainId": 421614,
+      "protocol": "camelot-v3",
+      "sender": "0x01bb7b44cc398aaa2b76ac6253f0f5634279db9d",
+      "recipient": "0x01bb7b44cc398aaa2b76ac6253f0f5634279db9d",
+      "tokenIn": "0xb893e3334d4bd6c5ba8277fd559e99ed683a9fc7",
+      "tokenOut": "0x980b62da83eff3d4576c647993b0c1d7faf17c73",
+      "amountInAtomic": "1000000000000000",
+      "amountOutMinimumAtomic": "62312541185147",
+      "router": "0x171B925C51565F5D2a7d8C494ba3188D304EFD93",
+      "from": "0x01bb7b44cc398aaa2b76ac6253f0f5634279db9d",
+      "to": "0x171B925C51565F5D2a7d8C494ba3188D304EFD93",
+      "value": "0x0",
+      "dataFingerprint": "sha256:34cdd3c306b7b6ce85d1d34756ad3f5c31770da8d314532cb684038cfd04838d"
+    }
+  },
+  "providerEvidence": {
+    "providerId": "native-rpc-arbitrum",
+    "providerStatus": "UNKNOWN",
+    "integrationStatus": "OK",
+    "executionStatus": "SUCCESS",
+    "quoteStatus": "AVAILABLE",
+    "quoteSource": "quote",
+    "quoteReproducibility": "REPRODUCIBLE",
+    "provenance": {
+      "fetchedAt": "2026-09-29T11:26:03.344Z",
+      "mode": "LIVE",
+      "source": "rpc",
+      "simulationBlock": "313933600",
+      "runtime": {
+        "runtimeVersion": "arbitrum-camelot-v3",
+        "runtimeRevision": "native-rpc"
+      }
+    },
+    "checkedScope": [
+      "native-rpc.eth_call",
+      "native-rpc.estimateGas",
+      "native-rpc.pinned-block"
+    ],
+    "unknownScope": [
+      "receipt",
+      "outcome",
+      "assetChanges",
+      "simulation",
+      "freshness"
+    ],
+    "assetChangeAssessment": "UNKNOWN"
+  },
+  "accountState": {
+    "httpStatus": 200,
+    "snapshotId": "1f28bbf8-9273-407c-bf70-f4ae6f11e23a",
+    "snapshotStatus": "AVAILABLE",
+    "block": {
+      "status": "VERIFIED",
+      "chainId": 421614,
+      "blockNumber": "313933618",
+      "blockHash": "0xe2a0c7b534b25c9cc67978d2dd4fe49fc098fa88d5f23b2c170cdab935c99e49",
+      "observedAt": "2026-09-29T11:26:06.925Z"
+    },
+    "inputTokenBalance": {
+      "status": "AVAILABLE",
+      "amountAtomic": "87898181500507860645523021",
+      "symbol": "USDC",
+      "decimals": 18,
+      "decimalsSource": "onchain_verified",
+      "verifiedAtBlock": "313915415"
+    },
+    "outputTokenBalance": {
+      "status": "AVAILABLE",
+      "amountAtomic": "0"
+    },
+    "nativeBalance": {
+      "status": "AVAILABLE",
+      "amountAtomic": "70270868758068858"
+    },
+    "allowance": {
+      "status": "SUFFICIENT",
+      "owner": "0x01bb7b44cc398aaa2b76ac6253f0f5634279db9d",
+      "tokenAddress": "0xb893e3334d4bd6c5ba8277fd559e99ed683a9fc7",
+      "requiredAmountAtomic": "1000000000000000",
+      "allowanceAtomic": "115792089237316195423570985008687907853269984665640564039427584007913129639935",
+      "blockNumber": "313933618",
+      "spenderStatus": "QUALIFIED",
+      "spenderAddress": "0x171b925c51565f5d2a7d8c494ba3188d304efd93",
+      "qualificationRef": "be-103:usdc-weth-camelot-2026-09-29T10-09-52-993Z#evaluation.callTrace.actualSpender",
+      "reason": null
+    },
+    "observedRpcRequests": 8,
+    "historicalRead": {
+      "httpStatus": 200,
+      "matchesQueryResponse": true,
+      "observedRpcRequests": 0
+    }
+  },
+  "rpcObservations": {
+    "totalObservedRequests": 25,
+    "observedMethods": {
+      "debug_traceCall": 2,
+      "eth_call": 6,
+      "eth_chainId": 6,
+      "eth_estimateGas": 2,
+      "eth_getBalance": 1,
+      "eth_getBlockByNumber": 8
+    },
+    "writeMethodViolations": [],
+    "quoteRequests": 3,
+    "checkRequests": 14,
+    "historicalRunReadRequests": 0,
+    "accountStateQueryRequests": 8,
+    "historicalAccountStateReadRequests": 0
+  },
+  "assertions": {
+    "sourceHeadDescendsFromOriginMain": true,
+    "sourceManifestCommitted": true,
+    "erc20InputNormalized": true,
+    "quoteHttpOk": true,
+    "quoteAvailable": true,
+    "quotePinnedBlock": true,
+    "quoteObservationTimeExposed": true,
+    "quoteRuntimeProvenancePresent": true,
+    "quoteAmountOutPositive": true,
+    "expectationBaselineAvailable": true,
+    "checkHttpOk": true,
+    "checkCompleted": true,
+    "realizedQuoteObservationTimeExposed": true,
+    "preparedTransactionPublic": true,
+    "preparedTransactionSelectorIsExactInputSingle": true,
+    "preparedTransactionBindsIntent": true,
+    "preparedTransactionValueIsZero": true,
+    "amountOutMinimumMatchesQuotePolicy": true,
+    "publicBindingMatchesIndependentInspection": true,
+    "preparedTransactionFingerprintRecorded": true,
+    "preparedTransactionFingerprintMatchesTraceEvidence": true,
+    "pinnedCallSucceeded": true,
+    "pinnedGasEstimated": true,
+    "validityAtExecutionRecorded": true,
+    "executionBlockRecorded": true,
+    "executionBlockMatchesSimulatorPin": true,
+    "transactionBindingRecorded": true,
+    "executionBindingBound": true,
+    "providerIsNativeRpcArbitrum": true,
+    "providerIntegrationOk": true,
+    "providerStatusRecorded": true,
+    "executionStatusRecorded": true,
+    "liveProviderProvenance": true,
+    "pinnedScopesChecked": true,
+    "evidenceStateRecorded": true,
+    "quoteFidelityRecorded": true,
+    "verdictRecorded": true,
+    "remediationRecorded": true,
+    "persistedRunHttpStatusOk": true,
+    "persistedRunMatchesResponse": true,
+    "historicalRunReadMadeZeroRpcRequests": true,
+    "primaryCheckMadeObservedRpcRequests": true,
+    "accountStateHttpOk": true,
+    "accountStateSnapshotAvailable": true,
+    "accountStateBlockVerified": true,
+    "trustedInputDecimalsFromRegistry": true,
+    "allowanceSpenderQualified": true,
+    "allowanceNoLongerStructurallyUnqualified": true,
+    "allowanceSpenderIsCamelotRouter": true,
+    "historicalAccountStateReadMadeZeroRpcRequests": true,
+    "historicalAccountStateReadMatchesQuery": true,
+    "noWriteRpcMethodsObserved": true,
+    "rpcEndpointRedacted": true,
+    "rawProviderPayloadAbsent": true
+  },
+  "blockers": [],
+  "blockerClassification": "NONE",
+  "blockerDetails": [],
+  "limitations": [
+    "No transaction was signed, approved, broadcast, or executed onchain.",
+    "The selected public sender is not controlled by this gate; only reads were performed.",
+    "Native RPC basic simulation is intentionally partial: no receipt, outcome, or asset-change set is claimed.",
+    "Provider status UNKNOWN and Evidence INCOMPLETE are recorded as observed and are never promoted."
+  ],
+  "provenance": {
+    "manifest": {
+      "runner": {
+        "path": "scripts/backend-gates/asset-coverage-reverse-live.ts",
+        "sha256": "sha256:40ee6dcff5c90da59914b7a8791ef7da9ac7b8498c2436a7d965ec1e61e80a21"
+      },
+      "acceptedSourceCaptureSha256": "5a7ed69ca2dcf0413f79ddd29749e6f0ae652da91493814fece00cb0963b7b20",
+      "sourceManifestSha256": "e025e3671507f5cc79e63dc5932438d9dd3d75bb7b6a475cada26809d21dbc26"
+    },
+    "fileCount": 187,
+    "nodeVersion": "v26.5.0"
+  },
+  "sourceIntegrity": {
+    "cleanlinessScope": "Gate source manifest only; paths outside it cannot reach this composition.",
+    "repositoryHeadAtStart": "40be2a4078b980246d981e31a429512de1091991",
+    "repositoryTree": "51bc8d14f8359db8c6f0c2d0ca98b8ba5dc57a41",
+    "originMainAtStart": "811e2b80fd6d6db6ccee5da6f4a518a6b66ba6c7",
+    "headDescendsFromOriginMain": true,
+    "worktreeDirty": true,
+    "unrelatedChangedPaths": [
+      "fixtures/provider-registry/be-078/backend-golden-path-20260929112546534/capture.json"
+    ]
+  }
+}

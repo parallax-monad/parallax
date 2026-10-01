@@ -97,10 +97,6 @@ export class UnsupportedKuruAgentFlowError extends Error {
   public readonly status = "unsupported" as const;
   public readonly code = "UNSUPPORTED" as const;
   public readonly retryable = false as const;
-
-  public constructor(message: string) {
-    super(message);
-  }
 }
 
 /**

@@ -23,6 +23,8 @@ export type ChainErrorCode =
   | "TIMEOUT"
   | "CANCELLED"
   | "INVALID_REQUEST"
+  | "INSUFFICIENT_NATIVE_BALANCE"
+  | "EXECUTION_REVERT"
   | "UNKNOWN";
 
 /** Options shared by every potentially long-running chain operation. */
@@ -46,6 +48,19 @@ export type GasEstimate = {
   /** Estimated execution units represented as a decimal string. */
   gasUnits: string;
 };
+
+/**
+ * A provider may own the pinned gas check and still need the prepared
+ * execution to cross the Provider boundary when the chain-level preflight is
+ * unavailable. This is an explicit absence of a preflight fact, never a
+ * fabricated gas estimate.
+ */
+export type UnavailableGasEstimate = {
+  readonly status: "UNAVAILABLE";
+  readonly reason: string;
+};
+
+export type PreparedGasEstimate = GasEstimate | UnavailableGasEstimate;
 
 export type FinalityStatus = {
   status: "unknown" | "pending" | "confirmed" | "finalized";
@@ -129,6 +144,8 @@ function isChainErrorCode(value: unknown): value is ChainErrorCode {
     value === "TIMEOUT" ||
     value === "CANCELLED" ||
     value === "INVALID_REQUEST" ||
+    value === "INSUFFICIENT_NATIVE_BALANCE" ||
+    value === "EXECUTION_REVERT" ||
     value === "UNKNOWN"
   );
 }

@@ -6,6 +6,8 @@ import type { ServerType } from "@hono/node-server";
 import type { KuruLiveRunner } from "@parallax/orchestrator/agent-flow";
 import { Pool } from "pg";
 import { describe, expect, it, vi } from "vitest";
+import type { BackendCompositionRuntime } from "../backend/composition.js";
+import { createTraceRpcEvidenceSource } from "../backend/trace-rpc-evidence-source.js";
 import { bootstrapBackendRuntime } from "../runtime-config.js";
 import { InMemoryRunStore } from "../store.js";
 import {
@@ -51,6 +53,43 @@ function checkRequest() {
 }
 
 describe("backend Node runtime", () => {
+  it("rejects a Trace source that would be silently ignored by a supplied composition", () => {
+    const source = createTraceRpcEvidenceSource({
+      client: { request: async () => undefined },
+      mode: "MOCK",
+    });
+
+    expect(() =>
+      bootstrapBackendApp({
+        environment,
+        tokenRegistry,
+        composition: {
+          runStore: new InMemoryRunStore(),
+        } as unknown as BackendCompositionRuntime,
+        traceRpcEvidenceSource: source,
+      }),
+    ).toThrow(
+      "traceRpcEvidenceSource must be configured on the supplied composition",
+    );
+  });
+
+  it("rejects a Trace source when no Arbitrum route can consume it", () => {
+    const source = createTraceRpcEvidenceSource({
+      client: { request: async () => undefined },
+      mode: "MOCK",
+    });
+
+    expect(() =>
+      bootstrapBackendApp({
+        environment,
+        tokenRegistry,
+        traceRpcEvidenceSource: source,
+      }),
+    ).toThrow(
+      "traceRpcEvidenceSource requires an Arbitrum RPC URL or supplied composition",
+    );
+  });
+
   it("serves a lightweight health response without invoking business services", async () => {
     let agentFlowCalled = false;
     let quoteFlowCalled = false;

@@ -1,5 +1,5 @@
 import type { Copy } from "@/lib/i18n";
-import type { CheckSwapInput, Protocol } from "./types";
+import type { CheckSwapInput, Protocol, RemediationOption } from "./types";
 
 /**
  * The swap intent as the UI holds it. Kept out of any screen component so the
@@ -15,7 +15,7 @@ export type FormState = {
 };
 
 /** The demo picks route and slippage, so the swap sheet stays wallet-like. */
-export const DEMO_PROTOCOL: Protocol = "kuru";
+export const DEMO_PROTOCOL: Protocol = "camelot-v3";
 export const DEMO_SLIPPAGE = "0.5";
 export const MIN_SLIPPAGE = 0;
 export const MAX_SLIPPAGE = 100;
@@ -202,7 +202,7 @@ export function planSubmission(
 
 export const INITIAL_FORM: FormState = {
   protocol: DEMO_PROTOCOL,
-  tokenIn: "MON",
+  tokenIn: "ETH",
   tokenOut: "USDC",
   amountIn: "0.01",
   slippage: DEMO_SLIPPAGE,
@@ -221,5 +221,19 @@ export function toInput(form: FormState, parentRunId?: string): CheckSwapInput {
     minimumReceivedSource: form.minimumReceived
       ? "user_declared"
       : "unavailable",
+  };
+}
+
+/** Applies a verified option to the swap form. Conditional options stay informational. */
+export function applyRemediationOption(
+  form: FormState,
+  option: RemediationOption,
+): FormState | undefined {
+  if (option.swapIntent === undefined) return undefined;
+  return {
+    ...form,
+    amountIn: option.swapIntent.amountIn,
+    tokenIn: option.swapIntent.tokenIn ?? form.tokenIn,
+    tokenOut: option.swapIntent.tokenOut ?? form.tokenOut,
   };
 }

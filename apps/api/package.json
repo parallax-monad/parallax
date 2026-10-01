@@ -12,7 +12,9 @@
     "test:integration": "vitest run --config vitest.integration.config.ts src/server.integration.test.ts src/postgres-run-store.integration.test.ts",
     "probe:native-rpc-canonical": "node --env-file-if-exists=../../.env --import=tsx/esm ../../scripts/provider-probes/native-rpc-canonical-exercise.ts",
     "probe:quicknode-canonical": "node --env-file-if-exists=../../.env --import=tsx/esm ../../scripts/provider-probes/quicknode-canonical-exercise.ts",
+    "probe:backend-trace-integration": "node --env-file-if-exists=../../.env --import=tsx/esm ../../scripts/backend-gates/backend-trace-integration-live.ts",
     "probe:backend-golden-path": "node --env-file-if-exists=../../.env --import=tsx/esm ../../scripts/backend-gates/backend-golden-path-live.ts",
+    "probe:verified-remediation": "node --env-file-if-exists=../../.env --import=tsx/esm ../../scripts/backend-gates/verified-remediation-live.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {

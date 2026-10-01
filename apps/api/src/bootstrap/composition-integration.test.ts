@@ -193,6 +193,13 @@ describe("Backend composition application boundary", () => {
       },
     );
     const store = new InMemoryRunStore();
+    const supplementaryEvidenceEvaluator = vi.fn(
+      async (input: { readonly preparedExecution: unknown }) => ({
+        source: "supplementary-fixture",
+        runId: (input.preparedExecution as { readonly runId: string }).runId,
+      }),
+    );
+    const executionPurposes: string[] = [];
     const composition = createBackendComposition({
       chainRegistry: new ChainRegistry([chain]),
       protocolRegistry: new ProtocolRegistry([
@@ -236,11 +243,23 @@ describe("Backend composition application boundary", () => {
         },
       },
       runStore: store,
+      supplementaryEvidenceEvaluator,
     });
-    const app = bootstrapBackendApp({
-      environment,
-      tokenRegistry,
+    const pipeline = new BackendPipeline({ runtime: composition });
+    const compositionFlow = createBackendCheckFlow({
+      pipeline,
+      project: (execution) => execution.decisionOutput,
+      capability: "simulate",
+    });
+    const app = createBackendApp({
+      runtime,
       composition,
+      agentFlow: {
+        async check(input) {
+          executionPurposes.push(input.executionPurpose ?? "missing");
+          return compositionFlow.check(input);
+        },
+      },
     });
 
     const response = await app.fetch(
@@ -275,6 +294,8 @@ describe("Backend composition application boundary", () => {
       "buildTransaction",
     ]);
     expect(evaluations).toHaveLength(2);
+    expect(supplementaryEvidenceEvaluator).toHaveBeenCalledTimes(1);
+    expect(executionPurposes).toEqual(["primary", "verification_child"]);
     expect(evaluations).toEqual([
       expect.objectContaining({
         input: expect.objectContaining({

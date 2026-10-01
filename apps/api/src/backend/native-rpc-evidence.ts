@@ -15,7 +15,8 @@ import {
   type ArbitrumTransaction,
 } from "./arbitrum-chain-adapter.js";
 import { inspectCamelotV3Transaction } from "./camelot-v3-binding.js";
-import type { BlockContext, GasEstimate } from "./chain-adapter.js";
+import type { BlockContext, PreparedGasEstimate } from "./chain-adapter.js";
+import { fingerprintPreparedTransaction } from "./prepared-transaction-fingerprint.js";
 import type { ProviderEvaluationResult } from "./provider-adapter.js";
 import type {
   ProvisionalCandidateFieldInput,
@@ -64,7 +65,7 @@ export type NativeRpcPreparedExecution<
     readonly kind: "unsigned";
     readonly payload: ArbitrumTransaction | Readonly<Record<string, unknown>>;
   };
-  readonly gasEstimate: GasEstimate;
+  readonly gasEstimate: PreparedGasEstimate;
   readonly finality: {
     readonly status: "unknown" | "pending" | "confirmed" | "finalized";
     readonly blockContext?: BlockContext;
@@ -357,7 +358,7 @@ export function projectNativeRpcBasicSimulation(
     gasEstimate,
   });
   const validityAtExecution =
-    call.status === "REVERTED"
+    call.status === "REVERTED" && blockVerified
       ? "INVALID"
       : input.providerResult.status === "success" &&
           call.status === "SUCCEEDED" &&
@@ -368,7 +369,8 @@ export function projectNativeRpcBasicSimulation(
         : "UNKNOWN";
   const reason = basicSimulationReason(
     failureStage,
-    call.status,
+    call,
+    gasEstimate,
     bindingInspection,
   );
 
@@ -389,7 +391,7 @@ export function projectNativeRpcBasicSimulation(
     ...(blockHash === undefined ? {} : { blockHash }),
     observedAt: input.providerResult.provider.observedAt,
     validityAtExecution,
-    preparedTransactionFingerprint: fingerprint(transaction),
+    preparedTransactionFingerprint: fingerprintPreparedTransaction(transaction),
     ...(bindingInspection.ok
       ? { transactionBinding: bindingInspection.binding }
       : {}),
@@ -451,7 +453,14 @@ function basicSimulationFailureStage(input: {
   if (
     input.blockNumberField?.status !== "observed" ||
     input.blockHashField?.status !== "observed" ||
-    input.revalidatedBlockField?.status === "invalid"
+    (input.revalidatedBlockField !== undefined &&
+      input.revalidatedBlockField.status !== "observed")
+  ) {
+    return "BLOCK";
+  }
+  if (
+    input.call.status === "REVERTED" &&
+    input.revalidatedBlockField?.status !== "observed"
   ) {
     return "BLOCK";
   }
@@ -474,11 +483,22 @@ function basicSimulationFailureStage(input: {
 
 function basicSimulationReason(
   stage: P0BasicSimulation["failureStage"],
-  callStatus: P0BasicSimulation["call"]["status"],
+  call: ProjectionStatus,
+  gasEstimate: GasProjection,
   bindingInspection: ReturnType<typeof inspectCamelotV3Transaction>,
 ): string | undefined {
   if (!bindingInspection.ok) return "Prepared transaction binding is invalid";
-  if (callStatus === "REVERTED") return "Native RPC eth_call reverted";
+  if (call.status === "REVERTED") {
+    return stage === "BLOCK"
+      ? "Native RPC eth_call reverted but the pinned block could not be verified throughout evaluation"
+      : "Native RPC eth_call reverted";
+  }
+  if (stage === "BLOCK" && gasEstimate.status === "UNAVAILABLE") {
+    return "Native RPC gas estimation was unavailable; the pinned execution block could not be verified before and after evaluation";
+  }
+  if (stage === "BLOCK" && call.status === "UNAVAILABLE") {
+    return "Native RPC eth_call was unavailable; the pinned execution block could not be verified before and after evaluation";
+  }
   switch (stage) {
     case "BLOCK":
       return "Pinned execution block could not be verified before and after evaluation";

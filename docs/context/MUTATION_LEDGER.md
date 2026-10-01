@@ -210,3 +210,111 @@ Issue #110's conflicting Notion authority sentence was corrected to make #96 and
 GitHub execution Issues authoritative. This PR changes documentation/control-plane truth only;
 no implementation completion, Product/Risk/Provider/Contract semantic change, or runtime/test
 change is claimed.
+
+## 2026-09-28 — PR-FS-D Backend supplementary integration in progress
+
+The working tree was prepared from current `main` at `b6d48c5f2223d1888231a5eb7810ec2a04006111`
+on branch `feat/backend-fs-d-trace-integration` after PR #112 merged the qualified #106
+`TraceRpcEvidenceSource`. The implementation mutation is limited to the #110 Backend boundary:
+
+- added an optional Backend-local supplementary evaluator/projector seam;
+- wired the qualified Trace source through the Arbitrum composition without registering a second
+  Provider;
+- bound Trace to the exact prepared unsigned transaction, Run, chain, protocol, and pinned block
+  context used by the primary execution;
+- preserved Native facts and existing Risk verdicts on Trace failure;
+- added normalized public/persisted `traceRpc` projection and historical no-requery coverage;
+- added route-level failure/partial coverage, Action-Gate purpose coverage, public failure-reason
+  allowlisting, bootstrap source-consumption validation, and a sanitized live qualification
+  capture;
+- kept raw RPC payloads, endpoint details, signing, broadcasting, custody, and Product/Risk
+  semantic changes out of scope.
+
+Validation in the working tree: API tests 612/612, repository tests 1303 passed with 2 skipped,
+repository typecheck, targeted formatting, repository lint, and `git diff --check` passed. The
+read-only live Backend Trace gate passed and wrote the sanitized capture at
+`fixtures/provider-registry/be-110/backend-trace-integration-20260928122150385/capture.json`.
+The run emitted the environment's pre-existing `NODE_TLS_REJECT_UNAUTHORIZED=0` warning; this
+is a transport-security limitation of the local test environment, not a qualification claim.
+No commit, push, GitHub review mutation, or secret mutation was performed. #110 remains an
+unmerged implementation checkpoint pending exact-head review and acceptance.
+
+## 2026-09-28 — PR-FS-D exact-head gate remediation
+
+The Standards review finding was repaired in commit
+`93a1084c0cfc5a741e8c6d4251290ef86ed6f605`: the live runner now captures the clean repository
+HEAD/tree before execution and rechecks them before writing evidence, failing closed if the
+repository changes during the run. The commit was pushed to
+`feat/backend-fs-d-trace-integration`.
+
+The Spec review finding was repaired by rerunning the real read-only Backend Trace gate from that
+exact clean commit. The v2 capture at
+`fixtures/provider-registry/be-110/backend-trace-integration-20260928131317584/capture.json`
+records the implementation HEAD/tree, clean worktree, runner hash, and `origin/main`; the gate
+passed exact prepared-transaction binding, complete Trace scope, public redaction, persisted
+round-trip, and historical no-requery. The two stale v1 captures were moved to
+`/private/tmp/parallax-be-110-stale.nmO38f/` without deletion. No signing, broadcasting, secret,
+merge, or GitHub review mutation occurred.
+
+## 2026-09-28 — PR-FS-D fingerprint and Trace scope remediation
+
+Implementation commit `cd1793267d4354c21785b878e1f17870e2411418` changed only the Backend Trace
+integration boundary and its regression/live-gate coverage. It introduced one shared canonical
+prepared-transaction fingerprint for Native and Trace, added an exact equality assertion to the
+live gate, and preserved observed chain scope on pinned-block context failure. The public Trace
+projection invariant was extended to accept the stage-aware checked/unknown scope shape.
+
+Validation passed with API tests 617/617, repository tests 1308 passed with 2 skipped, repository
+typecheck/lint/format checks, and the read-only live gate. The new sanitized capture is
+`fixtures/provider-registry/be-110/backend-trace-integration-20260928133255854/capture.json`;
+it records equal Native/Trace fingerprints, exact prepared-transaction matching, complete Trace
+scope, public redaction, persisted round-trip, and historical no-requery. This mutation does not
+change Product/Risk/Contract semantics, Provider selection, signing, broadcasting, custody, or
+accepted evidence meaning; no GitHub review mutation was performed.
+
+## 2026-09-28 — #107 verified remediation feasibility gate (read-only)
+
+Branch `feat/verified-remediation-107` added a read-only live feasibility gate
+(`scripts/backend-gates/verified-remediation-live.ts`), its pure feasibility classification
+and offline coverage (`scripts/backend-gates/verified-remediation-assertions.ts`,
+`verified-remediation-assertions.test.ts`), and one sanitized capture under
+`fixtures/provider-registry/be-107/`. The gate ran from a clean committed source head with
+production runtime source unchanged and recorded `VERIFIED_REMEDIATION_NOT_REACHABLE`.
+
+No signing, broadcasting, custody, wallet mutation, secret, history rewrite, force push,
+merge, or GitHub review mutation occurred. No accepted evidence was rewritten: the accepted
+BE-063 source capture digest is asserted and unchanged. No prior capture was moved or
+deleted. No Product, Risk, Contract, or Provider semantic was changed.
+
+## 2026-09-29 — #73 local Product P0 acceptance implementation
+
+Branch `feat/product-p0-final-73` was created in an isolated worktree from fresh
+`origin/main` `9dacb484d10f7fce06654511b176be0886cdbe49`. The change exposes the
+configured trusted ETH/test-USDC metadata, includes the quote observation time for
+selected-quote baseline binding, consumes the public Backend `basicSimulation` and
+separate Provider/Execution/Evidence/Risk/remediation states in the active UI, and
+connects the selected quote, persisted recovery, and explicit re-check. The shared
+worktree was not modified.
+
+Local read-only Arbitrum Sepolia/Camelot V3 ETH → USDC browser acceptance observed
+real quote and Run `0d5d68d3-01c8-414f-bc10-3023e212cefb`, reload recovery, and
+child re-check `71721898-4b14-4f81-8a93-914d039ec931`. The observed facts were
+call `SUCCEEDED`, gas `AVAILABLE`, Risk `UNKNOWN`, Evidence `INCOMPLETE`, and
+remediation `NOT_RUN`. A separate historical GET for Run
+`def2b539-e536-48b5-b65e-6f9b709ea14f` produced zero RPC requests through a
+read-only method counter. Controlled tests cover the distinct call-success/gas-failure
+branch. Full repository tests passed 1393 with 2 skipped, web tests passed 89,
+API tests passed 654, disposable PostgreSQL integration passed 16, and typecheck,
+lint, web build, diff check, and added-line secret scan passed. These are local
+implementation observations, pending exact-head PR CI and owner acceptance; they do
+not change Product/Risk/Contract semantics or certify a Product P0 PASS.
+
+## 2026-09-29 — current-main Final Sprint reconciliation
+
+Current `main` advanced to `811e2b80fd6d6db6ccee5da6f4a518a6b66ba6c7` through merged PR #126;
+PR #127 separately established real USDC → WETH `QUALIFIED_REAL`. PRs #118/#119/#121/#122
+completed the Evidence Federation lane (#106/#110/#91/#92), while PR #123's
+`BLOCKED_ACCOUNT_STATE` remains historical and PR #124 leaves Verified Remediation NOT COMPLETE.
+PR #125 preserves the execution-readiness/preflight versus Provider Evidence boundary.
+Product acceptance remains pending on #73; this entry records a durable snapshot only and does
+not claim Asset Coverage or Product P0 PASS.

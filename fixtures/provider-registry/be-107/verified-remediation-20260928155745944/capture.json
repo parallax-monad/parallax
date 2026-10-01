@@ -1,0 +1,291 @@
+{
+  "schemaVersion": "be-107-verified-remediation-feasibility-v1",
+  "exerciseStatus": "COMPLETED",
+  "gateStatus": "VERIFIED_REMEDIATION_NOT_REACHABLE",
+  "real": true,
+  "readOnly": true,
+  "signed": false,
+  "broadcast": false,
+  "endpointClass": "environment-supplied",
+  "baseReference": "origin/main",
+  "repositoryHeadAtCapture": "1373b4376ebfcd5a17e1afeab57a0564d425ab2a",
+  "headNote": "This sanitized capture and the offline test files are committed after the run; the hashed runtime source manifest in sourceIntegrity was unchanged across the exercise.",
+  "startedAt": "2026-09-28T15:57:37.864Z",
+  "completedAt": "2026-09-28T15:57:45.944Z",
+  "source": {
+    "acceptedIssueScenario": "#77 / BE-063 canonical Camelot Sepolia quote",
+    "fixture": "fixtures/provider-registry/be-063/camelot-sepolia-real-2026-09-18T08-47-56-715Z/capture.json",
+    "fixtureSha256": "85147b852e1e4b514af64241fede641f6a2b6db4f2056f0ab44d04164125cf23",
+    "fixtureClassification": "QUALIFIED_REAL",
+    "command": "pnpm --filter @parallax/api probe:verified-remediation",
+    "remediationConfiguration": {
+      "maxAmountInAtomic": "2000000000000000",
+      "initialStepAtomic": "100000000000000",
+      "maxEvaluations": 4
+    },
+    "primaryRequest": {
+      "chainId": 421614,
+      "protocol": "camelot-v3",
+      "sender": "0xeb7c5322f0997ee70f4bbd3ae7e428072c9af396",
+      "tokenIn": {
+        "kind": "native"
+      },
+      "tokenOut": {
+        "kind": "erc20",
+        "address": "0xb893E3334D4Bd6C5ba8277Fd559e99Ed683A9FC7"
+      },
+      "amountIn": "0.001",
+      "economicBoundary": {
+        "availability": "available",
+        "minimumReceived": "0.015724124766815875",
+        "source": "user_declared"
+      }
+    },
+    "expectationBaseline": {
+      "chainId": 421614,
+      "protocol": "camelot-v3",
+      "tokenIn": {
+        "kind": "native"
+      },
+      "tokenOut": {
+        "kind": "erc20",
+        "address": "0xb893E3334D4Bd6C5ba8277Fd559e99Ed683A9FC7"
+      },
+      "amountIn": "0.001",
+      "quote": {
+        "estimatedAmountOut": "0.015882896725531551",
+        "source": "quote",
+        "blockNumber": "310131879",
+        "fetchedAt": "2026-09-18T08:47:51.588Z",
+        "runtimeVersion": "arbitrum-camelot-v3",
+        "runtimeRevision": "native-rpc"
+      }
+    }
+  },
+  "liveQuote": {
+    "amountOutAtomic": "15882954309915026",
+    "boundaryBelowQuoteAtomic": "15724124766815875",
+    "boundaryAboveQuoteAtomic": "15898837264224942"
+  },
+  "runs": {
+    "liveQuoteObservation": {
+      "httpStatus": 200,
+      "runId": "ac3c50a1-8bf4-4c90-9306-335eed079ca1",
+      "verdict": "UNKNOWN",
+      "providerEvidence": {
+        "providerId": "native-rpc-arbitrum",
+        "providerStatus": "UNKNOWN",
+        "integrationStatus": "OK",
+        "executionStatus": "SUCCESS",
+        "quoteSource": "quote",
+        "quoteReproducibility": "REPRODUCIBLE",
+        "quoteEstimatedAmountOut": "0.015882954309915026",
+        "quoteBlockNumber": "313656633",
+        "provenanceMode": "LIVE",
+        "provenanceSource": "rpc",
+        "checkedScope": [
+          "native-rpc.eth_call",
+          "native-rpc.estimateGas",
+          "native-rpc.pinned-block"
+        ],
+        "unknownScope": [
+          "receipt",
+          "outcome",
+          "assetChanges",
+          "simulation",
+          "freshness"
+        ],
+        "providerDataKeys": [],
+        "providerDataRedacted": true
+      }
+    },
+    "primary": {
+      "httpStatus": 200,
+      "runId": "faa79dfd-6f03-422a-a1a6-2a814c337258",
+      "resultStatus": "completed",
+      "verdict": "UNKNOWN",
+      "summary": "Live check could not establish a trustworthy result",
+      "p0": {
+        "expectationBaseline": {
+          "status": "AVAILABLE",
+          "chainId": 421614,
+          "protocol": "camelot-v3",
+          "tokenIn": "native",
+          "tokenOut": "0xb893e3334d4bd6c5ba8277fd559e99ed683a9fc7",
+          "amountInAtomic": "1000000000000000",
+          "amountOutAtomic": "15882896725531551",
+          "quoteId": "sha256:33e8a95861e98c2c9878943bdc2aa89488430c0d7b65dd47927539d0f5dd89af",
+          "blockNumber": "310131879",
+          "observedAt": "2026-09-18T08:47:51.588Z",
+          "provenance": "source=quote;runtime=arbitrum-camelot-v3@native-rpc"
+        },
+        "quoteFidelity": {
+          "status": "UNKNOWN",
+          "reason": "EVIDENCE_NOT_VERIFIED"
+        },
+        "cause": {
+          "status": "NOT_VERIFIED"
+        },
+        "constraints": [],
+        "evidenceState": "INCOMPLETE",
+        "transactionProtection": {
+          "status": "PASS",
+          "minimumReceivedAtomic": "15724124766815875",
+          "source": "user_declared"
+        },
+        "remediation": {
+          "status": "NOT_RUN"
+        },
+        "basicSimulation": {
+          "callStatus": "SUCCEEDED",
+          "gasEstimateStatus": "AVAILABLE",
+          "gasUnits": "274472",
+          "blockNumber": "313656645",
+          "validityAtExecution": "VALID",
+          "preparedTransactionFingerprint": "sha256:7f02bf2e0be08f77ee4cc90f64887afb0cc1d9983fb51e856bf6e1e71e016a2c",
+          "amountOutMinimumAtomic": "15724124766815875",
+          "amountInAtomic": "1000000000000000",
+          "uncheckedCapabilities": [
+            "receipt",
+            "outcome",
+            "assetChanges",
+            "state-diff",
+            "logs",
+            "traces"
+          ]
+        }
+      },
+      "providerEvidence": {
+        "providerId": "native-rpc-arbitrum",
+        "providerStatus": "UNKNOWN",
+        "integrationStatus": "OK",
+        "executionStatus": "SUCCESS",
+        "quoteSource": "quote",
+        "quoteReproducibility": "REPRODUCIBLE",
+        "quoteEstimatedAmountOut": "0.015882954309915026",
+        "quoteBlockNumber": "313656645",
+        "provenanceMode": "LIVE",
+        "provenanceSource": "rpc",
+        "checkedScope": [
+          "native-rpc.eth_call",
+          "native-rpc.estimateGas",
+          "native-rpc.pinned-block"
+        ],
+        "unknownScope": [
+          "receipt",
+          "outcome",
+          "assetChanges",
+          "simulation",
+          "freshness"
+        ],
+        "providerDataKeys": [],
+        "providerDataRedacted": true
+      }
+    },
+    "boundaryAboveQuote": {
+      "httpStatus": 502,
+      "runStatus": "integration_error",
+      "errorCode": "AGENT_FLOW_ERROR",
+      "runErrorCode": "INTERNAL_ERROR",
+      "runVerdict": "UNKNOWN",
+      "runSummary": "The check could not be completed"
+    }
+  },
+  "historicalRead": {
+    "httpStatus": 200,
+    "persistedRunStatus": "completed",
+    "persistedResultMatchesResponse": true,
+    "rpcRequestsDuringRead": 0,
+    "rpcRequestsTotal": 24
+  },
+  "feasibility": {
+    "status": "NOT_REACHABLE",
+    "reachable": false,
+    "childLifecycle": "NOT_RUN",
+    "blockers": [
+      "EVIDENCE_STATE_NOT_VERIFIED",
+      "LIVE_PROVIDER_STATUS_NOT_SUCCESS",
+      "REMEDIATION_BRANCH_NOT_ENTERED",
+      "TRANSACTION_PROTECTION_IS_ECONOMIC_BOUNDARY",
+      "CHILD_SIMULATED_OUTPUT_UNAVAILABLE",
+      "CONSTRAINT_ROUTE_NOT_SIZE_REMEDIABLE"
+    ],
+    "blockerReferences": {
+      "EVIDENCE_STATE_NOT_VERIFIED": {
+        "summary": "The remediation branch only runs when the Run's provider-neutral EvidenceState is VERIFIED. A live Native RPC Run never reaches it: the mapper records a deliberately partial surface, so the derived state is INCOMPLETE and the branch is skipped before any candidate is quoted.",
+        "sources": [
+          "apps/api/src/backend/arbitrum-composition.ts:evaluateArbitrumP0Decision",
+          "apps/api/src/backend/p0-risk-integration.ts:backendEvidenceState"
+        ]
+      },
+      "LIVE_PROVIDER_STATUS_NOT_SUCCESS": {
+        "summary": "backendEvidenceState requires GenericEvidence.provider.status === SUCCESS. The merged live provider mappers cannot report that truthfully: a fully successful Native RPC result is mapped to UNKNOWN because no receipt, outcome, or asset-change evidence was observed, and the Tenderly mapper keeps outcome/assetChanges null and marks LIVE field provenance as external (which backendEvidenceState also rejects).",
+        "sources": [
+          "apps/api/src/backend/native-rpc-evidence.ts:genericProviderStatus",
+          "apps/api/src/backend/tenderly-evidence.ts:mapTenderlyProviderResult"
+        ]
+      },
+      "REMEDIATION_BRANCH_NOT_ENTERED": {
+        "summary": "A bounded solver configuration was supplied for the Run, yet no candidate was ever evaluated: the guard returned before solving, so the public remediation projection stays NOT_RUN rather than UNVERIFIED, NO_VALID_CANDIDATE, or VERIFIED.",
+        "sources": [
+          "apps/api/src/backend/arbitrum-composition.ts:evaluateArbitrumP0Decision"
+        ]
+      },
+      "TRANSACTION_PROTECTION_IS_ECONOMIC_BOUNDARY": {
+        "summary": "A declared economic boundary is bound verbatim into the prepared calldata as amountOutMinimum. Therefore Economic Boundary FAIL implies a prepared transaction whose floor exceeds the quoted output, and the live Run terminates as an integration error instead of producing a completed ADJUST diagnosis. On the live Camelot path the Risk verdict ADJUST — the only verdict the frozen remediation objective targets — is unreachable.",
+        "sources": [
+          "apps/api/src/backend/camelot-v3-protocol-adapter.ts:transactionProtection",
+          "packages/risk/src/verdict.ts:evaluateEvidence"
+        ]
+      },
+      "CHILD_SIMULATED_OUTPUT_UNAVAILABLE": {
+        "summary": "Even with a VERIFIED evidence state, admitting a verified remediation requires the child Run's P0-ECONOMIC-001 to be PASS, which requires simulated tokenOut Evidence derived from evidence.outcome or evidence.assetChanges. No merged provider mapper produces those fields, so the proof cannot be assembled.",
+        "sources": [
+          "apps/api/src/backend/arbitrum-composition.ts:candidateTransactionProtectionOutcome",
+          "packages/orchestrator/agent-flow/index.ts:economicRuleResult",
+          "packages/orchestrator/agent-flow/index.ts:extractSimulatedTokenOut"
+        ]
+      },
+      "CONSTRAINT_ROUTE_NOT_SIZE_REMEDIABLE": {
+        "summary": "The alternative child-verification route needs a real measured caller constraint that FAILs at the Run amountIn and PASSes at a larger candidate amountIn, because the frozen solver only searches upward. Every supported constraint metric degrades as size grows, and maxTotalCost has no reviewed derivation at all, so no legitimate measurement can satisfy it.",
+        "sources": [
+          "packages/risk/src/p0-solver.ts:solveSelectedTargetOutput",
+          "packages/risk/src/p0-diagnosis.ts:evaluateConstraints"
+        ]
+      }
+    }
+  },
+  "assertions": {
+    "liveBackendHttpPath": true,
+    "publicRunQueryRoundTrip": true,
+    "historicalReadMadeNoRpcRequest": true,
+    "providerSpecificDataRedacted": true,
+    "rpcEndpointRedacted": true,
+    "rawProviderPayloadAbsent": true,
+    "remediationConfigured": true,
+    "remediationBranchEntered": false,
+    "childRunProduced": false,
+    "executedPartialSimulationSurface": true,
+    "boundaryAboveQuoteRejected": true,
+    "evidenceState": "INCOMPLETE",
+    "providerStatus": "UNKNOWN",
+    "verdict": "UNKNOWN",
+    "transactionProtectionStatus": "PASS",
+    "remediationStatus": "NOT_RUN",
+    "constraintRoute": "NOT_CONFIGURED"
+  },
+  "sourceIntegrity": {
+    "sourceHeadAtStart": "1373b4376ebfcd5a17e1afeab57a0564d425ab2a",
+    "sourceHeadAtEnd": "1373b4376ebfcd5a17e1afeab57a0564d425ab2a",
+    "fixtureUnchanged": true,
+    "runnerUnchanged": true,
+    "runtimeSourceManifestSha256": "f73141f283e6850dc2bc4ccd7a2a76345b46e842b56de6a9f34b9b8c0ae060a1",
+    "runtimeSourceManifestSha256AtEnd": "f73141f283e6850dc2bc4ccd7a2a76345b46e842b56de6a9f34b9b8c0ae060a1",
+    "runtimeSourceChangedPaths": [],
+    "runtimeSourceWorktreeDirty": false
+  },
+  "runner": {
+    "path": "scripts/backend-gates/verified-remediation-live.ts",
+    "sha256": "0e96d8f51c7e56fd0bb402446186685e4070e2d501765d3edbf9f0dbc8739728"
+  }
+}

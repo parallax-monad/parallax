@@ -1,6 +1,6 @@
 # Current Agent Handoff
 
-Checkpoint: 2026-09-27
+Checkpoint: 2026-09-29
 
 ## Takeover
 
@@ -15,7 +15,7 @@ Checkpoint: 2026-09-27
 
 ## Expected main checkpoint
 
-`542d5c685d259b5ee6d5aa55098bb2dad900f230`
+`811e2b80fd6d6db6ccee5da6f4a518a6b66ba6c7`
 
 This is historical checkpoint truth, not a permanent equality requirement.
 
@@ -23,24 +23,25 @@ GitHub Issue #96 is the canonical Final Sprint execution tracker. Linked GitHub 
 implementation/acceptance records; `docs/context/*` is the durable handoff; Notion is supporting
 planning/reference material and must not override GitHub or frozen #70 semantics.
 
+This file is a durable snapshot, not a live issue tracker. Always fresh-fetch #96 and the target
+Issue/PR before acting; fresh GitHub state wins when it differs from this snapshot.
+
 ## Current live execution model
 
 ```text
 Final Sprint v3
 
 Product P0
-#100 + #102
-        +
-       #73
+#126 MERGED → Product Owner acceptance pending on #73
 
 Asset Coverage
-#103 → #104 → #105
+#103 QUALIFIED_REAL + #104 COMPLETE → #105 active end-to-end acceptance
 
 Evidence Federation
-#98 → #106 → #110 → #91 → #92
+#106 + #110 + #91 + #92 = PASS
 
 Verified Remediation
-#107
+#107 OPEN / NOT COMPLETE / not currently reachable under frozen semantics
 ```
 
 The four gates are independently reportable. Full Best Case requires all four:
@@ -76,8 +77,13 @@ P0 does not require successful `VERIFIED` remediation. A truthful `UNKNOWN` / `I
 result with remediation `NOT_RUN` / `UNVERIFIED` / `UNKNOWN` and child verification
 `unknown` / `unavailable` is valid when required Evidence is unavailable.
 
-#101 exact binding is CLOSED / COMPLETED through merged PR #113. #100 and #102 remain open for
-their explicit application-entrypoint and historical-replay acceptance evidence.
+#101 exact binding is CLOSED / COMPLETED through merged PR #113. #100 and #102 have complete
+Backend scope but remain open pending explicit Product acceptance of the merged #126 path.
+
+Merged PR #126 contains the real browser path and observed `eth_call=SUCCEEDED`,
+`gasEstimate=AVAILABLE`, Provider `UNKNOWN`, execution `SUCCESS`, Evidence `INCOMPLETE`, Risk
+`UNKNOWN`, persisted recovery, and a distinct child re-check. It is implementation evidence, not
+Product Owner acceptance; refer to live #73 for the final decision.
 
 The earlier #67 controlled WETH → test-USDC target remains historical accepted evidence.
 Do not erase or rewrite it, but do not use it to override the current #96/#73 final Product P0
@@ -87,16 +93,16 @@ acceptance path.
 
 `@jzhao0` has these relevant issues:
 
-- #106 — active next task: productionize provider-neutral `TraceRpcEvidenceSource`;
-- #110 — Backend supplementary integration after the minimum #106 interface is agreed;
-- #91 — follows #106/#110 for same-transaction Native vs Trace portability;
-- #103 — real USDC → WETH feasibility, gated by Product P0 #73;
-- #108 — Explorer feasibility, optional/stretch, not active;
-- #109 — additional asset feasibility, optional/stretch, not active.
+- #103 — real USDC → WETH qualification is `QUALIFIED_REAL` through PR #127;
+- #106 — CLOSED / COMPLETED provider-neutral `TraceRpcEvidenceSource`;
+- #110 — CLOSED / COMPLETED Backend supplementary integration;
+- #91 — CLOSED / COMPLETED same-transaction Native vs Trace portability;
+- #108 — optional/stretch draft PR #120 Explorer feasibility;
+- #109 — optional/stretch additional-asset feasibility.
 
-## #106 execution boundary
+## Evidence Federation boundary (complete)
 
-Build only the reusable supplementary Trace Evidence source.
+PR #112 delivered only the reusable supplementary Trace Evidence source.
 
 Required:
 
@@ -116,32 +122,27 @@ Do not:
 - modify frozen Risk/Product semantics;
 - sign, broadcast, or custody transactions.
 
-Backend integration belongs to #110.
+Backend integration is complete through #110. Do not reopen this lane without a new concrete
+defect; Native RPC remains primary and Trace remains supplementary.
 
 ## Coordination
 
-#110 may prepare against the minimum agreed #106 interface, but its real acceptance must use
-the qualified #106 source.
-
-#91 is the portability proof after the reusable source/integration exists.
-
-#92 is the Frontend capability/provenance consumer.
-
-#103 must not be promoted into production support before its bounded real-chain qualification
-and must not start before #73's prerequisite stage.
-
-Current parallel handoff is Clare on #100/#102 and Antony on #73; #101 is complete through
-PR #113. After Product P0, proceed through #103 → #104 → #105 for Asset Coverage and
-#106 → #110 → #91 → #92 for Evidence Federation, then #107 Verified Remediation and #94
-Minimal SDK as a SHOULD. Optional #90/#108/#109 work remains outside the critical path.
-
-The Asset Coverage order is #73 → #103 → #104 → #105. #103 has a four-hour feasibility
-kill switch; #104 is non-blocking for ETH → USDC P0 but enabling MUST for ERC-20 reverse support;
-#105 is the Asset Coverage PASS proof.
+#110, #91, and #92 are complete. Asset Coverage acceptance is #103 `QUALIFIED_REAL` + #104
+support + #105 end-to-end acceptance, but this is not a mandatory serial engineering order:
+#73 does not block #105 implementation, and #103 qualification does not block deterministic
+#105 work. #105 remains the active Asset Coverage lane. #107 is a separate NOT COMPLETE gate;
+#94 is SHOULD; #90/#108/#109 are optional and outside the critical path.
 
 #110 owns Backend composition, exact context binding, persistence, public projection, and
-historical consistency. It does not block Product P0. Native RPC remains primary; Trace is
-supplementary. No ProviderRegistry rewrite, ranking, scoring, voting, consensus, or fallback.
+historical consistency. The current implementation evaluates Trace after the primary Provider,
+keeps supplementary Evidence out of Core/Decision/Risk, and projects only normalized allowlisted
+facts into the public RunResult. It does not block Product P0. Native RPC remains primary; Trace
+is supplementary. No ProviderRegistry rewrite, ranking, scoring, voting, consensus, or fallback.
+
+Generic gas estimation is preflight; the pinned NativeRpcProvider gas check is execution Evidence.
+`INSUFFICIENT_NATIVE_BALANCE` is an execution-readiness fact, not a Risk verdict or economic
+Cause. Risk remains independent, and partial `call=SUCCEEDED` / `gas=UNAVAILABLE` remains
+incomplete Evidence / `UNKNOWN`.
 
 After P0, #107 is the separate Verified Remediation gate. Its ownership is Backend child Run
 and re-check (`@brightheartma`), Provider/Risk Evidence boundary (`@jzhao0`), Frontend
@@ -182,6 +183,40 @@ Current agent-assisted writes must continue to use the expected local identity:
 and must pass `./scripts/agent-preflight.sh --write`. Do not reuse the historical incorrect
 identity.
 
+## Historical 2026-09-28 implementation handoff
+
+- Current merged `main`: `f8cc7beb4f899e0b8283e1e30a67814a4989c73e` (PR #118, with #112 in history).
+- Current branch: `feat/backend-fs-d-trace-integration`.
+- This feature branch is not yet synchronized onto the newer merged `main`; before merge, reconcile
+  current `main` and rerun exact-head CI/review as required by the merge gate.
+- PR-FS-D / #110 now has a Backend-local supplementary evaluator and public projector. The
+  qualified Trace source receives the exact prepared unsigned transaction, Run ID, chain,
+  protocol, quote, and pinned block context from the same execution that Native evaluates.
+- Trace failures preserve Native facts and expose unknown/unavailable scopes. Trace success does
+  not alter the existing Risk verdict. POST `/api/check` and GET `/api/runs/:runId` expose the
+  same normalized Trace summary without raw RPC payloads or endpoint details, and historical
+  reads do not re-query the source. Public failure reasons are allowlisted; invalid diagnostics
+  fail closed at the projection boundary. Bootstrap rejects an unconsumable Trace source rather
+  than silently dropping it, and Action-Gate verification children explicitly suppress
+  supplementary Trace evaluation.
+- The follow-up review fix is committed at `cd1793267d4354c21785b878e1f17870e2411418`: Native
+  and Trace now share one prepared-transaction fingerprint, the live gate asserts equality, and
+  Trace preserves the observed chain scope when pinned-block context fails. Public projection
+  validation and regression coverage match the stage-aware scope semantics.
+- Validation completed for the implementation and gate: API tests 617/617, repository tests 1308
+  passed with 2 skipped, repository typecheck, repository lint, targeted formatting, and
+  `git diff --check`; the exact-head live-gate runner also passed Biome and API typecheck.
+  The read-only live Backend Trace gate passed from clean implementation commit `cd17932`
+  (`cd1793267d4354c21785b878e1f17870e2411418`) with Native primary success, equal Native/Trace
+  transaction fingerprints, exact prepared-transaction matching, complete Trace scope, public
+  redaction, persisted round-trip, and historical no-requery assertions. The current sanitized
+  capture is at
+  `fixtures/provider-registry/be-110/backend-trace-integration-20260928133255854/capture.json`.
+- The capture records the implementation commit/tree and `origin/main =
+  f8cc7beb4f899e0b8283e1e30a67814a4989c73e`. This is current qualification evidence for the
+  implementation commit, not a claim that #110 has been merged or accepted; no GitHub review
+  mutation has been performed.
+
 ## Context-overflow recovery
 
 If context is lost, ignore chat summaries until this sequence is complete:
@@ -197,5 +232,27 @@ preflight --read
 → fresh PR/review/CI state
 ```
 
-For Provider work, default target after this checkpoint is #106 unless live GitHub state
-has superseded it.
+Do not infer a default implementation target from this historical note. Fresh GitHub state and
+the owning Issue determine the next action.
+
+## 2026-09-28 — #107 verified remediation handoff
+
+`feat/verified-remediation-107` is the Verified Remediation lane branch. It carries a
+read-only live feasibility gate plus its blocker record; it changes no production semantics
+and claims no gate.
+
+State to carry forward:
+
+- Verified Remediation: `NOT COMPLETE` / `VERIFIED_REMEDIATION_NOT_REACHABLE`.
+- The merged mechanism (solver, `verificationBound`, child Runs, `p0.remediation`
+  projection) is real but reachable only with a caller-injected `providerEvidenceMapper`,
+  i.e. synthetic Evidence. Do not present that as #107 acceptance.
+- The live gate is `pnpm --filter @parallax/api probe:verified-remediation`; its sanitized
+  capture is under `fixtures/provider-registry/be-107/`.
+- Exact blocker detail and the four owner decisions that would unblock the gate are in
+  [verified-remediation-107-blocker.md](../integration/verified-remediation-107-blocker.md).
+
+Do not resolve this blocker by weakening `backendEvidenceState`, reclassifying a partial
+Native RPC surface as `SUCCESS`, mapping `UNKNOWN` to `VERIFIED`, or deriving
+`simulated_token_out` from an unqualified trace state diff. Each is a Product/Contract/
+Provider semantic decision owned outside this branch.

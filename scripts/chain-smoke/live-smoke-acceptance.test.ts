@@ -29,14 +29,14 @@ function provenance(key: string, source: string, stage: string) {
 function baseEvidence() {
   return [
     {
-      ...provenance(REVISION + ":quote", "quote", "QUOTE"),
+      ...provenance(`${REVISION}:quote`, "quote", "QUOTE"),
       kind: "generic",
       status: "confirmed",
       summary: "Live Kuru quote Evidence",
       routeInputRole: "ROUTE_QUOTE",
     },
     {
-      ...provenance(REVISION + ":completeness", "derived", "SIMULATE"),
+      ...provenance(`${REVISION}:completeness`, "derived", "SIMULATE"),
       kind: "generic",
       status: "confirmed",
       summary: "Live P0 Evidence completeness",
@@ -50,9 +50,9 @@ function baseEvidence() {
  * /api/check response but uses synthetic blocks and amounts.
  */
 function completedRun(overrides: Record<string, unknown> = {}) {
-  const quoteRef = provenance(REVISION + ":quote", "quote", "QUOTE");
+  const quoteRef = provenance(`${REVISION}:quote`, "quote", "QUOTE");
   const completenessRef = provenance(
-    REVISION + ":completeness",
+    `${REVISION}:completeness`,
     "derived",
     "SIMULATE",
   );

@@ -7,8 +7,9 @@ import type {
   BlockContext,
   ChainAdapter,
   FinalityStatus,
-  GasEstimate,
+  PreparedGasEstimate,
 } from "./chain-adapter.js";
+import { isChainAdapterError } from "./chain-adapter.js";
 import type {
   BackendCompositionRuntime,
   BackendOperationResult,
@@ -18,6 +19,7 @@ import type {
   UnsignedTransaction,
 } from "./protocol-adapter.js";
 import {
+  PROVIDER_OWNED_GAS_ESTIMATE_CAPABILITY,
   type ProviderAdapter,
   ProviderAdapterError,
   type ProviderAdapterErrorCode,
@@ -44,7 +46,7 @@ export type BackendPipelineContext<
   readonly blockContext: BlockContext;
   readonly quote: unknown;
   readonly unsignedTransaction: UnsignedTransaction<unknown>;
-  readonly gasEstimate: GasEstimate;
+  readonly gasEstimate: PreparedGasEstimate;
   readonly finality: FinalityStatus;
   readonly providerResult: ProviderEvaluationResult;
   /** Optional provisional evidence projection for Core/Decision consumers. */
@@ -76,10 +78,12 @@ export type BackendPipelineProviderExecution<
   readonly blockContext: BlockContext;
   readonly quote: unknown;
   readonly unsignedTransaction: UnsignedTransaction<unknown>;
-  readonly gasEstimate: GasEstimate;
+  readonly gasEstimate: PreparedGasEstimate;
   readonly finality: FinalityStatus;
   readonly providerResult: ProviderEvaluationResult;
   readonly providerEvidence?: unknown;
+  /** Backend-local supplementary Evidence kept outside Core/Decision input. */
+  readonly supplementaryEvidence?: unknown;
 };
 
 /**
@@ -87,9 +91,11 @@ export type BackendPipelineProviderExecution<
  *
  * Provider-specific input builders receive this only after Chain and Protocol
  * have produced this execution's block context, quote, unsigned transaction,
- * gas estimate, and finality. They may translate it to a private Provider
- * shape, but the pipeline does not pass an independently supplied Provider
- * payload into this boundary.
+ * gas preparation result, and finality. The gas preparation result may be an
+ * explicit unavailable fact when the selected Provider owns its pinned gas
+ * check; it is never an invented estimate. Providers may translate this to a
+ * private shape, but the pipeline does not pass an independently supplied
+ * Provider payload into this boundary.
  */
 export type BackendPipelinePreparedExecution<NormalizedIntent> = {
   readonly runId: string;
@@ -99,7 +105,7 @@ export type BackendPipelinePreparedExecution<NormalizedIntent> = {
   readonly blockContext: BlockContext;
   readonly quote: unknown;
   readonly unsignedTransaction: UnsignedTransaction<unknown>;
-  readonly gasEstimate: GasEstimate;
+  readonly gasEstimate: PreparedGasEstimate;
   readonly finality: FinalityStatus;
 };
 
@@ -122,8 +128,15 @@ export type BackendPipelineInput<RawInput> = {
   readonly chainId: number;
   readonly protocol: string;
   readonly capability?: string;
+  /** Action-Gate verification children do not need supplementary Trace. */
+  readonly executionPurpose?: AgentFlowCheckInput["executionPurpose"];
   /** Narrow, application-owned context delivered only to Decision. */
   readonly decisionContext?: unknown;
+};
+
+type ProviderExecutionOptions = {
+  /** Remediation child runs re-use the primary Provider path only. */
+  readonly includeSupplementaryEvidence?: boolean;
 };
 
 export type BackendPipelineExecution<
@@ -142,11 +155,13 @@ export type BackendPipelineExecution<
   readonly blockContext: BlockContext;
   readonly quote: unknown;
   readonly unsignedTransaction: UnsignedTransaction<unknown>;
-  readonly gasEstimate: GasEstimate;
+  readonly gasEstimate: PreparedGasEstimate;
   readonly finality: FinalityStatus;
   readonly providerResult: ProviderEvaluationResult;
   /** Optional provisional evidence projection for Backend/API composition. */
   readonly providerEvidence?: unknown;
+  /** Backend-local supplementary Evidence for the public projection seam. */
+  readonly supplementaryEvidence?: unknown;
   readonly coreOutput: CoreOutput;
   readonly decisionOutput: DecisionOutput;
   readonly receiptLifecycle: ReceiptLifecycleHandle;
@@ -214,6 +229,18 @@ export class BackendPipeline<
   ProviderIntent = NormalizedIntent,
   ProviderInput = BackendPipelinePreparedExecution<NormalizedIntent>,
 > {
+  /** Public projection hook used by `createBackendCheckFlow`. */
+  public readonly supplementaryEvidenceProjector: BackendCompositionRuntime<
+    RawInput,
+    NormalizedIntent,
+    CoreOutput,
+    DecisionInput,
+    DecisionOutput,
+    Chain,
+    Protocol,
+    ProviderIntent
+  >["supplementaryEvidenceProjector"];
+
   private readonly buildDecisionInput: NonNullable<
     BackendPipelineDependencies<
       RawInput,
@@ -254,6 +281,8 @@ export class BackendPipeline<
       ProviderInput
     >,
   ) {
+    this.supplementaryEvidenceProjector =
+      dependencies.runtime.supplementaryEvidenceProjector;
     this.buildDecisionInput =
       dependencies.buildDecisionInput ??
       ((input) => input.coreOutput as unknown as DecisionInput);
@@ -296,7 +325,10 @@ export class BackendPipeline<
       unknown
     >
   > {
-    const prepared = await this.prepareProviderExecution(normalized, input);
+    const prepared = await this.prepareProviderExecution(normalized, input, {
+      includeSupplementaryEvidence:
+        input.executionPurpose !== "verification_child",
+    });
 
     const context: BackendPipelineContext<NormalizedIntent, Chain, Protocol> = {
       runId: input.runId,
@@ -313,13 +345,17 @@ export class BackendPipeline<
         ? {}
         : { providerEvidence: prepared.providerEvidence }),
       executeProviderPath: async (candidate) =>
-        this.prepareProviderExecution(candidate.intent, {
-          rawInput: candidate.intent as unknown as RawInput,
-          runId: candidate.runId,
-          chainId: input.chainId,
-          protocol: input.protocol,
-          capability: input.capability,
-        }),
+        this.prepareProviderExecution(
+          candidate.intent,
+          {
+            rawInput: candidate.intent as unknown as RawInput,
+            runId: candidate.runId,
+            chainId: input.chainId,
+            protocol: input.protocol,
+            capability: input.capability,
+          },
+          { includeSupplementaryEvidence: false },
+        ),
     };
     const coreOutput = await this.dependencies.runtime.evaluate(
       normalized,
@@ -363,6 +399,9 @@ export class BackendPipeline<
       ...(prepared.providerEvidence === undefined
         ? {}
         : { providerEvidence: prepared.providerEvidence }),
+      ...(prepared.supplementaryEvidence === undefined
+        ? {}
+        : { supplementaryEvidence: prepared.supplementaryEvidence }),
       coreOutput,
       decisionOutput,
       receiptLifecycle,
@@ -372,6 +411,7 @@ export class BackendPipeline<
   private async prepareProviderExecution(
     normalized: NormalizedIntent,
     input: BackendPipelineInput<RawInput>,
+    options: ProviderExecutionOptions = {},
   ): Promise<
     BackendPipelineProviderExecution<NormalizedIntent, Chain, Protocol>
   > {
@@ -397,7 +437,32 @@ export class BackendPipeline<
       normalized as never,
       { blockContext, quote },
     );
-    const gasEstimate = await chain.estimateGas(unsignedTransaction.payload);
+    let gasEstimate: PreparedGasEstimate;
+    try {
+      gasEstimate = await chain.estimateGas(unsignedTransaction.payload);
+    } catch (error) {
+      if (
+        !isChainAdapterError(error) ||
+        error.chainId !== input.chainId ||
+        error.operation !== "estimateGas" ||
+        (error.code !== "INSUFFICIENT_NATIVE_BALANCE" &&
+          error.code !== "UNAVAILABLE") ||
+        !provider.routingCapabilities?.includes(
+          PROVIDER_OWNED_GAS_ESTIMATE_CAPABILITY,
+        )
+      ) {
+        throw error;
+      }
+
+      // Only a matching, typed balance/RPC-unavailable preflight failure may
+      // continue to a Provider that explicitly owns the pinned gas check.
+      // This absence is not itself a gas observation; the Provider must still
+      // perform and report its authoritative pinned check.
+      gasEstimate = {
+        status: "UNAVAILABLE",
+        reason: "Chain-level gas preflight was unavailable",
+      };
+    }
     const finality = await chain.getFinality(blockContext);
     const preparedExecution: BackendPipelinePreparedExecution<NormalizedIntent> =
       {
@@ -435,6 +500,25 @@ export class BackendPipeline<
             providerResult,
             mode: providerResult.mode,
           });
+    let supplementaryEvidence: unknown;
+    if (
+      options.includeSupplementaryEvidence !== false &&
+      this.dependencies.runtime.supplementaryEvidenceEvaluator !== undefined
+    ) {
+      try {
+        supplementaryEvidence =
+          await this.dependencies.runtime.supplementaryEvidenceEvaluator({
+            normalizedIntent: normalized,
+            preparedExecution,
+            providerResult,
+            ...(providerEvidence === undefined ? {} : { providerEvidence }),
+          });
+      } catch {
+        // Supplementary Evidence is non-critical after the primary Provider
+        // has completed. A rejected source must not discard Native facts.
+        supplementaryEvidence = undefined;
+      }
+    }
     if (providerResult.status !== "success" && providerEvidence === undefined) {
       throw providerResultError(providerResult);
     }
@@ -451,6 +535,7 @@ export class BackendPipeline<
       finality,
       providerResult,
       ...(providerEvidence === undefined ? {} : { providerEvidence }),
+      ...(supplementaryEvidence === undefined ? {} : { supplementaryEvidence }),
     };
   }
 }
@@ -500,6 +585,7 @@ export function createBackendCheckFlow<
           chainId: input.intent.chainId,
           protocol: input.intent.protocol,
           capability: options.capability,
+          executionPurpose: input.executionPurpose,
           ...(input.expectationBaseline === undefined
             ? {}
             : {
@@ -509,10 +595,24 @@ export function createBackendCheckFlow<
               }),
         },
       );
-      return withProviderEvidence(
+      const projected = withProviderEvidence(
         await options.project(execution),
         execution.providerEvidence,
       );
+      if (
+        execution.supplementaryEvidence === undefined ||
+        options.pipeline.supplementaryEvidenceProjector === undefined
+      ) {
+        return projected;
+      }
+      try {
+        return await options.pipeline.supplementaryEvidenceProjector({
+          projected,
+          supplementaryEvidence: execution.supplementaryEvidence,
+        });
+      } catch {
+        return projected;
+      }
     },
   };
 }

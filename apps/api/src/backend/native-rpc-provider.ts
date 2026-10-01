@@ -2,7 +2,10 @@ import { isDeepStrictEqual } from "node:util";
 import { normalizedSwapIntentSchema } from "@parallax/contracts";
 import type { ArbitrumTransaction } from "./arbitrum-chain-adapter.js";
 import { inspectCamelotV3Transaction } from "./camelot-v3-binding.js";
-import type { ChainOperationOptions } from "./chain-adapter.js";
+import type {
+  ChainOperationOptions,
+  PreparedGasEstimate,
+} from "./chain-adapter.js";
 import {
   createNativeRpcClient,
   NativeRpcClientError,
@@ -18,6 +21,7 @@ import {
 } from "./native-rpc-evidence.js";
 import {
   createProviderAdapter,
+  PROVIDER_OWNED_GAS_ESTIMATE_CAPABILITY,
   type ProviderAdapter,
   type ProviderAdapterRawImplementation,
   type ProviderEvaluationInput,
@@ -92,8 +96,9 @@ type Freshness =
 
 type EvaluationState = {
   observedChainId?: string;
-  readonly callReturnData?: string;
-  readonly gasUnits?: string;
+  observedBlockHash?: string;
+  callReturnData?: string;
+  gasUnits?: string;
   freshness: Freshness;
   readonly fields: ProvisionalCandidateFieldInput[];
 };
@@ -111,6 +116,9 @@ export class NativeRpcProvider<Intent extends NativeRpcIntent = NativeRpcIntent>
 {
   public readonly providerId = NATIVE_RPC_ARBITRUM_PROVIDER_ID;
   public readonly capabilities = NATIVE_RPC_CAPABILITIES;
+  public readonly routingCapabilities = Object.freeze([
+    PROVIDER_OWNED_GAS_ESTIMATE_CAPABILITY,
+  ]);
   public readonly adapter: ProviderAdapter<
     Intent,
     NativeRpcPreparedExecution<Intent>
@@ -329,6 +337,7 @@ export class NativeRpcProvider<Intent extends NativeRpcIntent = NativeRpcIntent>
           "$.result.hash",
         ),
       );
+      state.observedBlockHash = observed.hash;
     } catch (error) {
       const classified = classifyRpcFailure(error);
       state.freshness = {
@@ -354,10 +363,6 @@ export class NativeRpcProvider<Intent extends NativeRpcIntent = NativeRpcIntent>
     try {
       const response = await this.request("eth_call", [transaction, blockTag]);
       if (!isHexData(response)) {
-        state.freshness = {
-          status: "unknown",
-          reason: "invalid eth_call result",
-        };
         state.fields.push(
           invalidCandidate(
             "nativeRpc.ethCall.returnData",
@@ -365,9 +370,18 @@ export class NativeRpcProvider<Intent extends NativeRpcIntent = NativeRpcIntent>
             "eth_call returned a non-hex result",
           ),
         );
-        return this.result(input.runId, "unknown", state);
+        const revalidation = await this.revalidatePinnedBlock(blockTag, state);
+        return this.result(
+          input.runId,
+          revalidation.failure?.status ?? "unknown",
+          state,
+          revalidation.failure === undefined
+            ? {}
+            : { failure: revalidation.failure },
+        );
       }
       callReturnData = response;
+      state.callReturnData = response;
       state.fields.push(
         candidate(
           "nativeRpc.ethCall.returnData",
@@ -391,9 +405,14 @@ export class NativeRpcProvider<Intent extends NativeRpcIntent = NativeRpcIntent>
             : classified.message,
         ),
       );
-      return this.result(input.runId, classified.status, state, {
-        failure: classified,
-      });
+      const revalidation = await this.revalidatePinnedBlock(blockTag, state);
+      const failure = revalidation.failure ?? classified;
+      return this.result(
+        input.runId,
+        revalidation.failure?.status ?? classified.status,
+        state,
+        { failure },
+      );
     }
 
     let gasUnits: string;
@@ -403,6 +422,7 @@ export class NativeRpcProvider<Intent extends NativeRpcIntent = NativeRpcIntent>
         blockTag,
       ]);
       gasUnits = normalizeQuantity(response);
+      state.gasUnits = gasUnits;
       state.fields.push(
         candidate(
           "nativeRpc.estimateGas.gasUnits",
@@ -424,69 +444,29 @@ export class NativeRpcProvider<Intent extends NativeRpcIntent = NativeRpcIntent>
           classified.message,
         ),
       );
-      return this.result(input.runId, classified.status, state, {
-        failure: classified,
-      });
+      const revalidation = await this.revalidatePinnedBlock(blockTag, state);
+      const failure = revalidation.failure ?? classified;
+      return this.result(
+        input.runId,
+        revalidation.failure?.status ?? classified.status,
+        state,
+        { failure },
+      );
     }
 
-    // Re-read the exact pinned block after transaction evaluation. A block
-    // number alone is not enough: the provider may return a different block
-    // hash for the same tag while the request is in flight. The call and gas
-    // facts remain available, but the overall execution becomes UNKNOWN.
-    try {
-      const observed = await this.request("eth_getBlockByNumber", [
-        blockTag,
-        false,
-      ]);
-      if (
-        !isRecord(observed) ||
-        observed.number !== blockTag ||
-        !isBlockHash(observed.hash) ||
-        (input.input.blockContext.blockHash !== undefined &&
-          observed.hash.toLowerCase() !==
-            input.input.blockContext.blockHash.toLowerCase())
-      ) {
-        state.freshness = {
-          status: "unknown",
-          reason: "Pinned block changed during evaluation",
-        };
-        state.fields.push(
-          invalidCandidate(
-            "nativeRpc.revalidatedBlock",
-            "block",
-            "Pinned block changed during evaluation",
-          ),
-        );
-        return this.result(input.runId, "unknown", state);
-      }
-      state.fields.push(
-        candidate(
-          "nativeRpc.revalidatedBlock",
-          "hex_string",
-          "observed",
-          observed.hash,
-          "$.result.hash",
-        ),
+    // Pin verification must bracket both successful and failed calls. Failed
+    // call/gas paths retain their observation only when the same pinned block
+    // is still returned after evaluation.
+    const revalidation = await this.revalidatePinnedBlock(blockTag, state);
+    if (!revalidation.verified) {
+      return this.result(
+        input.runId,
+        revalidation.failure?.status ?? "unknown",
+        state,
+        revalidation.failure === undefined
+          ? {}
+          : { failure: revalidation.failure },
       );
-    } catch (error) {
-      const classified = classifyRpcFailure(error);
-      state.freshness = {
-        status: "unknown",
-        reason: "Pinned block could not be revalidated",
-      };
-      state.fields.push(
-        candidate(
-          "nativeRpc.revalidatedBlock",
-          "block",
-          "missing",
-          undefined,
-          "$.result",
-          classified.message,
-        ),
-      );
-      return this.result(input.runId, classified.status, state, {
-        failure: classified,
-      });
     }
 
     if (this.checkFreshness) {
@@ -545,6 +525,10 @@ export class NativeRpcProvider<Intent extends NativeRpcIntent = NativeRpcIntent>
       }
     }
 
+    const preparedGasUnits = providerGasUnits(
+      input.input.gasEstimate,
+      gasUnits,
+    );
     state.fields.push(
       candidate(
         "nativeRpc.preparedExecution",
@@ -554,7 +538,9 @@ export class NativeRpcProvider<Intent extends NativeRpcIntent = NativeRpcIntent>
           chainId: input.input.chainId,
           protocol: input.input.protocol,
           quote,
-          gasEstimate: input.input.gasEstimate.gasUnits,
+          ...(preparedGasUnits === undefined
+            ? {}
+            : { gasEstimate: preparedGasUnits }),
           finality: input.input.finality.status,
         },
       ),
@@ -615,6 +601,68 @@ export class NativeRpcProvider<Intent extends NativeRpcIntent = NativeRpcIntent>
           (error: unknown) => settle(() => reject(error)),
         );
     });
+  }
+
+  private async revalidatePinnedBlock(
+    blockTag: string,
+    state: EvaluationState,
+  ): Promise<{
+    readonly verified: boolean;
+    readonly failure?: ClassifiedRpcFailure;
+  }> {
+    try {
+      const observed = await this.request("eth_getBlockByNumber", [
+        blockTag,
+        false,
+      ]);
+      if (
+        !isRecord(observed) ||
+        observed.number !== blockTag ||
+        !isBlockHash(observed.hash) ||
+        !isBlockHash(state.observedBlockHash) ||
+        observed.hash.toLowerCase() !== state.observedBlockHash.toLowerCase()
+      ) {
+        state.freshness = {
+          status: "unknown",
+          reason: "Pinned block changed during evaluation",
+        };
+        state.fields.push(
+          invalidCandidate(
+            "nativeRpc.revalidatedBlock",
+            "block",
+            "Pinned block changed during evaluation",
+          ),
+        );
+        return { verified: false };
+      }
+      state.fields.push(
+        candidate(
+          "nativeRpc.revalidatedBlock",
+          "hex_string",
+          "observed",
+          observed.hash,
+          "$.result.hash",
+        ),
+      );
+      return { verified: true };
+    } catch (error) {
+      const failure = classifyRpcFailure(error);
+      state.freshness = {
+        status: "unknown",
+        reason: "Pinned block could not be revalidated",
+      };
+      state.fields.push(
+        candidate(
+          "nativeRpc.revalidatedBlock",
+          "block",
+          "missing",
+          undefined,
+          "$.result",
+          failure.message,
+        ),
+      );
+      return { verified: false, failure };
+    }
   }
 
   private observedAt(): string {
@@ -791,11 +839,8 @@ function validatePreparedExecution<Intent extends NativeRpcIntent>(
     payload as ArbitrumTransaction,
   );
   if (!binding.ok) return binding.reason;
-  if (
-    !isRecord(prepared.gasEstimate) ||
-    !isDecimalQuantity(prepared.gasEstimate.gasUnits)
-  ) {
-    return "Native RPC requires a prepared decimal gas estimate";
+  if (!isPreparedGasEstimate(prepared.gasEstimate)) {
+    return "Native RPC requires a prepared gas estimate or explicit unavailability";
   }
   if (
     !isRecord(prepared.finality) ||
@@ -804,6 +849,35 @@ function validatePreparedExecution<Intent extends NativeRpcIntent>(
     return "Native RPC requires a prepared finality status";
   }
   return undefined;
+}
+
+function isPreparedGasEstimate(value: unknown): value is PreparedGasEstimate {
+  if (!isRecord(value)) return false;
+  if (isDecimalQuantity(value.gasUnits)) return true;
+  return (
+    value.status === "UNAVAILABLE" &&
+    typeof value.reason === "string" &&
+    value.reason.trim().length > 0
+  );
+}
+
+function providerGasUnits(
+  prepared: PreparedGasEstimate,
+  observed: string,
+): string | undefined {
+  if (isDecimalQuantity(observed)) return observed;
+  return isAvailableGasEstimate(prepared) ? prepared.gasUnits : undefined;
+}
+
+function isAvailableGasEstimate(
+  value: PreparedGasEstimate,
+): value is { readonly gasUnits: string } {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "gasUnits" in value &&
+    isDecimalQuantity(value.gasUnits)
+  );
 }
 
 function candidate(

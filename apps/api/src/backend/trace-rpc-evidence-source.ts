@@ -12,6 +12,7 @@ import {
   type NativeRpcPreparedExecution,
   type NativeRpcProviderMode,
 } from "./native-rpc-evidence.js";
+import { fingerprintPreparedTransaction } from "./prepared-transaction-fingerprint.js";
 import type { ProviderEvaluationInput } from "./provider-adapter.js";
 
 export const TRACE_RPC_EVIDENCE_SOURCE_ID = "trace-rpc" as const;
@@ -20,6 +21,13 @@ export const TRACE_RPC_CAPABILITIES = Object.freeze([
   "debug_traceCall.callTracer",
   "debug_traceCall.prestateTracer.diffMode",
 ] as const);
+
+export const TRACE_RPC_SCOPES = Object.freeze({
+  chain: "trace-rpc.chain",
+  pinnedBlock: "trace-rpc.pinned-block",
+  callTracer: "trace-rpc.callTracer",
+  prestateTracerDiff: "trace-rpc.prestateTracer.diffMode",
+} as const);
 
 export type TraceRpcEvidenceMode = NativeRpcProviderMode;
 
@@ -83,6 +91,17 @@ export type TraceCapabilityFailureReason =
   | "malformed_response"
   | "binding_mismatch"
   | "context_unverified";
+
+export const TRACE_RPC_FAILURE_REASONS = Object.freeze([
+  "method_unsupported",
+  "invalid_parameters",
+  "timeout",
+  "cancelled",
+  "rpc_unavailable",
+  "malformed_response",
+  "binding_mismatch",
+  "context_unverified",
+] as const satisfies readonly TraceCapabilityFailureReason[]);
 
 export type TraceCapabilityFailure = {
   readonly status: "unknown" | "unavailable";
@@ -290,12 +309,15 @@ export class TraceRpcEvidenceSource<
           observedBlockHash.toLowerCase() !==
             validated.binding.blockContext.blockHash.toLowerCase())
       ) {
-        return this.invalidResult("context_unverified", validated.binding);
+        return this.invalidResult("context_unverified", validated.binding, [
+          TRACE_RPC_SCOPES.chain,
+        ]);
       }
     } catch (error) {
       return this.contextUnavailableResult(
         classifyCapabilityFailure(error),
         validated.binding,
+        [TRACE_RPC_SCOPES.chain],
       );
     }
 
@@ -320,6 +342,30 @@ export class TraceRpcEvidenceSource<
     );
 
     return this.result(binding, callTracer, prestateTracerDiff);
+  }
+
+  /**
+   * Builds a normalized supplementary failure for a Backend boundary error.
+   * Unexpected source rejection or malformed source output must not turn the
+   * primary Native check into an application failure.
+   */
+  public failClosed(
+    input: TraceRpcEvidenceInput<Intent>,
+    failure: TraceCapabilityFailure = {
+      status: "unknown",
+      reason: "rpc_unavailable",
+    },
+  ): TraceRpcEvidenceResult {
+    try {
+      const validated = validateInput(input);
+      return this.contextUnavailableResult(failure, validated.binding);
+    } catch (error) {
+      const reason =
+        error instanceof TraceNormalizationError
+          ? error.reason
+          : "binding_mismatch";
+      return this.invalidResult(reason);
+    }
   }
 
   private async evaluateCallTrace(
@@ -371,25 +417,29 @@ export class TraceRpcEvidenceSource<
     prestateTracerDiff: TraceStateDiffEvidence,
   ): TraceRpcEvidenceResult {
     const checkedScope = [
-      "trace-rpc.chain",
-      "trace-rpc.pinned-block",
-      ...(callTracer.status === "observed" ? ["trace-rpc.callTracer"] : []),
+      TRACE_RPC_SCOPES.chain,
+      TRACE_RPC_SCOPES.pinnedBlock,
+      ...(callTracer.status === "observed"
+        ? [TRACE_RPC_SCOPES.callTracer]
+        : []),
       ...(prestateTracerDiff.status === "observed"
-        ? ["trace-rpc.prestateTracer.diffMode"]
+        ? [TRACE_RPC_SCOPES.prestateTracerDiff]
         : []),
     ];
 
     const unknownScope = [
-      ...(callTracer.status === "unknown" ? ["trace-rpc.callTracer"] : []),
+      ...(callTracer.status === "unknown" ? [TRACE_RPC_SCOPES.callTracer] : []),
       ...(prestateTracerDiff.status === "unknown"
-        ? ["trace-rpc.prestateTracer.diffMode"]
+        ? [TRACE_RPC_SCOPES.prestateTracerDiff]
         : []),
     ];
 
     const unavailableScope = [
-      ...(callTracer.status === "unavailable" ? ["trace-rpc.callTracer"] : []),
+      ...(callTracer.status === "unavailable"
+        ? [TRACE_RPC_SCOPES.callTracer]
+        : []),
       ...(prestateTracerDiff.status === "unavailable"
-        ? ["trace-rpc.prestateTracer.diffMode"]
+        ? [TRACE_RPC_SCOPES.prestateTracerDiff]
         : []),
     ];
 
@@ -419,11 +469,17 @@ export class TraceRpcEvidenceSource<
   private invalidResult(
     reason: TraceCapabilityFailureReason,
     binding?: TraceRpcBinding,
+    checkedScope: readonly string[] = [],
   ): TraceRpcEvidenceResult {
     const failure: TraceCapabilityFailure = {
       status: "unknown",
       reason,
     };
+    const unknownScope = [
+      ...(checkedScope.length > 0 ? [TRACE_RPC_SCOPES.pinnedBlock] : []),
+      TRACE_RPC_SCOPES.callTracer,
+      TRACE_RPC_SCOPES.prestateTracerDiff,
+    ];
 
     return Object.freeze({
       status: "invalid",
@@ -434,11 +490,8 @@ export class TraceRpcEvidenceSource<
         callTracer: failure,
         prestateTracerDiff: failure,
       },
-      checkedScope: Object.freeze([]),
-      unknownScope: Object.freeze([
-        "trace-rpc.callTracer",
-        "trace-rpc.prestateTracer.diffMode",
-      ]),
+      checkedScope: Object.freeze([...checkedScope]),
+      unknownScope: Object.freeze(unknownScope),
       unavailableScope: Object.freeze([]),
     });
   }
@@ -446,21 +499,32 @@ export class TraceRpcEvidenceSource<
   private contextUnavailableResult(
     failure: TraceCapabilityFailure,
     binding: TraceRpcBinding,
+    checkedScope: readonly string[] = [],
   ): TraceRpcEvidenceResult {
+    const failedContextScope =
+      checkedScope.length > 0 ? [TRACE_RPC_SCOPES.pinnedBlock] : [];
     const unknown =
       failure.status === "unknown"
-        ? ["trace-rpc.callTracer", "trace-rpc.prestateTracer.diffMode"]
+        ? [
+            ...failedContextScope,
+            TRACE_RPC_SCOPES.callTracer,
+            TRACE_RPC_SCOPES.prestateTracerDiff,
+          ]
         : [];
 
     const unavailable =
       failure.status === "unavailable"
-        ? ["trace-rpc.callTracer", "trace-rpc.prestateTracer.diffMode"]
+        ? [
+            ...failedContextScope,
+            TRACE_RPC_SCOPES.callTracer,
+            TRACE_RPC_SCOPES.prestateTracerDiff,
+          ]
         : [];
 
     // Both capabilities inherit the same context failure, so the top-level
     // status is derived from that same evidence: an UNKNOWN capability must
     // never be reported as UNAVAILABLE.
-    const unknownCount = failure.status === "unknown" ? 2 : 0;
+    const unknownCount = unknown.length;
 
     return Object.freeze({
       status: observabilityStatus(0, unknownCount),
@@ -471,7 +535,7 @@ export class TraceRpcEvidenceSource<
         callTracer: failure,
         prestateTracerDiff: failure,
       },
-      checkedScope: Object.freeze([]),
+      checkedScope: Object.freeze([...checkedScope]),
       unknownScope: Object.freeze(unknown),
       unavailableScope: Object.freeze(unavailable),
     });
@@ -770,19 +834,6 @@ function normalizeAddressKeys(value: Record<string, unknown>): string[] {
   }
 
   return addresses.map((address) => address.toLowerCase());
-}
-
-function fingerprintPreparedTransaction(
-  transaction: ArbitrumTransaction,
-): string {
-  return `sha256:${createHash("sha256")
-    .update(
-      JSON.stringify({
-        kind: "unsigned",
-        payload: transaction,
-      }),
-    )
-    .digest("hex")}`;
 }
 
 function sha256Json(value: unknown): string {

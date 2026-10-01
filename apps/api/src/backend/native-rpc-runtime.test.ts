@@ -340,6 +340,7 @@ describe("NativeRpcProvider", () => {
       "eth_getBlockByNumber",
       "eth_call",
       "eth_estimateGas",
+      "eth_getBlockByNumber",
     ]);
   });
 
@@ -712,6 +713,195 @@ describe("NativeRpcProvider", () => {
     });
   });
 
+  it("revalidates the pinned block after eth_call reverts and keeps validity unknown if it changed", async () => {
+    const preparedWithoutHash: NativeRpcPreparedExecution<NormalizedSwapIntent> =
+      {
+        ...prepared,
+        blockContext: {
+          blockNumber: prepared.blockContext.blockNumber,
+          observedAt: prepared.blockContext.observedAt,
+        },
+      };
+    let blockReads = 0;
+    const client: NativeRpcClient = {
+      async request(method) {
+        if (method === "eth_chainId") return "0x66eee";
+        if (method === "eth_getBlockByNumber") {
+          blockReads += 1;
+          return {
+            number: "0x2a",
+            hash: `0x${blockReads === 1 ? "a".repeat(64) : "b".repeat(64)}`,
+          };
+        }
+        if (method === "eth_call") {
+          throw new NativeRpcClientError("RPC_ERROR", "execution reverted", 3);
+        }
+        throw new Error(`unexpected RPC method ${method}`);
+      },
+    };
+    const provider = createNativeRpcProvider({ client, mode: "MOCK" });
+    const providerResult = await evaluateProviderAdapter(provider, {
+      runId: preparedWithoutHash.runId,
+      intent,
+      chainId: preparedWithoutHash.chainId,
+      protocol: preparedWithoutHash.protocol,
+      input: preparedWithoutHash,
+    });
+    const simulation = projectNativeRpcBasicSimulation({
+      intent,
+      preparedExecution: preparedWithoutHash,
+      providerResult,
+    });
+
+    expect(blockReads).toBe(2);
+    expect(providerResult.candidateFields).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          candidatePath: "nativeRpc.revalidatedBlock",
+          status: "invalid",
+        }),
+      ]),
+    );
+    expect(simulation).toMatchObject({
+      call: { status: "REVERTED" },
+      gasEstimate: { status: "NOT_RUN" },
+      validityAtExecution: "UNKNOWN",
+      failureStage: "BLOCK",
+    });
+  });
+
+  it("reports a pinned execution revert as invalid after the block is revalidated", async () => {
+    const client = clientFor({
+      eth_call: new NativeRpcClientError("RPC_ERROR", "execution reverted", 3),
+    });
+    const provider = createNativeRpcProvider({ client, mode: "MOCK" });
+    const providerResult = await evaluateProviderAdapter(provider, {
+      runId: prepared.runId,
+      intent,
+      chainId: prepared.chainId,
+      protocol: prepared.protocol,
+      input: prepared,
+    });
+    const simulation = projectNativeRpcBasicSimulation({
+      intent,
+      preparedExecution: prepared,
+      providerResult,
+    });
+
+    expect(
+      client.calls.filter(({ method }) => method === "eth_getBlockByNumber"),
+    ).toHaveLength(2);
+    expect(simulation).toMatchObject({
+      call: { status: "REVERTED" },
+      gasEstimate: { status: "NOT_RUN" },
+      validityAtExecution: "INVALID",
+      failureStage: "CALL",
+      reason: "Native RPC eth_call reverted",
+    });
+  });
+
+  it("revalidates the pinned block after gas estimation fails", async () => {
+    const client = clientFor({
+      eth_call: "0xabcdef",
+      eth_estimateGas: new NativeRpcClientError(
+        "RPC_ERROR",
+        "gas estimate unavailable",
+        -32000,
+      ),
+    });
+    const provider = createNativeRpcProvider({ client, mode: "MOCK" });
+    const providerResult = await evaluateProviderAdapter(provider, {
+      runId: prepared.runId,
+      intent,
+      chainId: prepared.chainId,
+      protocol: prepared.protocol,
+      input: prepared,
+    });
+
+    expect(
+      client.calls.filter(({ method }) => method === "eth_getBlockByNumber"),
+    ).toHaveLength(2);
+    expect(providerResult.candidateFields).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          candidatePath: "nativeRpc.ethCall.returnData",
+          status: "observed",
+          value: "0xabcdef",
+        }),
+        expect.objectContaining({
+          candidatePath: "nativeRpc.estimateGas.gasUnits",
+          status: "missing",
+        }),
+        expect.objectContaining({
+          candidatePath: "nativeRpc.revalidatedBlock",
+          status: "observed",
+          value: prepared.blockContext.blockHash,
+        }),
+      ]),
+    );
+  });
+
+  it("keeps gas-failure validity unknown when pinned-block revalidation fails", async () => {
+    let blockReads = 0;
+    const client: NativeRpcClient = {
+      async request(method) {
+        if (method === "eth_chainId") return "0x66eee";
+        if (method === "eth_getBlockByNumber") {
+          blockReads += 1;
+          if (blockReads === 2) {
+            throw new NativeRpcClientError(
+              "NETWORK_FAILURE",
+              "endpoint unavailable",
+            );
+          }
+          return {
+            number: "0x2a",
+            hash: prepared.blockContext.blockHash,
+          };
+        }
+        if (method === "eth_call") return "0xabcdef";
+        if (method === "eth_estimateGas") {
+          throw new NativeRpcClientError("RPC_ERROR", "execution reverted", 3);
+        }
+        throw new Error(`unexpected RPC method ${method}`);
+      },
+    };
+    const provider = createNativeRpcProvider({ client, mode: "MOCK" });
+    const providerResult = await evaluateProviderAdapter(provider, {
+      runId: prepared.runId,
+      intent,
+      chainId: prepared.chainId,
+      protocol: prepared.protocol,
+      input: prepared,
+    });
+    const simulation = projectNativeRpcBasicSimulation({
+      intent,
+      preparedExecution: prepared,
+      providerResult,
+    });
+
+    expect(providerResult.status).toBe("failed");
+    expect(providerResult.candidateFields).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          candidatePath: "nativeRpc.revalidatedBlock",
+          status: "missing",
+        }),
+      ]),
+    );
+    expect(simulation).toMatchObject({
+      call: { status: "SUCCEEDED" },
+      gasEstimate: { status: "UNAVAILABLE" },
+      validityAtExecution: "UNKNOWN",
+      failureStage: "BLOCK",
+    });
+    expect(simulation.reason).toBe(
+      "Native RPC gas estimation was unavailable; the pinned execution block could not be verified before and after evaluation",
+    );
+    expect(simulation.reason).not.toContain("execution reverted");
+    expect(simulation.reason).not.toContain("endpoint unavailable");
+  });
+
   it("does not fall back to latest when estimateGas rejects the block parameter", async () => {
     const client = clientFor({
       eth_call: "0x",
@@ -859,7 +1049,7 @@ describe("NativeRpcProvider", () => {
     );
   });
 
-  it("retains chain and verified block evidence when eth_call returns non-hex data", async () => {
+  it("retains and revalidates block evidence when eth_call returns non-hex data", async () => {
     const client = clientFor({
       eth_call: "not-hex",
       eth_estimateGas: "0x5208",
@@ -877,6 +1067,7 @@ describe("NativeRpcProvider", () => {
       "eth_chainId",
       "eth_getBlockByNumber",
       "eth_call",
+      "eth_getBlockByNumber",
     ]);
     expect(result.candidateFields).toEqual(
       expect.arrayContaining([
@@ -898,6 +1089,11 @@ describe("NativeRpcProvider", () => {
         expect.objectContaining({
           candidatePath: "nativeRpc.ethCall.returnData",
           status: "invalid",
+        }),
+        expect.objectContaining({
+          candidatePath: "nativeRpc.revalidatedBlock",
+          status: "observed",
+          value: prepared.blockContext.blockHash,
         }),
       ]),
     );
@@ -1052,6 +1248,15 @@ describe("NativeRpcProvider", () => {
         }),
       ]),
     );
+    expect(result.responseEvidence).toMatchObject({
+      kind: "redacted_snapshot",
+      snapshot: {
+        methods: {
+          eth_call: "0xabcdef",
+          eth_estimateGas: "21000",
+        },
+      },
+    });
   });
   it("never invokes raw RPC when supports rejects the requested chain or protocol", () => {
     const client = clientFor({});
@@ -1076,6 +1281,7 @@ describe("NativeRpcProvider", () => {
       "providerId",
       "mode",
       "capabilities",
+      "routingCapabilities",
       "supports",
     ]);
     expect(

@@ -7,10 +7,19 @@ import {
 } from "@/components/wallet/WalletChecking";
 import { WalletHome } from "@/components/wallet/WalletHome";
 import { CloseIcon } from "@/components/wallet/WalletIcons";
+import { WalletIntro } from "@/components/wallet/WalletIntro";
 import { WalletResult } from "@/components/wallet/WalletResult";
 import { WalletSwap } from "@/components/wallet/WalletSwap";
+import {
+  arbitrumSampleAdjust,
+  arbitrumSampleIntegrationError,
+  arbitrumSampleProceed,
+  arbitrumSampleStop,
+  arbitrumSampleUnknown,
+} from "@/lib/analyze/arbitrum-samples";
 import { flaggedFields } from "@/lib/analyze/fields";
 import {
+  applyRemediationOption,
   DEMO_SLIPPAGE,
   type FormFieldErrors,
   type FormState,
@@ -27,7 +36,11 @@ import {
   loadRun,
 } from "@/lib/analyze/service";
 import { createStageScheduler } from "@/lib/analyze/stageScheduler";
-import type { CheckSwapResult, QuoteState } from "@/lib/analyze/types";
+import type {
+  CheckSwapResult,
+  QuoteState,
+  RemediationOption,
+} from "@/lib/analyze/types";
 import { type Language, pick } from "@/lib/i18n";
 
 /** Milliseconds per simulated Moss stage, tuned for a sub-minute demo. */
@@ -35,7 +48,7 @@ const STAGE_MS = 380;
 
 /**
  * Debounce before asking the backend for a Quote. Typing an amount digit by
- * digit should not fire a live Moss Discover → Load → Quote per keystroke.
+ * digit should not fire a live Moss Discover â?? Load â?? Quote per keystroke.
  */
 const QUOTE_DEBOUNCE_MS = 450;
 const LAST_RUN_ID_KEY = "parallax:last-run-id";
@@ -110,6 +123,7 @@ function backendRunId(result: CheckSwapResult): string | undefined {
 }
 
 export function WalletApp({ language }: { language: Language }) {
+  const [showIntro, setShowIntro] = useState(true);
   const [screen, setScreen] = useState<Screen>("home");
   const screenRef = useRef<Screen>("home");
   // A user-started flow invalidates the mount-time recovery result.
@@ -268,6 +282,45 @@ export function WalletApp({ language }: { language: Language }) {
     });
   };
 
+  const loadArbitrumSample = (
+    verdict: "ADJUST" | "PROCEED" | "STOP" | "UNKNOWN" | "ERROR",
+  ) => {
+    const sampleMap = {
+      ADJUST: arbitrumSampleAdjust,
+      PROCEED: arbitrumSampleProceed,
+      STOP: arbitrumSampleStop,
+      UNKNOWN: arbitrumSampleUnknown,
+      ERROR: arbitrumSampleIntegrationError,
+    };
+    const sample = sampleMap[verdict];
+
+    recoveryCancelledRef.current = true;
+    schedulerRef.current.cancel();
+    const sampleForm: FormState = {
+      ...INITIAL_FORM,
+      tokenIn: sample.intent.tokenIn,
+      tokenOut: sample.intent.tokenOut,
+      amountIn: sample.intent.amountIn,
+    };
+    setFormErrors({});
+    setStoredRunId(undefined);
+    setDrawerOpen(false);
+    setCheckingMode("live");
+    setForm(sampleForm);
+    setSubmittedForm(sampleForm);
+    setResult(sample);
+    setScreen("result");
+  };
+
+  const applyOption = (option: RemediationOption) => {
+    const nextForm = applyRemediationOption(form, option);
+    if (nextForm === undefined) return;
+    setForm(nextForm);
+    setFormErrors({});
+    setQuote({ status: "idle" });
+    setScreen("swap");
+  };
+
   const discard = () => {
     recoveryCancelledRef.current = true;
     schedulerRef.current.cancel();
@@ -297,77 +350,83 @@ export function WalletApp({ language }: { language: Language }) {
           keep body text legible over moving particles. */}
       {/* Desktop uses the original viewport calculation; the mobile utility row
           supplies a safe-area-aware height override. */}
-      <div className="wallet-app-frame relative z-10 flex h-[calc(100vh-2.5rem)] flex-col overflow-hidden border border-line bg-ink-elev/85 backdrop-blur-md">
-        <header className="relative flex items-center justify-center px-5 py-3">
-          <span className="text-[15px] font-extrabold tracking-[-0.05em] text-monad-dim">
-            PARAL<span className="text-white">LAX</span>
-          </span>
-          {screen !== "home" && (
-            <button
-              type="button"
-              aria-label={pick(
-                language,
-                "Return to wallet home",
-                "返回演示钱包首页",
-              )}
-              className="wallet-app-close absolute right-5 text-dim transition-colors hover:text-monad-dim"
-              onClick={discard}
-            >
-              <CloseIcon size={20} />
-            </button>
-          )}
-        </header>
+      {showIntro ? (
+        <WalletIntro onComplete={() => setShowIntro(false)} />
+      ) : (
+        <div className="wallet-app-frame relative z-10 flex h-[calc(100vh-2.5rem)] flex-col overflow-hidden rounded-[24px] border-none bg-ink-elev/90 backdrop-blur-xl shadow-[0_8px_32px_rgba(0,0,0,0.12),_0_1px_3px_rgba(0,0,0,0.08)] animate-wallet-enter">
+          <header className="relative flex items-center justify-center px-6 py-5">
+            <span className="text-[22px] font-semibold tracking-[-0.02em] text-monad-dim">
+              PARAL<span className="text-white">LAX</span>
+            </span>
+            {screen !== "home" && (
+              <button
+                type="button"
+                aria-label={pick(
+                  language,
+                  "Return to wallet home",
+                  "è¿?å??æ¼?ç¤ºé?±å??é¦?é¡µ",
+                )}
+                className="wallet-app-close absolute right-6 rounded-full p-2 text-dim/80 transition-all duration-200 ease-out hover:bg-white/[0.06] hover:text-white active:scale-95"
+                onClick={discard}
+              >
+                <CloseIcon size={20} />
+              </button>
+            )}
+          </header>
 
-        {/* x is clipped because the screen transition slides in from the right;
+          {/* x is clipped because the screen transition slides in from the right;
             leaving it visible would resolve to auto and flash a scrollbar. */}
-        <div className="no-scrollbar flex flex-1 flex-col overflow-y-auto overflow-x-hidden">
-          <ScreenTransition key={screen}>
-            <div className="flex w-full flex-1 flex-col">
-              {screen === "home" && (
-                <WalletHome
-                  language={language}
-                  onSwap={() => {
-                    recoveryCancelledRef.current = true;
-                    setScreen("swap");
-                  }}
-                />
-              )}
-              {screen === "swap" && (
-                <WalletSwap
-                  errors={formErrors}
-                  flags={flags}
-                  form={form}
-                  language={language}
-                  quote={quote}
-                  onChange={(nextForm) => {
-                    setForm(nextForm);
-                    if (Object.keys(formErrors).length > 0) setFormErrors({});
-                  }}
-                  onSubmit={runCheck}
-                  onReplay={runReplay}
-                />
-              )}
-              {screen === "checking" && (
-                <WalletChecking
-                  language={language}
-                  mode={checkingMode}
-                  stage={stage}
-                />
-              )}
-              {screen === "result" && result && (
-                <WalletResult
-                  language={language}
-                  result={result}
-                  onDiscard={discard}
-                  onRetry={() => runCheck(true)}
-                  onKeep={() => setScreen("swap")}
-                  onOpenEvidence={() => setDrawerOpen(true)}
-                />
-              )}
-            </div>
-          </ScreenTransition>
+          <div className="no-scrollbar flex flex-1 flex-col overflow-y-auto overflow-x-hidden">
+            <ScreenTransition key={screen}>
+              <div className="flex w-full flex-1 flex-col">
+                {screen === "home" && (
+                  <WalletHome
+                    language={language}
+                    onLoadArbitrumSample={loadArbitrumSample}
+                    onSwap={() => {
+                      recoveryCancelledRef.current = true;
+                      setScreen("swap");
+                    }}
+                  />
+                )}
+                {screen === "swap" && (
+                  <WalletSwap
+                    errors={formErrors}
+                    flags={flags}
+                    form={form}
+                    language={language}
+                    quote={quote}
+                    onChange={(nextForm) => {
+                      setForm(nextForm);
+                      if (Object.keys(formErrors).length > 0) setFormErrors({});
+                    }}
+                    onSubmit={runCheck}
+                    onReplay={runReplay}
+                  />
+                )}
+                {screen === "checking" && (
+                  <WalletChecking
+                    language={language}
+                    mode={checkingMode}
+                    stage={stage}
+                  />
+                )}
+                {screen === "result" && result && (
+                  <WalletResult
+                    language={language}
+                    result={result}
+                    onDiscard={discard}
+                    onRetry={() => runCheck(true)}
+                    onKeep={() => setScreen("swap")}
+                    onOpenEvidence={() => setDrawerOpen(true)}
+                    onSelectOption={applyOption}
+                  />
+                )}
+              </div>
+            </ScreenTransition>
+          </div>
         </div>
-      </div>
+      )}
 
       {result && drawerOpen && (
         <EvidenceDrawer

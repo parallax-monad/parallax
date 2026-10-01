@@ -33,6 +33,16 @@ The Provider's `success` means the two RPC methods returned valid values at the 
 
 `supports()` is true only for chain 421614, `camelot-v3`, and `simulate`, `eth_call`, `estimateGas`, or `pinned-block`. `simulate` denotes the partial RPC evaluation seam, not a full simulation receipt. Sender semantics are identical for call and estimate: both use the supplied `from`; a different sender is rejected before either request.
 
+The Backend's internal `routingCapabilities` entry `provider-owned-gas-estimate` is a
+routing permission, not part of the Provider's public `capabilities`, a successful
+estimate, or an Evidence claim. On the Native route it permits continuation after only a
+typed chain `estimateGas` preflight error for the same requested chain with code
+`INSUFFICIENT_NATIVE_BALANCE` or `UNAVAILABLE`. The Native Provider must still issue its
+own exact-transaction, pinned-block `eth_estimateGas`; its result determines the public gas
+fact. All other error codes, untyped failures, and chain/operation mismatches stop before
+Provider evaluation. An unavailable pinned result remains `UNKNOWN` / `INCOMPLETE`; the
+routing permission never upgrades Evidence or Verdict by itself.
+
 ## Error and control matrix
 
 | State | Provider status | Retryability | GenericEvidence in current pipeline | Evidence basis / fail-closed behavior |

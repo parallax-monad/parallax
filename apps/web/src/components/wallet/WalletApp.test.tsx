@@ -9,6 +9,13 @@ vi.mock("./WalletBackground", () => ({
   WalletBackground: () => null,
 }));
 
+vi.mock("./WalletIntro", () => ({
+  WalletIntro: ({ onComplete }: { onComplete: () => void }) => {
+    onComplete();
+    return null;
+  },
+}));
+
 const RUN_ID = "recovered-run";
 const CREATED_AT = "2026-08-15T08:00:00.000Z";
 
@@ -112,7 +119,7 @@ describe("WalletApp persisted Run recovery", () => {
     expect(container.textContent).toContain("Live check");
 
     const reviewInputs = Array.from(container.querySelectorAll("button")).find(
-      (button) => button.textContent?.includes("Review inputs"),
+      (button) => button.textContent?.includes("Review swap inputs"),
     );
     expect(reviewInputs).toBeDefined();
 
@@ -187,5 +194,90 @@ describe("WalletApp persisted Run recovery", () => {
       "Checking this swap before you sign.",
     );
     expect(container.textContent).not.toContain("Before you sign");
+  });
+
+  test("loads the Arbitrum sample result from the wallet home", async () => {
+    const container = document.createElement("div");
+    document.body.append(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(<WalletApp language="en" />);
+      await Promise.resolve();
+    });
+
+    const sampleButton = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent?.includes("ADJUST"),
+    );
+    expect(sampleButton).toBeDefined();
+
+    await act(async () => {
+      sampleButton?.click();
+    });
+
+    expect(container.textContent).toContain("Your quote has changed");
+    expect(container.textContent).toContain("Adjust before proceeding");
+    expect(container.textContent).toContain("View verified options →");
+    expect(container.textContent).toContain("Execution economics");
+
+    const timelineOptionsButton = Array.from(
+      container.querySelectorAll("button"),
+    ).find((button) => button.textContent?.includes("View verified options"));
+    expect(timelineOptionsButton).toBeDefined();
+
+    await act(async () => {
+      timelineOptionsButton?.click();
+    });
+
+    expect(container.textContent).toContain("Your options");
+    expect(container.textContent).toContain("Keep spending 10,000 USDC");
+  });
+
+  test("applies a verified option to the swap sheet", async () => {
+    const container = document.createElement("div");
+    document.body.append(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(<WalletApp language="en" />);
+      await Promise.resolve();
+    });
+
+    const sampleButton = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent?.includes("ADJUST"),
+    );
+    expect(sampleButton).toBeDefined();
+
+    await act(async () => {
+      sampleButton?.click();
+    });
+
+    const timelineOptionsButton = Array.from(
+      container.querySelectorAll("button"),
+    ).find((button) => button.textContent?.includes("View verified options"));
+    expect(timelineOptionsButton).toBeDefined();
+
+    await act(async () => {
+      timelineOptionsButton?.click();
+    });
+
+    const applyButtons = Array.from(
+      container.querySelectorAll("button"),
+    ).filter((button) =>
+      button.textContent?.includes("Preserve a similar effective rate"),
+    );
+    expect(applyButtons.length).toBeGreaterThan(0);
+
+    await act(async () => {
+      applyButtons[0]?.click();
+    });
+
+    const amountInput = container.querySelector<HTMLInputElement>(
+      'input[aria-label="Amount to pay"]',
+    );
+    expect(amountInput?.value).toBe("7200");
+    expect(container.textContent).toContain("USDC");
+    expect(container.textContent).toContain("ETH");
+    expect(container.textContent).toContain("Submit live check");
   });
 });

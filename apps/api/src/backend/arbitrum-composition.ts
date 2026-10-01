@@ -63,6 +63,8 @@ import { ChainRegistry } from "./chain-registry.js";
 import {
   type BackendCompositionRuntime,
   type BackendProviderEvidenceMapper,
+  type BackendSupplementaryEvidenceEvaluator,
+  type BackendSupplementaryEvidenceProjector,
   type CorePort,
   createBackendComposition,
   type DecisionPort,
@@ -82,7 +84,10 @@ import {
   buildBackendCurrentQuoteContext,
   evaluateBackendP0Risk,
 } from "./p0-risk-integration.js";
-import type { BackendPipelineProviderExecution } from "./pipeline.js";
+import type {
+  BackendPipelinePreparedExecution,
+  BackendPipelineProviderExecution,
+} from "./pipeline.js";
 import { ProtocolRegistry } from "./protocol-registry.js";
 import type { ProviderEvaluationResult } from "./provider-adapter.js";
 import {
@@ -97,6 +102,8 @@ import {
   TENDERLY_ARBITRUM_PROVIDER_ID,
   type TenderlyPreparedExecution,
 } from "./tenderly-provider.js";
+import type { TraceRpcEvidenceSource } from "./trace-rpc-evidence-source.js";
+import { projectTraceRpcEvidence } from "./trace-rpc-public.js";
 
 export type ArbitrumNormalizationInput = CheckSwapRequest | QuoteRequest;
 
@@ -140,6 +147,8 @@ export type ArbitrumProductionCompositionOptions = {
     NormalizedSwapIntent,
     unknown
   >[];
+  /** Optional qualified supplementary source; never enters ProviderRegistry. */
+  readonly traceRpcEvidenceSource?: TraceRpcEvidenceSource<NormalizedSwapIntent>;
   readonly providerEvidenceMapper?: BackendProviderEvidenceMapper;
   readonly providerEnvironment?: ProviderEnvironment;
   readonly normalization?: NormalizationBoundary<
@@ -320,6 +329,44 @@ export function createArbitrumProductionComposition(
         providerResult: input.providerResult,
       });
     });
+  const traceRpcEvidenceSource = options.traceRpcEvidenceSource;
+  const supplementaryEvidenceEvaluator:
+    | BackendSupplementaryEvidenceEvaluator
+    | undefined =
+    traceRpcEvidenceSource === undefined
+      ? undefined
+      : async (input) => {
+          const prepared =
+            input.preparedExecution as BackendPipelinePreparedExecution<NormalizedSwapIntent>;
+          const traceInput = {
+            runId: prepared.runId,
+            intent: input.normalizedIntent as NormalizedSwapIntent,
+            chainId: prepared.chainId,
+            protocol: prepared.protocol,
+            input: toNativeRpcPreparedExecution(prepared),
+          };
+          try {
+            const result = await traceRpcEvidenceSource.evaluate(traceInput);
+            return projectTraceRpcEvidence(result) === undefined
+              ? traceRpcEvidenceSource.failClosed(traceInput, {
+                  status: "unknown",
+                  reason: "malformed_response",
+                })
+              : result;
+          } catch {
+            return traceRpcEvidenceSource.failClosed(traceInput);
+          }
+        };
+  const supplementaryEvidenceProjector:
+    | BackendSupplementaryEvidenceProjector
+    | undefined =
+    traceRpcEvidenceSource === undefined
+      ? undefined
+      : (input) => {
+          const traceRpc = projectTraceRpcEvidence(input.supplementaryEvidence);
+          if (traceRpc === undefined) return input.projected;
+          return withPublicTraceRpcEvidence(input.projected, traceRpc);
+        };
 
   const core =
     options.core ??
@@ -410,6 +457,8 @@ export function createArbitrumProductionComposition(
     receiptSigner: options.receiptSigner,
     receiptAnchorer: options.receiptAnchorer,
     providerEvidenceMapper,
+    supplementaryEvidenceEvaluator,
+    supplementaryEvidenceProjector,
   });
   const accountStateRpcClient =
     options.rpcClient ??
@@ -467,6 +516,51 @@ type ArbitrumDecisionContext = {
     >
   >;
 };
+
+function toNativeRpcPreparedExecution(
+  prepared: BackendPipelinePreparedExecution<NormalizedSwapIntent>,
+): NativeRpcPreparedExecution<NormalizedSwapIntent> {
+  return {
+    runId: prepared.runId,
+    intent: prepared.intent,
+    chainId: prepared.chainId,
+    protocol: prepared.protocol,
+    blockContext: prepared.blockContext,
+    quote: prepared.quote,
+    unsignedTransaction:
+      prepared.unsignedTransaction as NativeRpcPreparedExecution<NormalizedSwapIntent>["unsignedTransaction"],
+    gasEstimate: prepared.gasEstimate,
+    finality: prepared.finality,
+  };
+}
+
+function withPublicTraceRpcEvidence(
+  projected: unknown,
+  traceRpc: Record<string, unknown>,
+): unknown {
+  if (!isRecord(projected) || !isRecord(projected.providerEvidence)) {
+    return projected;
+  }
+
+  const providerEvidence = projected.providerEvidence;
+  const providerData = isRecord(providerEvidence.providerData)
+    ? providerEvidence.providerData
+    : {};
+  return {
+    ...projected,
+    providerEvidence: {
+      ...providerEvidence,
+      providerData: {
+        ...providerData,
+        traceRpc,
+      },
+    },
+  };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
 
 /**
  * Builds this Run's current quote context from its own pinned execution

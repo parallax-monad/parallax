@@ -1,4 +1,5 @@
 import type { Copy } from "@/lib/i18n";
+import { getChainIdForProtocol } from "./api-helpers";
 import { type FormState, INITIAL_FORM, validateForm } from "./form";
 import type {
   ActionSuggestion,
@@ -18,6 +19,8 @@ import type {
 
 export const DEFAULT_SENDER = "0x1111111111111111111111111111111111111111";
 export const MONAD_USDC_ADDRESS = "0x754704Bc059F8C67012fEd69BC8A327a5aafb603";
+export const ARBITRUM_SEPOLIA_USDC_ADDRESS =
+  "0xb893E3334D4Bd6C5ba8277Fd559e99Ed683A9FC7";
 const API_BASE = "";
 const cp = (value: string) => ({ en: value, zh: value });
 const obj = (value: unknown): Record<string, unknown> | undefined =>
@@ -28,17 +31,29 @@ const str = (value: unknown) => (typeof value === "string" ? value : undefined);
 const arr = (value: unknown): unknown[] => (Array.isArray(value) ? value : []);
 const unavailable = cp("unavailable");
 
-function symbol(value: unknown): string {
+function symbol(value: unknown, chainId = 143): string {
   const asset = obj(value);
-  if (asset?.kind === "native") return "MON";
+  if (asset?.kind === "native") {
+    return chainId === 421614 ? "ETH" : "MON";
+  }
   const address = str(asset?.address)?.toLowerCase();
-  if (address === MONAD_USDC_ADDRESS.toLowerCase()) return "USDC";
+  if (
+    address === MONAD_USDC_ADDRESS.toLowerCase() ||
+    address === ARBITRUM_SEPOLIA_USDC_ADDRESS.toLowerCase()
+  )
+    return "USDC";
   return address ? `${address.slice(0, 6)}…${address.slice(-4)}` : "unknown";
 }
 
-function asset(value: string) {
-  if (value === "MON") return { kind: "native" };
-  if (value === "USDC") return { kind: "erc20", address: MONAD_USDC_ADDRESS };
+function asset(value: string, chainId: number) {
+  if (value === "MON" || value === "ETH") return { kind: "native" };
+  if (value === "USDC") {
+    return {
+      kind: "erc20",
+      address:
+        chainId === 421614 ? ARBITRUM_SEPOLIA_USDC_ADDRESS : MONAD_USDC_ADDRESS,
+    };
+  }
   throw new Error(`Unsupported token: ${value}`);
 }
 
@@ -251,6 +266,18 @@ function failureIssues(value: unknown): ApiFailureIssue[] | undefined {
 }
 
 function failureCopy(failure: ApiFailure) {
+  if (failure.code === "EXECUTION_REVERT") {
+    return {
+      en: "The transaction reverted during gas preflight. The check was not completed, so this is not a transaction-risk verdict.",
+      zh: "交易在 Gas 预检阶段发生回退，检查未完成；这不是交易风险结论。",
+    };
+  }
+  if (failure.code === "INSUFFICIENT_NATIVE_BALANCE") {
+    return {
+      en: "The sender does not have enough native currency to cover the transaction amount and gas. The check was not completed, so this is not a transaction-risk verdict.",
+      zh: "该地址的原生币余额不足以支付交易金额和 Gas。检查尚未完成，因此这不是交易风险结论。",
+    };
+  }
   const label = failure.code.replaceAll("_", " ").toLowerCase();
   const reason = failure.reason ? ` (${failure.reason})` : "";
   const detail = failure.issues
@@ -354,22 +381,29 @@ function mapRun(
     .filter((item): item is Record<string, unknown> => !!item);
   const route = obj(run?.route);
   const runQuote = obj(run?.quote);
-  const routePath = arr(route?.path).map(symbol).join(" → ");
+  const chainId = typeof intent?.chainId === "number" ? intent.chainId : 143;
+  const routePath = arr(route?.path)
+    .map((item) => symbol(item, chainId))
+    .join(" → ");
   const output = arr(run?.evidence)
     .map(obj)
     .find((item) => item?.kind === "simulated_token_out");
-  const tokenIn = symbol(intent?.tokenIn);
-  const tokenOut = symbol(intent?.tokenOut);
+  const tokenIn = symbol(intent?.tokenIn, chainId);
+  const tokenOut = symbol(intent?.tokenOut, chainId);
   const boundary = obj(intent?.economicBoundary);
   return {
     runId,
     parentRunId: str(run?.parentRunId),
     systemStatus: systemStatus as CheckSwapResult["systemStatus"],
     verdict: verdict as Verdict,
-    summary: cp(
-      str(run?.summary) ??
-        (apiFailure ? failureCopy(apiFailure).en : "No summary provided"),
-    ),
+    summary:
+      apiFailure?.code === "INSUFFICIENT_NATIVE_BALANCE" ||
+      apiFailure?.code === "EXECUTION_REVERT"
+        ? failureCopy(apiFailure)
+        : cp(
+            str(run?.summary) ??
+              (apiFailure ? failureCopy(apiFailure).en : "No summary provided"),
+          ),
     recommendedActions: arr(run?.recommendedActions)
       .map((item) => suggestion(item, tokenIn, tokenOut))
       .filter((item): item is ActionSuggestion => !!item),
@@ -442,11 +476,11 @@ function mapRun(
 function body(input: CheckSwapInput) {
   return {
     ...(input.parentRunId ? { parentRunId: input.parentRunId } : {}),
-    chainId: 143,
+    chainId: getChainIdForProtocol(input.protocol),
     protocol: input.protocol,
     sender: input.sender ?? DEFAULT_SENDER,
-    tokenIn: asset(input.tokenIn),
-    tokenOut: asset(input.tokenOut),
+    tokenIn: asset(input.tokenIn, getChainIdForProtocol(input.protocol)),
+    tokenOut: asset(input.tokenOut, getChainIdForProtocol(input.protocol)),
     amountIn: input.amountIn,
     economicBoundary: input.minimumReceived
       ? {
@@ -463,11 +497,11 @@ export type CheckOptions = { fetch?: typeof fetch; signal?: AbortSignal };
 /** `/api/quote` is a strict exact-input body: no boundary, no parent, no slippage. */
 function quoteBody(input: QuoteSwapInput) {
   return {
-    chainId: 143,
+    chainId: getChainIdForProtocol(input.protocol),
     protocol: input.protocol,
     sender: input.sender ?? DEFAULT_SENDER,
-    tokenIn: asset(input.tokenIn),
-    tokenOut: asset(input.tokenOut),
+    tokenIn: asset(input.tokenIn, getChainIdForProtocol(input.protocol)),
+    tokenOut: asset(input.tokenOut, getChainIdForProtocol(input.protocol)),
     amountIn: input.amountIn,
   };
 }
@@ -779,8 +813,17 @@ export async function loadRun(
     return { kind: "started", runId: storedRunId };
   }
 
+  // A persisted failure describes the RunStore lifecycle, which is deliberately
+  // coarse. Keep the specific native-balance error during recovery instead of
+  // replacing it with the lifecycle code (for example, AGENT_FLOW_ERROR).
+  const storedResult = obj(record?.result);
+  const storedErrorCode = str(obj(storedResult?.error)?.code);
   const persistedFailure =
-    status === "failed" ? str(record?.failure) : undefined;
+    status === "failed" &&
+    storedErrorCode !== "INSUFFICIENT_NATIVE_BALANCE" &&
+    storedErrorCode !== "EXECUTION_REVERT"
+      ? str(record?.failure)
+      : undefined;
   const result = mapRun(
     record?.result,
     persistedFailure === undefined
@@ -814,7 +857,10 @@ export function formFromRunResult(result: CheckSwapResult): FormState {
 
   return {
     ...INITIAL_FORM,
-    protocol: protocol === "kuru" || protocol === "pancake" ? protocol : "kuru",
+    protocol:
+      protocol === "kuru" || protocol === "pancake" || protocol === "camelot-v3"
+        ? protocol
+        : INITIAL_FORM.protocol,
     tokenIn: result.intent.tokenIn,
     tokenOut: result.intent.tokenOut,
     amountIn: result.intent.amountIn,

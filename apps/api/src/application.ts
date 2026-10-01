@@ -26,13 +26,19 @@ import {
   type BackendApplicationRoute,
   findBackendApplicationRoute,
 } from "./backend/application-routing.js";
+import { isChainAdapterError } from "./backend/chain-adapter.js";
 import type { BackendCompositionRuntime } from "./backend/composition.js";
 import { isBackendControlError } from "./backend/control-boundary.js";
+import { projectTraceRpcEvidence } from "./backend/trace-rpc-public.js";
 import {
   coerceIntentNormalizationResult,
   normalizeCheckSwapRequest,
 } from "./normalization.js";
-import { type AgentFlowPort, isUnsupportedAgentFlowError } from "./ports.js";
+import {
+  type AgentFlowCheckInput,
+  type AgentFlowPort,
+  isUnsupportedAgentFlowError,
+} from "./ports.js";
 import type { BackendRuntime } from "./runtime-config.js";
 import type { CheckRunFailureCode, CheckRunRecord, RunStore } from "./store.js";
 import { tokenDecimals } from "./token-decimals.js";
@@ -44,6 +50,8 @@ export type CheckApiErrorCode =
   | "UNSUPPORTED"
   | "AGENT_FLOW_ERROR"
   | "INVALID_AGENT_FLOW_RESPONSE"
+  | "INSUFFICIENT_NATIVE_BALANCE"
+  | "EXECUTION_REVERT"
   | "RUN_STORE_ERROR";
 
 export type CheckApiError =
@@ -187,18 +195,31 @@ export class CheckApplicationService {
     );
     if (!invoked.ok) {
       const unsupported = isUnsupportedCheckError(invoked.error);
+      const mappedError = integrationErrorForFailure(
+        unsupported ? "UNSUPPORTED" : "AGENT_FLOW_ERROR",
+        invoked.error,
+        normalized.intent.chainId,
+      );
+      const publicError: CheckApiError =
+        mappedError.code === "INSUFFICIENT_NATIVE_BALANCE" ||
+        mappedError.code === "EXECUTION_REVERT"
+          ? {
+              code: mappedError.code,
+              message: mappedError.message,
+            }
+          : {
+              code: unsupported ? "UNSUPPORTED" : "AGENT_FLOW_ERROR",
+              message: unsupported
+                ? unsupportedCheckMessage(invoked.error)
+                : "Agent Flow could not complete the check",
+            };
       return this.recordFailure(
         runId,
         unsupported ? "UNSUPPORTED" : "AGENT_FLOW_ERROR",
         normalized.intent,
         childFields,
         createdAt,
-        {
-          code: unsupported ? "UNSUPPORTED" : "AGENT_FLOW_ERROR",
-          message: unsupported
-            ? unsupportedCheckMessage(invoked.error)
-            : "Agent Flow could not complete the check",
-        },
+        publicError,
         invoked.error,
         partialRunResultFrom(invoked.error),
       );
@@ -311,6 +332,8 @@ export class CheckApplicationService {
       )?.agentFlow ?? this.dependencies.agentFlow,
       childRunId,
       adjustment.nextIntent,
+      undefined,
+      "verification_child",
     );
     if (!invoked.ok) {
       const persisted = await this.persistVerificationChildFailure(
@@ -418,11 +441,13 @@ export class CheckApplicationService {
     expectationBaseline?: Parameters<
       AgentFlowPort["check"]
     >[0]["expectationBaseline"],
+    executionPurpose: AgentFlowCheckInput["executionPurpose"] = "primary",
   ): Promise<{ ok: true; candidate: unknown } | { ok: false; error: unknown }> {
     try {
       const candidate = await agentFlow.check({
         runId,
         intent,
+        executionPurpose,
         ...(expectationBaseline === undefined ? {} : { expectationBaseline }),
         tokenInDecimals: tokenDecimals(
           this.dependencies.runtime,
@@ -638,9 +663,86 @@ function publicRunResult(result: RunResult): RunResult {
     ...result,
     providerEvidence: {
       ...result.providerEvidence,
-      providerData: {},
+      providerData: publicProviderData(
+        result.providerEvidence.providerData,
+        result,
+      ),
     },
   });
+}
+
+/**
+ * The Backend Trace integration is the first reviewed public projection of a
+ * supplementary source. Preserve only its normalized allowlist here; all
+ * other Provider-owned metadata remains private, including any raw RPC shape
+ * accidentally placed beside or inside the source result.
+ */
+function publicProviderData(
+  value: Record<string, unknown>,
+  result: RunResult,
+): Record<string, unknown> {
+  const traceRpc = publicTraceRpcEvidence(value.traceRpc, result);
+  return traceRpc === undefined ? {} : { traceRpc };
+}
+
+function publicTraceRpcEvidence(
+  value: unknown,
+  result: RunResult,
+): Record<string, unknown> | undefined {
+  const projected = projectTraceRpcEvidence(value);
+  if (projected === undefined) return undefined;
+
+  const binding = publicTraceBinding(projected.binding, result);
+  if (
+    projected.status !== "invalid" &&
+    (binding === undefined || projected.binding === undefined)
+  ) {
+    return undefined;
+  }
+  if (projected.binding !== undefined && binding === undefined)
+    return undefined;
+  if (binding !== undefined) projected.binding = binding;
+  return projected;
+}
+
+function publicTraceBinding(
+  value: unknown,
+  result: RunResult,
+): Record<string, unknown> | undefined {
+  if (value === undefined) return undefined;
+  const binding = asRecord(value);
+  const blockContext = asRecord(binding?.blockContext);
+  if (
+    binding === undefined ||
+    blockContext === undefined ||
+    typeof binding.runId !== "string" ||
+    typeof binding.chainId !== "number" ||
+    !Number.isSafeInteger(binding.chainId) ||
+    typeof binding.protocol !== "string" ||
+    typeof binding.transactionFingerprint !== "string" ||
+    typeof blockContext.blockNumber !== "string" ||
+    binding.runId !== result.runId ||
+    binding.chainId !== result.intent.chainId ||
+    binding.protocol !== result.intent.protocol
+  ) {
+    return undefined;
+  }
+
+  return {
+    runId: binding.runId,
+    chainId: binding.chainId,
+    protocol: binding.protocol,
+    transactionFingerprint: binding.transactionFingerprint,
+    blockContext: {
+      blockNumber: blockContext.blockNumber,
+      ...(typeof blockContext.blockHash === "string"
+        ? { blockHash: blockContext.blockHash }
+        : {}),
+      ...(typeof blockContext.observedAt === "string"
+        ? { observedAt: blockContext.observedAt }
+        : {}),
+    },
+  };
 }
 
 function failClosedAdjustCandidate(candidate: unknown): unknown | undefined {
@@ -686,19 +788,12 @@ function createIntegrationErrorResult(
     systemStatus: "INTEGRATION_ERROR",
     verdict: "UNKNOWN",
     summary: "The check could not be completed",
-    error: integrationErrorForFailure(failure, cause),
+    error: integrationErrorForFailure(failure, cause, intent.chainId),
     ruleResults: [],
     recommendedActions: [],
     irrelevantActions: [],
     evidence: [],
-    scope: [
-      {
-        key: "P0-CHECK-SIMULATION-001",
-        label: integrationScopeLabel(cause),
-        status: "unknown",
-        reason: "REQUIRED_CHECK_INTERRUPTED",
-      },
-    ],
+    scope: integrationScope(cause, intent.chainId),
   });
 }
 
@@ -707,6 +802,7 @@ type IntegrationError = FailedRunResult["error"];
 function integrationErrorForFailure(
   failure: CheckRunFailureCode,
   cause: unknown,
+  expectedChainId: number,
 ): IntegrationError {
   if (failure === "UNSUPPORTED") {
     return {
@@ -731,6 +827,26 @@ function integrationErrorForFailure(
   const rawStatus = stringField(fields, "integrationStatus");
   const source = stringField(fields, "source");
   const stage = integrationErrorStage(stringField(fields, "stage"));
+
+  if (isInsufficientNativeBalanceFailure(cause, expectedChainId)) {
+    return {
+      code: "INSUFFICIENT_NATIVE_BALANCE",
+      stage: "action",
+      message:
+        "The sender does not have enough native currency to cover the transaction amount and gas",
+      retryable: false,
+    };
+  }
+
+  if (isExecutionRevertFailure(cause, expectedChainId)) {
+    return {
+      code: "EXECUTION_REVERT",
+      stage: "action",
+      message:
+        "The transaction reverted during gas preflight; the check was not completed.",
+      retryable: false,
+    };
+  }
 
   if (rawCode === "TIMEOUT" || rawStatus === "TIMEOUT") {
     return {
@@ -805,10 +921,77 @@ function integrationErrorStage(
   }
 }
 
-function integrationScopeLabel(cause: unknown): string {
-  return isProviderBoundaryFailure(cause)
-    ? "Provider evaluation"
-    : "Moss simulation";
+function integrationScope(
+  cause: unknown,
+  expectedChainId: number,
+): FailedRunResult["scope"] {
+  if (isExecutionRevertFailure(cause, expectedChainId)) {
+    return [
+      {
+        key: "P0-CHECK-ACTION-001",
+        label: "Transaction preparation",
+        status: "unknown",
+        reason: "REQUIRED_CHECK_INTERRUPTED",
+      },
+    ];
+  }
+
+  if (isInsufficientNativeBalanceFailure(cause, expectedChainId)) {
+    return [
+      {
+        key: "P0-CHECK-ACTION-001",
+        label: "Transaction preparation",
+        status: "unknown",
+        reason: "REQUIRED_CHECK_INTERRUPTED",
+      },
+      {
+        key: "P0-CHECK-SIMULATION-001",
+        label: "Moss simulation",
+        status: "unknown",
+        reason: "REQUIRED_CHECK_INTERRUPTED",
+      },
+      {
+        key: "P0-CHECK-SIMULATION-COVERAGE-001",
+        label: "Simulation coverage",
+        status: "unknown",
+        reason: "REQUIRED_CHECK_INTERRUPTED",
+      },
+    ];
+  }
+  return [
+    {
+      key: "P0-CHECK-SIMULATION-001",
+      label: isProviderBoundaryFailure(cause)
+        ? "Provider evaluation"
+        : "Moss simulation",
+      status: "unknown",
+      reason: "REQUIRED_CHECK_INTERRUPTED",
+    },
+  ];
+}
+
+function isInsufficientNativeBalanceFailure(
+  cause: unknown,
+  expectedChainId: number,
+): boolean {
+  return (
+    isChainAdapterError(cause) &&
+    cause.chainId === expectedChainId &&
+    cause.code === "INSUFFICIENT_NATIVE_BALANCE" &&
+    cause.operation === "estimateGas"
+  );
+}
+
+function isExecutionRevertFailure(
+  cause: unknown,
+  expectedChainId: number,
+): boolean {
+  return (
+    isChainAdapterError(cause) &&
+    cause.chainId === expectedChainId &&
+    cause.operation === "estimateGas" &&
+    cause.code === "EXECUTION_REVERT"
+  );
 }
 
 function unsupportedCheckMessage(cause: unknown): string {

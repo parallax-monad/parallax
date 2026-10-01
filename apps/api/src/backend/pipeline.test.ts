@@ -2,6 +2,7 @@ import type { NormalizedSwapIntent } from "@parallax/contracts";
 import { describe, expect, it, vi } from "vitest";
 import { bootstrapBackendApp } from "../bootstrap/backend.js";
 import { InMemoryRunStore } from "../store.js";
+import { ChainAdapterError } from "./chain-adapter.js";
 import { ChainRegistry } from "./chain-registry.js";
 import { createBackendComposition } from "./composition.js";
 import {
@@ -12,6 +13,7 @@ import {
 } from "./fake-harness.js";
 import { BackendPipeline } from "./pipeline.js";
 import { ProtocolRegistry } from "./protocol-registry.js";
+import { PROVIDER_OWNED_GAS_ESTIMATE_CAPABILITY } from "./provider-adapter.js";
 import { ProviderRegistry } from "./provider-registry.js";
 
 const normalizedIntent = {
@@ -29,7 +31,193 @@ const normalizedIntent = {
   economicBoundary: { availability: "unavailable", source: "unavailable" },
 } as NormalizedSwapIntent;
 
+function createPipelineWithGasPreflightFailure(
+  error: unknown,
+  options: { readonly providerOwnsGasEstimate?: boolean } = {},
+  fixture = fakeBackendFixture(),
+) {
+  const chain = {
+    ...createFakeChainAdapter(fixture.chain),
+    async estimateGas() {
+      throw error;
+    },
+  };
+  const routingCapabilities = options.providerOwnsGasEstimate
+    ? [
+        ...(fixture.provider.routingCapabilities ?? []),
+        PROVIDER_OWNED_GAS_ESTIMATE_CAPABILITY,
+      ]
+    : fixture.provider.routingCapabilities;
+  const provider = createFakeProviderAdapterHarness({
+    ...fixture.provider,
+    routingCapabilities,
+    supports: (query) =>
+      query.chainId === fixture.chain.chainId &&
+      query.protocol === fixture.protocol.id,
+  });
+  const runtime = createBackendComposition({
+    chainRegistry: new ChainRegistry([chain]),
+    protocolRegistry: new ProtocolRegistry([
+      {
+        chainId: fixture.chain.chainId,
+        protocol: fixture.protocol.id,
+        adapter: createFakeProtocolAdapter(fixture.protocol),
+      },
+    ]),
+    providerRegistry: new ProviderRegistry([provider.adapter]),
+    normalization: { normalize: () => normalizedIntent },
+    core: { evaluate: async () => undefined },
+    decision: { decide: async () => undefined },
+    runStore: new InMemoryRunStore(),
+  });
+
+  return {
+    pipeline: new BackendPipeline({ runtime }),
+    provider,
+    fixture,
+  };
+}
+
 describe("BackendPipeline", () => {
+  it("evaluates supplementary evidence from the exact prepared execution without passing it to Risk seams", async () => {
+    const fixture = fakeBackendFixture();
+    const chain = createFakeChainAdapter(fixture.chain);
+    const protocol = createFakeProtocolAdapter(fixture.protocol);
+    const provider = createFakeProviderAdapterHarness({
+      ...fixture.provider,
+      supports: (query) =>
+        query.chainId === fixture.chain.chainId &&
+        query.protocol === fixture.protocol.id,
+    });
+    const supplementaryEvidenceEvaluator = vi.fn(
+      async (input: {
+        readonly preparedExecution: unknown;
+        readonly providerResult: unknown;
+      }) => ({
+        source: "supplementary-fixture",
+        runId: (input.preparedExecution as { readonly runId: string }).runId,
+        primaryStatus: (input.providerResult as { readonly status: string })
+          .status,
+      }),
+    );
+    const core = vi.fn(
+      async (_input: NormalizedSwapIntent, context?: unknown) => context,
+    );
+    const decision = vi.fn(async (input: unknown) => input);
+    const runtime = createBackendComposition({
+      chainRegistry: new ChainRegistry([chain]),
+      protocolRegistry: new ProtocolRegistry([
+        {
+          chainId: fixture.chain.chainId,
+          protocol: fixture.protocol.id,
+          adapter: protocol,
+        },
+      ]),
+      providerRegistry: new ProviderRegistry([provider.adapter]),
+      normalization: { normalize: () => normalizedIntent },
+      core: { evaluate: core },
+      decision: { decide: decision },
+      runStore: new InMemoryRunStore(),
+      supplementaryEvidenceEvaluator,
+    });
+    const pipeline = new BackendPipeline({ runtime });
+
+    const result = await pipeline.execute({
+      rawInput: {},
+      runId: "supplementary-run",
+      chainId: fixture.chain.chainId,
+      protocol: fixture.protocol.id,
+    });
+
+    expect(supplementaryEvidenceEvaluator).toHaveBeenCalledWith(
+      expect.objectContaining({
+        preparedExecution: expect.objectContaining({
+          runId: "supplementary-run",
+          chainId: fixture.chain.chainId,
+          protocol: fixture.protocol.id,
+          quote: fixture.protocol.quote,
+          unsignedTransaction: {
+            kind: "unsigned",
+            payload: fixture.protocol.transaction,
+          },
+          blockContext: expect.objectContaining({
+            blockNumber: fixture.chain.blockNumber,
+          }),
+        }),
+        providerResult: expect.objectContaining({ status: "success" }),
+      }),
+    );
+    expect(result.supplementaryEvidence).toEqual({
+      source: "supplementary-fixture",
+      runId: "supplementary-run",
+      primaryStatus: "success",
+    });
+    expect(core).toHaveBeenCalledWith(
+      normalizedIntent,
+      expect.not.objectContaining({ supplementaryEvidence: expect.anything() }),
+    );
+    expect(decision).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.not.objectContaining({ supplementaryEvidence: expect.anything() }),
+    );
+
+    const pipelineContext = core.mock.calls[0]?.[1] as {
+      readonly executeProviderPath?: (input: {
+        readonly runId: string;
+        readonly intent: NormalizedSwapIntent;
+      }) => Promise<{ readonly supplementaryEvidence?: unknown }>;
+    };
+    expect(pipelineContext.executeProviderPath).toBeTypeOf("function");
+    const childExecution = await pipelineContext.executeProviderPath?.({
+      runId: "supplementary-child",
+      intent: normalizedIntent,
+    });
+    expect(childExecution?.supplementaryEvidence).toBeUndefined();
+    expect(supplementaryEvidenceEvaluator).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the primary execution when supplementary evaluation rejects", async () => {
+    const fixture = fakeBackendFixture();
+    const chain = createFakeChainAdapter(fixture.chain);
+    const protocol = createFakeProtocolAdapter(fixture.protocol);
+    const provider = createFakeProviderAdapterHarness({
+      ...fixture.provider,
+      supports: (query) =>
+        query.chainId === fixture.chain.chainId &&
+        query.protocol === fixture.protocol.id,
+    });
+    const supplementaryEvidenceEvaluator = vi.fn(async () => {
+      throw new Error("supplementary source failed");
+    });
+    const runtime = createBackendComposition({
+      chainRegistry: new ChainRegistry([chain]),
+      protocolRegistry: new ProtocolRegistry([
+        {
+          chainId: fixture.chain.chainId,
+          protocol: fixture.protocol.id,
+          adapter: protocol,
+        },
+      ]),
+      providerRegistry: new ProviderRegistry([provider.adapter]),
+      normalization: { normalize: () => normalizedIntent },
+      core: { evaluate: async () => undefined },
+      decision: { decide: async () => undefined },
+      runStore: new InMemoryRunStore(),
+      supplementaryEvidenceEvaluator,
+    });
+
+    const result = await new BackendPipeline({ runtime }).execute({
+      rawInput: {},
+      runId: "supplementary-rejection",
+      chainId: fixture.chain.chainId,
+      protocol: fixture.protocol.id,
+    });
+
+    expect(result.providerResult.status).toBe("success");
+    expect(result.supplementaryEvidence).toBeUndefined();
+    expect(supplementaryEvidenceEvaluator).toHaveBeenCalledTimes(1);
+  });
+
   it("executes the injected Chain, Protocol, Provider, Core, and Decision seams", async () => {
     const fixture = fakeBackendFixture();
     const chain = createFakeChainAdapter(fixture.chain);
@@ -120,6 +308,178 @@ describe("BackendPipeline", () => {
         providerResult: expect.objectContaining({ status: "success" }),
       }),
     );
+  });
+
+  it.each(["INSUFFICIENT_NATIVE_BALANCE", "UNAVAILABLE"] as const)(
+    "continues to a provider-owned pinned gas check for %s preflight failures",
+    async (code) => {
+      const fixture = fakeBackendFixture();
+      const error = new ChainAdapterError({
+        chainId: fixture.chain.chainId,
+        operation: "estimateGas",
+        code,
+        message: "preflight estimate unavailable",
+      });
+      const { pipeline, provider } = createPipelineWithGasPreflightFailure(
+        error,
+        { providerOwnsGasEstimate: true },
+        fixture,
+      );
+
+      const result = await pipeline.execute({
+        rawInput: {},
+        runId: `gas-preflight-${code}`,
+        chainId: fixture.chain.chainId,
+        protocol: fixture.protocol.id,
+      });
+
+      expect(result.gasEstimate).toEqual({
+        status: "UNAVAILABLE",
+        reason: "Chain-level gas preflight was unavailable",
+      });
+      expect(provider.evaluations).toHaveLength(1);
+      expect(result.providerResult.status).toBe("success");
+      expect(provider.evaluations[0]?.input).toMatchObject({
+        runId: `gas-preflight-${code}`,
+        intent: normalizedIntent,
+        blockContext: { blockNumber: fixture.chain.blockNumber },
+        quote: fixture.protocol.quote,
+        unsignedTransaction: {
+          kind: "unsigned",
+          payload: fixture.protocol.transaction,
+        },
+        gasEstimate: {
+          status: "UNAVAILABLE",
+          reason: "Chain-level gas preflight was unavailable",
+        },
+      });
+    },
+  );
+
+  it.each([
+    {
+      label: "timeout",
+      chainId: 901,
+      operation: "estimateGas",
+      code: "TIMEOUT",
+    },
+    {
+      label: "cancellation",
+      chainId: 901,
+      operation: "estimateGas",
+      code: "CANCELLED",
+    },
+    {
+      label: "invalid request",
+      chainId: 901,
+      operation: "estimateGas",
+      code: "INVALID_REQUEST",
+    },
+    {
+      label: "unknown error",
+      chainId: 901,
+      operation: "estimateGas",
+      code: "UNKNOWN",
+    },
+    {
+      label: "wrong chain",
+      chainId: 143,
+      operation: "estimateGas",
+      code: "UNAVAILABLE",
+    },
+    {
+      label: "wrong operation",
+      chainId: 901,
+      operation: "getBlockContext",
+      code: "UNAVAILABLE",
+    },
+  ] as const)(
+    "stops before Provider evaluation for a $label gas-preflight failure",
+    async ({ chainId, operation, code }) => {
+      const error = new ChainAdapterError({
+        chainId,
+        operation,
+        code,
+        message: "must not be treated as a recoverable gas preflight",
+      });
+      const { pipeline, provider } = createPipelineWithGasPreflightFailure(
+        error,
+        { providerOwnsGasEstimate: true },
+      );
+
+      await expect(
+        pipeline.execute({
+          rawInput: {},
+          runId: `gas-preflight-blocked-${code}-${operation}-${chainId}`,
+          chainId: 901,
+          protocol: "kuru",
+        }),
+      ).rejects.toBe(error);
+      expect(provider.evaluations).toHaveLength(0);
+    },
+  );
+
+  it("stops when the selected Provider does not own gas estimation", async () => {
+    const error = new ChainAdapterError({
+      chainId: 901,
+      operation: "estimateGas",
+      code: "UNAVAILABLE",
+      message: "chain preflight unavailable",
+    });
+    const { pipeline, provider } = createPipelineWithGasPreflightFailure(error);
+
+    await expect(
+      pipeline.execute({
+        rawInput: {},
+        runId: "gas-preflight-no-provider-capability",
+        chainId: 901,
+        protocol: "kuru",
+      }),
+    ).rejects.toBe(error);
+    expect(provider.evaluations).toHaveLength(0);
+  });
+
+  it("stops before Provider evaluation for an execution-revert gas preflight failure even when the Provider owns pinned gas estimation", async () => {
+    const error = new ChainAdapterError({
+      chainId: 901,
+      operation: "estimateGas",
+      code: "EXECUTION_REVERT",
+      message: "transaction execution reverted during gas preflight",
+    });
+    const { pipeline, provider } = createPipelineWithGasPreflightFailure(
+      error,
+      { providerOwnsGasEstimate: true },
+    );
+
+    await expect(
+      pipeline.execute({
+        rawInput: {},
+        runId: "gas-preflight-execution-revert",
+        chainId: 901,
+        protocol: "kuru",
+      }),
+    ).rejects.toBe(error);
+    expect(provider.evaluations).toHaveLength(0);
+  });
+
+  it("does not continue after an untyped gas-preflight exception", async () => {
+    const error = new Error("unclassified preflight failure");
+    const { pipeline, provider } = createPipelineWithGasPreflightFailure(
+      error,
+      {
+        providerOwnsGasEstimate: true,
+      },
+    );
+
+    await expect(
+      pipeline.execute({
+        rawInput: {},
+        runId: "gas-preflight-untyped-error",
+        chainId: 901,
+        protocol: "kuru",
+      }),
+    ).rejects.toBe(error);
+    expect(provider.evaluations).toHaveLength(0);
   });
 
   it("binds Provider evaluation input to the exact Protocol preparation", async () => {

@@ -290,6 +290,113 @@ describe("ArbitrumChainAdapter", () => {
     });
   });
 
+  it("classifies estimateGas balance failures as insufficient native balance", async () => {
+    const adapter = createArbitrumChainAdapter({
+      client: clientFor({
+        eth_estimateGas: new Error(
+          "failed with 50003829 gas: insufficient funds for gas * price + value: address 0x1111111111111111111111111111111111111111 have 50883771891842106 want 100000000000000000000",
+        ),
+      }),
+    });
+
+    await expect(
+      adapter.estimateGas({
+        to: "0xrouter",
+        data: "0x",
+        value: "0x56bc75e2d63100000",
+      }),
+    ).rejects.toSatisfy((error: unknown) => {
+      return (
+        isChainAdapterError(error) &&
+        error.operation === "estimateGas" &&
+        error.code === "INSUFFICIENT_NATIVE_BALANCE" &&
+        !error.retryable
+      );
+    });
+  });
+
+  it("does not classify unrelated estimateGas failures as balance failures", async () => {
+    const adapter = createArbitrumChainAdapter({
+      client: clientFor({
+        eth_estimateGas: new Error("execution reverted: pool is paused"),
+      }),
+    });
+
+    await expect(
+      adapter.estimateGas({ to: "0xrouter", data: "0x", value: "0x0" }),
+    ).rejects.toSatisfy((error: unknown) => {
+      return isChainAdapterError(error) && error.code === "UNKNOWN";
+    });
+  });
+
+  it("classifies an explicit JSON-RPC execution revert separately", async () => {
+    const adapter = createArbitrumChainAdapter({
+      client: clientFor({
+        eth_estimateGas: Object.assign(
+          new Error("execution reverted: pool is paused"),
+          { rpcCode: 3 },
+        ),
+      }),
+    });
+
+    await expect(
+      adapter.estimateGas({ to: "0xrouter", data: "0x", value: "0x0" }),
+    ).rejects.toSatisfy((error: unknown) => {
+      return (
+        isChainAdapterError(error) &&
+        error.operation === "estimateGas" &&
+        error.code === "EXECUTION_REVERT" &&
+        error.message ===
+          "Arbitrum gas preflight observed an EVM execution revert" &&
+        !error.retryable
+      );
+    });
+  });
+
+  it.each([
+    "execution reverted: network failure while executing the request",
+    "execution reverted: fetch failed in the upstream error details",
+  ])(
+    "prioritizes JSON-RPC execution reverts over generic network text: %s",
+    async (message) => {
+      const adapter = createArbitrumChainAdapter({
+        client: clientFor({
+          eth_estimateGas: Object.assign(new Error(message), { rpcCode: 3 }),
+        }),
+      });
+
+      await expect(
+        adapter.estimateGas({ to: "0xrouter", data: "0x", value: "0x0" }),
+      ).rejects.toSatisfy((error: unknown) => {
+        return (
+          isChainAdapterError(error) &&
+          error.operation === "estimateGas" &&
+          error.code === "EXECUTION_REVERT" &&
+          !error.retryable
+        );
+      });
+    },
+  );
+
+  it("does not classify JSON-RPC code 3 as a revert without revert semantics", async () => {
+    const adapter = createArbitrumChainAdapter({
+      client: clientFor({
+        eth_estimateGas: Object.assign(
+          new Error("upstream execution failure"),
+          {
+            rpcCode: 3,
+          },
+        ),
+      }),
+    });
+
+    await expect(
+      adapter.estimateGas({ to: "0xrouter", data: "0x", value: "0x0" }),
+    ).rejects.toSatisfy((error: unknown) => {
+      return isChainAdapterError(error) && error.code === "UNKNOWN";
+    });
+  });
+
   it("uses the explicit HTTP JSON-RPC seam and normalizes RPC errors", async () => {
     const fetchImplementation = vi
       .fn<typeof fetch>()
@@ -338,6 +445,35 @@ describe("ArbitrumChainAdapter", () => {
       params: [],
     });
   });
+
+  it.each([
+    { status: 400, code: "INVALID_REQUEST", retryable: false },
+    { status: 422, code: "INVALID_REQUEST", retryable: false },
+    { status: 408, code: "TIMEOUT", retryable: true },
+    { status: 429, code: "UNAVAILABLE", retryable: true },
+    { status: 503, code: "UNAVAILABLE", retryable: true },
+    { status: 403, code: "UNKNOWN", retryable: false },
+  ] as const)(
+    "classifies HTTP $status as $code without treating client errors as unavailable",
+    async ({ status, code, retryable }) => {
+      const client = createArbitrumRpcClient(
+        "https://arbitrum.example.test",
+        vi
+          .fn<typeof fetch>()
+          .mockResolvedValue(new Response("rpc error", { status })),
+      );
+      const adapter = createArbitrumChainAdapter({ client });
+
+      await expect(adapter.connect()).rejects.toSatisfy((error: unknown) => {
+        return (
+          isChainAdapterError(error) &&
+          error.operation === "connect" &&
+          error.code === code &&
+          error.retryable === retryable
+        );
+      });
+    },
+  );
 
   it("requires an injected client or an explicit HTTP endpoint", () => {
     expect(() => new ArbitrumChainAdapter({})).toThrow(

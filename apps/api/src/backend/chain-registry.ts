@@ -11,6 +11,8 @@ export type {
   ChainOperationOptions,
   FinalityStatus,
   GasEstimate,
+  PreparedGasEstimate,
+  UnavailableGasEstimate,
 } from "./chain-adapter.js";
 
 export {
