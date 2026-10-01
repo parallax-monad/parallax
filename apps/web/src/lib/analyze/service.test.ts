@@ -8,6 +8,7 @@ import {
 } from "./form";
 import {
   checkSwap,
+  fetchP0Config,
   fetchQuote,
   formFromRunResult,
   loadReplay,
@@ -39,15 +40,15 @@ const intent = {
   economicBoundary: { availability: "unavailable", source: "unavailable" },
 };
 
-const tokenMetadata = [
-  {
+const tokenMetadata = {
+  tokenIn: {
     chainId: 143,
     asset: { kind: "native" },
     symbol: "MON",
     decimals: 18,
     decimalsSource: "chain_config",
   },
-  {
+  tokenOut: {
     chainId: 143,
     asset: {
       kind: "erc20",
@@ -58,7 +59,7 @@ const tokenMetadata = [
     decimalsSource: "onchain_verified",
     verifiedAtBlock: "92820000",
   },
-];
+};
 
 const completed = {
   runId: "run-live-1",
@@ -150,6 +151,8 @@ describe("checkSwap API adapter", () => {
     expect(result.createdAt).toBe(completed.createdAt);
     expect(result.quote.route.en).toBe("MON → USDC");
     expect(result.rawResponse).toEqual(completed);
+    expect(result.tokenMetadata).toEqual(tokenMetadata);
+    expect(result.intent.amountIn).toBe("0.01");
   });
 
   test("maps a malformed successful Check response to INVALID_RESPONSE", async () => {
@@ -274,6 +277,9 @@ describe("checkSwap API adapter", () => {
 
     expect(result.quote.expectedOutput).toBe("unavailable");
     expect(result.simulatedOutput).toBe("unavailable");
+    expect(result.intent.amountIn).toBe("unavailable");
+    expect(result.intent.tokenIn).toBe("unknown");
+    expect(result.tokenMetadata).toBeUndefined();
   });
 
   test("sends the selected quote as an expectation baseline", async () => {
@@ -973,6 +979,79 @@ describe("fetchQuote", () => {
     expect(await fetchQuote(quoteInput, { fetch: request })).toMatchObject({
       status: "error",
       apiFailure: { code: "UNSUPPORTED", retryable: false },
+    });
+  });
+
+  test("preserves quote tokenMetadata without rescaling human-unit amounts", async () => {
+    const request = vi.fn<typeof fetch>().mockResolvedValue(
+      jsonResponse({
+        ...available,
+        tokenMetadata,
+      }),
+    );
+
+    const state = await fetchQuote(quoteInput, { fetch: request });
+
+    expect(state).toMatchObject({
+      status: "available",
+      quote: { estimatedAmountOut: "0.000223" },
+      tokenMetadata,
+    });
+  });
+});
+
+describe("fetchP0Config", () => {
+  const p0Metadata = {
+    tokenIn: {
+      chainId: 421614,
+      asset: { kind: "native" as const },
+      symbol: "ETH",
+      decimals: 18,
+      decimalsSource: "chain_config",
+    },
+    tokenOut: {
+      chainId: 421614,
+      asset: {
+        kind: "erc20" as const,
+        address: "0xb893E3334D4Bd6C5ba8277Fd559e99Ed683A9FC7",
+      },
+      symbol: "USDC",
+      decimals: 6,
+      decimalsSource: "onchain_verified",
+      verifiedAtBlock: "42",
+    },
+  };
+
+  test("maps AVAILABLE as configured route identity, not a live success", async () => {
+    const request = vi.fn<typeof fetch>().mockResolvedValue(
+      jsonResponse({
+        status: "AVAILABLE",
+        chainId: 421614,
+        protocol: "camelot-v3",
+        tokenMetadata: p0Metadata,
+      }),
+    );
+
+    await expect(fetchP0Config({ fetch: request })).resolves.toEqual({
+      status: "AVAILABLE",
+      chainId: 421614,
+      protocol: "camelot-v3",
+      tokenMetadata: p0Metadata,
+    });
+    expect(request.mock.calls[0]?.[0]).toBe("/api/p0-config");
+  });
+
+  test("keeps UNAVAILABLE as configuration discovery", async () => {
+    const request = vi.fn<typeof fetch>().mockResolvedValue(
+      jsonResponse({
+        status: "UNAVAILABLE",
+        reason: "TOKEN_METADATA_UNAVAILABLE",
+      }),
+    );
+
+    await expect(fetchP0Config({ fetch: request })).resolves.toEqual({
+      status: "UNAVAILABLE",
+      reason: "TOKEN_METADATA_UNAVAILABLE",
     });
   });
 });

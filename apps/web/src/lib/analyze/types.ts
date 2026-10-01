@@ -80,8 +80,13 @@ export type QuoteState =
         tokenOut: string;
         amountIn: string;
       };
+      tokenMetadata?: TokenMetadataPair;
     }
-  | { status: "unavailable"; reason: "NO_ROUTE" | "QUOTE_UNAVAILABLE" }
+  | {
+      status: "unavailable";
+      reason: "NO_ROUTE" | "QUOTE_UNAVAILABLE";
+      tokenMetadata?: TokenMetadataPair;
+    }
   | { status: "error"; apiFailure: ApiFailure };
 
 export type EvidenceOrigin = "live" | "replay" | "derived" | "mock";
@@ -172,6 +177,29 @@ export type TokenMetadata = {
   verifiedAtBlock?: string;
 };
 
+/** Backend-owned display metadata for the exact input and output assets. */
+export type TokenMetadataPair = {
+  tokenIn: TokenMetadata;
+  tokenOut: TokenMetadata;
+};
+
+/**
+ * Read-only P0 configuration. AVAILABLE means the configured route and
+ * registry metadata resolved; it is not a live quote, RPC, or Product pass.
+ */
+export type P0ConfigState =
+  | {
+      status: "AVAILABLE";
+      chainId: 421614;
+      protocol: "camelot-v3";
+      tokenMetadata: TokenMetadataPair;
+    }
+  | {
+      status: "UNAVAILABLE";
+      reason: "ROUTE_NOT_CONFIGURED" | "TOKEN_METADATA_UNAVAILABLE";
+    }
+  | { status: "error"; apiFailure: ApiFailure };
+
 export type ProviderEvidenceSummary = {
   status: string;
   source?: string;
@@ -229,7 +257,7 @@ export type CheckSwapResult = {
   protocol?: string;
   evidenceState?: string;
   basicSimulation?: BasicSimulation;
-  tokenMetadata?: TokenMetadata[];
+  tokenMetadata?: TokenMetadataPair;
   providerEvidence?: ProviderEvidenceSummary;
   executionEvidence?: ExecutionEvidenceSummary;
   remediationStatus?: string;

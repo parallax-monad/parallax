@@ -35,15 +35,15 @@ const intent = {
 };
 
 const recoveredRun = {
-  tokenMetadata: [
-    {
+  tokenMetadata: {
+    tokenIn: {
       chainId: 143,
       asset: { kind: "native" },
       symbol: "MON",
       decimals: 18,
       decimalsSource: "chain_config",
     },
-    {
+    tokenOut: {
       chainId: 143,
       asset: {
         kind: "erc20",
@@ -54,7 +54,7 @@ const recoveredRun = {
       decimalsSource: "onchain_verified",
       verifiedAtBlock: "92820000",
     },
-  ],
+  },
   runId: RUN_ID,
   createdAt: CREATED_AT,
   replayMode: false,
@@ -69,6 +69,46 @@ const recoveredRun = {
   evidence: [],
   scope: [],
 };
+
+function jsonResponse(body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "content-type": "application/json" },
+  });
+}
+
+function mockFetch(handlers: {
+  config?: unknown;
+  run?: unknown;
+  quote?: unknown;
+  check?: unknown;
+  fallback?: (url: string) => Response | Promise<Response>;
+}) {
+  return vi.fn<typeof fetch>().mockImplementation((url) => {
+    const path = typeof url === "string" ? url : "";
+    if (path.includes("/api/p0-config")) {
+      return Promise.resolve(
+        jsonResponse(
+          handlers.config ?? {
+            status: "UNAVAILABLE",
+            reason: "ROUTE_NOT_CONFIGURED",
+          },
+        ),
+      );
+    }
+    if (path.includes("/api/runs/") && handlers.run !== undefined) {
+      return Promise.resolve(jsonResponse(handlers.run));
+    }
+    if (path.includes("/api/quote") && handlers.quote !== undefined) {
+      return Promise.resolve(jsonResponse(handlers.quote));
+    }
+    if (path.includes("/api/check") && handlers.check !== undefined) {
+      return Promise.resolve(jsonResponse(handlers.check));
+    }
+    if (handlers.fallback) return Promise.resolve(handlers.fallback(path));
+    return Promise.resolve(new Response("", { status: 404 }));
+  });
+}
 
 function setInputValue(input: HTMLInputElement, value: string): void {
   const setter = Object.getOwnPropertyDescriptor(
@@ -117,18 +157,15 @@ describe("WalletApp persisted Run recovery", () => {
   });
 
   test("restores the persisted result and editable form after mount", async () => {
-    const request = vi.fn<typeof fetch>().mockResolvedValue(
-      new Response(
-        JSON.stringify({
-          runId: RUN_ID,
-          createdAt: CREATED_AT,
-          intent,
-          status: "completed",
-          result: recoveredRun,
-        }),
-        { status: 200, headers: { "content-type": "application/json" } },
-      ),
-    );
+    const request = mockFetch({
+      run: {
+        runId: RUN_ID,
+        createdAt: CREATED_AT,
+        intent,
+        status: "completed",
+        result: recoveredRun,
+      },
+    });
     vi.stubGlobal("fetch", request);
     window.sessionStorage.setItem("parallax:last-run-id", RUN_ID);
 
@@ -142,8 +179,10 @@ describe("WalletApp persisted Run recovery", () => {
       await Promise.resolve();
     });
 
-    expect(request).toHaveBeenCalledOnce();
-    expect(request.mock.calls[0]?.[0]).toBe(`/api/runs/${RUN_ID}`);
+    expect(request).toHaveBeenCalled();
+    expect(
+      request.mock.calls.some((call) => call[0] === `/api/runs/${RUN_ID}`),
+    ).toBe(true);
     expect(container.textContent).toContain("Before you sign");
     expect(container.textContent).toContain("Live check");
 
@@ -167,9 +206,18 @@ describe("WalletApp persisted Run recovery", () => {
     const recoveryResponse = new Promise<Response>((resolve) => {
       resolveRecovery = resolve;
     });
-    const request = vi
-      .fn<typeof fetch>()
-      .mockImplementation(() => recoveryResponse);
+    const request = vi.fn<typeof fetch>().mockImplementation((url) => {
+      const path = typeof url === "string" ? url : "";
+      if (path.includes("/api/p0-config")) {
+        return Promise.resolve(
+          jsonResponse({
+            status: "UNAVAILABLE",
+            reason: "ROUTE_NOT_CONFIGURED",
+          }),
+        );
+      }
+      return recoveryResponse;
+    });
     vi.stubGlobal("fetch", request);
     window.sessionStorage.setItem("parallax:last-run-id", RUN_ID);
 
@@ -257,21 +305,26 @@ describe("WalletApp persisted Run recovery", () => {
       if (typeof url === "string" && url.includes("/api/quote")) {
         quoteRequestCount += 1;
         return Promise.resolve(
-          new Response(
-            JSON.stringify({
-              status: "available",
-              quote: {
-                source: "quote",
-                estimatedAmountOut: "1500000",
-                minimumAmountOut: "1485000",
-                blockNumber: "12345",
-                fetchedAt: "2026-01-01T00:00:00.000Z",
-                runtimeVersion: "arbitrum-camelot-v3",
-                runtimeRevision: "native-rpc",
-              },
-            }),
-            { status: 200, headers: { "content-type": "application/json" } },
-          ),
+          jsonResponse({
+            status: "available",
+            quote: {
+              source: "quote",
+              estimatedAmountOut: "1500000",
+              minimumAmountOut: "1485000",
+              blockNumber: "12345",
+              fetchedAt: "2026-01-01T00:00:00.000Z",
+              runtimeVersion: "arbitrum-camelot-v3",
+              runtimeRevision: "native-rpc",
+            },
+          }),
+        );
+      }
+      if (typeof url === "string" && url.includes("/api/p0-config")) {
+        return Promise.resolve(
+          jsonResponse({
+            status: "UNAVAILABLE",
+            reason: "ROUTE_NOT_CONFIGURED",
+          }),
         );
       }
       return Promise.resolve(new Response("", { status: 404 }));
@@ -326,51 +379,53 @@ describe("WalletApp persisted Run recovery", () => {
     const checkRequest = vi.fn<typeof fetch>().mockImplementation((url) => {
       if (typeof url === "string" && url.includes("/api/check")) {
         return Promise.resolve(
-          new Response(
-            JSON.stringify({
-              runId: "test-run",
-              createdAt: "2026-01-01T00:00:00.000Z",
-              intent: {
-                chainId: 421614,
-                protocol: "camelot-v3",
-                sender: "0x1111111111111111111111111111111111111111",
-                recipient: "0x1111111111111111111111111111111111111111",
-                recipientSource: "defaulted_from_sender",
-                tokenIn: { kind: "native" },
-                tokenOut: {
-                  kind: "erc20",
-                  address: "0x75faf114eafb1BDbe2F0316DF893fd58CE46AA4d",
-                },
-                amountInAtomic: "30000000000000000",
-                economicBoundary: {
-                  availability: "unavailable",
-                  source: "unavailable",
-                },
+          jsonResponse({
+            runId: "test-run",
+            createdAt: "2026-01-01T00:00:00.000Z",
+            intent: {
+              chainId: 421614,
+              protocol: "camelot-v3",
+              sender: "0x1111111111111111111111111111111111111111",
+              recipient: "0x1111111111111111111111111111111111111111",
+              recipientSource: "defaulted_from_sender",
+              tokenIn: { kind: "native" },
+              tokenOut: {
+                kind: "erc20",
+                address: "0x75faf114eafb1BDbe2F0316DF893fd58CE46AA4d",
               },
-              status: "completed",
-              result: recoveredRun,
-            }),
-            { status: 200, headers: { "content-type": "application/json" } },
-          ),
+              amountInAtomic: "30000000000000000",
+              economicBoundary: {
+                availability: "unavailable",
+                source: "unavailable",
+              },
+            },
+            status: "completed",
+            result: recoveredRun,
+          }),
         );
       }
       if (typeof url === "string" && url.includes("/api/quote")) {
         return Promise.resolve(
-          new Response(
-            JSON.stringify({
-              status: "available",
-              quote: {
-                source: "quote",
-                estimatedAmountOut: "1500000",
-                minimumAmountOut: "1485000",
-                blockNumber: "12345",
-                fetchedAt: "2026-01-01T00:00:00.000Z",
-                runtimeVersion: "arbitrum-camelot-v3",
-                runtimeRevision: "native-rpc",
-              },
-            }),
-            { status: 200, headers: { "content-type": "application/json" } },
-          ),
+          jsonResponse({
+            status: "available",
+            quote: {
+              source: "quote",
+              estimatedAmountOut: "1500000",
+              minimumAmountOut: "1485000",
+              blockNumber: "12345",
+              fetchedAt: "2026-01-01T00:00:00.000Z",
+              runtimeVersion: "arbitrum-camelot-v3",
+              runtimeRevision: "native-rpc",
+            },
+          }),
+        );
+      }
+      if (typeof url === "string" && url.includes("/api/p0-config")) {
+        return Promise.resolve(
+          jsonResponse({
+            status: "UNAVAILABLE",
+            reason: "ROUTE_NOT_CONFIGURED",
+          }),
         );
       }
       return Promise.resolve(new Response("", { status: 404 }));

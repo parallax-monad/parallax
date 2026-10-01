@@ -8,6 +8,7 @@ import type {
   CheckSwapInput,
   CheckSwapResult,
   EvidenceItem,
+  P0ConfigState,
   QuotePreview,
   QuoteState,
   QuoteSwapInput,
@@ -15,6 +16,7 @@ import type {
   RunDiff,
   RunRecovery,
   TokenMetadata,
+  TokenMetadataPair,
   Verdict,
 } from "./types";
 
@@ -53,6 +55,66 @@ function requestAsset(
   chainId: number,
 ): { kind: "native" } | { kind: "erc20"; address: string } {
   return symbolToAsset(value, chainId);
+}
+
+function parseTokenMetadata(value: unknown): TokenMetadata | undefined {
+  const item = obj(value);
+  if (!item) return;
+  const chainId = item.chainId;
+  const decimals = item.decimals;
+  const symbolValue = str(item.symbol);
+  const asset = obj(item.asset);
+  if (
+    typeof chainId !== "number" ||
+    typeof decimals !== "number" ||
+    !symbolValue ||
+    !asset
+  ) {
+    return;
+  }
+  if (asset.kind === "native") {
+    return {
+      chainId,
+      asset: { kind: "native" },
+      symbol: symbolValue,
+      decimals,
+      decimalsSource: str(item.decimalsSource) ?? "unknown",
+    };
+  }
+  const address = str(asset.address);
+  if (asset.kind !== "erc20" || !address) return;
+  return {
+    chainId,
+    asset: { kind: "erc20", address },
+    symbol: symbolValue,
+    decimals,
+    decimalsSource: str(item.decimalsSource) ?? "unknown",
+    verifiedAtBlock: str(item.verifiedAtBlock),
+  };
+}
+
+function parseTokenMetadataPair(value: unknown): TokenMetadataPair | undefined {
+  const pair = obj(value);
+  const tokenIn = parseTokenMetadata(pair?.tokenIn);
+  const tokenOut = parseTokenMetadata(pair?.tokenOut);
+  if (!tokenIn || !tokenOut) return;
+  return { tokenIn, tokenOut };
+}
+
+function metadataLookup(pair: TokenMetadataPair | undefined) {
+  const byAsset = new Map<string, TokenMetadata>();
+  const decimals = new Map<string, number>();
+  if (!pair) return { byAsset, decimals };
+  for (const item of [pair.tokenIn, pair.tokenOut]) {
+    byAsset.set(`${item.chainId}:${metadataAssetKey(item.asset)}`, item);
+    decimals.set(item.symbol.toLowerCase(), item.decimals);
+    if (item.asset.kind === "native") {
+      decimals.set("native", item.decimals);
+    } else {
+      decimals.set(item.asset.address.toLowerCase(), item.decimals);
+    }
+  }
+  return { byAsset, decimals };
 }
 
 /**
@@ -410,45 +472,9 @@ function mapRun(
     .filter((item): item is Record<string, unknown> => !!item);
   const route = obj(run?.route);
   const runQuote = obj(run?.quote);
-  const tokenMetadata = arr(run?.tokenMetadata)
-    .map(obj)
-    .filter((item): item is Record<string, unknown> => !!item);
-  const decimalMetadata = new Map<string, number>();
-  tokenMetadata.forEach((item) => {
-    const metadataAsset = obj(item.asset);
-    const symbolValue = str(item.symbol);
-    const decimalsValue = item.decimals;
-    if (typeof decimalsValue !== "number") return;
-    if (symbolValue)
-      decimalMetadata.set(symbolValue.toLowerCase(), decimalsValue);
-    if (metadataAsset?.kind === "native") {
-      decimalMetadata.set("native", decimalsValue);
-    } else {
-      const address = str(metadataAsset?.address)?.toLowerCase();
-      if (address) decimalMetadata.set(address, decimalsValue);
-    }
-  });
-  const metadataByAsset = new Map<string, TokenMetadata>();
-  tokenMetadata.forEach((item) => {
-    const metadataAsset = obj(item.asset);
-    const chain = item.chainId;
-    const decimalsValue = item.decimals;
-    const symbolValue = str(item.symbol);
-    if (
-      typeof chain !== "number" ||
-      typeof decimalsValue !== "number" ||
-      !symbolValue
-    )
-      return;
-    metadataByAsset.set(`${chain}:${metadataAssetKey(metadataAsset)}`, {
-      chainId: chain,
-      asset: metadataAsset as TokenMetadata["asset"],
-      symbol: symbolValue,
-      decimals: decimalsValue,
-      decimalsSource: str(item.decimalsSource) ?? "unknown",
-      verifiedAtBlock: str(item.verifiedAtBlock),
-    });
-  });
+  const tokenMetadata = parseTokenMetadataPair(run?.tokenMetadata);
+  const { byAsset: metadataByAsset, decimals: decimalMetadata } =
+    metadataLookup(tokenMetadata);
   const chainId =
     typeof intent?.chainId === "number" ? intent.chainId : undefined;
   const routePath = arr(route?.path)
@@ -563,9 +589,7 @@ function mapRun(
     rawResponse,
     chainId,
     protocol: str(intent?.protocol),
-    tokenMetadata: tokenMetadata.length
-      ? (tokenMetadata as unknown as TokenMetadata[])
-      : undefined,
+    tokenMetadata,
     evidenceState: str(p0?.evidenceState),
     basicSimulation:
       call || gasEstimate
@@ -753,11 +777,13 @@ export async function fetchQuote(
   }
 
   const result = obj(payload);
+  const tokenMetadata = parseTokenMetadataPair(result?.tokenMetadata);
   if (result?.status === "unavailable") {
     const reason = str(result.reason);
     return {
       status: "unavailable",
       reason: reason === "NO_ROUTE" ? "NO_ROUTE" : "QUOTE_UNAVAILABLE",
+      ...(tokenMetadata ? { tokenMetadata } : {}),
     };
   }
 
@@ -782,6 +808,97 @@ export async function fetchQuote(
       tokenOut: input.tokenOut,
       amountIn: input.amountIn,
     },
+    ...(tokenMetadata ? { tokenMetadata } : {}),
+  };
+}
+
+/**
+ * Reads configured P0 route identity. AVAILABLE is registry configuration only
+ * and never implies a live quote, RPC, or Product P0 success.
+ */
+export async function fetchP0Config(
+  options: CheckOptions = {},
+): Promise<P0ConfigState> {
+  let response: Response;
+  try {
+    response = await (options.fetch ?? fetch)(`${API_BASE}/api/p0-config`, {
+      signal: options.signal,
+    });
+  } catch (error) {
+    const aborted =
+      error instanceof DOMException && error.name === "AbortError";
+    return {
+      status: "error",
+      apiFailure: {
+        code: aborted ? "REQUEST_ABORTED" : "NETWORK_ERROR",
+        retryable: !aborted,
+        message: error instanceof Error ? error.message : undefined,
+      },
+    };
+  }
+
+  let payload: unknown;
+  try {
+    payload = await response.json();
+  } catch {
+    return {
+      status: "error",
+      apiFailure: {
+        httpStatus: response.status,
+        code: "INVALID_JSON_RESPONSE",
+        retryable: response.status >= 500,
+      },
+    };
+  }
+
+  if (!response.ok) {
+    const error = obj(obj(payload)?.error);
+    return {
+      status: "error",
+      apiFailure: {
+        httpStatus: response.status,
+        code: str(error?.code) ?? `HTTP_${response.status}`,
+        retryable: response.status >= 500,
+        message: str(error?.message),
+        issues: failureIssues(error?.issues),
+      },
+    };
+  }
+
+  const result = obj(payload);
+  if (result?.status === "UNAVAILABLE") {
+    const reason = str(result.reason);
+    return {
+      status: "UNAVAILABLE",
+      reason:
+        reason === "TOKEN_METADATA_UNAVAILABLE"
+          ? "TOKEN_METADATA_UNAVAILABLE"
+          : "ROUTE_NOT_CONFIGURED",
+    };
+  }
+
+  const tokenMetadata = parseTokenMetadataPair(result?.tokenMetadata);
+  if (
+    result?.status !== "AVAILABLE" ||
+    result.chainId !== 421614 ||
+    result.protocol !== "camelot-v3" ||
+    !tokenMetadata
+  ) {
+    return {
+      status: "error",
+      apiFailure: {
+        httpStatus: response.status,
+        code: "INVALID_RESPONSE",
+        retryable: false,
+      },
+    };
+  }
+
+  return {
+    status: "AVAILABLE",
+    chainId: 421614,
+    protocol: "camelot-v3",
+    tokenMetadata,
   };
 }
 
@@ -1023,13 +1140,7 @@ export function formFromRunResult(result: CheckSwapResult): FormState {
   const rawIntent = obj(rawRun?.intent);
   const rawBoundary = obj(rawIntent?.economicBoundary);
   const protocol = str(rawIntent?.protocol);
-  const decimalMetadata = new Map<string, number>();
-  result.tokenMetadata?.forEach((item) => {
-    decimalMetadata.set(item.symbol.toLowerCase(), item.decimals);
-    if (item.asset.kind === "erc20") {
-      decimalMetadata.set(item.asset.address.toLowerCase(), item.decimals);
-    }
-  });
+  const decimalMetadata = metadataLookup(result.tokenMetadata).decimals;
 
   return {
     ...INITIAL_FORM,

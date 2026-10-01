@@ -24,6 +24,7 @@ import {
 import {
   checkSwap,
   expectationBaseline,
+  fetchP0Config,
   fetchQuote,
   formFromRunResult,
   loadRun,
@@ -31,6 +32,7 @@ import {
 import { createStageScheduler } from "@/lib/analyze/stageScheduler";
 import type {
   CheckSwapResult,
+  P0ConfigState,
   QuoteState,
   RemediationOption,
 } from "@/lib/analyze/types";
@@ -132,6 +134,7 @@ export function WalletApp({ language }: { language: Language }) {
   /** Bumped on every return home, so the background replays its entrance. */
   const [homeVisit, setHomeVisit] = useState(0);
   const [quote, setQuote] = useState<QuoteState>({ status: "idle" });
+  const [p0Config, setP0Config] = useState<P0ConfigState | undefined>();
   const schedulerRef = useRef(createStageScheduler());
   // The mount-only recovery effect reads this from its eventual promise callback.
   screenRef.current = screen;
@@ -141,6 +144,16 @@ export function WalletApp({ language }: { language: Language }) {
   useEffect(() => {
     const scheduler = schedulerRef.current;
     return () => scheduler.cancel();
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    void fetchP0Config().then((next) => {
+      if (active) setP0Config(next);
+    });
+    return () => {
+      active = false;
+    };
   }, []);
 
   useEffect(() => {
@@ -357,6 +370,7 @@ export function WalletApp({ language }: { language: Language }) {
                     form={form}
                     language={language}
                     quote={quote}
+                    p0Config={p0Config}
                     onChange={(nextForm) => {
                       setForm(nextForm);
                       if (Object.keys(formErrors).length > 0) setFormErrors({});

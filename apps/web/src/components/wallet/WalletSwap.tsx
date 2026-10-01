@@ -4,7 +4,7 @@ import { ChevronDownIcon, SwapIcon } from "@/components/wallet/WalletIcons";
 import { DEMO_RECIPIENT } from "@/components/wallet/walletData";
 import type { FieldFlag } from "@/lib/analyze/fields";
 import type { FormFieldErrors, FormState } from "@/lib/analyze/form";
-import type { QuoteState } from "@/lib/analyze/types";
+import type { P0ConfigState, QuoteState } from "@/lib/analyze/types";
 import { type Copy, type Language, say } from "@/lib/i18n";
 
 const P0_TOKENS_IN = ["ETH"] as const;
@@ -91,6 +91,7 @@ export function WalletSwap({
   errors = {},
   flags = [],
   quote = { status: "idle" },
+  p0Config,
   onChange,
   onSubmit,
 }: {
@@ -101,6 +102,8 @@ export function WalletSwap({
   flags?: FieldFlag[];
   /** Pre-submit `/api/quote` state. Never a locally computed estimate. */
   quote?: QuoteState;
+  /** Configured route identity only; AVAILABLE is not a live quote or Product pass. */
+  p0Config?: P0ConfigState;
   onChange: (form: FormState) => void;
   onSubmit: () => void;
 }) {
@@ -112,8 +115,21 @@ export function WalletSwap({
   const flagFor = (key: FieldFlag["field"]) =>
     flags.find((flag) => flag.field === key);
 
-  const receiveToken = receiveTokenFor(form.tokenIn);
   const amountFlag = flagFor("amountIn");
+  const tokenInLabel =
+    p0Config?.status === "AVAILABLE"
+      ? p0Config.tokenMetadata.tokenIn.symbol
+      : form.tokenIn;
+  const tokenOutLabel =
+    p0Config?.status === "AVAILABLE"
+      ? p0Config.tokenMetadata.tokenOut.symbol
+      : form.tokenOut;
+  const routeLabel =
+    p0Config?.status === "AVAILABLE"
+      ? `Arbitrum Sepolia · Camelot V3 · ${tokenInLabel} → ${tokenOutLabel}`
+      : "Arbitrum Sepolia · Camelot V3 · ETH → USDC";
+  const configUnavailable =
+    p0Config !== undefined && p0Config.status !== "AVAILABLE";
   const amountError = errors.amountIn;
   const slippageError = errors.slippage;
   const minimumReceivedError = errors.minimumReceived;
@@ -131,11 +147,16 @@ export function WalletSwap({
           {say(language, { en: "Active P0 path", zh: "当前 P0 路径" })}
         </div>
         <div className="mt-1 text-[13px] font-semibold text-white">
-          {say(language, {
-            en: "Arbitrum Sepolia · Camelot V3 · ETH → USDC",
-            zh: "Arbitrum Sepolia · Camelot V3 · ETH → USDC",
-          })}
+          {say(language, { en: routeLabel, zh: routeLabel })}
         </div>
+        {configUnavailable && (
+          <p className="mt-2 text-[13px] leading-[1.5] text-risk-elevated">
+            {say(language, {
+              en: "Configured P0 metadata is unavailable. This is configuration discovery, not a live quote or RPC failure.",
+              zh: "当前 P0 配置元数据不可用。这是配置发现结果，不是实时报价或 RPC 失败。",
+            })}
+          </p>
+        )}
       </section>
 
       <section className="rounded-[16px] border border-white/[0.08] bg-white/[0.02] p-5 backdrop-blur-xl">
@@ -169,7 +190,7 @@ export function WalletSwap({
           <TokenSelect
             language={language}
             options={P0_TOKENS_IN}
-            value={form.tokenIn}
+            value={tokenInLabel}
             onSelect={(value) =>
               onChange({
                 ...form,
@@ -231,8 +252,8 @@ export function WalletSwap({
           </strong>
           <TokenSelect
             language={language}
-            options={[receiveToken]}
-            value={receiveToken}
+            options={[tokenOutLabel]}
+            value={tokenOutLabel}
             onSelect={() => undefined}
           />
         </div>
@@ -248,7 +269,7 @@ export function WalletSwap({
                   })}
                 </dt>
                 <dd className="mono m-0 text-right text-white">
-                  {quote.quote.minimumAmountOut} {form.tokenOut}
+                  {quote.quote.minimumAmountOut} {tokenOutLabel}
                 </dd>
               </div>
             )}
