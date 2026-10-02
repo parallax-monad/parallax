@@ -2752,6 +2752,53 @@ describe("Arbitrum composition P0 Risk wiring", () => {
     });
   });
 
+  it("keeps a degraded selected target descriptive when the baseline Risk is PROCEED", async () => {
+    const store = new InMemoryRunStore();
+    const start = vi.spyOn(store, "start");
+    const composition = createArbitrumProductionComposition(
+      p0CompositionOptions({
+        runStore: store,
+        providerEvidenceMapper: boundP0Evidence,
+        p0Risk: {
+          remediation: {
+            maxAmountInAtomic: "3000",
+            initialStepAtomic: "1000",
+            maxEvaluations: 2,
+          },
+        },
+      }),
+    );
+    const execution = await runP0Check(
+      composition,
+      "proceed-degraded-target",
+      {
+        ...p0AuthorizedIntent,
+        economicBoundary: {
+          availability: "available",
+          minimumReceivedAtomic: "400000",
+          source: "user_declared",
+        },
+      },
+      {
+        ...p0ExpectationBaseline,
+        quote: { ...p0ExpectationBaseline.quote, estimatedAmountOut: "0.6" },
+      },
+    );
+    const result = runResultSchema.parse(execution.decisionOutput);
+    expect(result).toMatchObject({
+      verdict: "PROCEED",
+      recommendedActions: [],
+      p0: {
+        quoteFidelity: { status: "VERIFIED" },
+        transactionProtection: { status: "PASS" },
+        remediation: { status: "NOT_RUN" },
+      },
+    });
+    expect(
+      start.mock.calls.filter(([id]) => id.includes(":p0-child:")),
+    ).toEqual([]);
+  });
+
   it("runs bounded remediation through a terminal child Run before recording VERIFIED", async () => {
     const store = new InMemoryRunStore();
     const composition = createArbitrumProductionComposition(
@@ -3404,6 +3451,14 @@ describe("Arbitrum composition P0 Risk wiring", () => {
     "recipient",
     "token",
     "input-amount",
+    "warning",
+    "unexplained-assets",
+    "missing-warnings",
+    "missing-quote",
+    "external-quote-source",
+    "missing-quote-observation-time",
+    "quote-unknown-scope",
+    "parent-missing-derivation",
     "failed-terminalization",
     "complete-terminalization",
   ] as const)(
@@ -3443,9 +3498,46 @@ describe("Arbitrum composition P0 Risk wiring", () => {
               finalReadFailure === "invalid-delta" ||
               finalReadFailure === "recipient" ||
               finalReadFailure === "token" ||
-              finalReadFailure === "input-amount")
+              finalReadFailure === "input-amount" ||
+              finalReadFailure === "warning" ||
+              finalReadFailure === "unexplained-assets" ||
+              finalReadFailure === "missing-warnings" ||
+              finalReadFailure === "missing-quote" ||
+              finalReadFailure === "external-quote-source" ||
+              finalReadFailure === "missing-quote-observation-time" ||
+              finalReadFailure === "quote-unknown-scope")
           ) {
             const changed = structuredClone(record);
+            const provider = changed.result.providerEvidence;
+            if (!provider) throw new Error("Missing provider fixture");
+            if (finalReadFailure === "warning") {
+              provider.warnings.value = ["Unclassified warning"];
+              return changed;
+            }
+            if (finalReadFailure === "unexplained-assets") {
+              provider.assetChangeAssessment = "UNEXPLAINED";
+              return changed;
+            }
+            if (finalReadFailure === "missing-warnings") {
+              provider.warnings.value = null;
+              return changed;
+            }
+            if (finalReadFailure === "missing-quote") {
+              provider.quote.value = null;
+              return changed;
+            }
+            if (finalReadFailure === "external-quote-source") {
+              provider.quote.source = "external";
+              return changed;
+            }
+            if (finalReadFailure === "missing-quote-observation-time") {
+              delete provider.quote.fetchedAt;
+              return changed;
+            }
+            if (finalReadFailure === "quote-unknown-scope") {
+              provider.unknownScope = [...provider.unknownScope, "quote"];
+              return changed;
+            }
             const outcome = changed.result.providerEvidence?.outcome.value;
             if (
               outcome === null ||
@@ -3488,12 +3580,21 @@ describe("Arbitrum composition P0 Risk wiring", () => {
               candidate.amountInAtomic !== "1000"
             )
               throw new Error("sensitive candidate failure");
-            return boundP0Evidence(input, {
+            const evidence = boundP0Evidence(input, {
               estimatedAmountOut:
                 candidate.amountInAtomic === "1000" ? "0.5" : "0.7",
               amountReceivedAtomic:
                 candidate.amountInAtomic === "1000" ? "500000" : "700000",
             });
+            if (
+              finalReadFailure === "parent-missing-derivation" &&
+              candidate.amountInAtomic === "1000"
+            ) {
+              const outcome = evidence.outcome.value as Record<string, unknown>;
+              delete outcome.derivation;
+              delete outcome.derivationVersion;
+            }
+            return evidence;
           },
           p0Risk: {
             constraints: p0Constraints,
@@ -3570,13 +3671,21 @@ describe("Arbitrum composition P0 Risk wiring", () => {
 
       expect(response.status).toBe(200);
       if (finalReadFailure !== "none") {
+        if (finalReadFailure !== "parent-missing-derivation")
+          expect(childReads).toBeGreaterThan(3);
         expect(result).toMatchObject({
-          verdict: "STOP",
+          verdict:
+            finalReadFailure === "parent-missing-derivation"
+              ? "UNKNOWN"
+              : "STOP",
           recommendedActions: [],
           p0: {
             remediation: { status: "UNKNOWN", reason: "EVIDENCE_NOT_VERIFIED" },
           },
         });
+        expect(
+          result.evidence.filter((item) => item.kind === "action_verification"),
+        ).toEqual([]);
         const response = await app.fetch(
           new Request(`https://api.example.test/api/runs/${result.runId}`),
         );

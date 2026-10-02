@@ -873,6 +873,9 @@ async function evaluateArbitrumP0Decision(
   const risk = evaluateBackendP0Risk(baseInput);
   const remediation = options.p0Risk?.remediation;
   const authorization = pipeline.intent.amountInIncreaseAuthorization;
+  // This slice remedies an already Risk-blocked baseline. A descriptive
+  // selected-target degradation with PROCEED remains a separate #107 gap.
+  // Never manufacture STOP solely to make the solver reachable.
   if (
     remediation === undefined ||
     authorization?.availability !== "available" ||
@@ -969,20 +972,11 @@ async function projectVerifiedArbitrumRemediation(
   solver: SolverResult | undefined,
   runStore: RunStore,
 ): Promise<RunResult> {
-  if (
-    projected.status !== "completed" ||
-    projected.verdict !== "STOP" ||
-    riskVerdict !== "ADJUST" ||
-    solver?.status !== "VERIFIED"
-  ) {
-    return projected;
-  }
-
-  let childRecord: CheckRunRecord | undefined;
+  // Solver verification is provisional until the final persisted-child Gate.
   const unverified = (): RunResult =>
     runResultSchema.parse({
       ...projected,
-      ...(projected.p0 === undefined
+      ...(projected.p0?.remediation.status !== "VERIFIED"
         ? {}
         : {
             p0: {
@@ -990,11 +984,21 @@ async function projectVerifiedArbitrumRemediation(
               remediation: {
                 status: "UNKNOWN",
                 reason: "EVIDENCE_NOT_VERIFIED",
-                evaluations: solver.evaluations,
+                evaluations: projected.p0.remediation.evaluations ?? 0,
               },
             },
           }),
     });
+  if (
+    projected.status !== "completed" ||
+    projected.verdict !== "STOP" ||
+    riskVerdict !== "ADJUST" ||
+    solver?.status !== "VERIFIED"
+  ) {
+    return unverified();
+  }
+
+  let childRecord: CheckRunRecord | undefined;
   try {
     childRecord = await runStore.get(solver.candidate.verification.childRunId);
   } catch {

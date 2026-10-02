@@ -8,8 +8,10 @@ import {
   type RunResult,
   type SimulatedTokenOutEvidence,
 } from "@parallax/contracts";
-import { evaluateConstraints } from "@parallax/risk";
+import { evaluateConstraints, evaluateEvidence } from "@parallax/risk";
+import { projectGenericEvidenceToRunResult } from "../agent-flow/index.js";
 import { extractSimulatedOutput } from "../agent-flow/simulated-output.js";
+import { backendEvidenceState } from "./evidence-state.js";
 
 const REQUIRED_CHILD_RULE_IDS = [
   "P0-EVIDENCE-001",
@@ -273,9 +275,44 @@ function childExecutionIsBound(child: CompletedRun): boolean {
     !binding ||
     !evidence ||
     evidence.provider.status !== "SUCCESS" ||
+    backendEvidenceState(evidence) !== "VERIFIED" ||
     evidence.execution.status !== "SUCCESS" ||
     evidence.provenance.simulationBlock !== binding.blockNumber ||
     child.simulatorPinnedBlock !== binding.blockNumber
+  )
+    return false;
+  // Persisted PASS rules cannot authorize evidence that changed on recovery.
+  const recoveredRisk = evaluateEvidence(evidence);
+  if (
+    recoveredRisk.verdict !== child.verdict ||
+    recoveredRisk.evidenceCompleteness !== "COMPLETE" ||
+    child.p0?.transactionProtection.status !== recoveredRisk.economicBoundary
+  )
+    return false;
+  const recovered = projectGenericEvidenceToRunResult(
+    child.runId,
+    child.intent,
+    evidence,
+  );
+  if (
+    recovered.status !== "completed" ||
+    recovered.verdict !== child.verdict ||
+    !REQUIRED_CHILD_RULE_IDS.every((ruleId) => {
+      const recorded = child.ruleResults.filter(
+        (rule) => rule.ruleId === ruleId,
+      );
+      const current = recovered.ruleResults.find(
+        (rule) => rule.ruleId === ruleId,
+      );
+      return (
+        recorded.length === 1 &&
+        current !== undefined &&
+        isDeepStrictEqual(
+          JSON.parse(JSON.stringify(recorded[0])),
+          JSON.parse(JSON.stringify(current)),
+        )
+      );
+    })
   )
     return false;
   // Re-derive from the recovered execution, using the same qualification and
