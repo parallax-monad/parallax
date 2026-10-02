@@ -5,19 +5,19 @@ const EVIDENCE_ROWS = [
   {
     index: "01",
     label: ["Intent", "交易意图"] as const,
-    value: ["4.00 MON → USDC", "4.00 MON → USDC"] as const,
+    value: ["0.01 ETH → USDC", "0.01 ETH → USDC"] as const,
     status: ["BOUND", "已绑定"] as const,
   },
   {
     index: "02",
     label: ["Quote & route", "报价与路径"] as const,
-    value: ["KURU / 1.1s", "KURU / 1.1s"] as const,
+    value: ["CAMELOT V3 / 1.2s", "CAMELOT V3 / 1.2s"] as const,
     status: ["FOUND", "已找到"] as const,
   },
   {
     index: "03",
     label: ["Prepared action", "已生成操作"] as const,
-    value: ["swapExactIn", "swapExactIn"] as const,
+    value: ["exactInputSingle", "exactInputSingle"] as const,
     status: ["READY", "已就绪"] as const,
   },
   {
@@ -29,14 +29,14 @@ const EVIDENCE_ROWS = [
   {
     index: "05",
     label: ["Economic boundary", "经济边界"] as const,
-    value: ["91.77 USDC", "91.77 USDC"] as const,
-    status: ["BELOW 93.40 USDC", "低于 93.40 USDC"] as const,
+    value: ["22.50 USDC", "22.50 USDC"] as const,
+    status: ["BELOW 23.00 USDC", "低于 23.00 USDC"] as const,
     active: true,
   },
   {
     index: "06",
     label: ["Provenance", "证据溯源"] as const,
-    value: ["DEMO PRESET / SAMPLE", "演示预设／示例"] as const,
+    value: ["ARBITRUM SEPOLIA", "ARBITRUM SEPOLIA"] as const,
     status: ["TRACEABLE", "可追溯"] as const,
   },
 ];

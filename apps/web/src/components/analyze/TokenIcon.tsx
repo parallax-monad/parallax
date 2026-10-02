@@ -99,8 +99,7 @@ function FallbackMark({ symbol, size }: { symbol: string; size: number }) {
 export function TokenIcon({ symbol, size = 20 }: TokenIconProps) {
   const key = symbol.toUpperCase();
 
-  if (key === "MON" || key === "WMON") return <MonMark size={size} />;
-  if (key === "USDC") return <UsdcMark size={size} />;
   if (key === "ETH" || key === "WETH") return <EthMark size={size} />;
+  if (key === "USDC") return <UsdcMark size={size} />;
   return <FallbackMark size={size} symbol={key} />;
 }

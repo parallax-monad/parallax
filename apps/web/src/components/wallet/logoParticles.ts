@@ -12,7 +12,7 @@ export type ParticleCloud = {
 };
 
 export type PlanetKind =
-  | "mon"
+  | "eth"
   | "usdc"
   | "proceed"
   | "adjust"
@@ -40,7 +40,7 @@ const DECAL_SPAN = Math.sin(DECAL_CONE);
 
 /** Fills the gaps where a mark does not cover its own square. */
 const BASE_COLOR: Record<PlanetKind, [number, number, number]> = {
-  mon: [0x6e / 255, 0x56 / 255, 0xf8 / 255],
+  eth: [0x62 / 255, 0x7e / 255, 0xea / 255],
   usdc: [0x27 / 255, 0x75 / 255, 0xca / 255],
   proceed: [0x22 / 255, 0xc5 / 255, 0x5e / 255],
   adjust: [0xea / 255, 0xb3 / 255, 0x08 / 255],
@@ -48,20 +48,26 @@ const BASE_COLOR: Record<PlanetKind, [number, number, number]> = {
   unknown: [0xf9 / 255, 0x73 / 255, 0x16 / 255],
 };
 
-function drawMon(ctx: CanvasRenderingContext2D) {
-  ctx.fillStyle = "#6E56F8";
+function drawEth(ctx: CanvasRenderingContext2D) {
+  ctx.fillStyle = "#627EEA";
   ctx.fillRect(0, 0, 24, 24);
 
-  ctx.save();
-  ctx.translate(12, 12);
-  ctx.rotate(Math.PI / 4);
-  ctx.translate(-12, -12);
-  ctx.strokeStyle = "#FFFFFF";
-  ctx.lineWidth = 2.6;
+  ctx.fillStyle = "#FFFFFF";
   ctx.beginPath();
-  ctx.roundRect(5.75, 5.75, 12.5, 12.5, 4);
-  ctx.stroke();
-  ctx.restore();
+  ctx.moveTo(12, 4.5);
+  ctx.lineTo(7, 13);
+  ctx.lineTo(12, 16);
+  ctx.lineTo(17, 13);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.beginPath();
+  ctx.moveTo(12, 17.5);
+  ctx.lineTo(7, 15);
+  ctx.lineTo(12, 22.5);
+  ctx.lineTo(17, 15);
+  ctx.closePath();
+  ctx.fill();
 }
 
 function drawUsdc(ctx: CanvasRenderingContext2D) {
@@ -160,7 +166,7 @@ function drawUnknown(ctx: CanvasRenderingContext2D) {
 }
 
 const PAINTERS: Record<PlanetKind, (ctx: CanvasRenderingContext2D) => void> = {
-  mon: drawMon,
+  eth: drawEth,
   usdc: drawUsdc,
   proceed: drawProceed,
   adjust: drawAdjust,
