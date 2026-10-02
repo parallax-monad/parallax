@@ -89,7 +89,55 @@ export type QuoteState =
     }
   | { status: "error"; apiFailure: ApiFailure };
 
-export type EvidenceOrigin = "live" | "replay" | "derived" | "mock";
+export type EvidenceStatus = "checked" | "unknown" | "unavailable";
+export type EvidenceSource =
+  | "native_rpc"
+  | "trace_rpc"
+  | "account_allowance"
+  | "explorer"
+  | "quote"
+  | "simulation"
+  | "unknown";
+export type EvidencePresentationMode = "LIVE" | "RECORDED_REPLAY" | "MOCK";
+export type EvidenceBlockContext = {
+  blockNumber: string;
+  blockHash?: string;
+  status: "observed" | "requested";
+};
+export type EvidenceCapabilityStatus =
+  | "checked"
+  | "not_checked"
+  | "unknown"
+  | "unavailable";
+export type EvidenceCapabilityPresentation = {
+  key: string;
+  summary: string;
+  stage: "SIMULATE";
+  status: EvidenceCapabilityStatus;
+  sourceCategory: EvidenceSource;
+  observedAt?: string;
+  reason?: string;
+  mode?: EvidencePresentationMode;
+  blockContext?: EvidenceBlockContext;
+};
+export type EvidencePresentation = {
+  version: 1;
+  items: Array<{
+    evidenceKey: string;
+    status: EvidenceStatus;
+    sourceCategory: EvidenceSource;
+    observedAt?: string;
+    reason?: string;
+    mode?: EvidencePresentationMode;
+  }>;
+  capabilities: EvidenceCapabilityPresentation[];
+};
+export type EvidenceOrigin = "live" | "replay" | "derived" | "mock" | "unknown";
+export type EvidenceCapability = {
+  id: string;
+  status: EvidenceCapabilityStatus;
+  reason?: string;
+};
 export type EvidenceItem = {
   id: string;
   stage:
@@ -101,11 +149,17 @@ export type EvidenceItem = {
     | "rpc"
     | "unknown";
   label: Copy;
-  value: string;
+  value?: string;
   origin: EvidenceOrigin;
+  status: EvidenceStatus;
+  source: EvidenceSource;
+  observedAt?: string;
+  mode?: EvidencePresentationMode;
   blockNumber?: string;
   runtimeVersion?: string;
   runtimeRevision?: string;
+  capabilities?: EvidenceCapability[];
+  reason?: Copy;
   fixtureId?: string;
   reproducibility?: string;
   isMock?: boolean;
@@ -200,12 +254,28 @@ export type P0ConfigState =
     }
   | { status: "error"; apiFailure: ApiFailure };
 
+export type ProviderCapabilitySummary = {
+  id: string;
+  summary: string;
+  stage: "SIMULATE";
+  status: EvidenceCapabilityStatus;
+  sourceCategory: EvidenceSource;
+  observedAt?: string;
+  reason?: string;
+  mode?: EvidencePresentationMode;
+  blockContext?: EvidenceBlockContext;
+};
+
 export type ProviderEvidenceSummary = {
   status: string;
   source?: string;
   observedAt?: string;
   blockNumber?: string;
   blockHash?: string;
+  checkedScope?: string[];
+  unknownScope?: string[];
+  unavailableScope?: string[];
+  capabilities?: ProviderCapabilitySummary[];
 };
 
 export type ExecutionEvidenceSummary = {
@@ -236,7 +306,9 @@ export type CheckSwapResult = {
   notChecked: Copy[];
   evidence: EvidenceItem[];
   ruleResults: RuleResult[];
+  capabilities?: EvidenceCapabilityPresentation[];
   unknowns: UnknownItem[];
+  unavailable?: Copy[];
   intent: IntentSummary;
   diff?: RunDiff;
   quote: { expectedOutput: string; route: Copy; blockNumber: string };
