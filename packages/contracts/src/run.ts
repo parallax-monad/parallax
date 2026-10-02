@@ -1270,6 +1270,33 @@ function validateEconomicBoundary(
     context,
     ["evidence", simulatedOutput.key, "inputEvidenceRefs"],
   );
+  // Qualification is a separate attestation, never a fabricated movement role.
+  // Admit only the unique paired reference in an asset-change derivation.
+  const qualificationKey = simulatedOutput.key.endsWith(":simulated-token-out")
+    ? `${simulatedOutput.key.slice(0, -":simulated-token-out".length)}:token-qualification`
+    : undefined;
+  const qualificationInputs = simulationInputs.filter(
+    (input) =>
+      input.kind === "generic" && input.simulationInputRole === undefined,
+  );
+  const hasPairedQualification =
+    simulatedOutput.derivation === "asset_change" &&
+    qualificationInputs.length === 1 &&
+    qualificationInputs[0].kind === "generic" &&
+    qualificationInputs[0].key === qualificationKey &&
+    qualificationInputs[0].coreRole === undefined &&
+    qualificationInputs[0].routeInputRole === undefined &&
+    (qualificationInputs[0].source === "moss" ||
+      qualificationInputs[0].source === "rpc" ||
+      qualificationInputs[0].source === "derived") &&
+    simulatedOutput.simulatorPinnedBlock !== undefined &&
+    qualificationInputs[0].blockNumber ===
+      simulatedOutput.simulatorPinnedBlock &&
+    simulationInputs.some(
+      (input) =>
+        input.kind === "generic" &&
+        input.simulationInputRole === "ASSET_CHANGE_SET",
+    );
   if (
     simulatedOutput.inputEvidenceRefs.some(
       (reference) => reference.key === simulatedOutput.key,
@@ -1280,7 +1307,8 @@ function validateEconomicBoundary(
         isTrustedEvidence(input) &&
         input.stage === "SIMULATE" &&
         input.kind === "generic" &&
-        input.simulationInputRole !== undefined &&
+        (input.simulationInputRole !== undefined ||
+          (hasPairedQualification && input.key === qualificationKey)) &&
         (!simulatedOutput.isReplay ||
           (input.fixtureId !== undefined &&
             input.fixtureId === simulatedOutput.fixtureId)) &&
