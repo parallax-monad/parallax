@@ -38,10 +38,7 @@ import {
   runKuruLiveSwap,
 } from "@parallax/moss-bridge";
 import { evaluateEvidence } from "@parallax/risk";
-import {
-  extractSimulatedOutput,
-  validatedTokenQualification,
-} from "./simulated-output.js";
+import { extractSimulatedOutput } from "./simulated-output.js";
 
 export type LiveAgentFlowRuntime = {
   rpcUrl: string;
@@ -1338,17 +1335,10 @@ class EvidenceCollector {
     intent: NormalizedSwapIntent,
     evidence: GenericEvidence,
   ): SimulatedTokenOutResult | undefined {
-    const qualification = validatedTokenQualification(intent, evidence);
-    if (qualification !== undefined) {
-      this.addGenericEvidence(
-        "token-qualification",
-        { ...evidence.outcome, value: qualification },
-        "SIMULATE",
-        "Validated token/execution qualification Evidence",
-        {},
-        "confirmed",
-      );
-    }
+    // Consistent outcome fields are not independent qualification authority.
+    // No Provider/Risk-qualified attestation source is wired in this composition.
+    // Do not mint a confirmed item from outcome.tokenQualification: asset-change
+    // extraction stays unavailable until that separately reviewed source exists.
     const extracted = extractSimulatedOutput(intent, evidence, this.items);
     if (extracted === undefined) return undefined;
 

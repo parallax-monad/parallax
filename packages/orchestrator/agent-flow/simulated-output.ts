@@ -73,7 +73,7 @@ function hasBoundExecution(
 }
 
 /** Local normalized qualification; opaque providerData is never authority. */
-export function validatedTokenQualification(
+function validatedTokenQualification(
   intent: NormalizedSwapIntent,
   evidence: GenericEvidence,
 ): TokenQualification | undefined {

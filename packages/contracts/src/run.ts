@@ -1272,6 +1272,8 @@ function validateEconomicBoundary(
   );
   // Qualification is a separate attestation, never a fabricated movement role.
   // Admit only the unique paired reference in an asset-change derivation.
+  // This is structural validation, not qualification authority: a producer must
+  // obtain an independently Provider/Risk-qualified source before confirming it.
   const qualificationKey = simulatedOutput.key.endsWith(":simulated-token-out")
     ? `${simulatedOutput.key.slice(0, -":simulated-token-out".length)}:token-qualification`
     : undefined;

@@ -194,6 +194,41 @@ function assetFixture() {
   return f;
 }
 
+// Test-only structural fixture: never a production qualification authority.
+function syntheticQualifiedAssetRun() {
+  const snapshot = fixture();
+  const result = projectGenericEvidenceToRunResult(
+    "synthetic-contract-qualified-output",
+    {
+      ...intent,
+      economicBoundary: {
+        availability: "available",
+        source: "user_declared",
+        minimumReceivedAtomic: "1",
+      },
+    },
+    snapshot.evidence,
+  );
+  const output = result.evidence.find(
+    (item) => item.kind === "simulated_token_out",
+  );
+  if (output?.kind !== "simulated_token_out")
+    throw new Error("Missing snapshot fixture output");
+  const asset = assetFixture();
+  result.evidence = result.evidence.filter(
+    (item) => !asset.items.some((input) => input.key === item.key),
+  );
+  result.evidence.push(...asset.items);
+  const snapshotRef = output.inputEvidenceRefs[0];
+  output.derivation = "asset_change";
+  output.derivationVersion = "synthetic-qualified-net/v1";
+  output.inputEvidenceRefs = asset.items.map((item) => ({
+    ...snapshotRef,
+    key: item.key,
+  }));
+  return result;
+}
+
 describe("explicit normalized simulated-output proof (synthetic unit fixtures, not live qualification)", () => {
   it.each(["transactionFingerprint", "blockHash", "amountInAtomic"])(
     "rejects missing snapshot execution binding %s",
@@ -239,7 +274,7 @@ describe("explicit normalized simulated-output proof (synthetic unit fixtures, n
       ).toBeUndefined();
     },
   );
-  it("preserves qualified net output and both source references through public projection", () => {
+  it("does not turn internally consistent provider self-attestation into qualified public output", () => {
     const f = assetFixture();
     f.evidence.quote = field({ estimatedAmountOut: "10" });
     const result = projectGenericEvidenceToRunResult(
@@ -256,19 +291,14 @@ describe("explicit normalized simulated-output proof (synthetic unit fixtures, n
     );
     expect(
       result.evidence.find((item) => item.kind === "simulated_token_out"),
-    ).toMatchObject({
-      amountReceivedAtomic: "10",
-      derivation: "asset_change",
-      derivationVersion: "qualified-net/v1",
-      inputEvidenceRefs: [
-        { key: key("asset-changes") },
-        { key: key("token-qualification") },
-      ],
-    });
+    ).toBeUndefined();
+    expect(
+      result.evidence.some((item) => item.key === key("token-qualification")),
+    ).toBe(false);
     expect(
       result.ruleResults.find((rule) => rule.ruleId === "P0-ECONOMIC-001")
         ?.status,
-    ).toBe("PASS");
+    ).toBe("UNKNOWN");
   });
   it("returns truthful UNKNOWN rather than throwing when a snapshot includes incompatible coverage references", () => {
     const f = fixture();
@@ -337,19 +367,8 @@ describe("explicit normalized simulated-output proof (synthetic unit fixtures, n
     "quote-source",
     "other-block",
   ])("RunResult rejects %s role-less qualification input", (scenario) => {
-    const f = assetFixture();
-    const result = projectGenericEvidenceToRunResult(
-      "contract-qualified-output",
-      {
-        ...intent,
-        economicBoundary: {
-          availability: "available",
-          source: "user_declared",
-          minimumReceivedAtomic: "1",
-        },
-      },
-      f.evidence,
-    );
+    const result = syntheticQualifiedAssetRun();
+    expect(runResultSchema.safeParse(result).success).toBe(true);
     const output = result.evidence.find(
       (item) => item.kind === "simulated_token_out",
     );
@@ -508,12 +527,19 @@ describe("explicit normalized simulated-output proof (synthetic unit fixtures, n
     },
   );
   it.each(["snapshot", "asset"])(
-    "proven zero %s output fails a positive boundary",
+    "preserves proven zero %s output without inventing production qualification",
     (kind) => {
       const f = kind === "asset" ? assetFixture() : fixture();
       f.outcome.amountReceivedAtomic = "0";
       if (kind === "snapshot") f.outcome.balanceAfterAtomic = "5";
       else f.evidence.assetChanges.value = [];
+      if (kind === "asset") {
+        // The extractor seam receives explicit synthetic qualification evidence.
+        // Production projection must not manufacture it from the outcome.
+        expect(
+          extractSimulatedOutput(intent, f.evidence, f.items),
+        ).toMatchObject({ amountReceivedAtomic: "0" });
+      }
       const result = projectGenericEvidenceToRunResult(
         "zero-output",
         {
@@ -528,7 +554,11 @@ describe("explicit normalized simulated-output proof (synthetic unit fixtures, n
       );
       expect(
         result.ruleResults.find((rule) => rule.ruleId === "P0-ECONOMIC-001"),
-      ).toMatchObject({ status: "FAIL", reasonCode: "OUTPUT_BELOW_BOUNDARY" });
+      ).toMatchObject(
+        kind === "snapshot"
+          ? { status: "FAIL", reasonCode: "OUTPUT_BELOW_BOUNDARY" }
+          : { status: "UNKNOWN", reasonCode: "SIMULATED_OUTPUT_UNAVAILABLE" },
+      );
     },
   );
   it.each([0, 2])(
