@@ -132,12 +132,7 @@ export type EvidencePresentation = {
   }>;
   capabilities: EvidenceCapabilityPresentation[];
 };
-export type EvidenceOrigin =
-  | "live"
-  | "replay"
-  | "derived"
-  | "mock"
-  | "unknown";
+export type EvidenceOrigin = "live" | "replay" | "derived" | "mock" | "unknown";
 export type EvidenceCapability = {
   id: string;
   status: EvidenceCapabilityStatus;
