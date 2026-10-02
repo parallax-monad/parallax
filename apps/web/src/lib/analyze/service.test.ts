@@ -480,7 +480,7 @@ describe("checkSwap API adapter", () => {
     );
   });
 
-  test("maps legacy Trace observed to checked without implying execution success", async () => {
+  test("does not infer capabilities from legacy Trace payloads", async () => {
     const request = vi.fn<typeof fetch>().mockResolvedValue(
       jsonResponse({
         ...completed,
@@ -504,13 +504,7 @@ describe("checkSwap API adapter", () => {
 
     const result = await checkSwap(input, { fetch: request });
 
-    expect(result.providerEvidence?.capabilities).toEqual([
-      expect.objectContaining({
-        id: "callTracer",
-        status: "checked",
-        reason: undefined,
-      }),
-    ]);
+    expect(result.providerEvidence?.capabilities).toBeUndefined();
     expect(result.providerEvidence?.status).toBe("UNKNOWN");
     expect(result.executionEvidence?.status).toBe("UNKNOWN");
     expect(result.evidenceState).toBe("INCOMPLETE");

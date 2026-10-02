@@ -291,8 +291,25 @@ export function EvidenceDrawer({
                             className="flex items-start justify-between gap-3 border-b border-line py-2"
                             key={capability.id}
                           >
-                            <span className="mono break-all text-white">
-                              {capability.id}
+                            <span className="flex min-w-0 flex-col gap-1">
+                              <span className="mono break-all text-white">
+                                {capability.id}
+                              </span>
+                              <span className="text-[11px] text-dim">
+                                {capability.summary} ·{" "}
+                                {capability.sourceCategory}
+                              </span>
+                              {capability.observedAt && (
+                                <span className="text-[11px] text-dim">
+                                  observed {capability.observedAt}
+                                </span>
+                              )}
+                              {capability.blockContext && (
+                                <span className="text-[11px] text-dim">
+                                  {capability.blockContext.status} block{" "}
+                                  {capability.blockContext.blockNumber}
+                                </span>
+                              )}
                             </span>
                             <span
                               className={`shrink-0 ${CAPABILITY_TONE[capability.status]}`}

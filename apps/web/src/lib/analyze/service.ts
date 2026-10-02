@@ -303,12 +303,6 @@ function rule(value: unknown): RuleResult | undefined {
   };
 }
 
-function capabilityStatus(value: unknown): EvidenceCapabilityStatus {
-  if (value === "checked" || value === "unknown" || value === "unavailable") {
-    return value;
-  }
-  return value === "observed" ? "checked" : "unknown";
-}
 function presentationMode(
   value: unknown,
 ): EvidencePresentationMode | undefined {
@@ -652,23 +646,17 @@ function mapRun(
     arr(value)
       .map(str)
       .filter((item): item is string => !!item);
-  const traceCapabilities = obj(
-    obj(obj(providerEvidence?.providerData)?.traceRpc)?.capabilities,
-  )
-    ? Object.entries(
-        obj(obj(providerEvidence?.providerData)?.traceRpc)?.capabilities ?? {},
-      ).map(([id, value]) => {
-        const capability = obj(value);
-        return {
-          id,
-          summary: id,
-          stage: "SIMULATE" as const,
-          status: capabilityStatus(capability?.status),
-          sourceCategory: "trace_rpc" as const,
-          reason: str(capability?.reason),
-        };
-      })
-    : undefined;
+  const providerCapabilities = presentation?.capabilities.map((capability) => ({
+    id: capability.key,
+    summary: capability.summary,
+    stage: capability.stage,
+    status: capability.status,
+    sourceCategory: capability.sourceCategory,
+    observedAt: capability.observedAt,
+    reason: capability.reason,
+    mode: capability.mode,
+    blockContext: capability.blockContext,
+  }));
   const remediation = obj(p0?.remediation);
   const baseline = obj(p0?.expectationBaseline);
   const basicSimulationBlockNumber = str(basicSimulation?.blockNumber);
@@ -798,18 +786,7 @@ function mapRun(
           checkedScope: scopeValues(providerEvidence?.checkedScope),
           unknownScope: scopeValues(providerEvidence?.unknownScope),
           unavailableScope: scopeValues(providerEvidence?.unavailableScope),
-          capabilities:
-            presentation?.capabilities.map((capability) => ({
-              id: capability.key,
-              summary: capability.summary,
-              stage: capability.stage,
-              status: capability.status,
-              sourceCategory: capability.sourceCategory,
-              observedAt: capability.observedAt,
-              reason: capability.reason,
-              mode: capability.mode,
-              blockContext: capability.blockContext,
-            })) ?? traceCapabilities,
+          capabilities: providerCapabilities,
         }
       : undefined,
     executionEvidence: execution

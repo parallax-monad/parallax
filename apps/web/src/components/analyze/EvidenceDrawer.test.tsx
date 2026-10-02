@@ -70,7 +70,40 @@ describe("EvidenceDrawer scope presentation", () => {
         onClose={() => undefined}
       />,
     );
-
     expect(html).toContain("Trace RPC");
+  });
+
+  test("renders normalized capability presentation", () => {
+    const html = renderToStaticMarkup(
+      <EvidenceDrawer
+        result={result({
+          status: "UNKNOWN",
+          checkedScope: [],
+          unknownScope: [],
+          unavailableScope: [],
+          capabilities: [
+            {
+              id: "callTracer",
+              summary: "Supplementary call trace",
+              stage: "SIMULATE",
+              status: "not_checked",
+              sourceCategory: "trace_rpc",
+              reason: "outside_baseline",
+              blockContext: {
+                blockNumber: "92820000",
+                status: "requested",
+              },
+            },
+          ],
+        })}
+        language="en"
+        onClose={() => undefined}
+      />,
+    );
+
+    expect(html).toContain("Supplementary call trace");
+    expect(html).toContain("trace_rpc");
+    expect(html).toContain("outside_baseline");
+    expect(html).toContain("requested block 92820000");
   });
 });
