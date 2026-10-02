@@ -104,6 +104,8 @@ function stageItems(
       label: STAGE_LABELS.discover,
       value: `${protocol} capabilities loaded`,
       origin,
+      status: status === "UNKNOWN" ? "unknown" : "checked",
+      source: "unknown",
       blockNumber,
     },
     {
@@ -113,6 +115,8 @@ function stageItems(
       // Raw route identifier, kept language-neutral like other evidence values.
       value: routeValue,
       origin,
+      status: status === "UNKNOWN" ? "unknown" : "checked",
+      source: "unknown",
       blockNumber,
     },
     {
@@ -121,6 +125,8 @@ function stageItems(
       label: STAGE_LABELS.action,
       value: status === "NO_ROUTE" ? "not reached" : "swap calldata prepared",
       origin,
+      status: status === "UNKNOWN" ? "unknown" : "checked",
+      source: "unknown",
       blockNumber,
     },
     {
@@ -129,6 +135,8 @@ function stageItems(
       label: STAGE_LABELS.simulate,
       value: status,
       origin,
+      status: status === "UNKNOWN" ? "unknown" : "checked",
+      source: "unknown",
       blockNumber,
     },
   ];
@@ -192,6 +200,8 @@ export function runEvidence(request: EvidenceRequest): NormalizedEvidence {
       label: STAGE_LABELS.balance,
       value: `${balance} ${tokenIn} available, ${amountIn} requested`,
       origin: DEMO_ORIGIN,
+      status: "unknown",
+      source: "account_allowance",
       blockNumber,
     });
     return {
@@ -221,6 +231,8 @@ export function runEvidence(request: EvidenceRequest): NormalizedEvidence {
     label: STAGE_LABELS.quote,
     value: `${expectedOutput.toFixed(4)} ${tokenOut}`,
     origin: DEMO_ORIGIN,
+    status: "checked",
+    source: "quote",
     blockNumber,
   });
 

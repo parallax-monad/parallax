@@ -362,6 +362,26 @@ describe("checkSwap API adapter", () => {
     }
   });
 
+  test("preserves empty scope groups and explicit unavailable scope", async () => {
+    const request = vi.fn<typeof fetch>().mockResolvedValue(
+      jsonResponse({
+        ...completed,
+        providerEvidence: {
+          provider: { providerId: "native-rpc", status: "UNKNOWN" },
+          checkedScope: [],
+          unknownScope: [],
+          unavailableScope: ["Trace RPC"],
+        },
+      }),
+    );
+
+    const result = await checkSwap(input, { fetch: request });
+
+    expect(result.providerEvidence?.checkedScope).toEqual([]);
+    expect(result.providerEvidence?.unknownScope).toEqual([]);
+    expect(result.providerEvidence?.unavailableScope).toEqual(["Trace RPC"]);
+  });
+
   test("preserves child Run identity and diff", async () => {
     const request = vi.fn<typeof fetch>().mockResolvedValue(
       jsonResponse({
@@ -460,6 +480,175 @@ describe("checkSwap API adapter", () => {
     );
   });
 
+  test("does not infer capabilities from legacy Trace payloads", async () => {
+    const request = vi.fn<typeof fetch>().mockResolvedValue(
+      jsonResponse({
+        ...completed,
+        providerEvidence: {
+          provider: { providerId: "native-rpc", status: "UNKNOWN" },
+          execution: { status: "UNKNOWN" },
+          providerData: {
+            traceRpc: {
+              capabilities: {
+                callTracer: {
+                  status: "observed",
+                  executionStatus: "reverted",
+                },
+              },
+            },
+          },
+        },
+        p0: { evidenceState: "INCOMPLETE" },
+      }),
+    );
+
+    const result = await checkSwap(input, { fetch: request });
+
+    expect(result.providerEvidence?.capabilities).toBeUndefined();
+    expect(result.providerEvidence?.status).toBe("UNKNOWN");
+    expect(result.executionEvidence?.status).toBe("UNKNOWN");
+    expect(result.evidenceState).toBe("INCOMPLETE");
+    expect(result.verdict).toBe("UNKNOWN");
+  });
+
+  test("consumes normalized capability states and evidence presentation", async () => {
+    const request = vi.fn<typeof fetch>().mockResolvedValue(
+      jsonResponse({
+        ...completed,
+        evidencePresentation: {
+          version: 1,
+          items: [
+            {
+              evidenceKey: "quote-1",
+              status: "checked",
+              sourceCategory: "quote",
+              observedAt: "2026-08-15T08:01:00.000Z",
+              mode: "RECORDED_REPLAY",
+            },
+          ],
+          capabilities: [
+            {
+              key: "callTracer",
+              summary: "Supplementary call trace",
+              stage: "SIMULATE",
+              sourceCategory: "trace_rpc",
+              status: "not_checked",
+              reason: "outside_baseline",
+              mode: "RECORDED_REPLAY",
+              blockContext: {
+                blockNumber: "92820000",
+                status: "requested",
+              },
+            },
+            {
+              key: "prestateTracerDiff",
+              summary: "Supplementary state diff",
+              stage: "SIMULATE",
+              sourceCategory: "trace_rpc",
+              status: "unavailable",
+              reason: "method_unsupported",
+            },
+          ],
+        },
+        providerEvidence: {
+          provider: { providerId: "native-rpc", status: "UNKNOWN" },
+          providerData: {
+            traceRpc: {
+              capabilities: {
+                callTracer: { status: "checked" },
+              },
+            },
+          },
+        },
+      }),
+    );
+
+    const result = await checkSwap(input, { fetch: request });
+
+    expect(result.evidence[0]).toMatchObject({
+      source: "quote",
+      observedAt: "2026-08-15T08:01:00.000Z",
+      mode: "RECORDED_REPLAY",
+      origin: "replay",
+      status: "checked",
+    });
+    expect(result.providerEvidence?.capabilities).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "callTracer",
+          status: "not_checked",
+          reason: "outside_baseline",
+          blockContext: {
+            blockNumber: "92820000",
+            status: "requested",
+          },
+        }),
+        expect.objectContaining({
+          id: "prestateTracerDiff",
+          status: "unavailable",
+          reason: "method_unsupported",
+        }),
+      ]),
+    );
+  });
+  test("keeps missing evidence mode separate from Run replay mode", async () => {
+    const request = vi.fn<typeof fetch>().mockResolvedValue(
+      jsonResponse({
+        ...completed,
+        replayMode: true,
+        evidence: [
+          {
+            key: "legacy-unknown",
+            stage: "QUOTE",
+            summary: "Legacy evidence",
+          },
+        ],
+      }),
+    );
+
+    const result = await checkSwap(input, { fetch: request });
+
+    expect(result.replayMode).toBe(true);
+    expect(result.evidence[0]).toMatchObject({
+      origin: "unknown",
+      mode: undefined,
+    });
+  });
+
+  test("keeps explicit evidence mode independent from Run replay mode", async () => {
+    const request = vi.fn<typeof fetch>().mockResolvedValue(
+      jsonResponse({
+        ...completed,
+        replayMode: true,
+        evidence: [
+          {
+            key: "live-evidence",
+            stage: "QUOTE",
+            summary: "Live evidence",
+          },
+        ],
+        evidencePresentation: {
+          version: 1,
+          items: [
+            {
+              evidenceKey: "live-evidence",
+              status: "checked",
+              sourceCategory: "quote",
+              mode: "LIVE",
+            },
+          ],
+          capabilities: [],
+        },
+      }),
+    );
+
+    const result = await checkSwap(input, { fetch: request });
+
+    expect(result.evidence[0]).toMatchObject({
+      origin: "live",
+      mode: "LIVE",
+    });
+  });
   test("does not send a client expectation baseline when quote is unavailable", async () => {
     const request = vi
       .fn<typeof fetch>()

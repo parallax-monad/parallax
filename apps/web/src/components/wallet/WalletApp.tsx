@@ -22,6 +22,7 @@ import {
   validateForm,
 } from "@/lib/analyze/form";
 import {
+  applyTokenMetadata,
   checkSwap,
   expectationBaseline,
   fetchP0Config,
@@ -279,8 +280,12 @@ export function WalletApp({ language }: { language: Language }) {
               }
             : {}),
         });
-        setStoredRunId(backendRunId(nextResult));
-        setResult(nextResult);
+        const displayResult = applyTokenMetadata(
+          nextResult,
+          p0Config?.status === "AVAILABLE" ? p0Config.tokenMetadata : undefined,
+        );
+        setStoredRunId(backendRunId(displayResult));
+        setResult(displayResult);
         setSubmittedForm(submitted);
         setScreen("result");
       },
@@ -389,6 +394,7 @@ export function WalletApp({ language }: { language: Language }) {
                   <WalletResult
                     language={language}
                     result={result}
+                    tokenMetadata={result.tokenMetadata}
                     onDiscard={discard}
                     onRetry={() => runCheck(true)}
                     onKeep={() => setScreen("swap")}

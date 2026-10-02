@@ -7,7 +7,12 @@ import type {
   ApiFailureIssue,
   CheckSwapInput,
   CheckSwapResult,
+  EvidenceCapabilityStatus,
   EvidenceItem,
+  EvidencePresentation,
+  EvidencePresentationMode,
+  EvidenceSource,
+  EvidenceStatus,
   P0ConfigState,
   QuotePreview,
   QuoteState,
@@ -44,10 +49,7 @@ function symbol(
 ): string {
   const resolved = metadata.get(`${chainId}:${metadataAssetKey(value)}`);
   if (resolved) return resolved.symbol;
-  const asset = obj(value);
-  if (asset?.kind === "native") return "unknown";
-  const address = str(asset?.address)?.toLowerCase();
-  return address ? `${address.slice(0, 6)}…${address.slice(-4)}` : "unknown";
+  return "unknown";
 }
 
 function requestAsset(
@@ -92,7 +94,6 @@ function parseTokenMetadata(value: unknown): TokenMetadata | undefined {
     verifiedAtBlock: str(item.verifiedAtBlock),
   };
 }
-
 function parseTokenMetadataPair(value: unknown): TokenMetadataPair | undefined {
   const pair = obj(value);
   const tokenIn = parseTokenMetadata(pair?.tokenIn);
@@ -174,6 +175,40 @@ function decimalsFor(
   metadata: Map<string, number>,
 ): number | undefined {
   return metadata.get(value.toLowerCase());
+}
+export function applyTokenMetadata(
+  result: CheckSwapResult,
+  metadata: TokenMetadataPair | undefined,
+): CheckSwapResult {
+  if (!metadata) return result;
+  const raw = obj(result.rawResponse);
+  const rawIntent = obj(raw?.intent);
+  const chainId =
+    typeof rawIntent?.chainId === "number" ? rawIntent.chainId : result.chainId;
+  if (chainId === undefined) return result;
+  const lookup = metadataLookup(metadata).byAsset;
+  const tokenInMetadata = lookup.get(
+    `${chainId}:${metadataAssetKey(rawIntent?.tokenIn)}`,
+  );
+  const tokenOutMetadata = lookup.get(
+    `${chainId}:${metadataAssetKey(rawIntent?.tokenOut)}`,
+  );
+  if (!tokenInMetadata || !tokenOutMetadata) return result;
+  const decimals = metadataLookup(metadata).decimals;
+  const amountIn = decimal(
+    rawIntent?.amountInAtomic,
+    decimalsFor(tokenInMetadata.symbol, decimals),
+  );
+  return {
+    ...result,
+    tokenMetadata: metadata,
+    intent: {
+      ...result.intent,
+      tokenIn: tokenInMetadata.symbol,
+      tokenOut: tokenOutMetadata.symbol,
+      amountIn: amountIn === "unavailable" ? result.intent.amountIn : amountIn,
+    },
+  };
 }
 
 /**
@@ -268,7 +303,110 @@ function rule(value: unknown): RuleResult | undefined {
   };
 }
 
-function evidence(value: unknown, replay: boolean): EvidenceItem | undefined {
+function presentationMode(
+  value: unknown,
+): EvidencePresentationMode | undefined {
+  return value === "LIVE" || value === "RECORDED_REPLAY" || value === "MOCK"
+    ? value
+    : undefined;
+}
+
+function parseEvidencePresentation(
+  value: unknown,
+): EvidencePresentation | undefined {
+  const presentation = obj(value);
+  if (presentation?.version !== 1 || !Array.isArray(presentation.items)) return;
+  const sourceCategories = [
+    "native_rpc",
+    "trace_rpc",
+    "account_allowance",
+    "explorer",
+    "quote",
+    "simulation",
+    "unknown",
+  ] as const;
+  const items = presentation.items.flatMap((raw) => {
+    const item = obj(raw);
+    const evidenceKey = str(item?.evidenceKey);
+    const status = str(item?.status);
+    const sourceCategory = str(item?.sourceCategory);
+    if (
+      !evidenceKey ||
+      !["checked", "unknown", "unavailable"].includes(status ?? "") ||
+      !sourceCategories.includes(
+        sourceCategory as (typeof sourceCategories)[number],
+      )
+    )
+      return [];
+    const mode = presentationMode(item?.mode);
+    return [
+      {
+        evidenceKey,
+        status: status as EvidenceStatus,
+        sourceCategory: sourceCategory as EvidenceSource,
+        observedAt: str(item?.observedAt),
+        reason: str(item?.reason),
+        mode,
+      },
+    ];
+  });
+  const capabilities = Array.isArray(presentation.capabilities)
+    ? presentation.capabilities.flatMap((raw) => {
+        const item = obj(raw);
+        const key = str(item?.key);
+        const summary = str(item?.summary);
+        const status = str(item?.status);
+        const sourceCategory = str(item?.sourceCategory);
+        if (
+          !key ||
+          !summary ||
+          !["checked", "not_checked", "unknown", "unavailable"].includes(
+            status ?? "",
+          ) ||
+          !sourceCategories.includes(
+            sourceCategory as (typeof sourceCategories)[number],
+          )
+        )
+          return [];
+        const block = obj(item?.blockContext);
+        const blockStatus = block?.status;
+        return [
+          {
+            key,
+            summary,
+            stage: "SIMULATE" as const,
+            status: status as EvidenceCapabilityStatus,
+            sourceCategory: sourceCategory as EvidenceSource,
+            observedAt: str(item?.observedAt),
+            reason: str(item?.reason),
+            mode: presentationMode(item?.mode),
+            blockContext:
+              typeof block?.blockNumber === "string" &&
+              (blockStatus === "observed" || blockStatus === "requested")
+                ? {
+                    blockNumber: block.blockNumber,
+                    blockHash: str(block.blockHash),
+                    status: blockStatus as "observed" | "requested",
+                  }
+                : undefined,
+          },
+        ];
+      })
+    : [];
+  return { version: 1, items, capabilities };
+}
+
+function presentationItem(
+  presentation: EvidencePresentation | undefined,
+  evidenceKey: string,
+) {
+  return presentation?.items.find((item) => item.evidenceKey === evidenceKey);
+}
+
+function evidence(
+  value: unknown,
+  presentation: EvidencePresentation | undefined,
+): EvidenceItem | undefined {
   const item = obj(value);
   const id = str(item?.key);
   if (!id) return;
@@ -278,25 +416,32 @@ function evidence(value: unknown, replay: boolean): EvidenceItem | undefined {
     ["discover", "load", "quote", "action", "simulate"].includes(rawStage)
       ? (rawStage as EvidenceItem["stage"])
       : "unknown";
-  const source = str(item?.source);
+  const normalized = presentationItem(presentation, id);
+  const mode = normalized?.mode;
   const isMock = item?.isMock === true;
   return {
     id,
     stage,
     label: cp(str(item?.summary) ?? id),
     value: JSON.stringify(item, null, 2),
-    origin: replay
-      ? "replay"
-      : isMock
-        ? "mock"
-        : source === "derived"
-          ? "derived"
-          : "live",
+    origin:
+      mode === "RECORDED_REPLAY"
+        ? "replay"
+        : mode === "MOCK" || isMock
+          ? "mock"
+          : mode === "LIVE"
+            ? "live"
+            : "unknown",
+    status: normalized?.status ?? "unknown",
+    source: normalized?.sourceCategory ?? "unknown",
+    observedAt: normalized?.observedAt,
+    mode,
     blockNumber: str(item?.blockNumber) ?? str(item?.simulatorPinnedBlock),
     runtimeVersion: str(item?.runtimeVersion),
     runtimeRevision: str(item?.runtimeRevision),
     fixtureId: str(item?.fixtureId),
     reproducibility: str(item?.reproducibility),
+    reason: normalized?.reason ? cp(normalized.reason) : undefined,
     isMock,
   };
 }
@@ -408,6 +553,7 @@ function failed(
         reason: failureCopy(apiFailure),
       },
     ],
+    unavailable: [],
     intent: {
       tokenIn: input.tokenIn,
       tokenOut: input.tokenOut,
@@ -464,8 +610,9 @@ function mapRun(
           issues: failureIssues(runError?.issues) ?? transportFailure?.issues,
         }
       : undefined;
+  const presentation = parseEvidencePresentation(run?.evidencePresentation);
   const mappedEvidence = arr(run?.evidence)
-    .map((item) => evidence(item, replayMode))
+    .map((item) => evidence(item, presentation))
     .filter((item): item is EvidenceItem => !!item);
   const scope = arr(run?.scope)
     .map(obj)
@@ -476,15 +623,17 @@ function mapRun(
   const { byAsset: metadataByAsset, decimals: decimalMetadata } =
     metadataLookup(tokenMetadata);
   const chainId =
-    typeof intent?.chainId === "number" ? intent.chainId : undefined;
+    typeof intent?.chainId === "number"
+      ? intent.chainId
+      : getChainIdForProtocol(str(intent?.protocol) ?? "");
   const routePath = arr(route?.path)
-    .map((item) => symbol(item, chainId ?? 0, metadataByAsset))
+    .map((item) => symbol(item, chainId, metadataByAsset))
     .join(" → ");
   const output = arr(run?.evidence)
     .map(obj)
     .find((item) => item?.kind === "simulated_token_out");
-  const tokenIn = symbol(intent?.tokenIn, chainId ?? 0, metadataByAsset);
-  const tokenOut = symbol(intent?.tokenOut, chainId ?? 0, metadataByAsset);
+  const tokenIn = symbol(intent?.tokenIn, chainId, metadataByAsset);
+  const tokenOut = symbol(intent?.tokenOut, chainId, metadataByAsset);
   const boundary = obj(intent?.economicBoundary);
   const p0 = obj(run?.p0);
   const basicSimulation = obj(p0?.basicSimulation);
@@ -494,6 +643,21 @@ function mapRun(
   const provider = obj(providerEvidence?.provider);
   const execution = obj(providerEvidence?.execution);
   const providerProvenance = obj(providerEvidence?.provenance);
+  const scopeValues = (value: unknown) =>
+    arr(value)
+      .map(str)
+      .filter((item): item is string => !!item);
+  const providerCapabilities = presentation?.capabilities.map((capability) => ({
+    id: capability.key,
+    summary: capability.summary,
+    stage: capability.stage,
+    status: capability.status,
+    sourceCategory: capability.sourceCategory,
+    observedAt: capability.observedAt,
+    reason: capability.reason,
+    mode: capability.mode,
+    blockContext: capability.blockContext,
+  }));
   const remediation = obj(p0?.remediation);
   const baseline = obj(p0?.expectationBaseline);
   const basicSimulationBlockNumber = str(basicSimulation?.blockNumber);
@@ -531,6 +695,9 @@ function mapRun(
         label: cp(str(item.label) ?? "Unknown"),
         reason: cp(str(item.reason) ?? "No reason provided"),
       })),
+    unavailable: scope
+      .filter((item) => item.status === "unavailable")
+      .map((item) => cp(str(item.label) ?? str(item.key) ?? "Unavailable")),
     evidence: mappedEvidence,
     ruleResults: arr(run?.ruleResults)
       .map(rule)
@@ -616,6 +783,11 @@ function mapRun(
           source: str(provider?.providerId),
           observedAt: str(providerProvenance?.fetchedAt),
           blockNumber: str(providerProvenance?.blockNumber),
+          blockHash: str(providerProvenance?.blockHash),
+          checkedScope: scopeValues(providerEvidence?.checkedScope),
+          unknownScope: scopeValues(providerEvidence?.unknownScope),
+          unavailableScope: scopeValues(providerEvidence?.unavailableScope),
+          capabilities: providerCapabilities,
         }
       : undefined,
     executionEvidence: execution

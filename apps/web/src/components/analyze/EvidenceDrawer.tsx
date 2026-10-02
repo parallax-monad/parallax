@@ -11,6 +11,7 @@ const ORIGIN_TONE: Record<EvidenceItem["origin"], string> = {
   replay: "",
   derived: "border-risk-moderate/50 text-risk-moderate",
   mock: "border-risk-high/50 text-risk-high",
+  unknown: "border-line/50 text-faint",
 };
 
 const OUTCOME_TONE: Record<RuleResult["outcome"], string> = {
@@ -34,6 +35,63 @@ const MODE_LABEL: Record<CheckSwapResult["productRunMode"], Copy> = {
   LIVE: { en: "Live check", zh: "实时检查" },
   RECORDED_REPLAY: { en: "Recorded replay", zh: "录制回放" },
 };
+
+function sourceLabel(source: EvidenceItem["source"]): Copy {
+  return {
+    native_rpc: { en: "Native RPC", zh: "Native RPC" },
+    trace_rpc: { en: "Trace RPC", zh: "Trace RPC" },
+    account_allowance: { en: "Account / allowance", zh: "账户 / 授权" },
+    explorer: { en: "Explorer", zh: "浏览器" },
+    quote: { en: "Quote", zh: "报价" },
+    simulation: { en: "Simulation", zh: "模拟" },
+    unknown: { en: "Unknown source", zh: "未知来源" },
+  }[source];
+}
+
+const STATUS_TONE: Record<EvidenceItem["status"], string> = {
+  checked: "text-risk-low",
+  unknown: "text-risk-elevated",
+  unavailable: "text-faint",
+};
+
+const CAPABILITY_TONE: Record<
+  "checked" | "not_checked" | "unknown" | "unavailable",
+  string
+> = {
+  checked: "text-risk-low",
+  not_checked: "text-faint",
+  unknown: "text-risk-elevated",
+  unavailable: "text-faint",
+};
+
+function ScopeList({
+  label,
+  items,
+  tone = "text-white",
+}: {
+  label: string;
+  items: string[];
+  tone?: string;
+}) {
+  return (
+    <div>
+      <div className="text-[11px] font-bold uppercase tracking-[0.08em] text-dim">
+        {label}
+      </div>
+      {items.length > 0 ? (
+        <ul
+          className={`m-0 mt-1 list-disc pl-4 text-[12px] leading-[1.5] ${tone}`}
+        >
+          {items.map((item) => (
+            <li key={`${label}-${item}`}>{item}</li>
+          ))}
+        </ul>
+      ) : (
+        <p className="m-0 mt-1 text-[12px] text-faint">No items reported</p>
+      )}
+    </div>
+  );
+}
 
 export function EvidenceDrawer({
   result,
@@ -116,6 +174,9 @@ export function EvidenceDrawer({
                   <span className={`pill ${ORIGIN_TONE[item.origin]}`}>
                     {item.origin}
                   </span>
+                  <span className={STATUS_TONE[item.status]}>
+                    {item.status}
+                  </span>
                   {item.blockNumber && (
                     <span className="text-[12px] text-dim">
                       block {item.blockNumber}
@@ -125,12 +186,191 @@ export function EvidenceDrawer({
                 <p className="m-0 mt-1 text-[11px] text-faint">
                   {say(language, item.label)}
                 </p>
-                <p className="m-0 mt-0.5 break-words text-[12px] text-dim">
-                  {item.value}
-                </p>
+                {item.reason && (
+                  <p className="m-0 mt-1 text-[11px] leading-[1.5] text-dim">
+                    {say(language, item.reason)}
+                  </p>
+                )}
+                <dl className="m-0 mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-[12px]">
+                  <dt className="text-dim">Source</dt>
+                  <dd className="m-0 break-words text-right text-white">
+                    {say(language, sourceLabel(item.source))}
+                  </dd>
+                  <dt className="text-dim">Observed</dt>
+                  <dd className="m-0 break-words text-right text-white">
+                    {item.observedAt ?? "Not recorded"}
+                  </dd>
+                  {item.mode && (
+                    <>
+                      <dt className="text-dim">Mode</dt>
+                      <dd className="m-0 break-words text-right text-white">
+                        {item.mode}
+                      </dd>
+                    </>
+                  )}
+                  {item.blockNumber && (
+                    <>
+                      <dt className="text-dim">Observed block</dt>
+                      <dd className="mono m-0 break-words text-right text-white">
+                        {item.blockNumber}
+                      </dd>
+                    </>
+                  )}
+                  {item.runtimeVersion && (
+                    <>
+                      <dt className="text-dim">Runtime</dt>
+                      <dd className="mono m-0 break-words text-right text-white">
+                        {item.runtimeVersion}
+                        {item.runtimeRevision
+                          ? ` · ${item.runtimeRevision}`
+                          : ""}
+                      </dd>
+                    </>
+                  )}
+                  {item.reproducibility && (
+                    <>
+                      <dt className="text-dim">Reproducibility</dt>
+                      <dd className="m-0 text-right text-white">
+                        {item.reproducibility}
+                      </dd>
+                    </>
+                  )}
+                </dl>
               </li>
             ))}
           </ul>
+        </section>
+
+        {result.providerEvidence && (
+          <section className="mt-6">
+            <h3 className="m-0 mb-2 text-[12px] font-bold uppercase tracking-[0.08em] text-dim">
+              {say(language, {
+                en: "Provider capability",
+                zh: "提供方能力",
+              })}
+            </h3>
+            <dl className="m-0 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 border-t border-line pt-3 text-[12px]">
+              <dt className="text-dim">Source</dt>
+              <dd className="m-0 text-right text-white">
+                {result.providerEvidence.source ?? "Unavailable"}
+              </dd>
+              <dt className="text-dim">Observed</dt>
+              <dd className="m-0 text-right text-white">
+                {result.providerEvidence.observedAt ?? "Unavailable"}
+              </dd>
+              <dt className="text-dim">Block</dt>
+              <dd className="mono m-0 text-right text-white">
+                {result.providerEvidence.blockNumber ?? "Unavailable"}
+              </dd>
+            </dl>
+            <div className="mt-3 grid gap-3">
+              <ScopeList
+                label="Checked capability scope"
+                items={result.providerEvidence.checkedScope ?? []}
+                tone="text-white"
+              />
+              <ScopeList
+                label="Unknown capability scope"
+                items={result.providerEvidence.unknownScope ?? []}
+                tone="text-risk-elevated"
+              />
+              <ScopeList
+                label="Unavailable capability scope"
+                items={result.providerEvidence.unavailableScope ?? []}
+                tone="text-faint"
+              />
+              {result.providerEvidence.capabilities &&
+                result.providerEvidence.capabilities.length > 0 && (
+                  <div>
+                    <div className="text-[11px] font-bold uppercase tracking-[0.08em] text-dim">
+                      Capabilities
+                    </div>
+                    <ul className="m-0 mt-1 list-none border-t border-line p-0 text-[12px]">
+                      {result.providerEvidence.capabilities.map(
+                        (capability) => (
+                          <li
+                            className="flex items-start justify-between gap-3 border-b border-line py-2"
+                            key={capability.id}
+                          >
+                            <span className="flex min-w-0 flex-col gap-1">
+                              <span className="mono break-all text-white">
+                                {capability.id}
+                              </span>
+                              <span className="text-[11px] text-dim">
+                                {capability.summary} ·{" "}
+                                {capability.sourceCategory}
+                              </span>
+                              {capability.observedAt && (
+                                <span className="text-[11px] text-dim">
+                                  observed {capability.observedAt}
+                                </span>
+                              )}
+                              {capability.blockContext && (
+                                <span className="text-[11px] text-dim">
+                                  {capability.blockContext.status} block{" "}
+                                  {capability.blockContext.blockNumber}
+                                </span>
+                              )}
+                            </span>
+                            <span
+                              className={`shrink-0 ${CAPABILITY_TONE[capability.status]}`}
+                            >
+                              {capability.status} ·{" "}
+                              {capability.mode ?? "Not recorded"}
+                              {capability.reason
+                                ? ` · ${capability.reason}`
+                                : ""}
+                            </span>
+                          </li>
+                        ),
+                      )}
+                    </ul>
+                  </div>
+                )}
+            </div>
+          </section>
+        )}
+
+        <section className="mt-6">
+          <h3 className="m-0 mb-2 text-[12px] font-bold uppercase tracking-[0.08em] text-dim">
+            {say(language, { en: "Check scope", zh: "检查范围" })}
+          </h3>
+          <div className="grid gap-3 border-t border-line pt-3">
+            {(
+              [
+                ["Checked", result.checked.map((item) => say(language, item))],
+                [
+                  "Not checked",
+                  result.notChecked.map((item) => say(language, item)),
+                ],
+                [
+                  "Unknown",
+                  result.unknowns.map((item) => say(language, item.label)),
+                ],
+                [
+                  "Unavailable",
+                  (result.unavailable ?? []).map((item) => say(language, item)),
+                ],
+              ] as Array<[string, string[]]>
+            ).map(([label, items]) => (
+              <div key={String(label)}>
+                <div className="text-[11px] font-bold uppercase tracking-[0.08em] text-dim">
+                  {label}
+                </div>
+                {items.length > 0 ? (
+                  <ul className="m-0 mt-1 list-disc pl-4 text-[12px] leading-[1.5] text-white">
+                    {items.map((item) => (
+                      <li key={`${label}-${item}`}>{item}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="m-0 mt-1 text-[12px] text-faint">
+                    No items reported
+                  </p>
+                )}
+              </div>
+            ))}
+          </div>
         </section>
 
         <section className="mt-6">
