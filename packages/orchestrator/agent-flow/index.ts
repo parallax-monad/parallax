@@ -38,6 +38,7 @@ import {
   runKuruLiveSwap,
 } from "@parallax/moss-bridge";
 import { evaluateEvidence } from "@parallax/risk";
+import { extractSimulatedOutput } from "./simulated-output.js";
 
 export type LiveAgentFlowRuntime = {
   rpcUrl: string;
@@ -522,7 +523,10 @@ function collectLiveEvidence(
     evidence.outcome,
     "SIMULATE",
     `${prefix} simulation outcome Evidence`,
-    { simulationInputRole: "RECIPIENT_BALANCE_SNAPSHOT" },
+    isRecord(evidence.outcome.value) &&
+      evidence.outcome.value.derivation === "recipient_balance_delta"
+      ? { simulationInputRole: "RECIPIENT_BALANCE_SNAPSHOT" }
+      : {},
   );
   const assetChanges = collector.addGenericEvidence(
     "asset-changes",
@@ -557,8 +561,7 @@ function buildRunResult(
   risk: ReturnType<typeof evaluateEvidence>,
 ): RunResult {
   const collector = new EvidenceCollector(evidence);
-  const { quote, receipt, outcome, assetChanges, coverage } =
-    collectLiveEvidence(collector, evidence, false);
+  const { quote, coverage } = collectLiveEvidence(collector, evidence, false);
 
   const noRoute =
     evidence.execution.status === "NO_ROUTE"
@@ -585,11 +588,7 @@ function buildRunResult(
   const simulatedOutput =
     intent.economicBoundary.availability === "available" &&
     evidence.execution.status === "SUCCESS"
-      ? collector.simulatedTokenOut(intent, evidence, {
-          receipt,
-          outcome,
-          assetChanges,
-        })
+      ? collector.simulatedTokenOut(intent, evidence)
       : undefined;
 
   const completenessRule = completenessRuleResult(
@@ -1335,27 +1334,20 @@ class EvidenceCollector {
   public simulatedTokenOut(
     intent: NormalizedSwapIntent,
     evidence: GenericEvidence,
-    inputs: {
-      receipt?: EvidenceRef;
-      outcome?: EvidenceRef;
-      assetChanges?: EvidenceRef;
-    },
   ): SimulatedTokenOutResult | undefined {
-    const extracted = extractSimulatedTokenOut(intent, evidence);
+    // Consistent outcome fields are not independent qualification authority.
+    // No Provider/Risk-qualified attestation source is wired in this composition.
+    // Do not mint a confirmed item from outcome.tokenQualification: asset-change
+    // extraction stays unavailable until that separately reviewed source exists.
+    const extracted = extractSimulatedOutput(intent, evidence, this.items);
     if (extracted === undefined) return undefined;
 
-    const inputEvidenceRefs = [
-      inputs.receipt,
-      inputs.outcome,
-      inputs.assetChanges,
-    ]
-      .filter((reference): reference is EvidenceRef => reference !== undefined)
-      .filter((reference) => {
-        const item = this.items.find(
-          (candidate) => candidate.key === reference.key,
-        );
-        return item?.kind === "generic" && item.status === "confirmed";
-      });
+    const inputEvidenceRefs = extracted.inputEvidenceKeys.map((key) => {
+      const item = this.items.find((candidate) => candidate.key === key);
+      if (item === undefined)
+        throw new Error("Validated simulation source missing");
+      return evidenceRef(item);
+    });
     if (inputEvidenceRefs.length === 0) return undefined;
 
     const item = evidenceItemSchema.parse({
@@ -1370,7 +1362,7 @@ class EvidenceCollector {
       recipient: intent.recipient,
       amountReceivedAtomic: extracted.amountReceivedAtomic,
       derivation: extracted.derivation,
-      derivationVersion: "recipient-token-out/v1",
+      derivationVersion: extracted.derivationVersion,
       inputEvidenceRefs,
     });
     this.items.push(item);
@@ -1417,139 +1409,10 @@ function evidenceRef(item: EvidenceItem): EvidenceRef {
   };
 }
 
-type SimulatedTokenOut = {
-  amountReceivedAtomic: string;
-  derivation: "recipient_balance_delta" | "asset_change";
-};
-
 type SimulatedTokenOutResult = {
   reference: EvidenceRef;
   amountReceivedAtomic: string;
 };
-
-function extractSimulatedTokenOut(
-  intent: NormalizedSwapIntent,
-  evidence: GenericEvidence,
-): SimulatedTokenOut | undefined {
-  const outcome = isRecord(evidence.outcome.value)
-    ? exactOutputFromRecord(evidence.outcome.value, intent, evidence)
-    : undefined;
-  if (outcome !== undefined) {
-    return outcome;
-  }
-
-  if (
-    evidence.assetChanges.value === null ||
-    evidence.assetChangeAssessment !== "EXPLAINED"
-  ) {
-    return undefined;
-  }
-  for (const change of evidence.assetChanges.value) {
-    if (!isRecord(change) || !isExplicitTokenTransfer(change)) continue;
-    if (
-      typeof change.to !== "string" ||
-      change.to.toLowerCase() !== intent.recipient.toLowerCase()
-    ) {
-      continue;
-    }
-    const token = tokenFromRecord(change);
-    if (!sameAssetString(token, intent.tokenOut)) continue;
-    const amount = firstString(change, [
-      "amountReceivedAtomic",
-      "amountAtomic",
-      "amount",
-      "value",
-    ]);
-    if (amount !== undefined && /^\d+$/.test(amount) && amount !== "0") {
-      return { amountReceivedAtomic: amount, derivation: "asset_change" };
-    }
-  }
-  return undefined;
-}
-
-function exactOutputFromRecord(
-  value: Record<string, unknown>,
-  intent: NormalizedSwapIntent,
-  evidence: GenericEvidence,
-): SimulatedTokenOut | undefined {
-  const amountReceivedAtomic = firstString(value, ["amountReceivedAtomic"]);
-  const amount =
-    amountReceivedAtomic ??
-    firstString(value, [
-      "amountOutAtomic",
-      "tokenOutAmountAtomic",
-      // Moss Kuru's normalized swap outcome uses atomic `amountOut`.
-      "amountOut",
-    ]);
-  const recordedRecipient = firstString(value, ["recipient"]);
-  const inferredRecipient =
-    recordedRecipient === undefined &&
-    evidence.assetChangeAssessment === "EXPLAINED" &&
-    intent.recipient.toLowerCase() === intent.sender.toLowerCase()
-      ? intent.recipient
-      : undefined;
-  const recipient = recordedRecipient ?? inferredRecipient;
-  const token = tokenFromRecord(value);
-  if (
-    amount === undefined ||
-    !/^\d+$/.test(amount) ||
-    amount === "0" ||
-    recipient === undefined ||
-    recipient.toLowerCase() !== intent.recipient.toLowerCase() ||
-    !sameAssetString(token, intent.tokenOut)
-  ) {
-    return undefined;
-  }
-  return {
-    amountReceivedAtomic: amount,
-    derivation:
-      amountReceivedAtomic === undefined
-        ? "asset_change"
-        : "recipient_balance_delta",
-  };
-}
-
-function isExplicitTokenTransfer(value: Record<string, unknown>): boolean {
-  return (
-    value.kind === "erc20Transfer" ||
-    value.kind === "tokenTransfer" ||
-    value.kind === "assetChange"
-  );
-}
-
-function tokenFromRecord(value: Record<string, unknown>): string | undefined {
-  const candidate = value.tokenOut ?? value.token ?? value.address;
-  if (typeof candidate === "string") return candidate;
-  if (
-    isRecord(candidate) &&
-    candidate.kind === "erc20" &&
-    typeof candidate.address === "string"
-  ) {
-    return candidate.address;
-  }
-  if (isRecord(candidate) && candidate.kind === "native") return "native";
-  return undefined;
-}
-
-function sameAssetString(
-  value: string | undefined,
-  asset: AssetReference,
-): boolean {
-  if (value === undefined) return false;
-  return asset.kind === "native"
-    ? value === "native" || value === "MON"
-    : value.toLowerCase() === asset.address.toLowerCase();
-}
-
-function firstString(
-  value: Record<string, unknown>,
-  keys: string[],
-): string | undefined {
-  for (const key of keys) {
-    if (typeof value[key] === "string") return value[key];
-  }
-  return undefined;
-}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);

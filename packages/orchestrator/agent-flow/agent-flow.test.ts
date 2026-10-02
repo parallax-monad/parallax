@@ -92,8 +92,24 @@ function evidence(
     integrationStatus: "OK",
     executionStatus: "SUCCESS",
     quote: sourced({ estimatedAmountOut: "10" }, "quote"),
-    action: sourced([{ protocol: "kuru", method: "swap" }], "moss"),
-    receipt: sourced({ status: "ok" }, "moss"),
+    action: sourced(
+      [
+        {
+          protocol: "kuru",
+          method: "swap",
+          transactionFingerprint: `sha256:${"4".repeat(64)}`,
+        },
+      ],
+      "moss",
+    ),
+    receipt: sourced(
+      {
+        status: "ok",
+        transactionFingerprint: `sha256:${"4".repeat(64)}`,
+        blockHash: `0x${"5".repeat(64)}`,
+      },
+      "moss",
+    ),
     outcome: sourced({ status: "ok" }, "moss"),
     assetChanges: sourced([], "moss"),
     assetChangeAssessment: "NOT_APPLICABLE",
@@ -488,6 +504,15 @@ describe("KuruLiveAgentFlow", () => {
         outcome: sourced(
           {
             amountReceivedAtomic: "20000",
+            derivation: "recipient_balance_delta",
+            derivationVersion: "recipient-snapshot/v1",
+            inputEvidenceKeys: [`${runtime.runtimeRevision}:outcome`],
+            balanceBeforeAtomic: "1000",
+            balanceAfterAtomic: "21000",
+            amountInAtomic: intent.amountInAtomic,
+            evaluatedAmountIn: intent.amountInAtomic,
+            transactionFingerprint: `sha256:${"4".repeat(64)}`,
+            blockHash: `0x${"5".repeat(64)}`,
             recipient: sender,
             tokenOut: usdc,
           },
@@ -528,7 +553,7 @@ describe("KuruLiveAgentFlow", () => {
     ).toMatchObject({ amountReceivedAtomic: "20000" });
   });
 
-  it("derives simulated tokenOut from the live Kuru amountOut shape", async () => {
+  it("does not promote legacy Kuru amountOut and a single Transfer to canonical output", async () => {
     const flow = liveAmountOutFlow();
 
     const result = await flow.check({
@@ -543,22 +568,16 @@ describe("KuruLiveAgentFlow", () => {
       },
     });
 
-    expect(result.verdict).toBe("PROCEED");
+    expect(result.verdict).toBe("UNKNOWN");
     expect(
       result.ruleResults.find((rule) => rule.ruleId === "P0-ECONOMIC-001"),
-    ).toMatchObject({ status: "PASS" });
+    ).toMatchObject({
+      status: "UNKNOWN",
+      reasonCode: "SIMULATED_OUTPUT_UNAVAILABLE",
+    });
     expect(
       result.evidence.find((item) => item.kind === "simulated_token_out"),
-    ).toMatchObject({
-      amountReceivedAtomic: "223",
-      recipient: sender,
-      derivation: "asset_change",
-      inputEvidenceRefs: expect.arrayContaining([
-        expect.objectContaining({
-          key: `${runtime.runtimeRevision}:asset-changes`,
-        }),
-      ]),
-    });
+    ).toBeUndefined();
 
     const belowBoundary = await flow.check({
       ...input("run-live-below-boundary"),
@@ -572,14 +591,14 @@ describe("KuruLiveAgentFlow", () => {
       },
     });
 
-    expect(belowBoundary.verdict).toBe("STOP");
+    expect(belowBoundary.verdict).toBe("UNKNOWN");
     expect(
       belowBoundary.ruleResults.find(
         (rule) => rule.ruleId === "P0-ECONOMIC-001",
       ),
     ).toMatchObject({
-      status: "FAIL",
-      reasonCode: "OUTPUT_BELOW_BOUNDARY",
+      status: "UNKNOWN",
+      reasonCode: "SIMULATED_OUTPUT_UNAVAILABLE",
     });
   });
 
@@ -630,6 +649,15 @@ describe("KuruLiveAgentFlow", () => {
         outcome: sourced(
           {
             amountReceivedAtomic: "9000",
+            derivation: "recipient_balance_delta",
+            derivationVersion: "recipient-snapshot/v1",
+            inputEvidenceKeys: [`${runtime.runtimeRevision}:outcome`],
+            balanceBeforeAtomic: "1000",
+            balanceAfterAtomic: "10000",
+            amountInAtomic: intent.amountInAtomic,
+            evaluatedAmountIn: intent.amountInAtomic,
+            transactionFingerprint: `sha256:${"4".repeat(64)}`,
+            blockHash: `0x${"5".repeat(64)}`,
             recipient: sender,
             tokenOut: usdc,
           },
