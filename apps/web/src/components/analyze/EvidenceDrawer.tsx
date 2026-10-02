@@ -53,8 +53,12 @@ const STATUS_TONE: Record<EvidenceItem["status"], string> = {
   unavailable: "text-faint",
 };
 
-const CAPABILITY_TONE: Record<"checked" | "unknown" | "unavailable", string> = {
+const CAPABILITY_TONE: Record<
+  "checked" | "not_checked" | "unknown" | "unavailable",
+  string
+> = {
   checked: "text-risk-low",
+  not_checked: "text-faint",
   unknown: "text-risk-elevated",
   unavailable: "text-faint",
 };
@@ -193,8 +197,16 @@ export function EvidenceDrawer({
                   </dd>
                   <dt className="text-dim">Observed</dt>
                   <dd className="m-0 break-words text-right text-white">
-                    {item.observedAt ?? "Unavailable"}
+                    {item.observedAt ?? "Not recorded"}
                   </dd>
+                  {item.mode && (
+                    <>
+                      <dt className="text-dim">Mode</dt>
+                      <dd className="m-0 break-words text-right text-white">
+                        {item.mode}
+                      </dd>
+                    </>
+                  )}
                   {item.blockNumber && (
                     <>
                       <dt className="text-dim">Observed block</dt>
@@ -333,7 +345,9 @@ export function EvidenceDrawer({
                     ))}
                   </ul>
                 ) : (
-                  <p className="m-0 mt-1 text-[12px] text-faint">Unavailable</p>
+                  <p className="m-0 mt-1 text-[12px] text-faint">
+                    No items reported
+                  </p>
                 )}
               </div>
             ))}
