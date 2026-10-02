@@ -811,12 +811,15 @@ async function evaluateArbitrumP0Decision(
   };
   const risk = evaluateBackendP0Risk(baseInput);
   const remediation = options.p0Risk?.remediation;
+  const targetPreservingRemediation =
+    risk.quoteFidelity.status === "VERIFIED" &&
+    risk.quoteFidelity.observations.includes("QUOTE_OUTPUT_DEGRADED");
   if (
     remediation === undefined ||
     selectedQuote === undefined ||
     pipeline.executeProviderPath === undefined ||
     backendEvidenceState(evidence) !== "VERIFIED" ||
-    (risk.verdict !== "STOP" && risk.verdict !== "ADJUST")
+    (risk.verdict === "PROCEED" && !targetPreservingRemediation)
   ) {
     return {
       risk,
@@ -875,11 +878,7 @@ async function projectVerifiedArbitrumRemediation(
   solver: SolverResult | undefined,
   runStore: RunStore,
 ): Promise<RunResult> {
-  if (
-    projected.status !== "completed" ||
-    projected.verdict !== "STOP" ||
-    solver?.status !== "VERIFIED"
-  ) {
+  if (projected.status !== "completed" || solver?.status !== "VERIFIED") {
     return projected;
   }
 
