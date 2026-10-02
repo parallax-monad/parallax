@@ -5,6 +5,53 @@ Status: BACKEND HANDOFF FOR ANALYZE 联调 — LIVE SIMULATION SUCCEEDED ON THE 
 Owner: Clare (`apps/api`)
 Consumers: Antony (`apps/web`)
 
+## Evidence provenance and capability display — #145 / #92
+
+New Check Runs include optional `result.evidencePresentation` (version `1`).
+The same saved projection is returned by `POST /api/check` and the persisted
+`GET /api/runs/:runId` result. Failed Checks return it inside `errorResponse.run`.
+Legacy Runs and recorded fixtures may omit the projection: display "not recorded"
+and never fetch providers or manufacture provenance to fill it in.
+
+- `items[].evidenceKey` joins to `result.evidence[].key`. Reuse that existing item's
+  summary, stage, block, runtime, fixture, replay, mock and reproducibility fields;
+  these are deliberately not duplicated in the display view.
+- `items[].status` is display availability (`checked` / `unknown` / `unavailable`),
+  not canonical Evidence status, EvidenceState, execution success or a Risk verdict.
+  A checked failure observation does not mean the transaction succeeded.
+- `items[].sourceCategory` is a normalized display category. Unknown categories stay
+  `unknown`. Only supported sources are emitted; no Explorer qualification is implied.
+- `items[].observedAt`, when recorded, uses the corresponding Generic Evidence
+  field's acquisition time. Quote time is not the pinned block timestamp, Run
+  creation time or another operation's observation time.
+  Optional `items[].mode` preserves explicitly recorded source mode; do not infer
+  LIVE from its absence or turn a live API request using recorded source evidence
+  into a replay Run. Mock/non-reproducible items are not presented as checked.
+- `capabilities[]` describes Native RPC and qualified supplementary Trace operations
+  independently, with stable key, fixed summary, stage, category, status, normalized
+  reason and available mode/time/block context. Status distinguishes `checked`,
+  `not_checked`, `unknown` and `unavailable`. `blockContext.status=requested` is
+  explicitly not proof that the requested pinned block was verified.
+- Native `SUCCEEDED` and `REVERTED` calls both represent a checked observation; read
+  `p0.basicSimulation.call.status` for their different execution outcomes. `NOT_RUN`
+  is `not_checked`, has no observation timestamp, and does not become `unavailable`.
+  Receipt/outcome/asset-change capabilities outside the Native baseline remain
+  `not_checked/outside_baseline`; an independently qualified Trace operation does
+  not upgrade that baseline or Risk.
+- Trace mode and exact transaction/block binding remain available in the existing
+  allowlisted `providerEvidence.providerData.traceRpc`; raw traces are not public.
+  Trace `observedAt` is its source evaluation time, not a per-operation timestamp
+  or the pinned block's historical time.
+  Failure diagnostics are allowlisted reason codes, never upstream error text.
+- Keep canonical `result.scope` unchanged (`checked` / `not_checked` / `unknown`).
+  The four-state capability display is separate; do not add `unavailable` to the
+  canonical scope enum or replace scope with Evidence-item availability.
+
+This additive Backend display contract does not change Product/Risk/Action Gate
+semantics, trigger provider queries on historical reads, or add ranking/fallback.
+Account allowance remains the separately saved `/api/account-state` snapshot; do
+not label a Run as having checked allowance without that explicit snapshot.
+
 This page is the single backend handoff for frontend Analyze. It documents the
 HTTP surfaces that exist today, with request/response shapes and branching
 rules that match current Contracts and API behavior. It does not replace the

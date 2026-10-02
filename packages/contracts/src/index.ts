@@ -3,6 +3,7 @@ export * from "./amount.js";
 export * from "./common.js";
 export * from "./decision.js";
 export * from "./evidence.js";
+export * from "./evidence-presentation.js";
 export * from "./evidence-provider.js";
 export * from "./expectation-baseline.js";
 export * from "./generic-evidence.js";

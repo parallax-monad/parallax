@@ -1381,6 +1381,22 @@ describe("Arbitrum production composition skeleton", () => {
     expect(JSON.stringify(body)).not.toContain("ARBITRUM_RPC_URL");
     expect(JSON.stringify(body)).not.toContain("0x1234");
 
+    expect(body.evidencePresentation?.capabilities).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          key: "native-rpc.eth_call",
+          sourceCategory: "native_rpc",
+          status: "checked",
+        }),
+        expect.objectContaining({
+          key: "trace-rpc.callTracer",
+          sourceCategory: "trace_rpc",
+          status: "checked",
+          mode: "RECORDED_REPLAY",
+        }),
+      ]),
+    );
+
     const traceCallsBeforeHistoricalRead = traceReplay.calls.length;
     const nativeCallsBeforeHistoricalRead = replay.calls.length;
     const storedResponse = await app.fetch(
@@ -1396,6 +1412,7 @@ describe("Arbitrum production composition skeleton", () => {
       body.providerEvidence?.providerData.traceRpc,
     );
     expect(JSON.stringify(stored)).not.toContain("0x1234");
+    expect(stored.evidencePresentation).toEqual(body.evidencePresentation);
     expect(traceReplay.calls).toHaveLength(traceCallsBeforeHistoricalRead);
     expect(replay.calls).toHaveLength(nativeCallsBeforeHistoricalRead);
   });
@@ -1626,6 +1643,39 @@ describe("Arbitrum production composition skeleton", () => {
       });
 
       const publicTrace = body.providerEvidence?.providerData.traceRpc;
+      const presentation = body.evidencePresentation;
+      expect(
+        presentation?.capabilities.some(
+          (item) => item.sourceCategory === "native_rpc",
+        ),
+      ).toBe(true);
+      for (const key of expected.checkedScope) {
+        expect(presentation?.capabilities).toContainEqual(
+          expect.objectContaining({
+            key,
+            sourceCategory: "trace_rpc",
+            status: "checked",
+          }),
+        );
+      }
+      for (const key of expected.unknownScope) {
+        expect(presentation?.capabilities).toContainEqual(
+          expect.objectContaining({
+            key,
+            sourceCategory: "trace_rpc",
+            status: "unknown",
+          }),
+        );
+      }
+      for (const key of expected.unavailableScope) {
+        expect(presentation?.capabilities).toContainEqual(
+          expect.objectContaining({
+            key,
+            sourceCategory: "trace_rpc",
+            status: "unavailable",
+          }),
+        );
+      }
       const traceCallsBeforeHistoricalRead = fixture.traceReplay.calls.length;
       const nativeCallsBeforeHistoricalRead = fixture.replay.calls.length;
       const storedResponse = await fixture.app.fetch(
@@ -1640,6 +1690,7 @@ describe("Arbitrum production composition skeleton", () => {
       expect(stored.providerEvidence?.providerData.traceRpc).toEqual(
         publicTrace,
       );
+      expect(stored.evidencePresentation).toEqual(presentation);
       expect(fixture.traceReplay.calls).toHaveLength(
         traceCallsBeforeHistoricalRead,
       );

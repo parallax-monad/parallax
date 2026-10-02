@@ -30,6 +30,7 @@ import {
 import { isChainAdapterError } from "./backend/chain-adapter.js";
 import type { BackendCompositionRuntime } from "./backend/composition.js";
 import { isBackendControlError } from "./backend/control-boundary.js";
+import { projectEvidencePresentation } from "./backend/evidence-presentation.js";
 import { projectTraceRpcEvidence } from "./backend/trace-rpc-public.js";
 import {
   coerceIntentNormalizationResult,
@@ -270,9 +271,8 @@ export class CheckApplicationService {
       } catch {
         return storeErrorResponse();
       }
-      const gatedResult = closeUnverifiedAdjust(
-        gated.result,
-        verificationChildren,
+      const gatedResult = publicRunResult(
+        closeUnverifiedAdjust(gated.result, verificationChildren),
       );
       try {
         await this.dependencies.store.complete(gatedResult);
@@ -499,19 +499,21 @@ export class CheckApplicationService {
       if (result.parentRunId === undefined || result.diff === undefined) {
         return "non_terminal";
       }
-      const failed = failedRunResultSchema.parse({
-        ...createIntegrationErrorResult(
-          childRunId,
-          intent,
-          "INVALID_AGENT_FLOW_RESPONSE",
-          {
-            parentRunId: result.parentRunId,
-            diff: result.diff,
-          },
-          result.createdAt,
-        ),
-        tokenMetadata: result.tokenMetadata,
-      });
+      const failed = failedRunResultSchema.parse(
+        publicRunResult({
+          ...createIntegrationErrorResult(
+            childRunId,
+            intent,
+            "INVALID_AGENT_FLOW_RESPONSE",
+            {
+              parentRunId: result.parentRunId,
+              diff: result.diff,
+            },
+            result.createdAt,
+          ),
+          tokenMetadata: result.tokenMetadata,
+        }),
+      );
       try {
         await this.dependencies.store.fail(
           childRunId,
@@ -534,17 +536,19 @@ export class CheckApplicationService {
     cause?: unknown,
     tokenMetadata?: TokenMetadataPair,
   ): Promise<"terminal_error" | "non_terminal"> {
-    const result = failedRunResultSchema.parse({
-      ...createIntegrationErrorResult(
-        childRunId,
-        intent,
-        failure,
-        childFields,
-        createdAt,
-        cause,
-      ),
-      tokenMetadata,
-    });
+    const result = failedRunResultSchema.parse(
+      publicRunResult({
+        ...createIntegrationErrorResult(
+          childRunId,
+          intent,
+          failure,
+          childFields,
+          createdAt,
+          cause,
+        ),
+        tokenMetadata,
+      }),
+    );
     try {
       await this.dependencies.store.fail(childRunId, failure, result);
       return "terminal_error";
@@ -584,10 +588,14 @@ export class CheckApplicationService {
             ...(childFields ?? {}),
             createdAt,
           };
-    const result = failedRunResultSchema.parse({
-      ...failureResult,
-      tokenMetadata,
-    });
+    const result = failedRunResultSchema.parse(
+      publicRunResult(
+        failedRunResultSchema.parse({
+          ...failureResult,
+          tokenMetadata,
+        }),
+      ),
+    );
     try {
       await this.dependencies.store.fail(runId, failure, result);
     } catch {
@@ -639,7 +647,8 @@ type InterpretAgentFlowOptions = {
 /**
  * Shared parse + identity validation for primary checks and Action Gate
  * verification children. Fail-closed ADJUST stripping applies only to the
- * primary path (children must stay raw so Gate attestation can evaluate them).
+ * primary path. Children retain their decision/Action fields for Gate attestation;
+ * both paths return the redacted public result with generated display metadata.
  */
 function interpretAgentFlowCandidate(
   candidate: unknown,
@@ -691,16 +700,25 @@ function interpretAgentFlowCandidate(
  * copying `providerData` into an HTTP response or persisted Run.
  */
 function publicRunResult(result: RunResult): RunResult {
-  if (result.providerEvidence === undefined) return result;
-  return runResultSchema.parse({
+  const publicResult = runResultSchema.parse({
     ...result,
-    providerEvidence: {
-      ...result.providerEvidence,
-      providerData: publicProviderData(
-        result.providerEvidence.providerData,
-        result,
-      ),
-    },
+    ...(result.providerEvidence === undefined
+      ? {}
+      : {
+          providerEvidence: {
+            ...result.providerEvidence,
+            providerData: publicProviderData(
+              result.providerEvidence.providerData,
+              result,
+            ),
+          },
+        }),
+    // Never accept a caller-supplied display view as evidence of capability.
+    evidencePresentation: undefined,
+  });
+  return runResultSchema.parse({
+    ...publicResult,
+    evidencePresentation: projectEvidencePresentation(publicResult),
   });
 }
 
