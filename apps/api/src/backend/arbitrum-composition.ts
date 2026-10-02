@@ -811,15 +811,12 @@ async function evaluateArbitrumP0Decision(
   };
   const risk = evaluateBackendP0Risk(baseInput);
   const remediation = options.p0Risk?.remediation;
-  const targetPreservingRemediation =
-    risk.quoteFidelity.status === "VERIFIED" &&
-    risk.quoteFidelity.observations.includes("QUOTE_OUTPUT_DEGRADED");
   if (
     remediation === undefined ||
     selectedQuote === undefined ||
     pipeline.executeProviderPath === undefined ||
     backendEvidenceState(evidence) !== "VERIFIED" ||
-    (risk.verdict === "PROCEED" && !targetPreservingRemediation)
+    (risk.verdict !== "STOP" && risk.verdict !== "ADJUST")
   ) {
     return {
       risk,

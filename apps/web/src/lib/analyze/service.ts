@@ -1,5 +1,9 @@
 import type { Copy } from "@/lib/i18n";
-import { getChainIdForProtocol, symbolToAsset } from "./api-helpers";
+import {
+  assetToSymbol,
+  getChainIdForProtocol,
+  symbolToAsset,
+} from "./api-helpers";
 import { type FormState, INITIAL_FORM, validateForm } from "./form";
 import type {
   AccountStateResult,
@@ -51,6 +55,13 @@ function symbol(
 ): string {
   const resolved = metadata.get(`${chainId}:${metadataAssetKey(value)}`);
   if (resolved) return resolved.symbol;
+  const asset = obj(value);
+  if (asset?.kind === "native") return assetToSymbol(asset, chainId);
+  const address = str(asset?.address);
+  if (address) {
+    const known = assetToSymbol({ kind: "erc20", address }, chainId);
+    if (known !== `${address.slice(0, 6)}…${address.slice(-4)}`) return known;
+  }
   return "unknown";
 }
 
@@ -814,11 +825,17 @@ function mapRun(
   const routePath = arr(route?.path)
     .map((item) => symbol(item, chainId, metadataByAsset))
     .join(" → ");
+  const tokenIn = symbol(intent?.tokenIn, chainId, metadataByAsset);
+  const tokenOut = symbol(intent?.tokenOut, chainId, metadataByAsset);
+  const displayRoute =
+    routePath && !routePath.split(" → ").includes("unknown")
+      ? routePath
+      : tokenIn !== "unknown" && tokenOut !== "unknown"
+        ? `${tokenIn} → ${tokenOut}`
+        : "";
   const output = arr(run?.evidence)
     .map(obj)
     .find((item) => item?.kind === "simulated_token_out");
-  const tokenIn = symbol(intent?.tokenIn, chainId, metadataByAsset);
-  const tokenOut = symbol(intent?.tokenOut, chainId, metadataByAsset);
   const boundary = obj(intent?.economicBoundary);
   const p0 = obj(run?.p0);
   const basicSimulation = obj(p0?.basicSimulation);
@@ -908,7 +925,7 @@ function mapRun(
               decimalsFor(tokenOut, decimalMetadata),
             )
           : "unavailable"),
-      route: routePath ? cp(routePath) : unavailable,
+      route: displayRoute ? cp(displayRoute) : unavailable,
       blockNumber:
         str(runQuote?.blockNumber) ??
         str(route?.blockNumber) ??

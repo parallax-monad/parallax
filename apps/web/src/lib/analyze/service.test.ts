@@ -252,6 +252,47 @@ describe("checkSwap API adapter", () => {
     expect(result.simulatedOutput).toBe("0.000223");
   });
 
+  test("resolves known Arbitrum assets when Run token metadata is absent", async () => {
+    const arbitrumRun = {
+      ...completed,
+      intent: {
+        ...intent,
+        chainId: 421614,
+        protocol: "camelot-v3",
+        tokenIn: {
+          kind: "erc20",
+          address: "0xb893E3334D4Bd6C5ba8277Fd559e99Ed683A9FC7",
+        },
+        tokenOut: {
+          kind: "erc20",
+          address: "0x980B62Da83eFf3D4576C647993b0c1D7faf17c73",
+        },
+      },
+      tokenMetadata: undefined,
+      route: {
+        path: [
+          {
+            kind: "erc20",
+            address: "0xb893E3334D4Bd6C5ba8277Fd559e99Ed683A9FC7",
+          },
+          {
+            kind: "erc20",
+            address: "0x980B62Da83eFf3D4576C647993b0c1D7faf17c73",
+          },
+        ],
+      },
+    };
+    const request = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(jsonResponse(arbitrumRun));
+
+    const result = await checkSwap(input, { fetch: request });
+
+    expect(result.intent.tokenIn).toBe("USDC");
+    expect(result.intent.tokenOut).toBe("WETH");
+    expect(result.quote.route.en).toBe("USDC → WETH");
+  });
+
   test("keeps atomic output unavailable without trusted token metadata", async () => {
     const request = vi.fn<typeof fetch>().mockResolvedValue(
       jsonResponse({
@@ -279,7 +320,7 @@ describe("checkSwap API adapter", () => {
     expect(result.quote.expectedOutput).toBe("unavailable");
     expect(result.simulatedOutput).toBe("unavailable");
     expect(result.intent.amountIn).toBe("unavailable");
-    expect(result.intent.tokenIn).toBe("unknown");
+    expect(result.intent.tokenIn).toBe("MON");
     expect(result.tokenMetadata).toBeUndefined();
   });
 

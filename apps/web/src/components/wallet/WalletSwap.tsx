@@ -124,10 +124,7 @@ export function WalletSwap({
   const amountFlag = flagFor("amountIn");
   const tokenInLabel = form.tokenIn;
   const tokenOutLabel = form.tokenOut;
-  const routeLabel =
-    p0Config?.status === "AVAILABLE"
-      ? `Arbitrum Sepolia · Camelot V3 · ${tokenInLabel} → ${tokenOutLabel}`
-      : "Arbitrum Sepolia · Camelot V3 · ETH → USDC";
+  const routeLabel = `Arbitrum Sepolia · Camelot V3 · ${tokenInLabel} → ${tokenOutLabel}`;
   const configUnavailable =
     p0Config !== undefined && p0Config.status !== "AVAILABLE";
   const amountError = errors.amountIn;
