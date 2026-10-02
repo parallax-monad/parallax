@@ -44,10 +44,7 @@ function symbol(
 ): string {
   const resolved = metadata.get(`${chainId}:${metadataAssetKey(value)}`);
   if (resolved) return resolved.symbol;
-  const asset = obj(value);
-  if (asset?.kind === "native") return "unknown";
-  const address = str(asset?.address)?.toLowerCase();
-  return address ? `${address.slice(0, 6)}…${address.slice(-4)}` : "unknown";
+  return "unknown";
 }
 
 function requestAsset(
@@ -174,6 +171,41 @@ function decimalsFor(
   metadata: Map<string, number>,
 ): number | undefined {
   return metadata.get(value.toLowerCase());
+}
+
+export function applyTokenMetadata(
+  result: CheckSwapResult,
+  metadata: TokenMetadataPair | undefined,
+): CheckSwapResult {
+  if (!metadata) return result;
+  const raw = obj(result.rawResponse);
+  const rawIntent = obj(raw?.intent);
+  const chainId =
+    typeof rawIntent?.chainId === "number" ? rawIntent.chainId : result.chainId;
+  if (chainId === undefined) return result;
+  const lookup = metadataLookup(metadata).byAsset;
+  const tokenInMetadata = lookup.get(
+    `${chainId}:${metadataAssetKey(rawIntent?.tokenIn)}`,
+  );
+  const tokenOutMetadata = lookup.get(
+    `${chainId}:${metadataAssetKey(rawIntent?.tokenOut)}`,
+  );
+  if (!tokenInMetadata || !tokenOutMetadata) return result;
+  const decimals = metadataLookup(metadata).decimals;
+  const amountIn = decimal(
+    rawIntent?.amountInAtomic,
+    decimalsFor(tokenInMetadata.symbol, decimals),
+  );
+  return {
+    ...result,
+    tokenMetadata: metadata,
+    intent: {
+      ...result.intent,
+      tokenIn: tokenInMetadata.symbol,
+      tokenOut: tokenOutMetadata.symbol,
+      amountIn: amountIn === "unavailable" ? result.intent.amountIn : amountIn,
+    },
+  };
 }
 
 /**
@@ -492,15 +524,17 @@ function mapRun(
   const { byAsset: metadataByAsset, decimals: decimalMetadata } =
     metadataLookup(tokenMetadata);
   const chainId =
-    typeof intent?.chainId === "number" ? intent.chainId : undefined;
+    typeof intent?.chainId === "number"
+      ? intent.chainId
+      : getChainIdForProtocol(str(intent?.protocol) ?? "");
   const routePath = arr(route?.path)
-    .map((item) => symbol(item, chainId ?? 0, metadataByAsset))
+    .map((item) => symbol(item, chainId, metadataByAsset))
     .join(" → ");
   const output = arr(run?.evidence)
     .map(obj)
     .find((item) => item?.kind === "simulated_token_out");
-  const tokenIn = symbol(intent?.tokenIn, chainId ?? 0, metadataByAsset);
-  const tokenOut = symbol(intent?.tokenOut, chainId ?? 0, metadataByAsset);
+  const tokenIn = symbol(intent?.tokenIn, chainId, metadataByAsset);
+  const tokenOut = symbol(intent?.tokenOut, chainId, metadataByAsset);
   const boundary = obj(intent?.economicBoundary);
   const p0 = obj(run?.p0);
   const basicSimulation = obj(p0?.basicSimulation);

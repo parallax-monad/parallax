@@ -7,6 +7,7 @@ import type {
   CheckSwapResult,
   ProductRunMode,
   RemediationOption,
+  TokenMetadataPair,
 } from "@/lib/analyze/types";
 import { type Copy, type Language, say } from "@/lib/i18n";
 
@@ -41,6 +42,7 @@ const INTEGRATION_ERROR_COPY = {
 
 export function WalletResult({
   result,
+  tokenMetadata,
   language,
   onKeep,
   onRetry,
@@ -49,6 +51,7 @@ export function WalletResult({
   onSelectOption,
 }: {
   result: CheckSwapResult;
+  tokenMetadata?: TokenMetadataPair;
   language: Language;
   onKeep: () => void;
   onRetry?: () => void;
@@ -219,6 +222,7 @@ export function WalletResult({
         <ResultStep
           language={language}
           result={result}
+          tokenMetadata={tokenMetadata}
           onNext={() => setCurrentStep("options")}
         />
       ) : (

@@ -5,7 +5,11 @@ import { QuoteFidelityCard } from "@/components/analyze/QuoteFidelityCard";
 import { VerdictIcon } from "@/components/analyze/StatusIcon";
 import { TokenIcon } from "@/components/analyze/TokenIcon";
 import { formatAmount } from "@/components/wallet/walletData";
-import type { CheckSwapResult, Verdict } from "@/lib/analyze/types";
+import type {
+  CheckSwapResult,
+  TokenMetadataPair,
+  Verdict,
+} from "@/lib/analyze/types";
 import { type Copy, type Language, say } from "@/lib/i18n";
 
 const VERDICT_TONE: Record<Verdict, string> = {
@@ -45,6 +49,20 @@ const RECHECK_COPY: Copy = {
   en: "This result is based on the checked state. Re-check immediately before signing if conditions change.",
   zh: "此结果基于已检查的状态。如果条件发生变化，请在签名前立即重新检查。",
 };
+
+function displayTokenSymbol(
+  value: string,
+  metadata: TokenMetadataPair | undefined,
+): string {
+  if (metadata) {
+    const candidates = [metadata.tokenIn, metadata.tokenOut];
+    const match = candidates.find((item) => item.symbol === value);
+    if (match) return match.symbol;
+  }
+  return value !== "unavailable" && value !== "unknown"
+    ? value
+    : "Unknown token";
+}
 
 function SwapSummary({
   amountIn,
@@ -199,22 +217,29 @@ function ScopeSummary({
 
 export function ResultStep({
   result,
+  tokenMetadata,
   language,
   onNext,
 }: {
   result: CheckSwapResult;
+  tokenMetadata?: TokenMetadataPair;
   language: Language;
   onNext: () => void;
 }) {
   const [scopeOpen, setScopeOpen] = useState(false);
   const { intent, quote, verdict } = result;
-  const amountIn = Number.isFinite(Number(intent.amountIn))
-    ? formatAmount(Number(intent.amountIn))
-    : intent.amountIn;
+  const amountIn =
+    intent.amountIn === "unavailable"
+      ? say(language, { en: "Unknown amount", zh: "未知数量" })
+      : Number.isFinite(Number(intent.amountIn))
+        ? formatAmount(Number(intent.amountIn))
+        : intent.amountIn;
   const amountOut =
     quote.expectedOutput === "unavailable"
       ? say(language, { en: "Unknown", zh: "未知" })
       : quote.expectedOutput;
+  const tokenInLabel = displayTokenSymbol(intent.tokenIn, tokenMetadata);
+  const tokenOutLabel = displayTokenSymbol(intent.tokenOut, tokenMetadata);
   const hasOptions = Boolean(
     result.remediationOptions && result.remediationOptions.length > 0,
   );
@@ -243,8 +268,8 @@ export function ResultStep({
         amountIn={amountIn}
         amountOut={amountOut}
         language={language}
-        tokenIn={intent.tokenIn}
-        tokenOut={intent.tokenOut}
+        tokenIn={tokenInLabel}
+        tokenOut={tokenOutLabel}
       />
 
       {result.quoteFidelity && (
