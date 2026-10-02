@@ -16,6 +16,7 @@ import {
 import { describe, expect, it } from "vitest";
 import { CheckApplicationService } from "./application.js";
 import { ChainAdapterError } from "./backend/chain-adapter.js";
+import { projectEvidencePresentation } from "./backend/evidence-presentation.js";
 import { normalizeCheckSwapRequest } from "./normalization.js";
 import { type AgentFlowPort, UnsupportedAgentFlowError } from "./ports.js";
 import type { BackendRuntime } from "./runtime-config.js";
@@ -1548,6 +1549,108 @@ describe("CheckApplicationService", () => {
       },
     });
   });
+
+  it.each(["completed", "integration_error"] as const)(
+    "persists the generated Evidence presentation for a %s verification child",
+    async (childStatus) => {
+      const completedInputs: RunResult[] = [];
+      class ObservedStore extends InMemoryRunStore {
+        override async complete(result: RunResult): Promise<void> {
+          completedInputs.push(structuredClone(result));
+          await super.complete(result);
+        }
+      }
+      const store = new ObservedStore();
+      let nextId = 1;
+      let calls = 0;
+      let rawChild: RunResult | undefined;
+      const service = createService(
+        {
+          async check(input) {
+            calls++;
+            if (input.runId === "run-1") {
+              return economicFailStopResult(
+                actionGateAssets,
+                input.runId,
+                input.intent,
+              );
+            }
+            rawChild =
+              childStatus === "completed"
+                ? economicPassChildResult(
+                    actionGateAssets,
+                    input.runId,
+                    input.intent,
+                  )
+                : integrationErrorResult(input.runId, input.intent);
+            // Ensure the failure case also projects real item metadata, rather
+            // than passing merely because an empty display object was saved.
+            if (childStatus === "integration_error") {
+              rawChild.evidence = economicPassChildResult(
+                actionGateAssets,
+                input.runId,
+                input.intent,
+              ).evidence;
+            }
+            rawChild.evidencePresentation = {
+              version: 1,
+              items: [
+                {
+                  evidenceKey: "caller-supplied",
+                  status: "checked",
+                  sourceCategory: "unknown",
+                },
+              ],
+              capabilities: [],
+            };
+            return rawChild;
+          },
+        },
+        store,
+        () => `run-${nextId++}`,
+      );
+      const response = await service.check(
+        publicRequest({
+          economicBoundary: {
+            availability: "available",
+            minimumReceived: "0.02",
+            source: "user_declared",
+          },
+        }),
+      );
+      expect(response).toMatchObject({
+        status: 200,
+        body: {
+          verdict: childStatus === "completed" ? "ADJUST" : "STOP",
+        },
+      });
+      expect(calls).toBe(2);
+      if (!rawChild) throw new Error("missing verification child");
+      const expected = projectEvidencePresentation(rawChild);
+      expect(expected.items.length).toBeGreaterThan(0);
+      const submittedChild = completedInputs.find(
+        (item) => item.runId === "run-2",
+      );
+      expect(submittedChild).toMatchObject({
+        status: childStatus,
+        parentRunId: "run-1",
+        createdAt,
+        evidencePresentation: expected,
+      });
+      expect(
+        submittedChild?.evidencePresentation?.items.some(
+          (item) => item.evidenceKey === "caller-supplied",
+        ),
+      ).toBe(false);
+      const saved = await store.get("run-2");
+      if (!saved || saved.status === "started")
+        throw new Error("child is not terminal");
+      expect(saved.result.evidencePresentation).toEqual(expected);
+      expect(saved.result.diff).toBeDefined();
+      expect(await store.get("run-2")).toEqual(saved);
+      expect(calls).toBe(2);
+    },
+  );
 
   it("keeps STOP when the Action Gate verification child fails required rules", async () => {
     const store = new InMemoryRunStore();

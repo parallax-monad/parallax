@@ -647,7 +647,8 @@ type InterpretAgentFlowOptions = {
 /**
  * Shared parse + identity validation for primary checks and Action Gate
  * verification children. Fail-closed ADJUST stripping applies only to the
- * primary path (children must stay raw so Gate attestation can evaluate them).
+ * primary path. Children retain their decision/Action fields for Gate attestation;
+ * both paths return the redacted public result with generated display metadata.
  */
 function interpretAgentFlowCandidate(
   candidate: unknown,
