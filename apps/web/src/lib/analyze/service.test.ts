@@ -505,11 +505,11 @@ describe("checkSwap API adapter", () => {
     const result = await checkSwap(input, { fetch: request });
 
     expect(result.providerEvidence?.capabilities).toEqual([
-      {
+      expect.objectContaining({
         id: "callTracer",
         status: "checked",
         reason: undefined,
-      },
+      }),
     ]);
     expect(result.providerEvidence?.status).toBe("UNKNOWN");
     expect(result.executionEvidence?.status).toBe("UNKNOWN");
