@@ -875,7 +875,11 @@ async function projectVerifiedArbitrumRemediation(
   solver: SolverResult | undefined,
   runStore: RunStore,
 ): Promise<RunResult> {
-  if (projected.status !== "completed" || solver?.status !== "VERIFIED") {
+  if (
+    projected.status !== "completed" ||
+    projected.verdict !== "STOP" ||
+    solver?.status !== "VERIFIED"
+  ) {
     return projected;
   }
 
