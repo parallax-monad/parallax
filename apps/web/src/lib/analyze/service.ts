@@ -7,7 +7,10 @@ import type {
   ApiFailureIssue,
   CheckSwapInput,
   CheckSwapResult,
+  EvidenceCapabilityPresentation,
+  EvidenceCapabilityStatus,
   EvidenceItem,
+  EvidencePresentation,
   P0ConfigState,
   QuotePreview,
   QuoteState,
@@ -268,30 +271,169 @@ function rule(value: unknown): RuleResult | undefined {
   };
 }
 
-function evidence(value: unknown, replay: boolean): EvidenceItem | undefined {
+function parseEvidencePresentation(
+  value: unknown,
+): EvidencePresentation | undefined {
+  const presentation = obj(value);
+  if (presentation?.version !== 1 || !Array.isArray(presentation.items)) {
+    return;
+  }
+  const items = presentation.items.flatMap((value) => {
+    const item = obj(value);
+    const evidenceKey = str(item?.evidenceKey);
+    const status = str(item?.status);
+    const sourceCategory = str(item?.sourceCategory);
+    if (
+      !evidenceKey ||
+      !["checked", "unknown", "unavailable"].includes(status ?? "") ||
+      ![
+        "native_rpc",
+        "trace_rpc",
+        "account_allowance",
+        "explorer",
+        "quote",
+        "simulation",
+        "unknown",
+      ].includes(sourceCategory ?? "")
+    ) {
+      return [];
+    }
+    return [
+      {
+        evidenceKey,
+        status: status as EvidencePresentation["items"][number]["status"],
+        sourceCategory:
+          sourceCategory as EvidencePresentation["items"][number]["sourceCategory"],
+        observedAt: str(item?.observedAt),
+        reason: str(item?.reason),
+        mode: str(item?.mode) as EvidencePresentation["items"][number]["mode"],
+      },
+    ];
+  });
+  const capabilities = Array.isArray(presentation.capabilities)
+    ? presentation.capabilities.flatMap((value) => {
+        const item = obj(value);
+        const key = str(item?.key);
+        const summary = str(item?.summary);
+        const status = str(item?.status);
+        const sourceCategory = str(item?.sourceCategory);
+        if (
+          !key ||
+          !summary ||
+          !["checked", "not_checked", "unknown", "unavailable"].includes(
+            status ?? "",
+          ) ||
+          ![
+            "native_rpc",
+            "trace_rpc",
+            "account_allowance",
+            "explorer",
+            "quote",
+            "simulation",
+            "unknown",
+          ].includes(sourceCategory ?? "")
+        ) {
+          return [];
+        }
+        const block = obj(item?.blockContext);
+        return [
+          {
+            key,
+            summary,
+            stage: "SIMULATE" as const,
+            status: status as EvidenceCapabilityStatus,
+            sourceCategory:
+              sourceCategory as EvidenceCapabilityPresentation["sourceCategory"],
+            observedAt: str(item?.observedAt),
+            reason: str(item?.reason),
+            mode: str(item?.mode) as EvidenceCapabilityPresentation["mode"],
+            blockContext:
+              typeof block?.blockNumber === "string" &&
+              (block.status === "observed" || block.status === "requested")
+                ? {
+                    blockNumber: block.blockNumber,
+                    blockHash: str(block.blockHash),
+                    status: block.status as "observed" | "requested",
+                  }
+                : undefined,
+          },
+        ];
+      })
+    : [];
+  return { version: 1, items, capabilities };
+}
+
+function presentationItem(
+  presentation: EvidencePresentation | undefined,
+  evidenceKey: string,
+) {
+  return presentation?.items.find((item) => item.evidenceKey === evidenceKey);
+}
+
+function legacyTraceCapabilities(
+  value: unknown,
+): EvidenceCapabilityPresentation[] {
+  const capabilities = obj(value);
+  if (!capabilities) return [];
+  return Object.entries(capabilities).flatMap(([key, value]) => {
+    const capability = obj(value);
+    if (!capability) return [];
+    return [
+      {
+        key,
+        summary: key,
+        stage: "SIMULATE" as const,
+        status:
+          capability.status === "observed"
+            ? ("checked" as const)
+            : ("unknown" as const),
+        sourceCategory: "trace_rpc" as const,
+        reason: str(capability.reason),
+      },
+    ];
+  });
+}
+
+function evidence(
+  value: unknown,
+  replay: boolean,
+  presentation: EvidencePresentation | undefined,
+): EvidenceItem | undefined {
   const item = obj(value);
   const id = str(item?.key);
   if (!id) return;
   const rawStage = str(item?.stage)?.toLowerCase();
+  const isMock = item?.isMock === true;
   const stage =
     rawStage &&
     ["discover", "load", "quote", "action", "simulate"].includes(rawStage)
       ? (rawStage as EvidenceItem["stage"])
       : "unknown";
-  const source = str(item?.source);
-  const isMock = item?.isMock === true;
+  const presentationItemValue = presentationItem(presentation, id);
+  const mode = presentationItemValue?.mode;
+  const presentationMode =
+    mode === "LIVE" || mode === "RECORDED_REPLAY" || mode === "MOCK"
+      ? mode
+      : undefined;
   return {
     id,
     stage,
     label: cp(str(item?.summary) ?? id),
-    value: JSON.stringify(item, null, 2),
-    origin: replay
-      ? "replay"
-      : isMock
-        ? "mock"
-        : source === "derived"
-          ? "derived"
-          : "live",
+    origin:
+      presentationMode === "RECORDED_REPLAY" || replay
+        ? "replay"
+        : presentationMode === "MOCK" || item?.isMock === true
+          ? "mock"
+          : item?.source === "derived"
+            ? "derived"
+            : "live",
+    status: presentationItemValue?.status ?? "unknown",
+    source: presentationItemValue?.sourceCategory ?? "unknown",
+    observedAt: presentationItemValue?.observedAt,
+    reason: presentationItemValue?.reason
+      ? cp(presentationItemValue.reason)
+      : undefined,
+    mode: presentationMode,
     blockNumber: str(item?.blockNumber) ?? str(item?.simulatorPinnedBlock),
     runtimeVersion: str(item?.runtimeVersion),
     runtimeRevision: str(item?.runtimeRevision),
@@ -400,6 +542,7 @@ function failed(
     checked: [],
     notChecked: [],
     evidence: [],
+    capabilities: [],
     ruleResults: [],
     unknowns: [
       {
@@ -464,8 +607,9 @@ function mapRun(
           issues: failureIssues(runError?.issues) ?? transportFailure?.issues,
         }
       : undefined;
+  const presentation = parseEvidencePresentation(run?.evidencePresentation);
   const mappedEvidence = arr(run?.evidence)
-    .map((item) => evidence(item, replayMode))
+    .map((item) => evidence(item, replayMode, presentation))
     .filter((item): item is EvidenceItem => !!item);
   const scope = arr(run?.scope)
     .map(obj)
@@ -494,6 +638,15 @@ function mapRun(
   const provider = obj(providerEvidence?.provider);
   const execution = obj(providerEvidence?.execution);
   const providerProvenance = obj(providerEvidence?.provenance);
+  const traceCapabilities = presentation?.capabilities.some(
+    (capability) => capability.sourceCategory === "trace_rpc",
+  )
+    ? presentation.capabilities.filter(
+        (capability) => capability.sourceCategory === "trace_rpc",
+      )
+    : legacyTraceCapabilities(
+        obj(obj(providerEvidence?.providerData)?.traceRpc)?.capabilities,
+      );
   const remediation = obj(p0?.remediation);
   const baseline = obj(p0?.expectationBaseline);
   const basicSimulationBlockNumber = str(basicSimulation?.blockNumber);
@@ -532,6 +685,7 @@ function mapRun(
         reason: cp(str(item.reason) ?? "No reason provided"),
       })),
     evidence: mappedEvidence,
+    capabilities: traceCapabilities,
     ruleResults: arr(run?.ruleResults)
       .map(rule)
       .filter((item): item is RuleResult => !!item),
@@ -610,14 +764,41 @@ function mapRun(
             observedAt: basicSimulationObservedAt,
           }
         : undefined,
-    providerEvidence: provider
-      ? {
-          status: str(provider?.status) ?? "UNKNOWN",
-          source: str(provider?.providerId),
-          observedAt: str(providerProvenance?.fetchedAt),
-          blockNumber: str(providerProvenance?.blockNumber),
-        }
-      : undefined,
+    providerEvidence:
+      provider || presentation
+        ? {
+            status: str(provider?.status) ?? "UNKNOWN",
+            source: str(provider?.providerId),
+            observedAt: str(providerProvenance?.fetchedAt),
+            blockNumber: str(providerProvenance?.blockNumber),
+            capabilities: (presentation?.capabilities ?? traceCapabilities).map(
+              (capability) => ({
+                id: capability.key,
+                summary: capability.summary,
+                status: capability.status,
+                sourceCategory: capability.sourceCategory,
+                observedAt: capability.observedAt,
+                reason: capability.reason,
+                mode: capability.mode,
+                blockContext: capability.blockContext,
+              }),
+            ),
+          }
+        : traceCapabilities.length > 0
+          ? {
+              status: "UNKNOWN",
+              capabilities: traceCapabilities.map((capability) => ({
+                id: capability.key,
+                summary: capability.summary,
+                status: capability.status,
+                sourceCategory: capability.sourceCategory,
+                observedAt: capability.observedAt,
+                reason: capability.reason,
+                mode: capability.mode,
+                blockContext: capability.blockContext,
+              })),
+            }
+          : undefined,
     executionEvidence: execution
       ? {
           status: str(execution?.status) ?? "UNKNOWN",

@@ -116,9 +116,52 @@ function ScopeSummary({
   expanded: boolean;
   onToggle: () => void;
 }) {
-  const checked = result.checked.length;
-  const unknown = result.unknowns.length;
-  const notChecked = result.notChecked.length;
+  const hasCapabilities = (result.capabilities ?? []).length > 0;
+  const capabilities = result.capabilities ?? [];
+  const checked = hasCapabilities
+    ? capabilities.filter((item) => item.status === "checked").length
+    : result.checked.length;
+  const unknown = hasCapabilities
+    ? capabilities.filter((item) => item.status === "unknown").length
+    : result.unknowns.length;
+  const notChecked = hasCapabilities
+    ? capabilities.filter((item) => item.status === "not_checked").length
+    : result.notChecked.length;
+
+  const renderCapabilityGroup = (
+    label: Copy,
+    status: "checked" | "unknown" | "not_checked" | "unavailable",
+  ) => {
+    const items = capabilities.filter((item) => item.status === status);
+    return (
+      <div>
+        <div className="text-[11px] font-bold uppercase tracking-[0.08em] text-dim">
+          {say(language, label)}
+        </div>
+        {items.length === 0 ? (
+          <p className="m-0 mt-1 text-[13px] text-dim">
+            {say(language, {
+              en: "No items reported",
+              zh: "没有报告项目",
+            })}
+          </p>
+        ) : (
+          <ul className="m-0 mt-1 list-disc space-y-1 pl-4 text-[13px] leading-[1.5] text-white">
+            {items.map((item) => (
+              <li key={item.key}>
+                {item.summary}
+                {item.status === "unavailable" && (
+                  <span className="ml-2 text-dim">
+                    {say(language, { en: "Unavailable", zh: "不可用" })}
+                  </span>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    );
+  };
 
   return (
     <section className="rounded-[12px] border border-line bg-ink-elev2/30 p-3">
@@ -155,41 +198,61 @@ function ScopeSummary({
       </div>
       {expanded && (
         <div className="mt-4 space-y-3 border-t border-line pt-3">
-          {result.unknowns.length > 0 && (
-            <div>
-              <div className="text-[11px] font-bold uppercase tracking-[0.08em] text-risk-elevated">
-                {say(language, { en: "Unknown", zh: "未知" })}
-              </div>
-              <ul className="m-0 mt-1 list-disc space-y-1 pl-4 text-[13px] leading-[1.5] text-white">
-                {result.unknowns.map((item) => (
-                  <li key={item.id}>{say(language, item.reason)}</li>
-                ))}
-              </ul>
-            </div>
-          )}
-          {result.checked.length > 0 && (
-            <div>
-              <div className="text-[11px] font-bold uppercase tracking-[0.08em] text-dim">
-                {say(language, { en: "Checked", zh: "已检查" })}
-              </div>
-              <ul className="m-0 mt-1 list-disc space-y-1 pl-4 text-[13px] leading-[1.5] text-white">
-                {result.checked.map((item) => (
-                  <li key={item.en}>{say(language, item)}</li>
-                ))}
-              </ul>
-            </div>
-          )}
-          {result.notChecked.length > 0 && (
-            <div>
-              <div className="text-[11px] font-bold uppercase tracking-[0.08em] text-dim">
-                {say(language, { en: "Not checked", zh: "未检查" })}
-              </div>
-              <ul className="m-0 mt-1 list-disc space-y-1 pl-4 text-[13px] leading-[1.5] text-white">
-                {result.notChecked.map((item) => (
-                  <li key={item.en}>{say(language, item)}</li>
-                ))}
-              </ul>
-            </div>
+          {hasCapabilities ? (
+            <>
+              {renderCapabilityGroup(
+                { en: "Checked", zh: "已检查" },
+                "checked",
+              )}
+              {renderCapabilityGroup({ en: "Unknown", zh: "未知" }, "unknown")}
+              {renderCapabilityGroup(
+                { en: "Not checked", zh: "未检查" },
+                "not_checked",
+              )}
+              {renderCapabilityGroup(
+                { en: "Unavailable", zh: "不可用" },
+                "unavailable",
+              )}
+            </>
+          ) : (
+            <>
+              {result.unknowns.length > 0 && (
+                <div>
+                  <div className="text-[11px] font-bold uppercase tracking-[0.08em] text-risk-elevated">
+                    {say(language, { en: "Unknown", zh: "未知" })}
+                  </div>
+                  <ul className="m-0 mt-1 list-disc space-y-1 pl-4 text-[13px] leading-[1.5] text-white">
+                    {result.unknowns.map((item) => (
+                      <li key={item.id}>{say(language, item.reason)}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {result.checked.length > 0 && (
+                <div>
+                  <div className="text-[11px] font-bold uppercase tracking-[0.08em] text-dim">
+                    {say(language, { en: "Checked", zh: "已检查" })}
+                  </div>
+                  <ul className="m-0 mt-1 list-disc space-y-1 pl-4 text-[13px] leading-[1.5] text-white">
+                    {result.checked.map((item) => (
+                      <li key={item.en}>{say(language, item)}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {result.notChecked.length > 0 && (
+                <div>
+                  <div className="text-[11px] font-bold uppercase tracking-[0.08em] text-dim">
+                    {say(language, { en: "Not checked", zh: "未检查" })}
+                  </div>
+                  <ul className="m-0 mt-1 list-disc space-y-1 pl-4 text-[13px] leading-[1.5] text-white">
+                    {result.notChecked.map((item) => (
+                      <li key={item.en}>{say(language, item)}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </>
           )}
         </div>
       )}

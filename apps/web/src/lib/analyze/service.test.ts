@@ -460,6 +460,99 @@ describe("checkSwap API adapter", () => {
     );
   });
 
+  test("consumes normalized capability status without changing execution or Risk facts", async () => {
+    const request = vi.fn<typeof fetch>().mockResolvedValue(
+      jsonResponse({
+        ...completed,
+        evidencePresentation: {
+          version: 1,
+          items: [],
+          capabilities: [
+            {
+              key: "trace-rpc.callTracer",
+              summary: "Supplementary call trace",
+              stage: "SIMULATE",
+              status: "checked",
+              sourceCategory: "trace_rpc",
+            },
+          ],
+        },
+        providerEvidence: {
+          provider: { providerId: "native-rpc", status: "UNKNOWN" },
+          execution: { status: "SUCCESS" },
+        },
+        p0: { evidenceState: "INCOMPLETE" },
+      }),
+    );
+
+    const result = await checkSwap(input, { fetch: request });
+
+    expect(result.providerEvidence?.capabilities).toEqual([
+      expect.objectContaining({
+        id: "trace-rpc.callTracer",
+        status: "checked",
+      }),
+    ]);
+    expect(result.providerEvidence?.status).toBe("UNKNOWN");
+    expect(result.executionEvidence?.status).toBe("SUCCESS");
+    expect(result.evidenceState).toBe("INCOMPLETE");
+    expect(result.verdict).toBe("UNKNOWN");
+  });
+
+  test("preserves an empty capability presentation without inventing unavailable state", async () => {
+    const request = vi.fn<typeof fetch>().mockResolvedValue(
+      jsonResponse({
+        ...completed,
+        evidencePresentation: {
+          version: 1,
+          items: [],
+          capabilities: [],
+        },
+      }),
+    );
+
+    const result = await checkSwap(input, { fetch: request });
+
+    expect(result.capabilities).toEqual([]);
+    expect(result.providerEvidence?.capabilities).toEqual([]);
+  });
+  test("maps legacy Trace observed to checked without implying execution success", async () => {
+    const request = vi.fn<typeof fetch>().mockResolvedValue(
+      jsonResponse({
+        ...completed,
+        providerEvidence: {
+          provider: {
+            providerId: "native-rpc",
+            status: "UNKNOWN",
+          },
+          providerData: {
+            traceRpc: {
+              capabilities: {
+                callTracer: {
+                  status: "observed",
+                  executionStatus: "reverted",
+                },
+              },
+            },
+          },
+          execution: { status: "UNKNOWN" },
+        },
+        p0: { evidenceState: "INCOMPLETE" },
+      }),
+    );
+
+    const result = await checkSwap(input, { fetch: request });
+
+    expect(result.providerEvidence?.capabilities).toEqual([
+      expect.objectContaining({
+        id: "callTracer",
+        status: "checked",
+      }),
+    ]);
+    expect(result.executionEvidence?.status).toBe("UNKNOWN");
+    expect(result.evidenceState).toBe("INCOMPLETE");
+    expect(result.verdict).toBe("UNKNOWN");
+  });
   test("does not send a client expectation baseline when quote is unavailable", async () => {
     const request = vi
       .fn<typeof fetch>()
