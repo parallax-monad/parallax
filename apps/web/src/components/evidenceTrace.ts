@@ -3,12 +3,12 @@ import type { Language } from "../lib/i18n";
 export const AMBIENT_STAR_COLORS = ["#ffffff", "#eeeaff"] as const;
 
 export const EVIDENCE_TRACE_MARKERS = [
-  { label: "Kuru", color: "#42ffd0" },
-  { label: "PancakeSwap V2 / V3", color: "#b784ff" },
-  { label: "WMON", color: "#ffd36a" },
-  { label: "ERC-20 / native MON", color: "#69d7ff" },
-  { label: "ERC-721", color: "#d98cff" },
-  { label: "ERC-1155", color: "#ff7d9f" },
+  { label: "Camelot V3", color: "#42ffd0" },
+  { label: "Arbitrum Sepolia", color: "#b784ff" },
+  { label: "WETH", color: "#ffd36a" },
+  { label: "USDC", color: "#69d7ff" },
+  { label: "ETH", color: "#d98cff" },
+  { label: "Native Balance", color: "#ff7d9f" },
 ] as const;
 
 export function getExpandedMarkerEdgeScale(width: number) {
@@ -33,6 +33,6 @@ export function getProtocolLabelOffset(
 
 export function getEvidenceTraceAriaLabel(language: Language) {
   return language === "zh-CN"
-    ? "协议路径星图；拖动可旋转"
-    : "Protocol route constellation; drag to rotate";
+    ? "Arbitrum Sepolia 协议路径星图；拖动可旋转"
+    : "Arbitrum Sepolia protocol constellation; drag to rotate";
 }

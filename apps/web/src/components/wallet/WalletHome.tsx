@@ -56,14 +56,14 @@ export function WalletHome({
       >
         <strong className="block text-[14px] font-bold text-monad-dim">
           {say(language, {
-            en: "This demo checks a supported swap intent before signing",
-            zh: "本演示会在签名前检查一个受支持的兑换意图",
+            en: "This demo checks execution evidence before signing",
+            zh: "本演示在签名前检查执行证据",
           })}
         </strong>
         <p className="mt-1.5 text-[13px] leading-[1.6] text-dim">
           {say(language, {
-            en: "Nothing is signed or broadcast in this demo.",
-            zh: "本演示不会签名，也不会广播。",
+            en: "Parallax converts real simulation evidence into clear decisions. Nothing is signed or broadcast.",
+            zh: "Parallax 将真实模拟证据转化为清晰决策。不签名，不广播。",
           })}
         </p>
       </section>
