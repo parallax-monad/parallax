@@ -183,6 +183,20 @@ function rule(value: unknown): RuleResult | undefined {
   };
 }
 
+function evidenceSource(value: string | undefined): EvidenceItem["source"] {
+  if (value === "quote") return "quote";
+  if (value === "simulation") return "simulation";
+  if (value === "native_rpc" || value === "trace_rpc") return value;
+  if (value === "account_allowance" || value === "explorer") return value;
+  return "unknown";
+}
+
+function evidenceStatus(value: unknown): EvidenceItem["status"] {
+  if (value === "confirmed" || value === "checked") return "checked";
+  if (value === "unavailable") return "unavailable";
+  return "unknown";
+}
+
 function evidence(value: unknown, replay: boolean): EvidenceItem | undefined {
   const item = obj(value);
   const id = str(item?.key);
@@ -199,7 +213,6 @@ function evidence(value: unknown, replay: boolean): EvidenceItem | undefined {
     id,
     stage,
     label: cp(str(item?.summary) ?? id),
-    value: JSON.stringify(item, null, 2),
     origin: replay
       ? "replay"
       : isMock
@@ -207,6 +220,9 @@ function evidence(value: unknown, replay: boolean): EvidenceItem | undefined {
         : source === "derived"
           ? "derived"
           : "live",
+    status: evidenceStatus(item?.status),
+    source: evidenceSource(source),
+    observedAt: str(item?.observedAt) ?? str(item?.fetchedAt),
     blockNumber: str(item?.blockNumber) ?? str(item?.simulatorPinnedBlock),
     runtimeVersion: str(item?.runtimeVersion),
     runtimeRevision: str(item?.runtimeRevision),

@@ -70,6 +70,21 @@ export type QuoteState =
   | { status: "error"; apiFailure: ApiFailure };
 
 export type EvidenceOrigin = "live" | "replay" | "derived" | "mock";
+export type EvidenceStatus = "checked" | "unknown" | "unavailable";
+export type EvidenceSource =
+  | "native_rpc"
+  | "trace_rpc"
+  | "account_allowance"
+  | "explorer"
+  | "quote"
+  | "simulation"
+  | "unknown";
+export type EvidenceCapabilityStatus = "checked" | "unknown" | "unavailable";
+export type EvidenceCapability = {
+  id: string;
+  status: EvidenceCapabilityStatus;
+  reason?: string;
+};
 export type EvidenceItem = {
   id: string;
   stage:
@@ -81,11 +96,16 @@ export type EvidenceItem = {
     | "rpc"
     | "unknown";
   label: Copy;
-  value: string;
+  value?: string;
   origin: EvidenceOrigin;
+  status: EvidenceStatus;
+  source: EvidenceSource;
+  observedAt?: string;
   blockNumber?: string;
   runtimeVersion?: string;
   runtimeRevision?: string;
+  capabilities?: EvidenceCapability[];
+  reason?: Copy;
   fixtureId?: string;
   reproducibility?: string;
   isMock?: boolean;

@@ -35,6 +35,24 @@ const MODE_LABEL: Record<CheckSwapResult["productRunMode"], Copy> = {
   RECORDED_REPLAY: { en: "Recorded replay", zh: "录制回放" },
 };
 
+function sourceLabel(source: EvidenceItem["source"]): Copy {
+  return {
+    native_rpc: { en: "Native RPC", zh: "Native RPC" },
+    trace_rpc: { en: "Trace RPC", zh: "Trace RPC" },
+    account_allowance: { en: "Account / allowance", zh: "账户 / 授权" },
+    explorer: { en: "Explorer", zh: "浏览器" },
+    quote: { en: "Quote", zh: "报价" },
+    simulation: { en: "Simulation", zh: "模拟" },
+    unknown: { en: "Unknown source", zh: "未知来源" },
+  }[source];
+}
+
+const STATUS_TONE: Record<EvidenceItem["status"], string> = {
+  checked: "text-risk-low",
+  unknown: "text-risk-elevated",
+  unavailable: "text-faint",
+};
+
 export function EvidenceDrawer({
   result,
   language,
@@ -116,6 +134,9 @@ export function EvidenceDrawer({
                   <span className={`pill ${ORIGIN_TONE[item.origin]}`}>
                     {item.origin}
                   </span>
+                  <span className={STATUS_TONE[item.status]}>
+                    {item.status}
+                  </span>
                   {item.blockNumber && (
                     <span className="text-[12px] text-dim">
                       block {item.blockNumber}
@@ -125,12 +146,82 @@ export function EvidenceDrawer({
                 <p className="m-0 mt-1 text-[11px] text-faint">
                   {say(language, item.label)}
                 </p>
-                <p className="m-0 mt-0.5 break-words text-[12px] text-dim">
-                  {item.value}
-                </p>
+                <dl className="m-0 mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-[12px]">
+                  <dt className="text-dim">Source</dt>
+                  <dd className="m-0 break-words text-right text-white">
+                    {say(language, sourceLabel(item.source))}
+                  </dd>
+                  <dt className="text-dim">Observed</dt>
+                  <dd className="m-0 break-words text-right text-white">
+                    {item.observedAt ?? "Unavailable"}
+                  </dd>
+                  {item.blockNumber && (
+                    <>
+                      <dt className="text-dim">Observed block</dt>
+                      <dd className="mono m-0 break-words text-right text-white">
+                        {item.blockNumber}
+                      </dd>
+                    </>
+                  )}
+                  {item.runtimeVersion && (
+                    <>
+                      <dt className="text-dim">Runtime</dt>
+                      <dd className="mono m-0 break-words text-right text-white">
+                        {item.runtimeVersion}
+                        {item.runtimeRevision
+                          ? ` · ${item.runtimeRevision}`
+                          : ""}
+                      </dd>
+                    </>
+                  )}
+                  {item.reproducibility && (
+                    <>
+                      <dt className="text-dim">Reproducibility</dt>
+                      <dd className="m-0 text-right text-white">
+                        {item.reproducibility}
+                      </dd>
+                    </>
+                  )}
+                </dl>
               </li>
             ))}
           </ul>
+        </section>
+
+        <section className="mt-6">
+          <h3 className="m-0 mb-2 text-[12px] font-bold uppercase tracking-[0.08em] text-dim">
+            {say(language, { en: "Check scope", zh: "检查范围" })}
+          </h3>
+          <div className="grid gap-3 border-t border-line pt-3">
+            {(
+              [
+                ["Checked", result.checked.map((item) => say(language, item))],
+                [
+                  "Not checked",
+                  result.notChecked.map((item) => say(language, item)),
+                ],
+                [
+                  "Unknown",
+                  result.unknowns.map((item) => say(language, item.label)),
+                ],
+              ] as Array<[string, string[]]>
+            ).map(([label, items]) => (
+              <div key={String(label)}>
+                <div className="text-[11px] font-bold uppercase tracking-[0.08em] text-dim">
+                  {label}
+                </div>
+                {items.length > 0 ? (
+                  <ul className="m-0 mt-1 list-disc pl-4 text-[12px] leading-[1.5] text-white">
+                    {items.map((item) => (
+                      <li key={`${label}-${item}`}>{item}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="m-0 mt-1 text-[12px] text-faint">Unavailable</p>
+                )}
+              </div>
+            ))}
+          </div>
         </section>
 
         <section className="mt-6">
