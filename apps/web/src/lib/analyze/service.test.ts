@@ -534,6 +534,7 @@ describe("checkSwap API adapter", () => {
               sourceCategory: "trace_rpc",
               status: "not_checked",
               reason: "outside_baseline",
+              mode: "RECORDED_REPLAY",
               blockContext: {
                 blockNumber: "92820000",
                 status: "requested",
@@ -568,6 +569,7 @@ describe("checkSwap API adapter", () => {
       source: "quote",
       observedAt: "2026-08-15T08:01:00.000Z",
       mode: "RECORDED_REPLAY",
+      origin: "replay",
       status: "checked",
     });
     expect(result.providerEvidence?.capabilities).toEqual(
@@ -588,6 +590,64 @@ describe("checkSwap API adapter", () => {
         }),
       ]),
     );
+  });
+  test("keeps missing evidence mode separate from Run replay mode", async () => {
+    const request = vi.fn<typeof fetch>().mockResolvedValue(
+      jsonResponse({
+        ...completed,
+        replayMode: true,
+        evidence: [
+          {
+            key: "legacy-unknown",
+            stage: "QUOTE",
+            summary: "Legacy evidence",
+          },
+        ],
+      }),
+    );
+
+    const result = await checkSwap(input, { fetch: request });
+
+    expect(result.replayMode).toBe(true);
+    expect(result.evidence[0]).toMatchObject({
+      origin: "unknown",
+      mode: undefined,
+    });
+  });
+
+  test("keeps explicit evidence mode independent from Run replay mode", async () => {
+    const request = vi.fn<typeof fetch>().mockResolvedValue(
+      jsonResponse({
+        ...completed,
+        replayMode: true,
+        evidence: [
+          {
+            key: "live-evidence",
+            stage: "QUOTE",
+            summary: "Live evidence",
+          },
+        ],
+        evidencePresentation: {
+          version: 1,
+          items: [
+            {
+              evidenceKey: "live-evidence",
+              status: "checked",
+              sourceCategory: "quote",
+              mode: "LIVE",
+            },
+          ],
+          capabilities: [],
+        },
+      }),
+    );
+
+    const result = await checkSwap(input, { fetch: request });
+
+    expect(result.evidence[0]).toMatchObject({
+      origin: "live",
+      mode: "LIVE",
+    });
   });
   test("does not send a client expectation baseline when quote is unavailable", async () => {
     const request = vi

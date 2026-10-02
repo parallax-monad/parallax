@@ -405,7 +405,6 @@ function presentationItem(
 
 function evidence(
   value: unknown,
-  replay: boolean,
   presentation: EvidencePresentation | undefined,
 ): EvidenceItem | undefined {
   const item = obj(value);
@@ -426,11 +425,13 @@ function evidence(
     label: cp(str(item?.summary) ?? id),
     value: JSON.stringify(item, null, 2),
     origin:
-      mode === "RECORDED_REPLAY" || replay
+      mode === "RECORDED_REPLAY"
         ? "replay"
         : mode === "MOCK" || isMock
           ? "mock"
-          : "live",
+          : mode === "LIVE"
+            ? "live"
+            : "unknown",
     status: normalized?.status ?? "unknown",
     source: normalized?.sourceCategory ?? "unknown",
     observedAt: normalized?.observedAt,
@@ -611,7 +612,7 @@ function mapRun(
       : undefined;
   const presentation = parseEvidencePresentation(run?.evidencePresentation);
   const mappedEvidence = arr(run?.evidence)
-    .map((item) => evidence(item, replayMode, presentation))
+    .map((item) => evidence(item, presentation))
     .filter((item): item is EvidenceItem => !!item);
   const scope = arr(run?.scope)
     .map(obj)

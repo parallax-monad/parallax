@@ -88,6 +88,7 @@ describe("EvidenceDrawer scope presentation", () => {
               stage: "SIMULATE",
               status: "not_checked",
               sourceCategory: "trace_rpc",
+              mode: "RECORDED_REPLAY",
               reason: "outside_baseline",
               blockContext: {
                 blockNumber: "92820000",
@@ -104,6 +105,7 @@ describe("EvidenceDrawer scope presentation", () => {
     expect(html).toContain("Supplementary call trace");
     expect(html).toContain("trace_rpc");
     expect(html).toContain("outside_baseline");
+    expect(html).toContain("RECORDED_REPLAY");
     expect(html).toContain("requested block 92820000");
   });
 });

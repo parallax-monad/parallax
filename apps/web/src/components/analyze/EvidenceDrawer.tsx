@@ -11,6 +11,7 @@ const ORIGIN_TONE: Record<EvidenceItem["origin"], string> = {
   replay: "",
   derived: "border-risk-moderate/50 text-risk-moderate",
   mock: "border-risk-high/50 text-risk-high",
+  unknown: "border-line/50 text-faint",
 };
 
 const OUTCOME_TONE: Record<RuleResult["outcome"], string> = {
@@ -314,7 +315,8 @@ export function EvidenceDrawer({
                             <span
                               className={`shrink-0 ${CAPABILITY_TONE[capability.status]}`}
                             >
-                              {capability.status}
+                              {capability.status} ·{" "}
+                              {capability.mode ?? "Not recorded"}
                               {capability.reason
                                 ? ` · ${capability.reason}`
                                 : ""}
