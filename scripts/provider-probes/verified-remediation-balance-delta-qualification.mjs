@@ -290,7 +290,7 @@ async function main() {
     },
     limitations: [
       "The balance delta is reconstructed from the same Provider's prestateTracer tokenOut-local post-storage diff; this does not independently establish Provider completeness or Provider SUCCESS.",
-      "QuickNode rejects full post-state override replay for at least one Arbitrum system address, so this capture does not claim full-state replay equivalence.",
+      "The RPC service rejects full post-state override replay for at least one Arbitrum system address, so this capture does not claim full-state replay equivalence.",
       "The pinned balanceOf call has no nested calls in the observed code path; this narrows but does not eliminate the need for Contract/Provider review before treating this candidate as canonical Evidence.",
       "This qualification capture is not production Backend integration and does not create canonical Evidence by itself.",
       "This capture does not establish simulation.complete, receipt completeness, warnings completeness, Risk PROCEED, or VERIFIED remediation.",
