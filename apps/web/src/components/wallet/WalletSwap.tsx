@@ -4,14 +4,18 @@ import { ChevronDownIcon, SwapIcon } from "@/components/wallet/WalletIcons";
 import { DEMO_RECIPIENT } from "@/components/wallet/walletData";
 import type { FieldFlag } from "@/lib/analyze/fields";
 import type { FormFieldErrors, FormState } from "@/lib/analyze/form";
-import type { P0ConfigState, QuoteState } from "@/lib/analyze/types";
+import type {
+  AccountStateResult,
+  P0ConfigState,
+  QuoteState,
+} from "@/lib/analyze/types";
 import { type Copy, type Language, say } from "@/lib/i18n";
 
-const P0_TOKENS_IN = ["ETH"] as const;
+const P0_TOKENS_IN = ["ETH", "USDC"] as const;
 const P0_TOKEN_OUT = "USDC";
 
-function receiveTokenFor(_tokenIn: string): string {
-  return P0_TOKEN_OUT;
+function receiveTokenFor(tokenIn: string): string {
+  return tokenIn === "USDC" ? "WETH" : P0_TOKEN_OUT;
 }
 
 function TokenSelect({
@@ -91,6 +95,7 @@ export function WalletSwap({
   errors = {},
   flags = [],
   quote = { status: "idle" },
+  accountState = { status: "idle" },
   p0Config,
   onChange,
   onSubmit,
@@ -102,6 +107,7 @@ export function WalletSwap({
   flags?: FieldFlag[];
   /** Pre-submit `/api/quote` state. Never a locally computed estimate. */
   quote?: QuoteState;
+  accountState?: AccountStateResult;
   /** Configured route identity only; AVAILABLE is not a live quote or Product pass. */
   p0Config?: P0ConfigState;
   onChange: (form: FormState) => void;
@@ -116,14 +122,8 @@ export function WalletSwap({
     flags.find((flag) => flag.field === key);
 
   const amountFlag = flagFor("amountIn");
-  const tokenInLabel =
-    p0Config?.status === "AVAILABLE"
-      ? p0Config.tokenMetadata.tokenIn.symbol
-      : form.tokenIn;
-  const tokenOutLabel =
-    p0Config?.status === "AVAILABLE"
-      ? p0Config.tokenMetadata.tokenOut.symbol
-      : form.tokenOut;
+  const tokenInLabel = form.tokenIn;
+  const tokenOutLabel = form.tokenOut;
   const routeLabel =
     p0Config?.status === "AVAILABLE"
       ? `Arbitrum Sepolia · Camelot V3 · ${tokenInLabel} → ${tokenOutLabel}`
@@ -162,12 +162,21 @@ export function WalletSwap({
       <section className="rounded-[16px] border border-white/[0.08] bg-white/[0.02] p-5 backdrop-blur-xl">
         <div className="flex items-baseline justify-between gap-3">
           <span className="text-[12px] font-bold uppercase tracking-[0.08em] text-dim">
-            {say(language, { en: "You pay", zh: "你支付" })}
+            {say(language, { en: "Account state", zh: "账户状态" })}
           </span>
-          <span className="text-[12px] text-dim">
-            {say(language, { en: "Balance unavailable", zh: "余额不可用" })}
+          <span className="mono text-[12px] text-white">
+            {accountState.status === "available"
+              ? accountState.snapshot.status
+              : accountState.status.toUpperCase()}
           </span>
         </div>
+        <p className="mt-2 text-[12px] leading-[1.5] text-dim">
+          {say(language, {
+            en: "Balance and allowance are read-only observations for this exact account, pair, and amount.",
+            zh: "余额和授权是针对当前账户、资产对和数量的只读观测。",
+          })}
+        </p>
+
         <div className="mt-3 flex items-center gap-3">
           <input
             aria-describedby={

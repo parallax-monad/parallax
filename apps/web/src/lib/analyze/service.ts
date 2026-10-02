@@ -2,6 +2,8 @@ import type { Copy } from "@/lib/i18n";
 import { getChainIdForProtocol, symbolToAsset } from "./api-helpers";
 import { type FormState, INITIAL_FORM, validateForm } from "./form";
 import type {
+  AccountStateResult,
+  AccountStateSnapshot,
   ActionSuggestion,
   ApiFailure,
   ApiFailureIssue,
@@ -529,6 +531,164 @@ function failureCopy(failure: ApiFailure) {
   };
 }
 
+function parseAccountStateSnapshot(
+  value: unknown,
+): AccountStateSnapshot | undefined {
+  const snapshot = obj(value);
+  const context = obj(snapshot?.context);
+  const block = obj(snapshot?.block);
+  const balances = obj(snapshot?.balances);
+  const allowance = obj(snapshot?.allowance);
+  if (
+    !str(snapshot?.snapshotId) ||
+    !context ||
+    typeof context.chainId !== "number" ||
+    !str(context.protocol) ||
+    !str(context.sender) ||
+    !str(context.recipient) ||
+    !obj(context.tokenIn) ||
+    !obj(context.tokenOut) ||
+    !str(context.amountInAtomic) ||
+    !block ||
+    !str(block.status) ||
+    !str(block.observedAt) ||
+    !balances ||
+    !obj(balances.inputToken) ||
+    !obj(balances.outputToken) ||
+    !obj(balances.native) ||
+    !allowance ||
+    !str(allowance.status)
+  )
+    return;
+  return snapshot as unknown as AccountStateSnapshot;
+}
+
+function accountStateFailure(response: Response, payload: unknown): ApiFailure {
+  const error = obj(obj(payload)?.error);
+  return {
+    httpStatus: response.status,
+    code: str(error?.code) ?? `HTTP_${response.status}`,
+    retryable: response.status >= 500,
+    message: str(error?.message),
+    issues: failureIssues(error?.issues),
+  };
+}
+
+export async function fetchAccountState(
+  input: CheckSwapInput,
+  options: CheckOptions = {},
+): Promise<AccountStateResult> {
+  const chainId = getChainIdForProtocol(input.protocol);
+  const sender = input.sender ?? DEFAULT_SENDER;
+  const recipient = sender;
+  const request = {
+    chainId,
+    protocol: input.protocol,
+    sender,
+    recipient,
+    tokenIn: requestAsset(input.tokenIn, chainId),
+    tokenOut: requestAsset(input.tokenOut, chainId),
+    amountIn: input.amountIn,
+  };
+  let response: Response;
+  try {
+    response = await (options.fetch ?? fetch)(`${API_BASE}/api/account-state`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(request),
+      signal: options.signal,
+    });
+  } catch (error) {
+    return {
+      status: "error",
+      apiFailure: {
+        code: "NETWORK_ERROR",
+        retryable: true,
+        message: error instanceof Error ? error.message : undefined,
+      },
+    };
+  }
+  let payload: unknown;
+  try {
+    payload = await response.json();
+  } catch {
+    return {
+      status: "error",
+      apiFailure: {
+        httpStatus: response.status,
+        code: "INVALID_JSON_RESPONSE",
+        retryable: response.status >= 500,
+      },
+    };
+  }
+  if (!response.ok)
+    return {
+      status: "error",
+      apiFailure: accountStateFailure(response, payload),
+    };
+  const snapshot = parseAccountStateSnapshot(payload);
+  return snapshot
+    ? { status: "available", snapshot }
+    : {
+        status: "error",
+        apiFailure: {
+          httpStatus: response.status,
+          code: "INVALID_RESPONSE",
+          retryable: false,
+        },
+      };
+}
+
+export async function loadAccountStateSnapshot(
+  snapshotId: string,
+  options: CheckOptions = {},
+): Promise<AccountStateResult> {
+  let response: Response;
+  try {
+    response = await (options.fetch ?? fetch)(
+      `${API_BASE}/api/account-state/${encodeURIComponent(snapshotId)}`,
+      { signal: options.signal },
+    );
+  } catch (error) {
+    return {
+      status: "error",
+      apiFailure: {
+        code: "NETWORK_ERROR",
+        retryable: true,
+        message: error instanceof Error ? error.message : undefined,
+      },
+    };
+  }
+  let payload: unknown;
+  try {
+    payload = await response.json();
+  } catch {
+    return {
+      status: "error",
+      apiFailure: {
+        httpStatus: response.status,
+        code: "INVALID_JSON_RESPONSE",
+        retryable: response.status >= 500,
+      },
+    };
+  }
+  if (!response.ok)
+    return {
+      status: "error",
+      apiFailure: accountStateFailure(response, payload),
+    };
+  const snapshot = parseAccountStateSnapshot(payload);
+  return snapshot
+    ? { status: "available", snapshot }
+    : {
+        status: "error",
+        apiFailure: {
+          httpStatus: response.status,
+          code: "INVALID_RESPONSE",
+          retryable: false,
+        },
+      };
+}
 function failed(
   input: CheckSwapInput,
   apiFailure: ApiFailure,
@@ -808,7 +968,6 @@ function mapRun(
       : undefined,
   };
 }
-
 function body(input: CheckSwapInput) {
   const baseline = input.expectationBaseline;
   const chainId = getChainIdForProtocol(input.protocol);
@@ -817,6 +976,7 @@ function body(input: CheckSwapInput) {
     chainId,
     protocol: input.protocol,
     sender: input.sender ?? DEFAULT_SENDER,
+    recipient: input.sender ?? DEFAULT_SENDER,
     tokenIn: requestAsset(input.tokenIn, chainId),
     tokenOut: requestAsset(input.tokenOut, chainId),
     amountIn: input.amountIn,

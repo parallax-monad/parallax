@@ -24,14 +24,18 @@ import {
 import {
   applyTokenMetadata,
   checkSwap,
+  DEFAULT_SENDER,
   expectationBaseline,
+  fetchAccountState,
   fetchP0Config,
   fetchQuote,
   formFromRunResult,
+  loadAccountStateSnapshot,
   loadRun,
 } from "@/lib/analyze/service";
 import { createStageScheduler } from "@/lib/analyze/stageScheduler";
 import type {
+  AccountStateResult,
   CheckSwapResult,
   P0ConfigState,
   QuoteState,
@@ -48,6 +52,7 @@ const STAGE_MS = 380;
  */
 const QUOTE_DEBOUNCE_MS = 450;
 const LAST_RUN_ID_KEY = "parallax:last-run-id";
+const LAST_ACCOUNT_SNAPSHOT_ID_KEY = "parallax:last-account-snapshot-id";
 
 type Screen = "home" | "swap" | "checking" | "result";
 
@@ -99,6 +104,26 @@ function setStoredRunId(runId: string | undefined): void {
   }
 }
 
+function storedAccountSnapshotId(): string | undefined {
+  try {
+    return (
+      window.sessionStorage.getItem(LAST_ACCOUNT_SNAPSHOT_ID_KEY) ?? undefined
+    );
+  } catch {
+    return undefined;
+  }
+}
+
+function setStoredAccountSnapshotId(snapshotId: string | undefined): void {
+  try {
+    if (snapshotId === undefined)
+      window.sessionStorage.removeItem(LAST_ACCOUNT_SNAPSHOT_ID_KEY);
+    else
+      window.sessionStorage.setItem(LAST_ACCOUNT_SNAPSHOT_ID_KEY, snapshotId);
+  } catch {
+    // Session storage can be unavailable in privacy-restricted browsers.
+  }
+}
 function backendRunId(result: CheckSwapResult): string | undefined {
   if (result.replayMode) return undefined;
   const raw =
@@ -135,6 +160,9 @@ export function WalletApp({ language }: { language: Language }) {
   /** Bumped on every return home, so the background replays its entrance. */
   const [homeVisit, setHomeVisit] = useState(0);
   const [quote, setQuote] = useState<QuoteState>({ status: "idle" });
+  const [accountState, setAccountState] = useState<AccountStateResult>({
+    status: "idle",
+  });
   const [p0Config, setP0Config] = useState<P0ConfigState | undefined>();
   const schedulerRef = useRef(createStageScheduler());
   // The mount-only recovery effect reads this from its eventual promise callback.
@@ -158,9 +186,20 @@ export function WalletApp({ language }: { language: Language }) {
   }, []);
 
   useEffect(() => {
+    const snapshotId = storedAccountSnapshotId();
+    if (!snapshotId) return;
+    let active = true;
+    void loadAccountStateSnapshot(snapshotId).then((next) => {
+      if (active) setAccountState(next);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
     const runId = storedRunId();
     if (runId === undefined) return;
-
     let active = true;
     void loadRun(runId).then((recovery) => {
       if (
@@ -198,10 +237,14 @@ export function WalletApp({ language }: { language: Language }) {
   // aborts the previous one so a slow response cannot overwrite a newer one.
   const { protocol, tokenIn, tokenOut, amountIn } = form;
   useEffect(() => {
-    if (screen !== "swap") return;
-    // Only the exact-input fields govern a Quote, so slippage and Minimum
-    // Received are held at neutral values here instead of gating the request.
+    if (accountState.status !== "available" || !result || result.accountState)
+      return;
+    setResult({ ...result, accountState: accountState.snapshot });
+  }, [accountState, result]);
+
+  useEffect(() => {
     if (
+      screen !== "swap" ||
       !validateForm({
         protocol,
         tokenIn,
@@ -212,20 +255,28 @@ export function WalletApp({ language }: { language: Language }) {
       }).valid
     ) {
       setQuote({ status: "idle" });
+      setAccountState({ status: "idle" });
       return;
     }
-
     const controller = new AbortController();
     const timer = setTimeout(() => {
       setQuote({ status: "loading" });
-      fetchQuote(
-        { protocol, tokenIn, tokenOut, amountIn },
-        { signal: controller.signal },
-      ).then((next) => {
-        if (!controller.signal.aborted) setQuote(next);
+      setAccountState({ status: "loading" });
+      void Promise.all([
+        fetchQuote(
+          { protocol, tokenIn, tokenOut, amountIn },
+          { signal: controller.signal },
+        ),
+        fetchAccountState(
+          { protocol, tokenIn, tokenOut, amountIn, sender: DEFAULT_SENDER },
+          { signal: controller.signal },
+        ),
+      ]).then(([nextQuote, nextAccountState]) => {
+        if (controller.signal.aborted) return;
+        setQuote(nextQuote);
+        setAccountState(nextAccountState);
       });
     }, QUOTE_DEBOUNCE_MS);
-
     return () => {
       clearTimeout(timer);
       controller.abort();
@@ -246,6 +297,7 @@ export function WalletApp({ language }: { language: Language }) {
     const submitted = plan.submitted;
     setFormErrors({});
     setStoredRunId(undefined);
+    setStoredAccountSnapshotId(undefined);
     setResult(undefined);
     setDrawerOpen(false);
     setStage(0);
@@ -284,8 +336,13 @@ export function WalletApp({ language }: { language: Language }) {
           nextResult,
           p0Config?.status === "AVAILABLE" ? p0Config.tokenMetadata : undefined,
         );
-        setStoredRunId(backendRunId(displayResult));
-        setResult(displayResult);
+        const withAccountState =
+          accountState.status === "available"
+            ? { ...displayResult, accountState: accountState.snapshot }
+            : displayResult;
+        setStoredRunId(backendRunId(withAccountState));
+        setStoredAccountSnapshotId(withAccountState.accountState?.snapshotId);
+        setResult(withAccountState);
         setSubmittedForm(submitted);
         setScreen("result");
       },
@@ -305,6 +362,7 @@ export function WalletApp({ language }: { language: Language }) {
     recoveryCancelledRef.current = true;
     schedulerRef.current.cancel();
     setStoredRunId(undefined);
+    setStoredAccountSnapshotId(undefined);
     setResult(undefined);
     setSubmittedForm(undefined);
     setFormErrors({});
@@ -375,6 +433,7 @@ export function WalletApp({ language }: { language: Language }) {
                     form={form}
                     language={language}
                     quote={quote}
+                    accountState={accountState}
                     p0Config={p0Config}
                     onChange={(nextForm) => {
                       setForm(nextForm);

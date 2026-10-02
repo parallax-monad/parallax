@@ -137,6 +137,7 @@ describe("checkSwap API adapter", () => {
       chainId: 143,
       protocol: "kuru",
       sender: "0x1111111111111111111111111111111111111111",
+      recipient: "0x1111111111111111111111111111111111111111",
       tokenIn: { kind: "native" },
       tokenOut: {
         kind: "erc20",
