@@ -44,6 +44,124 @@ function request(
 }
 
 describe("normalizeCheckSwapRequest", () => {
+  it("normalizes explicit input-increase consent using input asset decimals", () => {
+    const result = normalizeCheckSwapRequest(
+      request({
+        amountInIncreaseAuthorization: {
+          availability: "available",
+          source: "user_declared",
+          consent: true,
+          maximumAmountIn: "2",
+        },
+      }),
+      registry,
+    );
+    expect(result).toMatchObject({
+      success: true,
+      intent: {
+        amountInIncreaseAuthorization: {
+          availability: "available",
+          source: "user_declared",
+          consent: true,
+          maximumAmountInAtomic: "2000000000000000000",
+        },
+      },
+    });
+  });
+
+  it("rejects an authorized maximum below the current input", () => {
+    const result = normalizeCheckSwapRequest(
+      request({
+        amountInIncreaseAuthorization: {
+          availability: "available",
+          source: "user_declared",
+          consent: true,
+          maximumAmountIn: "1",
+        },
+      }),
+      registry,
+    );
+    expect(result).toMatchObject({
+      success: false,
+      error: { code: "INVALID_AMOUNT_INCREASE_AUTHORIZATION" },
+    });
+  });
+
+  it("never infers consent when authorization is missing", () => {
+    const result = normalizeCheckSwapRequest(request(), registry);
+    expect(
+      result.success && result.intent.amountInIncreaseAuthorization,
+    ).toBeUndefined();
+  });
+
+  it("preserves explicit unavailable authorization", () => {
+    expect(
+      normalizeCheckSwapRequest(
+        request({
+          amountInIncreaseAuthorization: {
+            availability: "unavailable",
+            source: "unavailable",
+          },
+        }),
+        registry,
+      ),
+    ).toMatchObject({
+      success: true,
+      intent: {
+        amountInIncreaseAuthorization: {
+          availability: "unavailable",
+          source: "unavailable",
+        },
+      },
+    });
+  });
+
+  it("rejects missing/false consent and excess precision without guessing", () => {
+    expect(
+      checkSwapRequestSchema.safeParse({
+        ...request(),
+        amountInIncreaseAuthorization: {
+          availability: "available",
+          source: "user_declared",
+          maximumAmountIn: "2",
+          consent: false,
+        },
+      }).success,
+    ).toBe(false);
+    expect(
+      checkSwapRequestSchema.safeParse({
+        ...request(),
+        amountInIncreaseAuthorization: {
+          availability: "available",
+          source: "user_declared",
+          maximumAmountIn: "2",
+        },
+      }).success,
+    ).toBe(false);
+    expect(
+      normalizeCheckSwapRequest(
+        request({
+          tokenIn: usdc,
+          tokenOut: mon,
+          amountIn: "1",
+          amountInIncreaseAuthorization: {
+            availability: "available",
+            source: "user_declared",
+            consent: true,
+            maximumAmountIn: "2.0000001",
+          },
+        }),
+        registry,
+      ),
+    ).toMatchObject({
+      success: false,
+      error: {
+        code: "TOO_MANY_DECIMAL_PLACES",
+        field: "amountInIncreaseAuthorization.maximumAmountIn",
+      },
+    });
+  });
+
   it("creates the authoritative atomic-unit intent", () => {
     const result = normalizeCheckSwapRequest(
       request({

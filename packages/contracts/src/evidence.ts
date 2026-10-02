@@ -4,10 +4,12 @@ import {
   assetReferenceSchema,
   atomicAmountSchema,
   chainIdSchema,
+  crossRunEvidenceRefSchema,
   protocolSchema,
   transactionAdjustmentFieldSchema,
   uint256AmountSchema,
 } from "./common.js";
+import { targetOutputVerificationProofSchema } from "./p0-run-result.js";
 
 export const evidenceSourceSchema = z.enum([
   "moss",
@@ -186,9 +188,11 @@ const actionVerificationEvidenceObjectSchema = z
     verificationRunId: z.string().trim().min(1),
     beforeValue: z.string().trim().min(1),
     afterValue: z.string().trim().min(1),
-    resultEvidenceKey: z.string().trim().min(1),
+    resultEvidenceKey: z.string().trim().min(1).optional(),
+    resultEvidenceRef: crossRunEvidenceRefSchema.optional(),
     baselineBoundaryAtomic: atomicAmountSchema.optional(),
     verificationBoundaryAtomic: atomicAmountSchema.optional(),
+    targetOutputProof: targetOutputVerificationProofSchema.optional(),
   })
   .strict();
 
@@ -332,8 +336,35 @@ function validateGateEvidenceProvenance(
     });
   }
 
+  if (evidence.kind === "action_verification") {
+    const hasSameRunResult = evidence.resultEvidenceKey !== undefined;
+    const hasCrossRunResult = evidence.resultEvidenceRef !== undefined;
+    if (
+      (evidence.targetOutputProof === undefined &&
+        (hasSameRunResult === hasCrossRunResult ||
+          (hasCrossRunResult &&
+            evidence.resultEvidenceRef?.runId !==
+              evidence.verificationRunId))) ||
+      (evidence.targetOutputProof !== undefined &&
+        (hasSameRunResult ||
+          hasCrossRunResult ||
+          evidence.field !== "amountIn" ||
+          evidence.actionReasonCode !== "OUTPUT_IMPROVEMENT_VERIFIED" ||
+          evidence.targetOutputProof.resultEvidenceRef.runId !==
+            evidence.verificationRunId))
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          "Action verification must use exactly one correctly scoped result Evidence locator",
+        path: ["resultEvidenceRef"],
+      });
+    }
+  }
+
   if (
     evidence.kind === "action_verification" &&
+    evidence.resultEvidenceKey !== undefined &&
     evidence.resultEvidenceKey === evidence.key
   ) {
     context.addIssue({
@@ -347,6 +378,7 @@ function validateGateEvidenceProvenance(
   if (
     evidence.kind === "action_verification" &&
     evidence.actionReasonCode === "OUTPUT_IMPROVEMENT_VERIFIED" &&
+    evidence.targetOutputProof === undefined &&
     (evidence.baselineBoundaryAtomic === undefined ||
       evidence.verificationBoundaryAtomic === undefined ||
       evidence.baselineBoundaryAtomic !== evidence.verificationBoundaryAtomic)

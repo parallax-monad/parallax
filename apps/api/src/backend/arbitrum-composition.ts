@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { isDeepStrictEqual } from "node:util";
 import {
   ARBITRUM_SEPOLIA_CHAIN_ID,
   CAMELOT_V3_PROTOCOL_ID,
@@ -20,7 +21,10 @@ import {
   runResultSchema,
 } from "@parallax/contracts";
 import { projectGenericEvidenceToRunResult } from "@parallax/orchestrator/agent-flow";
-import { buildVerifiedAdjustBaseline } from "@parallax/orchestrator/application";
+import {
+  buildVerifiedAdjustBaseline,
+  childRunPassesTargetOutputGate,
+} from "@parallax/orchestrator/application";
 import type {
   CallerConstraint,
   CandidateEvaluation,
@@ -70,6 +74,7 @@ import {
   type DecisionPort,
   type NormalizationBoundary,
 } from "./composition.js";
+import { BackendControlError } from "./control-boundary.js";
 import {
   mapNativeRpcProviderResult,
   NATIVE_RPC_ARBITRUM_PROVIDER_ID,
@@ -424,6 +429,28 @@ export function createArbitrumProductionComposition(
             projection.selectedQuote,
             projection.solver,
             basicSimulation,
+            projection.risk.quoteFidelity.status === "VERIFIED"
+              ? {
+                  candidateQuoteId:
+                    projection.risk.quoteFidelity.currentQuoteId,
+                  blockNumber: pipelineContext.blockContext.blockNumber,
+                  checks: (options.p0Risk?.constraints ?? []).map(
+                    (declaration, index) => ({
+                      declaration,
+                      measurements: (
+                        options.p0Risk?.constraintEvidence ?? []
+                      ).filter(
+                        (measurement) => measurement.name === declaration.name,
+                      ),
+                      outcome: projection.risk.constraints[index] ?? {
+                        name: declaration.name,
+                        declarationId: declaration.declarationId,
+                        status: "UNKNOWN",
+                      },
+                    }),
+                  ),
+                }
+              : undefined,
           ),
         });
         const projected = applyBackendP0Verdict(
@@ -432,6 +459,7 @@ export function createArbitrumProductionComposition(
         );
         return projectVerifiedArbitrumRemediation(
           projected,
+          projection.risk.verdict,
           projection.solver,
           options.runStore,
         );
@@ -670,6 +698,7 @@ function projectArbitrumP0RunResult(
   selectedQuote: QuoteContext | undefined,
   solver: SolverResult | undefined,
   basicSimulation: P0RunResult["basicSimulation"] | undefined,
+  constraintVerification?: P0RunResult["constraintVerification"],
 ): P0RunResult {
   const boundary = intent.economicBoundary;
   const transactionProtection = {
@@ -703,10 +732,11 @@ function projectArbitrumP0RunResult(
     quoteFidelity: risk.quoteFidelity,
     cause: { status: "NOT_VERIFIED" },
     constraints: risk.constraints,
+    ...(constraintVerification === undefined ? {} : { constraintVerification }),
     evidenceState: risk.evidenceState,
     transactionProtection,
     ...(basicSimulation === undefined ? {} : { basicSimulation }),
-    remediation: projectRemediation(solver),
+    remediation: projectRemediation(solver, selectedQuote),
   });
 }
 
@@ -740,6 +770,7 @@ function projectArbitrumBasicSimulation(
 
 function projectRemediation(
   solver: SolverResult | undefined,
+  selectedQuote: QuoteContext | undefined,
 ): P0RunResult["remediation"] {
   if (solver === undefined) return { status: "NOT_RUN" };
   if (solver.status === "PROPOSED") {
@@ -761,9 +792,21 @@ function projectRemediation(
 
   const candidate = solver.candidate;
   const verification = candidate.verification;
+  if (
+    selectedQuote === undefined ||
+    verification.resultEvidenceKey === undefined ||
+    verification.verificationBlockHash === undefined
+  ) {
+    return {
+      status: "UNKNOWN",
+      reason: "EVIDENCE_NOT_VERIFIED",
+      evaluations: solver.evaluations,
+    };
+  }
   return {
     status: "VERIFIED",
     parentRunId: verification.parentRunId,
+    evaluations: solver.evaluations,
     childRunId: verification.childRunId,
     amountInAtomic: candidate.amountInAtomic,
     amountOutAtomic: candidate.amountOutAtomic,
@@ -772,6 +815,24 @@ function projectRemediation(
     verificationTime: verification.verificationTime,
     provenance: verification.provenance,
     checkedScope: [...verification.checkedScope],
+    verificationProof: {
+      targetAmountOutAtomic: selectedQuote.amountOutAtomic,
+      targetQuoteId: selectedQuote.quoteId,
+      verifiedAmountOutAtomic: verification.childAmountOutAtomic,
+      resultEvidenceRef: {
+        kind: "CROSS_RUN_EVIDENCE",
+        runId: verification.childRunId,
+        evidenceId: verification.resultEvidenceKey,
+      },
+      executionBinding: {
+        preparedTransactionFingerprint:
+          verification.preparedUnsignedTxFingerprint,
+        blockNumber: verification.verificationBlock,
+        blockHash: verification.verificationBlockHash,
+        candidateQuoteId: verification.childQuoteId,
+        observedAt: verification.verificationTime,
+      },
+    },
   };
 }
 
@@ -811,8 +872,12 @@ async function evaluateArbitrumP0Decision(
   };
   const risk = evaluateBackendP0Risk(baseInput);
   const remediation = options.p0Risk?.remediation;
+  const authorization = pipeline.intent.amountInIncreaseAuthorization;
   if (
     remediation === undefined ||
+    authorization?.availability !== "available" ||
+    BigInt(authorization.maximumAmountInAtomic) <=
+      BigInt(pipeline.intent.amountInAtomic) ||
     selectedQuote === undefined ||
     pipeline.executeProviderPath === undefined ||
     backendEvidenceState(evidence) !== "VERIFIED" ||
@@ -825,12 +890,17 @@ async function evaluateArbitrumP0Decision(
   }
 
   let solver: SolverResult;
+  const spawnedChildren = new Set<string>();
   try {
     solver = await solveSelectedTargetOutput({
       parentRunId: pipeline.runId,
       selected: selectedQuote,
       startingAmountInAtomic: pipeline.intent.amountInAtomic,
-      maxAmountInAtomic: remediation.maxAmountInAtomic,
+      maxAmountInAtomic:
+        BigInt(authorization.maximumAmountInAtomic) <
+        BigInt(remediation.maxAmountInAtomic)
+          ? authorization.maximumAmountInAtomic
+          : remediation.maxAmountInAtomic,
       initialStepAtomic: remediation.initialStepAtomic,
       maxEvaluations: remediation.maxEvaluations,
       evaluate: async (amountInAtomic) =>
@@ -839,18 +909,41 @@ async function evaluateArbitrumP0Decision(
           pipeline,
           amountInAtomic,
           risk.verdict,
+          selectedQuote,
+          spawnedChildren,
         ),
     });
   } catch {
-    return {
-      risk,
-      selectedQuote,
-      solver: {
-        status: "UNKNOWN",
-        reason: "EVALUATOR_FAILURE",
-        evaluations: 0,
-      },
+    solver = {
+      status: "UNKNOWN",
+      reason: "EVALUATOR_FAILURE",
+      evaluations: 0,
     };
+  }
+
+  // A failed evaluator is not proof that its already-started children ended.
+  // Check every spawned child before exposing either success or failure.
+  for (const childRunId of spawnedChildren) {
+    try {
+      const record = await options.runStore.get(childRunId);
+      if (
+        record?.runId === childRunId &&
+        record.parentRunId === pipeline.runId &&
+        ((record.status === "completed" &&
+          record.result.status === "completed") ||
+          (record.status === "failed" &&
+            record.result?.status === "integration_error"))
+      )
+        continue;
+    } catch {
+      /* Unreadable terminal state is not a confirmed terminal state. */
+    }
+    throw new BackendControlError({
+      status: "failed",
+      code: "RUN_STORE_ERROR",
+      message: "A verification child could not be confirmed terminal",
+      retryable: true,
+    });
   }
 
   if (solver.status !== "VERIFIED") return { risk, selectedQuote, solver };
@@ -872,38 +965,79 @@ async function evaluateArbitrumP0Decision(
  */
 async function projectVerifiedArbitrumRemediation(
   projected: RunResult,
+  riskVerdict: Verdict,
   solver: SolverResult | undefined,
   runStore: RunStore,
 ): Promise<RunResult> {
   if (
     projected.status !== "completed" ||
     projected.verdict !== "STOP" ||
+    riskVerdict !== "ADJUST" ||
     solver?.status !== "VERIFIED"
   ) {
     return projected;
   }
 
   let childRecord: CheckRunRecord | undefined;
+  const unverified = (): RunResult =>
+    runResultSchema.parse({
+      ...projected,
+      ...(projected.p0 === undefined
+        ? {}
+        : {
+            p0: {
+              ...projected.p0,
+              remediation: {
+                status: "UNKNOWN",
+                reason: "EVIDENCE_NOT_VERIFIED",
+                evaluations: solver.evaluations,
+              },
+            },
+          }),
+    });
   try {
     childRecord = await runStore.get(solver.candidate.verification.childRunId);
   } catch {
-    return projected;
+    return unverified();
   }
 
   if (
     childRecord?.status !== "completed" ||
     childRecord.result.status !== "completed"
   ) {
-    return projected;
+    return unverified();
   }
 
   try {
+    const child = runResultSchema.parse(childRecord.result);
+    const proof = solver.candidate.verification;
+    const output = child.evidence.find(
+      (item) => item.key === proof.resultEvidenceKey,
+    );
+    if (
+      child.status !== "completed" ||
+      child.runId !== proof.childRunId ||
+      solver.candidate.verification.childRunId !== child.runId ||
+      child.parentRunId !== projected.runId ||
+      child.replayMode ||
+      child.verdict !== "PROCEED" ||
+      !isDeepStrictEqual(child.intent, {
+        ...projected.intent,
+        amountInAtomic: solver.candidate.amountInAtomic,
+      }) ||
+      output?.kind !== "simulated_token_out" ||
+      output.amountReceivedAtomic !== proof.childAmountOutAtomic ||
+      output.isMock ||
+      output.isReplay ||
+      output.blockNumber !== proof.verificationBlock
+    )
+      return unverified();
     return buildVerifiedAdjustBaseline(projected, childRecord.result, {
       before: projected.intent.amountInAtomic,
       after: solver.candidate.amountInAtomic,
     });
   } catch {
-    return projected;
+    return unverified();
   }
 }
 
@@ -912,9 +1046,17 @@ async function evaluateArbitrumCandidate(
   parent: ArbitrumDecisionContext,
   amountInAtomic: string,
   parentVerdict: Verdict,
+  selectedQuote: QuoteContext,
+  spawnedChildren: Set<string>,
 ): Promise<CandidateEvaluation> {
   const executeProviderPath = parent.executeProviderPath;
-  if (executeProviderPath === undefined) {
+  const authorization = parent.intent.amountInIncreaseAuthorization;
+  if (
+    executeProviderPath === undefined ||
+    authorization?.availability !== "available" ||
+    BigInt(amountInAtomic) <= BigInt(parent.intent.amountInAtomic) ||
+    BigInt(amountInAtomic) > BigInt(authorization.maximumAmountInAtomic)
+  ) {
     return { status: "UNKNOWN", evidenceState: "UNAVAILABLE" };
   }
   const intent = normalizedSwapIntentSchema.parse({
@@ -922,117 +1064,198 @@ async function evaluateArbitrumCandidate(
     amountInAtomic,
   });
   const childRunId = childRunIdFor(parent.runId, amountInAtomic);
-  let execution: ArbitrumProviderExecution;
+  // A start error can be an uncertain write acknowledgement, not proof of
+  // absence. Such an attempt must also be reconciled before parent finalization.
+  spawnedChildren.add(childRunId);
   try {
-    execution = await executeProviderPath({ runId: childRunId, intent });
+    await options.runStore.start(childRunId, intent, parent.runId);
   } catch {
-    return { status: "QUOTE_FAILED", evidenceState: "UNAVAILABLE" };
-  }
-  const parsedEvidence = genericEvidenceSchema.safeParse(
-    execution.providerEvidence,
-  );
-  if (!parsedEvidence.success) {
     return { status: "UNKNOWN", evidenceState: "UNAVAILABLE" };
   }
-  const childEvidence = parsedEvidence.data;
-  if (
-    !providerEvidenceMatchesCandidateIntent(
-      childEvidence,
+  let partialResult: RunResult | undefined;
+  try {
+    let execution: ArbitrumProviderExecution;
+    try {
+      execution = await executeProviderPath({ runId: childRunId, intent });
+    } catch {
+      await failChildRun(options, parent, intent, childRunId, parentVerdict);
+      return { status: "QUOTE_FAILED", evidenceState: "UNAVAILABLE" };
+    }
+    const parsedEvidence = genericEvidenceSchema.safeParse(
+      execution.providerEvidence,
+    );
+    if (!parsedEvidence.success) {
+      await failChildRun(options, parent, intent, childRunId, parentVerdict);
+      return { status: "UNKNOWN", evidenceState: "UNAVAILABLE" };
+    }
+    const childEvidence = parsedEvidence.data;
+    if (
+      !providerEvidenceMatchesCandidateIntent(
+        childEvidence,
+        intent,
+        options.runtime,
+      )
+    ) {
+      await failChildRun(options, parent, intent, childRunId, parentVerdict);
+      return { status: "UNKNOWN", evidenceState: "UNAVAILABLE" };
+    }
+    partialResult = projectGenericEvidenceToRunResult(
+      childRunId,
       intent,
-      options.runtime,
-    )
-  ) {
-    return { status: "UNKNOWN", evidenceState: "UNAVAILABLE" };
-  }
-  const childPipeline: ArbitrumDecisionContext = {
-    runId: childRunId,
-    intent,
-    blockContext: execution.blockContext,
-    quote: execution.quote,
-    unsignedTransaction: execution.unsignedTransaction,
-    gasEstimate: execution.gasEstimate,
-    finality: execution.finality,
-    providerResult: execution.providerResult,
-  };
-  const childQuote = arbitrumCurrentQuote(
-    options,
-    childPipeline,
-    childEvidence,
-  );
-  const evidenceState = backendEvidenceState(childEvidence);
-  if (childQuote.status !== "available") {
-    await persistChildRun(
+      childEvidence,
+    );
+    const childPipeline: ArbitrumDecisionContext = {
+      runId: childRunId,
+      intent,
+      blockContext: execution.blockContext,
+      quote: execution.quote,
+      unsignedTransaction: execution.unsignedTransaction,
+      gasEstimate: execution.gasEstimate,
+      finality: execution.finality,
+      providerResult: execution.providerResult,
+    };
+    const childQuote = arbitrumCurrentQuote(
+      options,
+      childPipeline,
+      childEvidence,
+    );
+    const evidenceState = backendEvidenceState(childEvidence);
+    if (childQuote.status !== "available") {
+      await persistChildRun(
+        options,
+        parent,
+        intent,
+        childRunId,
+        childEvidence,
+        parentVerdict,
+        "UNKNOWN",
+      );
+      return { status: "UNKNOWN", evidenceState };
+    }
+
+    let candidateConstraintEvidence: readonly ConstraintEvidence[] | undefined;
+    try {
+      candidateConstraintEvidence =
+        options.p0Risk?.remediation?.constraintEvidenceForCandidate ===
+        undefined
+          ? undefined
+          : await options.p0Risk.remediation.constraintEvidenceForCandidate({
+              intent,
+              quote: childQuote.quote,
+              evidence: childEvidence,
+            });
+    } catch {
+      await failChildRun(
+        options,
+        parent,
+        intent,
+        childRunId,
+        parentVerdict,
+        partialResult,
+        "Candidate constraint verification could not be completed",
+      );
+      return { status: "UNKNOWN", evidenceState: "UNAVAILABLE" };
+    }
+    // The solver, not child Quote Fidelity, compares this candidate with the
+    // original exact-input selected baseline. Reusing that baseline here would
+    // make every legitimate amountIn change INCOMPATIBLE. The child instead
+    // re-runs the provider-neutral base Risk plus explicit caller constraints.
+    const childBaseRisk = evaluateEvidence(childEvidence);
+    const childConstraints = evaluateConstraints(
+      options.p0Risk?.constraints ?? [],
+      candidateConstraintEvidence ?? [],
+    );
+    const childRisk = {
+      verdict: childVerificationVerdict(
+        childBaseRisk.verdict,
+        evidenceState,
+        childConstraints,
+      ),
+      constraints: childConstraints,
+    };
+    const persisted = await persistChildRun(
       options,
       parent,
       intent,
       childRunId,
       childEvidence,
       parentVerdict,
-      "UNKNOWN",
+      childRisk.verdict,
+      {
+        expectationBaseline: { status: "MISSING" },
+        quoteFidelity: { status: "UNKNOWN", reason: "MISSING_BASELINE" },
+        cause: { status: "NOT_VERIFIED" },
+        constraints: childConstraints,
+        evidenceState,
+        transactionProtection: { status: childBaseRisk.economicBoundary },
+        remediation: { status: "NOT_RUN" },
+        ...(execution.blockContext.blockHash === undefined
+          ? {}
+          : {
+              executionBinding: {
+                preparedTransactionFingerprint: fingerprint(
+                  execution.unsignedTransaction,
+                ),
+                blockNumber: execution.blockContext.blockNumber,
+                blockHash: execution.blockContext.blockHash,
+                candidateQuoteId: childQuote.quote.quoteId,
+                observedAt: childQuote.quote.observedAt,
+              },
+            }),
+        constraintVerification: {
+          candidateQuoteId: childQuote.quote.quoteId,
+          blockNumber: childQuote.quote.blockNumber,
+          checks: (options.p0Risk?.constraints ?? []).map(
+            (declaration, index) => ({
+              declaration,
+              outcome: childConstraints[index] ?? {
+                name: declaration.name,
+                declarationId: declaration.declarationId,
+                status: "UNKNOWN",
+              },
+              measurements: (candidateConstraintEvidence ?? []).filter(
+                (measurement) => measurement.name === declaration.name,
+              ),
+            }),
+          ),
+        },
+      },
     );
-    return { status: "UNKNOWN", evidenceState };
-  }
+    if (evidenceState !== "VERIFIED") {
+      return { status: "UNKNOWN", evidenceState };
+    }
 
-  const candidateConstraintEvidence =
-    options.p0Risk?.remediation?.constraintEvidenceForCandidate === undefined
-      ? undefined
-      : await options.p0Risk.remediation.constraintEvidenceForCandidate({
-          intent,
-          quote: childQuote.quote,
-          evidence: childEvidence,
-        });
-  // The solver, not child Quote Fidelity, compares this candidate with the
-  // original exact-input selected baseline. Reusing that baseline here would
-  // make every legitimate amountIn change INCOMPATIBLE. The child instead
-  // re-runs the provider-neutral base Risk plus explicit caller constraints.
-  const childBaseRisk = evaluateEvidence(childEvidence);
-  const childConstraints = evaluateConstraints(
-    options.p0Risk?.constraints ?? [],
-    candidateConstraintEvidence ?? [],
-  );
-  const childRisk = {
-    verdict: childVerificationVerdict(
-      childBaseRisk.verdict,
+    const verification =
+      persisted !== undefined
+        ? candidateVerification(
+            parent,
+            intent,
+            execution,
+            childEvidence,
+            childQuote.quote,
+            childRisk,
+            persisted,
+            selectedQuote,
+          )
+        : undefined;
+    return {
+      status: "QUOTED",
       evidenceState,
-      childConstraints,
-    ),
-    constraints: childConstraints,
-  };
-  const persisted = await persistChildRun(
-    options,
-    parent,
-    intent,
-    childRunId,
-    childEvidence,
-    parentVerdict,
-    childRisk.verdict,
-  );
-  if (evidenceState !== "VERIFIED") {
-    return { status: "UNKNOWN", evidenceState };
+      quote: childQuote.quote,
+      ...(verification === undefined ? {} : { verification }),
+    };
+  } catch {
+    await failChildRun(
+      options,
+      parent,
+      intent,
+      childRunId,
+      parentVerdict,
+      partialResult,
+      "Candidate verification could not be completed",
+    );
+    return { status: "UNKNOWN", evidenceState: "UNAVAILABLE" };
   }
-
-  const childResult = projectGenericEvidenceToRunResult(
-    childRunId,
-    intent,
-    childEvidence,
-  );
-  const verification = persisted
-    ? candidateVerification(
-        parent,
-        intent,
-        execution,
-        childEvidence,
-        childQuote.quote,
-        childRisk,
-        childResult,
-      )
-    : undefined;
-  return {
-    status: "QUOTED",
-    evidenceState,
-    quote: childQuote.quote,
-    ...(verification === undefined ? {} : { verification }),
-  };
 }
 
 async function persistChildRun(
@@ -1043,11 +1266,10 @@ async function persistChildRun(
   evidence: GenericEvidence,
   parentVerdict: Verdict,
   verdict: Verdict,
-): Promise<boolean> {
-  let started = false;
-  let diff: ReturnType<typeof runDiffSchema.parse> | undefined;
+  p0?: P0RunResult,
+): Promise<RunResult | undefined> {
   try {
-    diff = runDiffSchema.parse({
+    const diff = runDiffSchema.parse({
       previousRunId: parent.runId,
       previousVerdict: parentVerdict,
       changedFields: [
@@ -1066,52 +1288,139 @@ async function persistChildRun(
       ...child,
       parentRunId: parent.runId,
       diff,
+      ...(p0 === undefined ? {} : { p0 }),
     });
-    await options.runStore.start(childRunId, intent, parent.runId);
-    started = true;
     await options.runStore.complete(persisted);
-    return true;
+    const record = await options.runStore.get(childRunId);
+    if (
+      record?.status !== "completed" ||
+      record.runId !== childRunId ||
+      record.parentRunId !== parent.runId ||
+      !isDeepStrictEqual(record.intent, intent)
+    )
+      return undefined;
+    const recovered = runResultSchema.parse(
+      JSON.parse(JSON.stringify(record.result)),
+    );
+    // SQL JSON storage omits undefined optionals. Compare the canonical wire
+    // representation, while requiring every recorded fact to remain equal.
+    const expected = runResultSchema.parse(
+      JSON.parse(JSON.stringify({ ...persisted, createdAt: record.createdAt })),
+    );
+    return isDeepStrictEqual(recovered, expected) ? recovered : undefined;
   } catch {
-    if (started && diff !== undefined) {
-      try {
-        await options.runStore.fail(
-          childRunId,
-          "INVALID_AGENT_FLOW_RESPONSE",
-          failedRunResultSchema.parse({
-            runId: childRunId,
-            parentRunId: parent.runId,
-            intent,
-            replayMode: false,
-            status: "integration_error",
-            systemStatus: "INTEGRATION_ERROR",
-            verdict: "UNKNOWN",
-            summary: "The P0 verification child could not be finalized",
-            error: {
-              code: "INVALID_RESPONSE",
-              stage: "unknown",
-              message: "The P0 verification child could not be finalized",
-              retryable: false,
-            },
-            diff,
-            ruleResults: [],
-            recommendedActions: [],
-            irrelevantActions: [],
-            evidence: [],
-            scope: [
-              {
-                key: "P0-CHECK-SIMULATION-001",
-                label: "P0 verification child",
-                status: "unknown",
-                reason: "REQUIRED_CHECK_INTERRUPTED",
-              },
-            ],
-          }),
-        );
-      } catch {
-        // A store that cannot terminalize the child cannot produce a proof.
-      }
-    }
-    return false;
+    await failChildRun(options, parent, intent, childRunId, parentVerdict);
+    return undefined;
+  }
+}
+
+async function failChildRun(
+  options: ArbitrumProductionCompositionOptions,
+  parent: ArbitrumDecisionContext,
+  intent: NormalizedSwapIntent,
+  childRunId: string,
+  parentVerdict: Verdict,
+  partialResult?: RunResult,
+  partialFailureMessage?: string,
+): Promise<void> {
+  try {
+    const diff = runDiffSchema.parse({
+      previousRunId: parent.runId,
+      previousVerdict: parentVerdict,
+      changedFields: [
+        {
+          field: "amountInAtomic",
+          before: parent.intent.amountInAtomic,
+          after: intent.amountInAtomic,
+        },
+      ],
+    });
+    await options.runStore.fail(
+      childRunId,
+      "INVALID_AGENT_FLOW_RESPONSE",
+      failedRunResultSchema.parse({
+        runId: childRunId,
+        parentRunId: parent.runId,
+        intent,
+        replayMode: false,
+        status: "integration_error",
+        systemStatus: "INTEGRATION_ERROR",
+        verdict: "UNKNOWN",
+        summary: "The P0 verification child could not be finalized",
+        error: {
+          code: "INVALID_RESPONSE",
+          stage: "unknown",
+          message:
+            partialFailureMessage ??
+            "The P0 verification child could not be finalized",
+          retryable: false,
+        },
+        diff,
+        ruleResults: (partialResult?.ruleResults ?? []).map((rule) =>
+          rule.status === "FAIL"
+            ? {
+                ...rule,
+                status: "UNKNOWN",
+                reasonCode:
+                  rule.ruleId === "P0-EVIDENCE-001"
+                    ? "EVIDENCE_SOURCE_UNKNOWN"
+                    : rule.ruleId === "P0-EXECUTION-001"
+                      ? "RULE_CLASSIFICATION_NOT_VERIFIED"
+                      : "SIMULATED_OUTPUT_UNAVAILABLE",
+                actionEvaluations: [],
+              }
+            : { ...rule, actionEvaluations: [] },
+        ),
+        recommendedActions: [],
+        irrelevantActions: [],
+        evidence: partialResult?.evidence ?? [],
+        ...(partialResult?.quote === undefined
+          ? {}
+          : { quote: partialResult.quote }),
+        ...(partialResult?.route === undefined
+          ? {}
+          : { route: partialResult.route }),
+        ...(partialResult?.simulatorPinnedBlock === undefined
+          ? {}
+          : { simulatorPinnedBlock: partialResult.simulatorPinnedBlock }),
+        scope:
+          partialResult === undefined
+            ? [
+                {
+                  key: "P0-CHECK-SIMULATION-001",
+                  label: "P0 verification child",
+                  status: "unknown",
+                  reason: "REQUIRED_CHECK_INTERRUPTED",
+                },
+              ]
+            : partialResult.scope.map((item) => {
+                const incompleteRule = partialResult.ruleResults.find(
+                  (rule) => rule.ruleId === item.key && rule.status === "FAIL",
+                );
+                if (incompleteRule) {
+                  return {
+                    ...item,
+                    status: "unknown",
+                    reason: "CLASSIFICATION_INCOMPLETE",
+                    note: "A later candidate verification step did not complete",
+                  };
+                }
+                return item.key === "P0-CHECK-ACTION-001"
+                  ? {
+                      ...item,
+                      label: "Candidate verification",
+                      status: "unknown",
+                      reason: "REQUIRED_CHECK_INTERRUPTED",
+                      note:
+                        partialFailureMessage ??
+                        "A later candidate verification step did not complete",
+                    }
+                  : item;
+              }),
+      }),
+    );
+  } catch {
+    // Never overwrite an already-terminal child or claim a failed write passed.
   }
 }
 
@@ -1123,15 +1432,51 @@ function candidateVerification(
   quote: QuoteContext,
   childRisk: ChildVerificationRisk,
   childResult: RunResult,
+  selectedQuote: QuoteContext,
 ): VerifiedCandidate["verification"] | undefined {
   if (
     childResult.status !== "completed" ||
+    childResult.verdict !== "PROCEED" ||
+    childResult.runId !== execution.runId ||
+    childResult.parentRunId !== parent.runId ||
+    childResult.replayMode ||
+    !isDeepStrictEqual(childResult.intent, intent) ||
     childRisk.verdict !== "PROCEED" ||
     evidence.provider.status !== "SUCCESS" ||
     backendEvidenceState(evidence) !== "VERIFIED"
   ) {
     return undefined;
   }
+  if (
+    !childRunPassesTargetOutputGate(
+      childResult,
+      parent.runId,
+      parent.intent,
+      selectedQuote.amountOutAtomic,
+    )
+  )
+    return undefined;
+  const output = childResult.evidence.find(
+    (item) => item.kind === "simulated_token_out",
+  );
+  const outcome = evidence.outcome.value;
+  if (outcome === null || typeof outcome !== "object" || Array.isArray(outcome))
+    return undefined;
+  const executionFingerprint = fingerprint(execution.unsignedTransaction);
+  if (
+    output?.kind !== "simulated_token_out" ||
+    !isDeepStrictEqual(output.tokenOut, intent.tokenOut) ||
+    output.recipient.toLowerCase() !== intent.recipient.toLowerCase() ||
+    output.isReplay ||
+    output.isMock ||
+    output.blockNumber !== execution.blockContext.blockNumber ||
+    quote.blockNumber !== execution.blockContext.blockNumber ||
+    outcome?.transactionFingerprint !== executionFingerprint ||
+    execution.blockContext.blockHash === undefined ||
+    outcome?.blockHash !== execution.blockContext.blockHash ||
+    output.amountReceivedAtomic !== outcome?.amountReceivedAtomic
+  )
+    return undefined;
   const transactionProtectionOutcome = candidateTransactionProtectionOutcome(
     intent,
     childResult,
@@ -1145,7 +1490,7 @@ function candidateVerification(
     return undefined;
   }
   return {
-    preparedUnsignedTxFingerprint: fingerprint(execution.unsignedTransaction),
+    preparedUnsignedTxFingerprint: executionFingerprint,
     preparedAmountInAtomic: intent.amountInAtomic,
     providerStatus: evidence.provider.status,
     riskVerdict: childRisk.verdict,
@@ -1153,9 +1498,11 @@ function candidateVerification(
     childRunId: execution.runId,
     childStatus: "completed",
     childAmountInAtomic: intent.amountInAtomic,
-    childAmountOutAtomic: quote.amountOutAtomic,
+    childAmountOutAtomic: output.amountReceivedAtomic,
+    resultEvidenceKey: output.key,
     childQuoteId: quote.quoteId,
     verificationBlock: quote.blockNumber,
+    verificationBlockHash: execution.blockContext.blockHash,
     verificationTime: quote.observedAt,
     provenance: quote.provenance,
     checkedScope: evidence.checkedScope,

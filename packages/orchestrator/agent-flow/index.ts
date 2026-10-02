@@ -586,8 +586,9 @@ function buildRunResult(
 
   const route = buildRoute(intent, quote, evidence);
   const simulatedOutput =
-    intent.economicBoundary.availability === "available" &&
-    evidence.execution.status === "SUCCESS"
+    evidence.execution.status === "SUCCESS" &&
+    (intent.economicBoundary.availability === "available" ||
+      intent.amountInIncreaseAuthorization?.availability === "available")
       ? collector.simulatedTokenOut(intent, evidence)
       : undefined;
 

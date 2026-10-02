@@ -19,6 +19,45 @@ export const recipientSourceSchema = z.enum([
 
 const publicEconomicBoundarySourceSchema = z.enum(["user_declared"]);
 
+// Missing/unavailable authorization never permits changing the input budget.
+export const checkAmountInIncreaseAuthorizationSchema = z.discriminatedUnion(
+  "availability",
+  [
+    z
+      .object({
+        availability: z.literal("available"),
+        source: z.literal("user_declared"),
+        consent: z.literal(true),
+        maximumAmountIn: positiveDecimalSchema,
+      })
+      .strict(),
+    z
+      .object({
+        availability: z.literal("unavailable"),
+        source: z.literal("unavailable"),
+      })
+      .strict(),
+  ],
+);
+
+export const normalizedAmountInIncreaseAuthorizationSchema =
+  z.discriminatedUnion("availability", [
+    z
+      .object({
+        availability: z.literal("available"),
+        source: z.literal("user_declared"),
+        consent: z.literal(true),
+        maximumAmountInAtomic: atomicAmountSchema,
+      })
+      .strict(),
+    z
+      .object({
+        availability: z.literal("unavailable"),
+        source: z.literal("unavailable"),
+      })
+      .strict(),
+  ]);
+
 const normalizedEconomicBoundarySourceSchema = z.enum([
   "original_swap",
   "user_declared",
@@ -76,6 +115,23 @@ function distinctAssetsSchema<T extends z.ZodRawShape>(schema: z.ZodObject<T>) {
     const chainId = intent.chainId as number;
     const tokenIn = intent.tokenIn as AssetReference;
     const tokenOut = intent.tokenOut as AssetReference;
+    const authorization =
+      normalizedAmountInIncreaseAuthorizationSchema.safeParse(
+        intent.amountInIncreaseAuthorization,
+      );
+    const amount = atomicAmountSchema.safeParse(intent.amountInAtomic);
+    if (
+      authorization.success &&
+      authorization.data.availability === "available" &&
+      amount.success &&
+      BigInt(authorization.data.maximumAmountInAtomic) < BigInt(amount.data)
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["amountInIncreaseAuthorization", "maximumAmountInAtomic"],
+        message: "Authorized maximum must not be below amountIn",
+      });
+    }
 
     if (
       assetIdentity({ chainId, asset: tokenIn }) ===
@@ -102,6 +158,8 @@ export const checkSwapRequestSchema = distinctAssetsSchema(
       tokenIn: assetReferenceSchema,
       tokenOut: assetReferenceSchema,
       amountIn: positiveDecimalSchema,
+      amountInIncreaseAuthorization:
+        checkAmountInIncreaseAuthorizationSchema.optional(),
       expectationBaseline: expectationBaselineSchema.optional(),
       economicBoundary: checkEconomicBoundarySchema,
     })
@@ -120,6 +178,8 @@ export const normalizedSwapIntentSchema = distinctAssetsSchema(
       tokenIn: assetReferenceSchema,
       tokenOut: assetReferenceSchema,
       amountInAtomic: atomicAmountSchema,
+      amountInIncreaseAuthorization:
+        normalizedAmountInIncreaseAuthorizationSchema.optional(),
       economicBoundary: normalizedEconomicBoundarySchema,
     })
     .strict(),

@@ -230,6 +230,18 @@ function syntheticQualifiedAssetRun() {
 }
 
 describe("explicit normalized simulated-output proof (synthetic unit fixtures, not live qualification)", () => {
+  it("does not collect simulated output without a transaction boundary or explicit target consent", () => {
+    const result = projectGenericEvidenceToRunResult(
+      "success-without-output-objective",
+      intent,
+      fixture().evidence,
+    );
+
+    expect(
+      result.evidence.some((item) => item.kind === "simulated_token_out"),
+    ).toBe(false);
+  });
+
   it.each(["transactionFingerprint", "blockHash", "amountInAtomic"])(
     "rejects missing snapshot execution binding %s",
     (property) => {

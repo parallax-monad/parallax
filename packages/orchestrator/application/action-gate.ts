@@ -8,6 +8,8 @@ import {
   type RunResult,
   type SimulatedTokenOutEvidence,
 } from "@parallax/contracts";
+import { evaluateConstraints } from "@parallax/risk";
+import { extractSimulatedOutput } from "../agent-flow/simulated-output.js";
 
 const REQUIRED_CHILD_RULE_IDS = [
   "P0-EVIDENCE-001",
@@ -16,6 +18,15 @@ const REQUIRED_CHILD_RULE_IDS = [
 ] as const;
 
 type CompletedRun = Extract<RunResult, { status: "completed" }>;
+
+function hasTerminalNoRouteFailure(result: CompletedRun): boolean {
+  return result.ruleResults.some(
+    (rule) =>
+      rule.ruleId === "P0-EXECUTION-001" &&
+      rule.status === "FAIL" &&
+      rule.reasonCode === "NO_ROUTE_FOUND",
+  );
+}
 
 export type ActionGateRunRecord =
   | { status: "started" }
@@ -153,6 +164,223 @@ export function childRunPassesActionGate(
   );
 }
 
+/** Selected quote target is not the optional transaction Minimum Received. */
+export function childRunPassesTargetOutputGate(
+  child: CompletedRun,
+  baselineRunId: string,
+  baselineIntent: NormalizedSwapIntent,
+  targetAmountOutAtomic: string,
+): boolean {
+  if (!completedRunResultSchema.safeParse(child).success) return false;
+  if (!childExecutionIsBound(child)) return false;
+  const authorization = baselineIntent.amountInIncreaseAuthorization;
+  const outputs = child.evidence.filter(
+    (item) => item.kind === "simulated_token_out",
+  );
+  const output = outputs[0];
+  if (
+    authorization?.availability !== "available" ||
+    outputs.length !== 1 ||
+    output?.kind !== "simulated_token_out" ||
+    child.parentRunId !== baselineRunId ||
+    child.runId === baselineRunId ||
+    child.replayMode ||
+    child.systemStatus !== "OK" ||
+    child.verdict !== "PROCEED" ||
+    output.isReplay ||
+    output.isMock ||
+    output.recipient !== child.intent.recipient ||
+    !isDeepStrictEqual(output.tokenOut, child.intent.tokenOut) ||
+    !isDeepStrictEqual(child.intent, {
+      ...baselineIntent,
+      amountInAtomic: child.intent.amountInAtomic,
+    }) ||
+    BigInt(child.intent.amountInAtomic) <=
+      BigInt(baselineIntent.amountInAtomic) ||
+    BigInt(child.intent.amountInAtomic) >
+      BigInt(authorization.maximumAmountInAtomic) ||
+    !/^(0|[1-9]\d*)$/.test(targetAmountOutAtomic) ||
+    BigInt(output.amountReceivedAtomic) < BigInt(targetAmountOutAtomic) ||
+    child.scope.some((item) => item.status === "unknown") ||
+    child.ruleResults.some(
+      (rule) => rule.status === "UNKNOWN" || rule.status === "FAIL",
+    )
+  )
+    return false;
+  return REQUIRED_CHILD_RULE_IDS.every((ruleId) =>
+    child.ruleResults.some(
+      (rule) =>
+        rule.ruleId === ruleId &&
+        rule.status ===
+          (ruleId === "P0-ECONOMIC-001" &&
+          child.intent.economicBoundary.availability === "unavailable"
+            ? "NOT_APPLICABLE"
+            : "PASS"),
+    ),
+  );
+}
+
+function childRunPassesSelectedTargetGate(
+  baseline: CompletedRun,
+  child: CompletedRun,
+): boolean {
+  const remediation = baseline.p0?.remediation;
+  const target = baseline.p0?.expectationBaseline;
+  if (
+    remediation?.status !== "VERIFIED" ||
+    !remediation.verificationProof ||
+    target?.status !== "AVAILABLE"
+  )
+    return false;
+  const proof = remediation.verificationProof;
+  const output = child.evidence.find(
+    (item) => item.key === proof.resultEvidenceRef.evidenceId,
+  );
+  const checks = child.p0?.constraintVerification;
+  return (
+    childRunPassesTargetOutputGate(
+      child,
+      baseline.runId,
+      baseline.intent,
+      proof.targetAmountOutAtomic,
+    ) &&
+    remediation.parentRunId === baseline.runId &&
+    remediation.childRunId === child.runId &&
+    proof.resultEvidenceRef.runId === child.runId &&
+    remediation.amountInAtomic === child.intent.amountInAtomic &&
+    target.quoteId === proof.targetQuoteId &&
+    target.amountOutAtomic === proof.targetAmountOutAtomic &&
+    output?.kind === "simulated_token_out" &&
+    output.amountReceivedAtomic === proof.verifiedAmountOutAtomic &&
+    output.blockNumber === remediation.verificationBlock &&
+    checks !== undefined &&
+    checks.candidateQuoteId === remediation.quoteId &&
+    checks.blockNumber === remediation.verificationBlock &&
+    proof.executionBinding !== undefined &&
+    isDeepStrictEqual(proof.executionBinding, child.p0?.executionBinding) &&
+    proof.executionBinding.blockNumber === remediation.verificationBlock &&
+    proof.executionBinding.candidateQuoteId === remediation.quoteId &&
+    proof.executionBinding.observedAt === remediation.verificationTime &&
+    recordedConstraintsMatch(baseline, child)
+  );
+}
+
+/** Compare the persisted execution facts, not just the output/block height. */
+function childExecutionIsBound(child: CompletedRun): boolean {
+  const binding = child.p0?.executionBinding;
+  const evidence = child.providerEvidence;
+  if (
+    !binding ||
+    !evidence ||
+    evidence.provider.status !== "SUCCESS" ||
+    evidence.execution.status !== "SUCCESS" ||
+    evidence.provenance.simulationBlock !== binding.blockNumber ||
+    child.simulatorPinnedBlock !== binding.blockNumber
+  )
+    return false;
+  // Re-derive from the recovered execution, using the same qualification and
+  // balance-delta checks as the initial projection. Identity alone is not proof
+  // that a persisted canonical output still agrees with its source.
+  const derived = extractSimulatedOutput(
+    child.intent,
+    evidence,
+    child.evidence,
+  );
+  const outputs = child.evidence.filter(
+    (item) => item.kind === "simulated_token_out",
+  );
+  const output = outputs[0];
+  if (
+    !derived ||
+    outputs.length !== 1 ||
+    output?.kind !== "simulated_token_out" ||
+    output.amountReceivedAtomic !== derived.amountReceivedAtomic ||
+    output.derivation !== derived.derivation ||
+    output.derivationVersion !== derived.derivationVersion ||
+    !isDeepStrictEqual(
+      output.inputEvidenceRefs.map((ref) => ref.key),
+      derived.inputEvidenceKeys,
+    )
+  )
+    return false;
+  for (const field of [evidence.receipt, evidence.outcome]) {
+    const value = field.value;
+    if (
+      field.blockNumber !== binding.blockNumber ||
+      value === null ||
+      typeof value !== "object" ||
+      Array.isArray(value) ||
+      value.transactionFingerprint !== binding.preparedTransactionFingerprint ||
+      value.blockHash !== binding.blockHash
+    )
+      return false;
+  }
+  const actions = evidence.action.value;
+  return (
+    Array.isArray(actions) &&
+    actions.length === 1 &&
+    actions[0] !== null &&
+    typeof actions[0] === "object" &&
+    !Array.isArray(actions[0]) &&
+    actions[0].transactionFingerprint === binding.preparedTransactionFingerprint
+  );
+}
+
+function recordedConstraintsMatch(
+  baseline: CompletedRun,
+  child: CompletedRun,
+): boolean {
+  const original = baseline.p0?.constraintVerification;
+  const recorded = child.p0?.constraintVerification;
+  if (!original || !recorded) return false;
+  const declarations = recorded.checks.map((check) => check.declaration);
+  if (
+    !isDeepStrictEqual(
+      declarations,
+      original.checks.map((check) => check.declaration),
+    ) ||
+    new Set(declarations.map((declaration) => declaration.declarationId))
+      .size !== declarations.length ||
+    declarations.length !== baseline.p0?.constraints.length
+  )
+    return false;
+  try {
+    const measurements = new Map<
+      string,
+      (typeof recorded.checks)[number]["measurements"]
+    >();
+    for (const check of recorded.checks) {
+      if (
+        check.measurements.some((item) => item.name !== check.declaration.name)
+      )
+        return false;
+      const previous = measurements.get(check.declaration.name);
+      if (
+        previous !== undefined &&
+        !isDeepStrictEqual(previous, check.measurements)
+      )
+        return false;
+      measurements.set(check.declaration.name, check.measurements);
+    }
+    // Repeated declarations share one observation; conflicting copies never
+    // become separate observations selected per threshold.
+    const evaluated = evaluateConstraints(
+      declarations,
+      [...measurements.values()].flat(),
+    );
+    return (
+      evaluated.every((outcome) => outcome.status === "PASS") &&
+      isDeepStrictEqual(
+        evaluated,
+        recorded.checks.map((check) => check.outcome),
+      ) &&
+      isDeepStrictEqual(evaluated, child.p0?.constraints)
+    );
+  } catch {
+    return false;
+  }
+}
+
 function findActionGateAttestation(
   result: CompletedRun,
   evaluation: CompletedRun["recommendedActions"][number],
@@ -207,11 +435,66 @@ export function closeUnverifiedAdjust(
     return result;
   }
 
+  const targetAttestations = result.evidence.filter(
+    (item) =>
+      item.kind === "action_verification" &&
+      item.targetOutputProof !== undefined,
+  );
+  const rejectedKeys = new Set(
+    targetAttestations.flatMap((item) =>
+      item.kind === "action_verification"
+        ? [
+            item.key,
+            ...(item.resultEvidenceKey === undefined
+              ? []
+              : [item.resultEvidenceKey]),
+          ]
+        : [],
+    ),
+  );
+  const rejectedActions = new Set(
+    result.recommendedActions
+      .filter((action) =>
+        action.evidenceRefs.some((reference) =>
+          rejectedKeys.has(reference.key),
+        ),
+      )
+      .map((action) => action.id),
+  );
+  const evaluations =
+    result.p0?.remediation.status === "VERIFIED"
+      ? (result.p0.remediation.evaluations ?? 0)
+      : 0;
   return completedRunResultSchema.parse({
     ...result,
     verdict: "STOP",
     summary: "No verified child Run and Action Gate attestation is available",
     recommendedActions: [],
+    ...(targetAttestations.length === 0
+      ? {}
+      : {
+          evidence: result.evidence.filter(
+            (item) => !rejectedKeys.has(item.key),
+          ),
+          ruleResults: result.ruleResults.map((rule) => ({
+            ...rule,
+            actionEvaluations: rule.actionEvaluations.filter(
+              (action) => !rejectedActions.has(action.id),
+            ),
+          })),
+          ...(result.p0 === undefined
+            ? {}
+            : {
+                p0: {
+                  ...result.p0,
+                  remediation: {
+                    status: "UNKNOWN",
+                    reason: "EVIDENCE_NOT_VERIFIED",
+                    evaluations,
+                  },
+                },
+              }),
+        }),
   });
 }
 
@@ -219,16 +502,40 @@ function hasVerifiedActionGate(
   result: CompletedRun,
   verificationChildren: ReadonlyMap<string, ActionGateRunRecord | undefined>,
 ): boolean {
-  if (result.recommendedActions.length === 0) return false;
+  if (
+    result.recommendedActions.length === 0 ||
+    hasTerminalNoRouteFailure(result)
+  )
+    return false;
 
   return result.recommendedActions.every((evaluation) => {
     const attestation = findActionGateAttestation(result, evaluation);
     if (attestation === undefined) return false;
+    if (
+      result.p0?.remediation.status === "VERIFIED" &&
+      result.p0.remediation.verificationProof !== undefined &&
+      attestation.targetOutputProof === undefined
+    )
+      return false;
 
     const childRecord = verificationChildren.get(attestation.verificationRunId);
+    if (
+      childRecord?.status !== "completed" ||
+      childRecord.result.status !== "completed"
+    ) {
+      return false;
+    }
+
+    if (attestation.targetOutputProof !== undefined) {
+      return childRunPassesSelectedTargetGate(result, childRecord.result);
+    }
+
+    const childOutput = economicSimulatedTokenOutEvidence(childRecord.result);
+    const crossRunResultRef = attestation.resultEvidenceRef;
     return (
-      childRecord?.status === "completed" &&
-      childRecord.result.status === "completed" &&
+      (crossRunResultRef === undefined ||
+        (crossRunResultRef.runId === childRecord.result.runId &&
+          crossRunResultRef.evidenceId === childOutput?.key)) &&
       childRunPassesActionGate(childRecord.result, result.runId)
     );
   });
@@ -250,18 +557,33 @@ export function evidenceRefFromItem(evidence: EvidenceProvenance): EvidenceRef {
   };
 }
 
-/**
- * Builds a publicly verified ADJUST baseline from a STOP/ADJUST baseline and
- * passing child. Shared Contract requires same-Run result Evidence for
- * recommendable Actions; the verified output is a derived attestation payload
- * (not the child's Evidence record relocated into the baseline).
- */
+/** Builds a public ADJUST baseline while keeping child Evidence child-owned. */
 export function buildVerifiedAdjustBaseline(
   baseline: CompletedRun,
   child: CompletedRun,
   adjustment: { before: string; after: string },
 ): CompletedRun {
-  const childOutput = economicSimulatedTokenOutEvidence(child);
+  if (hasTerminalNoRouteFailure(baseline)) {
+    throw new Error("NO_ROUTE_FOUND cannot be promoted to ADJUST");
+  }
+
+  const targetProof =
+    baseline.p0?.remediation.status === "VERIFIED"
+      ? baseline.p0.remediation.verificationProof
+      : undefined;
+  const childOutput =
+    targetProof === undefined
+      ? economicSimulatedTokenOutEvidence(child)
+      : child.evidence.find(
+          (item): item is SimulatedTokenOutEvidence =>
+            item.kind === "simulated_token_out" &&
+            item.key === targetProof.resultEvidenceRef.evidenceId,
+        );
+  if (
+    targetProof !== undefined &&
+    !childRunPassesSelectedTargetGate(baseline, child)
+  )
+    throw new Error("Selected target Action Gate did not pass");
   if (childOutput === undefined) {
     throw new Error(
       "Action Gate verification requires child Economic simulated tokenOut Evidence",
@@ -272,25 +594,20 @@ export function buildVerifiedAdjustBaseline(
     baseline.intent.economicBoundary.availability === "available"
       ? baseline.intent.economicBoundary.minimumReceivedAtomic
       : undefined;
-  if (boundaryAtomic === undefined) {
+  if (boundaryAtomic === undefined && targetProof === undefined) {
     throw new Error(
       "Action Gate verification requires an available Economic Boundary",
     );
   }
 
-  const baselineSimulationInput = baseline.evidence.find(
-    (item) =>
-      item.kind === "generic" &&
-      item.simulationInputRole === "SIMULATION_RECEIPT",
-  );
-
   const attestationKey = "action-verification-amount-in";
-  const verifiedOutputKey = "verified-output-improvement";
-  const verifiedOutput: SimulatedTokenOutEvidence = {
-    kind: "simulated_token_out",
-    key: verifiedOutputKey,
+  if (baseline.evidence.some((item) => item.key === attestationKey))
+    throw new Error("Action verification Evidence key collision");
+  const attestation: ActionVerificationEvidence = {
+    kind: "action_verification",
+    key: attestationKey,
     status: "confirmed",
-    summary: "Verified simulated output after the proposed amountIn adjustment",
+    summary: "A verification child Run confirmed the proposed amountIn change",
     source: "derived",
     stage: "SIMULATE",
     blockNumber: childOutput.blockNumber,
@@ -301,55 +618,36 @@ export function buildVerifiedAdjustBaseline(
     reproducibility: childOutput.reproducibility,
     isReplay: false,
     isMock: false,
-    tokenOut: childOutput.tokenOut,
-    recipient: childOutput.recipient,
-    amountReceivedAtomic: childOutput.amountReceivedAtomic,
-    derivation: childOutput.derivation,
-    derivationVersion: childOutput.derivationVersion,
-    inputEvidenceRefs:
-      baselineSimulationInput === undefined
-        ? childOutput.inputEvidenceRefs.map((reference) =>
-            evidenceRefFromItem(reference),
-          )
-        : [evidenceRefFromItem(baselineSimulationInput)],
-  };
-
-  const attestation: ActionVerificationEvidence = {
-    kind: "action_verification",
-    key: attestationKey,
-    status: "confirmed",
-    summary: "A verification child Run confirmed the proposed amountIn change",
-    source: "derived",
-    stage: "SIMULATE",
-    blockNumber: verifiedOutput.blockNumber,
-    simulatorPinnedBlock: verifiedOutput.simulatorPinnedBlock,
-    runtimeVersion: verifiedOutput.runtimeVersion,
-    runtimeRevision: verifiedOutput.runtimeRevision,
-    fixtureId: verifiedOutput.fixtureId,
-    reproducibility: verifiedOutput.reproducibility,
-    isReplay: verifiedOutput.isReplay,
-    isMock: verifiedOutput.isMock,
     field: "amountIn",
     actionReasonCode: "OUTPUT_IMPROVEMENT_VERIFIED",
     baselineRunId: baseline.runId,
     verificationRunId: child.runId,
     beforeValue: adjustment.before,
     afterValue: adjustment.after,
-    resultEvidenceKey: verifiedOutputKey,
     baselineBoundaryAtomic: boundaryAtomic,
     verificationBoundaryAtomic: boundaryAtomic,
+    ...(targetProof === undefined
+      ? {
+          resultEvidenceRef: {
+            kind: "CROSS_RUN_EVIDENCE" as const,
+            runId: child.runId,
+            evidenceId: childOutput.key,
+          },
+        }
+      : {}),
+    ...(targetProof === undefined ? {} : { targetOutputProof: targetProof }),
   };
 
   const verificationReference = evidenceRefFromItem(attestation);
-  const resultReference = evidenceRefFromItem(verifiedOutput);
   const recommendedAction: ActionEvaluation = {
     id: "verified-amount-in-adjustment",
     action: { kind: "TRANSACTION_ADJUSTMENT", field: "amountIn" },
     relevance: "RELEVANT",
     recommendable: true,
     actionReasonCode: "OUTPUT_IMPROVEMENT_VERIFIED",
-    // Contract requires the same-Run result EvidenceRef alongside attestation.
-    evidenceRefs: [verificationReference, resultReference],
+    // Selected-target proof points to child Evidence only inside the local
+    // attestation; public Action refs stay scoped to this parent Run.
+    evidenceRefs: [verificationReference],
     proposedChange: {
       field: "amountIn",
       before: adjustment.before,
@@ -369,9 +667,12 @@ export function buildVerifiedAdjustBaseline(
   return completedRunResultSchema.parse({
     ...baseline,
     verdict: "ADJUST",
-    summary: "A verified amount adjustment can satisfy the Economic Boundary",
+    summary:
+      targetProof === undefined
+        ? "A verified amount adjustment can satisfy the Economic Boundary"
+        : "An authorized input increase preserved the selected output target",
     recommendedActions: [recommendedAction],
-    evidence: [...baseline.evidence, verifiedOutput, attestation],
+    evidence: [...baseline.evidence, attestation],
     ruleResults,
   });
 }

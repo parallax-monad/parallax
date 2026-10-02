@@ -139,6 +139,118 @@ export function runStoreContract(
   const contractIt = options.skip === true ? it.skip : it;
   describe(`${implementationName} RunStore contract`, () => {
     contractIt(
+      "round-trips explicit input-increase authorization and linked child result proof",
+      async () => {
+        const store = await createStore();
+        const parent = completedResultWithBasicSimulation("authorized-parent");
+        parent.intent.amountInIncreaseAuthorization = {
+          availability: "available",
+          source: "user_declared",
+          consent: true,
+          maximumAmountInAtomic: "3",
+        };
+        const child = completedResultWithBasicSimulation("authorized-child");
+        // The legacy helper predates derivation-specific source validation.
+        // This opted-in storage fixture records a snapshot, not a receipt.
+        for (const result of [parent, child]) {
+          result.evidence = result.evidence.map((item) =>
+            item.kind === "generic" && item.key === "simulation-receipt"
+              ? { ...item, simulationInputRole: "RECIPIENT_BALANCE_SNAPSHOT" }
+              : item,
+          );
+        }
+        child.intent = { ...parent.intent, amountInAtomic: "2" };
+        child.parentRunId = parent.runId;
+        child.diff = {
+          previousRunId: parent.runId,
+          previousVerdict: parent.verdict,
+          changedFields: [{ field: "amountInAtomic", before: "1", after: "2" }],
+        };
+        const output = child.evidence.find(
+          (item) => item.kind === "simulated_token_out",
+        );
+        if (parent.p0 === undefined || output?.kind !== "simulated_token_out")
+          throw new Error("Expected synthetic storage fixture");
+        const executionBinding = {
+          preparedTransactionFingerprint: `sha256:${"d".repeat(64)}`,
+          blockNumber: "42",
+          blockHash: `0x${"e".repeat(64)}`,
+          candidateQuoteId: "candidate",
+          observedAt: "2026-09-01T00:00:00.000Z",
+        };
+        if (child.p0 === undefined)
+          throw new Error("Expected child P0 fixture");
+        child.p0.executionBinding = executionBinding;
+        parent.p0.expectationBaseline = {
+          status: "AVAILABLE",
+          chainId: parent.intent.chainId,
+          protocol: parent.intent.protocol,
+          tokenIn: "native",
+          tokenOut: "erc20:usdc",
+          amountInAtomic: "1",
+          amountOutAtomic: output.amountReceivedAtomic,
+          quoteId: "selected",
+          blockNumber: "41",
+          observedAt: "2026-09-01T00:00:00.000Z",
+          provenance: "synthetic-storage-fixture",
+        };
+        parent.p0.remediation = {
+          status: "VERIFIED",
+          evaluations: 1,
+          parentRunId: parent.runId,
+          childRunId: child.runId,
+          amountInAtomic: "2",
+          amountOutAtomic: output.amountReceivedAtomic,
+          quoteId: "candidate",
+          verificationBlock: "42",
+          verificationTime: "2026-09-01T00:00:00.000Z",
+          provenance: "synthetic-storage-fixture",
+          checkedScope: [],
+          verificationProof: {
+            targetAmountOutAtomic: output.amountReceivedAtomic,
+            targetQuoteId: "selected",
+            verifiedAmountOutAtomic: output.amountReceivedAtomic,
+            resultEvidenceRef: {
+              kind: "CROSS_RUN_EVIDENCE",
+              runId: child.runId,
+              evidenceId: output.key,
+            },
+            executionBinding,
+          },
+        };
+        await store.start(parent.runId, parent.intent);
+        await store.start(child.runId, child.intent, parent.runId);
+        await store.complete(child);
+        await store.complete(parent);
+        const recoveredParent = await store.get(parent.runId);
+        const recoveredChild = await store.get(child.runId);
+        expect(recoveredParent).toMatchObject({
+          status: "completed",
+          intent: parent.intent,
+          result: { p0: { remediation: parent.p0.remediation } },
+        });
+        expect(recoveredChild).toMatchObject({
+          status: "completed",
+          parentRunId: parent.runId,
+          intent: child.intent,
+          result: {
+            evidence: JSON.parse(JSON.stringify(child.evidence)),
+            p0: { executionBinding },
+          },
+        });
+        const legacy = completedResultWithBasicSimulation(
+          "authorization-legacy",
+        );
+        await store.start(legacy.runId, legacy.intent);
+        await store.complete(legacy);
+        const old = await store.get(legacy.runId);
+        expect(old?.intent.amountInIncreaseAuthorization).toBeUndefined();
+        expect(
+          old?.status === "completed" && old.result.p0?.remediation,
+        ).toEqual({ status: "NOT_RUN" });
+      },
+    );
+    contractIt(
       "round-trips the display projection for completed/failed Runs and preserves legacy absence",
       async () => {
         const store = await createStore();
