@@ -555,8 +555,9 @@ function sameAsset(
   right: AccountStateSnapshot["context"]["tokenIn"],
 ): boolean {
   if (left.kind !== right.kind) return false;
+  if (left.kind === "native") return true;
   return (
-    left.kind === "native" ||
+    right.kind === "erc20" &&
     left.address.toLowerCase() === right.address.toLowerCase()
   );
 }

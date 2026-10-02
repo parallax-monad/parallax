@@ -57,6 +57,7 @@ import {
   type ArbitrumTransaction,
   createArbitrumRpcClient,
 } from "./arbitrum-chain-adapter.js";
+import { isVerifiedArbitrumRemediationPublicationEligible } from "./arbitrum-remediation-publication.js";
 import { CamelotV3ProtocolAdapter } from "./camelot-v3-protocol-adapter.js";
 import type { BlockContext, ChainAdapter } from "./chain-adapter.js";
 import { ChainRegistry } from "./chain-registry.js";
@@ -811,12 +812,39 @@ async function evaluateArbitrumP0Decision(
   };
   const risk = evaluateBackendP0Risk(baseInput);
   const remediation = options.p0Risk?.remediation;
+  if (remediation === undefined) {
+    return {
+      risk,
+      ...(selectedQuote === undefined ? {} : { selectedQuote }),
+    };
+  }
+
+  // Remediation must not run when the canonical parent projection is UNKNOWN,
+  // even if the narrower quote/constraint gate could otherwise search. In
+  // particular, a child candidate cannot repair missing parent outcome proof.
+  const canonicalParent = projectGenericEvidenceToRunResult(
+    pipeline.runId,
+    pipeline.intent,
+    evidence,
+  );
+  if (canonicalParent.verdict === "UNKNOWN") {
+    return {
+      risk: { ...risk, verdict: "UNKNOWN" },
+      ...(selectedQuote === undefined ? {} : { selectedQuote }),
+    };
+  }
+
+  if (risk.verdict !== "STOP" && risk.verdict !== "ADJUST") {
+    return {
+      risk,
+      ...(selectedQuote === undefined ? {} : { selectedQuote }),
+    };
+  }
+
   if (
-    remediation === undefined ||
     selectedQuote === undefined ||
     pipeline.executeProviderPath === undefined ||
-    backendEvidenceState(evidence) !== "VERIFIED" ||
-    (risk.verdict !== "STOP" && risk.verdict !== "ADJUST")
+    backendEvidenceState(evidence) !== "VERIFIED"
   ) {
     return {
       risk,
@@ -875,13 +903,16 @@ async function projectVerifiedArbitrumRemediation(
   solver: SolverResult | undefined,
   runStore: RunStore,
 ): Promise<RunResult> {
-  if (projected.status !== "completed" || solver?.status !== "VERIFIED") {
+  const publication = { projected, solver };
+  if (!isVerifiedArbitrumRemediationPublicationEligible(publication)) {
     return projected;
   }
 
   let childRecord: CheckRunRecord | undefined;
   try {
-    childRecord = await runStore.get(solver.candidate.verification.childRunId);
+    childRecord = await runStore.get(
+      publication.solver.candidate.verification.childRunId,
+    );
   } catch {
     return projected;
   }
@@ -894,10 +925,14 @@ async function projectVerifiedArbitrumRemediation(
   }
 
   try {
-    return buildVerifiedAdjustBaseline(projected, childRecord.result, {
-      before: projected.intent.amountInAtomic,
-      after: solver.candidate.amountInAtomic,
-    });
+    return buildVerifiedAdjustBaseline(
+      publication.projected,
+      childRecord.result,
+      {
+        before: publication.projected.intent.amountInAtomic,
+        after: publication.solver.candidate.amountInAtomic,
+      },
+    );
   } catch {
     return projected;
   }
