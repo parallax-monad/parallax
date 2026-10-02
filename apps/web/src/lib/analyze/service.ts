@@ -90,7 +90,6 @@ function parseTokenMetadata(value: unknown): TokenMetadata | undefined {
     verifiedAtBlock: str(item.verifiedAtBlock),
   };
 }
-
 function parseTokenMetadataPair(value: unknown): TokenMetadataPair | undefined {
   const pair = obj(value);
   const tokenIn = parseTokenMetadata(pair?.tokenIn);
@@ -173,7 +172,6 @@ function decimalsFor(
 ): number | undefined {
   return metadata.get(value.toLowerCase());
 }
-
 export function applyTokenMetadata(
   result: CheckSwapResult,
   metadata: TokenMetadataPair | undefined,
