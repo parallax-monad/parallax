@@ -89,51 +89,6 @@ export type QuoteState =
     }
   | { status: "error"; apiFailure: ApiFailure };
 
-export type EvidenceStatus = "checked" | "unknown" | "unavailable";
-export type EvidenceSource =
-  | "native_rpc"
-  | "trace_rpc"
-  | "account_allowance"
-  | "explorer"
-  | "quote"
-  | "simulation"
-  | "unknown";
-export type EvidencePresentationMode = "LIVE" | "RECORDED_REPLAY" | "MOCK";
-export type EvidenceReason = string;
-export type EvidenceBlockContext = {
-  blockNumber: string;
-  blockHash?: string;
-  status: "observed" | "requested";
-};
-export type EvidenceCapabilityStatus =
-  | "checked"
-  | "not_checked"
-  | "unknown"
-  | "unavailable";
-export type EvidenceCapabilityPresentation = {
-  key: string;
-  summary: string;
-  stage: "SIMULATE";
-  status: EvidenceCapabilityStatus;
-  sourceCategory: EvidenceSource;
-  observedAt?: string;
-  reason?: EvidenceReason;
-  mode?: EvidencePresentationMode;
-  blockContext?: EvidenceBlockContext;
-};
-export type EvidencePresentation = {
-  version: 1;
-  items: Array<{
-    evidenceKey: string;
-    status: EvidenceStatus;
-    sourceCategory: EvidenceSource;
-    observedAt?: string;
-    reason?: EvidenceReason;
-    mode?: EvidencePresentationMode;
-  }>;
-  capabilities: EvidenceCapabilityPresentation[];
-};
-
 export type EvidenceOrigin = "live" | "replay" | "derived" | "mock";
 export type EvidenceItem = {
   id: string;
@@ -146,19 +101,13 @@ export type EvidenceItem = {
     | "rpc"
     | "unknown";
   label: Copy;
-  value?: string;
+  value: string;
   origin: EvidenceOrigin;
-  status?: EvidenceStatus;
-  source?: EvidenceSource;
-  observedAt?: string;
   blockNumber?: string;
-  blockContextStatus?: "observed" | "requested";
   runtimeVersion?: string;
   runtimeRevision?: string;
   fixtureId?: string;
   reproducibility?: string;
-  reason?: Copy;
-  mode?: EvidencePresentationMode;
   isMock?: boolean;
 };
 
@@ -251,24 +200,12 @@ export type P0ConfigState =
     }
   | { status: "error"; apiFailure: ApiFailure };
 
-export type ProviderCapabilitySummary = {
-  id: string;
-  summary: string;
-  status: EvidenceCapabilityStatus;
-  sourceCategory: EvidenceSource;
-  observedAt?: string;
-  reason?: string;
-  mode?: EvidencePresentationMode;
-  blockContext?: EvidenceBlockContext;
-};
-
 export type ProviderEvidenceSummary = {
   status: string;
   source?: string;
   observedAt?: string;
   blockNumber?: string;
   blockHash?: string;
-  capabilities?: ProviderCapabilitySummary[];
 };
 
 export type ExecutionEvidenceSummary = {
@@ -297,7 +234,6 @@ export type CheckSwapResult = {
   irrelevantActions: ActionSuggestion[];
   checked: Copy[];
   notChecked: Copy[];
-  capabilities?: EvidenceCapabilityPresentation[];
   evidence: EvidenceItem[];
   ruleResults: RuleResult[];
   unknowns: UnknownItem[];
