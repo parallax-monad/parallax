@@ -65,9 +65,17 @@ export function buildStateOverrides(post) {
       override.balance = entry.balance.toLowerCase();
     }
     if (entry.nonce !== undefined) {
-      if (!validQuantity(entry.nonce))
+      if (
+        typeof entry.nonce === "number" &&
+        Number.isSafeInteger(entry.nonce) &&
+        entry.nonce >= 0
+      ) {
+        override.nonce = `0x${entry.nonce.toString(16)}`;
+      } else if (validQuantity(entry.nonce)) {
+        override.nonce = entry.nonce.toLowerCase();
+      } else {
         throw new Error("invalid post-state nonce");
-      override.nonce = entry.nonce.toLowerCase();
+      }
     }
     if (entry.code !== undefined) {
       if (
@@ -95,6 +103,19 @@ function sha(value) {
       .update(typeof value === "string" ? value : JSON.stringify(value))
       .digest("hex")
   );
+}
+
+function countNestedCalls(trace) {
+  let count = 0;
+  function walk(frame) {
+    const calls = Array.isArray(frame?.calls) ? frame.calls : [];
+    for (const call of calls) {
+      count += 1;
+      walk(call);
+    }
+  }
+  walk(trace);
+  return count;
 }
 
 async function rpc(url, requestId, method, params) {
@@ -155,6 +176,17 @@ async function main() {
   ]);
   const preBalance = BigInt(preBalanceRaw);
 
+  const balanceOfTrace = await rpc(url, 3, "debug_traceCall", [
+    { to: tokenOut, data: balanceData },
+    blockTag,
+    { tracer: "callTracer" },
+  ]);
+  if (balanceOfTrace?.error || balanceOfTrace?.revertReason)
+    throw new Error("balanceOf trace failed");
+  const balanceOfNestedCallCount = countNestedCalls(balanceOfTrace);
+  if (balanceOfNestedCallCount !== 0)
+    throw new Error("balanceOf code path has nested calls");
+
   async function replay(idBase) {
     const diff = await rpc(url, idBase, "debug_traceCall", [
       { from: tx.from, to: tx.to, data: tx.data, value: tx.value },
@@ -162,16 +194,21 @@ async function main() {
       { tracer: "prestateTracer", tracerConfig: { diffMode: true } },
     ]);
     if (!diff?.post) throw new Error("prestateTracer post diff unavailable");
-    const overrides = buildStateOverrides(diff.post);
+    const validatedPostDiff = buildStateOverrides(diff.post);
 
-    const tokenOverride = overrides[tokenOut];
+    const tokenOverride = validatedPostDiff[tokenOut];
     if (!tokenOverride?.stateDiff)
       throw new Error("tokenOut post storage diff unavailable");
+    if (Object.keys(tokenOverride).some((key) => key !== "stateDiff"))
+      throw new Error("tokenOut post-state changed outside storage");
 
+    const tokenLocalOverride = {
+      [tokenOut]: { stateDiff: tokenOverride.stateDiff },
+    };
     const postBalanceRaw = await rpc(url, idBase + 1, "eth_call", [
       { to: tokenOut, data: balanceData },
       blockTag,
-      overrides,
+      tokenLocalOverride,
     ]);
     const postBalance = BigInt(postBalanceRaw);
     const delta = postBalance - preBalance;
@@ -179,8 +216,9 @@ async function main() {
     return {
       capturedAt: new Date().toISOString(),
       prestateDiffFingerprint: sha(diff),
-      stateOverridesFingerprint: sha(overrides),
-      changedAddressCount: Object.keys(overrides).length,
+      validatedPostDiffFingerprint: sha(validatedPostDiff),
+      tokenLocalOverrideFingerprint: sha(tokenLocalOverride),
+      changedAddressCount: Object.keys(validatedPostDiff).length,
       tokenOutChangedStorageSlotCount: Object.keys(tokenOverride.stateDiff)
         .length,
       preBalanceAtomic: preBalance.toString(),
@@ -220,17 +258,27 @@ async function main() {
     },
     method: {
       preBalance: "eth_call balanceOf at pinned pre-state",
+      balanceOfCallTrace: {
+        tracer: "callTracer",
+        nestedCallCount: balanceOfNestedCallCount,
+        resultFingerprint: sha(balanceOfTrace),
+      },
       executionDiff: "debug_traceCall prestateTracer(diffMode=true)",
       postBalance:
-        "eth_call balanceOf at pinned state with full returned post-state diff as state overrides",
+        "eth_call balanceOf at pinned state with tokenOut-local post storage diff as state override",
+      stateOverrideScope: "TOKEN_OUT_STORAGE_ONLY",
     },
     expectedQuoteAmountOutAtomic: String(prepared.quoteAmountOutAtomic),
     replays: [first, second],
     replayComparison: {
       prestateDiffFingerprintStable:
         first.prestateDiffFingerprint === second.prestateDiffFingerprint,
-      stateOverridesFingerprintStable:
-        first.stateOverridesFingerprint === second.stateOverridesFingerprint,
+      validatedPostDiffFingerprintStable:
+        first.validatedPostDiffFingerprint ===
+        second.validatedPostDiffFingerprint,
+      tokenLocalOverrideFingerprintStable:
+        first.tokenLocalOverrideFingerprint ===
+        second.tokenLocalOverrideFingerprint,
       postBalanceStable: first.postBalanceAtomic === second.postBalanceAtomic,
       deltaStable: first.deltaAtomic === second.deltaAtomic,
     },
@@ -241,7 +289,9 @@ async function main() {
         second.deltaAtomic === String(prepared.quoteAmountOutAtomic),
     },
     limitations: [
-      "The balance delta is reconstructed from the same Provider's prestateTracer post-state diff; this does not independently establish Provider completeness or Provider SUCCESS.",
+      "The balance delta is reconstructed from the same Provider's prestateTracer tokenOut-local post-storage diff; this does not independently establish Provider completeness or Provider SUCCESS.",
+      "QuickNode rejects full post-state override replay for at least one Arbitrum system address, so this capture does not claim full-state replay equivalence.",
+      "The pinned balanceOf call has no nested calls in the observed code path; this narrows but does not eliminate the need for Contract/Provider review before treating this candidate as canonical Evidence.",
       "This qualification capture is not production Backend integration and does not create canonical Evidence by itself.",
       "This capture does not establish simulation.complete, receipt completeness, warnings completeness, Risk PROCEED, or VERIFIED remediation.",
       "Raw Provider payload, RPC URL, and credentials are not persisted.",

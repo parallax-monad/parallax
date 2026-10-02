@@ -71,6 +71,16 @@ describe("BE-107 recipient balance-delta qualification helpers", () => {
     ).toThrow(/storage slot\/value/);
   });
 
+  it("normalizes numeric tracer nonces to state-override quantities", () => {
+    expect(
+      buildStateOverrides({
+        [ADDRESS]: { nonce: 343 },
+      }),
+    ).toEqual({
+      [ADDRESS]: { nonce: "0x157" },
+    });
+  });
+
   it("rejects malformed balance and nonce quantities", () => {
     expect(() =>
       buildStateOverrides({
@@ -78,11 +88,13 @@ describe("BE-107 recipient balance-delta qualification helpers", () => {
       }),
     ).toThrow(/post-state balance/);
 
-    expect(() =>
-      buildStateOverrides({
-        [ADDRESS]: { nonce: "-1" },
-      }),
-    ).toThrow(/post-state nonce/);
+    for (const nonce of ["-1", -1, 1.5, Number.MAX_SAFE_INTEGER + 1]) {
+      expect(() =>
+        buildStateOverrides({
+          [ADDRESS]: { nonce },
+        }),
+      ).toThrow(/post-state nonce/);
+    }
   });
 
   it("rejects empty post-state diffs", () => {
