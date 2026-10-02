@@ -180,3 +180,78 @@ describe("BE-107 trace event net normalization", () => {
     expect(result.malformedPaths).toEqual(["0.calls"]);
   });
 });
+
+describe("BE-107 returned-trace movement inventory", () => {
+  it("records native call-value edges and transfer-topic movements", async () => {
+    const { inventoryReturnedTraceMovements } = await import(
+      "./verified-remediation-trace-event-normalization.mjs"
+    );
+    const result = inventoryReturnedTraceMovements({
+      trace: {
+        from: RECIPIENT,
+        to: OTHER,
+        value: "0x10",
+        logs: [transfer(OTHER, RECIPIENT, 5n)],
+        calls: [
+          {
+            from: OTHER,
+            to: TOKEN,
+            value: "0x0",
+            logs: [transfer(RECIPIENT, OTHER, 2n)],
+          },
+        ],
+      },
+    });
+
+    expect(result.returnedTraceInventoryUsable).toBe(true);
+    expect(result.nativeValueMovements).toHaveLength(1);
+    expect(result.nativeValueMovements[0]).toMatchObject({
+      from: RECIPIENT,
+      to: OTHER,
+      amountAtomic: "16",
+      successfulAncestry: true,
+    });
+    expect(result.transferTopicMovements).toHaveLength(2);
+    expect(result.observedTransferTokenAddresses).toEqual([TOKEN]);
+  });
+
+  it("preserves reverted movements but marks their ancestry", async () => {
+    const { inventoryReturnedTraceMovements } = await import(
+      "./verified-remediation-trace-event-normalization.mjs"
+    );
+    const result = inventoryReturnedTraceMovements({
+      trace: {
+        calls: [
+          {
+            from: OTHER,
+            to: TOKEN,
+            value: "0x1",
+            error: "execution reverted",
+            logs: [transfer(OTHER, RECIPIENT, 4n)],
+          },
+        ],
+      },
+    });
+
+    expect(result.returnedTraceInventoryUsable).toBe(true);
+    expect(result.nativeValueMovements[0].successfulAncestry).toBe(false);
+    expect(result.transferTopicMovements[0].successfulAncestry).toBe(false);
+  });
+
+  it("fails closed on malformed value-bearing movement", async () => {
+    const { inventoryReturnedTraceMovements } = await import(
+      "./verified-remediation-trace-event-normalization.mjs"
+    );
+    const result = inventoryReturnedTraceMovements({
+      trace: {
+        from: RECIPIENT,
+        to: "not-an-address",
+        value: "0x10",
+      },
+    });
+
+    expect(result.returnedTraceInventoryUsable).toBe(false);
+    expect(result.failClosedReasons).toContain("MALFORMED_TRACE_STRUCTURE");
+    expect(result.malformedPaths).toContain("0.nativeValueAddress");
+  });
+});

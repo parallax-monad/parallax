@@ -157,3 +157,113 @@ export function normalizeRecipientTokenOutTransfers({
 }
 
 export { TRANSFER_TOPIC, ZERO_ADDRESS };
+
+function parseQuantity(value) {
+  if (value === undefined || value === null) return 0n;
+  if (typeof value !== "string" || !/^0x[0-9a-fA-F]+$/.test(value)) return null;
+  try {
+    return BigInt(value);
+  } catch {
+    return null;
+  }
+}
+
+export function inventoryReturnedTraceMovements({ trace }) {
+  if (!trace || typeof trace !== "object" || Array.isArray(trace))
+    throw new Error("trace must be an object");
+
+  const malformed = [];
+  const nativeValueMovements = [];
+  const transferTopicMovements = [];
+  let totalTraceLogCount = 0;
+
+  function walk(frame, path = "0", ancestorErrored = false) {
+    if (!frame || typeof frame !== "object" || Array.isArray(frame)) {
+      malformed.push(path);
+      return;
+    }
+    const errored =
+      ancestorErrored || Boolean(frame.error) || Boolean(frame.revertReason);
+    const from = normalizeAddress(frame.from);
+    const to = normalizeAddress(frame.to);
+    const value = parseQuantity(frame.value);
+
+    if (value === null) malformed.push(path + ".value");
+    if (value !== null && value > 0n) {
+      if (!from || !to) malformed.push(path + ".nativeValueAddress");
+      else {
+        nativeValueMovements.push({
+          path,
+          from,
+          to,
+          amountAtomic: value.toString(),
+          successfulAncestry: !errored,
+          callType: typeof frame.type === "string" ? frame.type : null,
+        });
+      }
+    }
+
+    const logs = frameLogs(frame, path, malformed);
+    totalTraceLogCount += logs.length;
+    for (let index = 0; index < logs.length; index++) {
+      const log = logs[index];
+      if (!log || typeof log !== "object" || Array.isArray(log)) {
+        malformed.push(path + ".log" + index);
+        continue;
+      }
+      if (!Array.isArray(log.topics)) continue;
+      const topic0 =
+        typeof log.topics[0] === "string" ? log.topics[0].toLowerCase() : "";
+      if (topic0 !== TRANSFER_TOPIC) continue;
+
+      const token = normalizeAddress(log.address);
+      const transferFrom = topicAddress(log.topics[1]);
+      const transferTo = topicAddress(log.topics[2]);
+      const amount = parseAmount(log.data);
+      if (
+        log.topics.length !== 3 ||
+        token === null ||
+        transferFrom === null ||
+        transferTo === null ||
+        amount === null
+      ) {
+        malformed.push(path + ".log" + index + ".transfer");
+        continue;
+      }
+      transferTopicMovements.push({
+        path: path + ".log" + index,
+        token,
+        from: transferFrom,
+        to: transferTo,
+        amountAtomic: amount.toString(),
+        successfulAncestry: !errored,
+        mint: transferFrom === ZERO_ADDRESS,
+        burn: transferTo === ZERO_ADDRESS,
+        selfTransfer: transferFrom === transferTo,
+      });
+    }
+
+    const calls = childFrames(frame, path, malformed);
+    for (let index = 0; index < calls.length; index++)
+      walk(calls[index], path + "." + index, errored);
+  }
+
+  walk(trace);
+
+  const topLevelSucceeded = !trace.error && !trace.revertReason;
+  const failClosedReasons = [];
+  if (!topLevelSucceeded) failClosedReasons.push("TOP_LEVEL_REVERTED");
+  if (malformed.length > 0) failClosedReasons.push("MALFORMED_TRACE_STRUCTURE");
+  return {
+    topLevelSucceeded,
+    returnedTraceInventoryUsable: failClosedReasons.length === 0,
+    failClosedReasons,
+    malformedPaths: malformed,
+    totalTraceLogCount,
+    nativeValueMovements,
+    transferTopicMovements,
+    observedTransferTokenAddresses: [
+      ...new Set(transferTopicMovements.map((item) => item.token)),
+    ].sort(),
+  };
+}
