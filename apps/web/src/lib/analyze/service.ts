@@ -7,6 +7,7 @@ import type {
   ApiFailureIssue,
   CheckSwapInput,
   CheckSwapResult,
+  EvidenceCapabilityStatus,
   EvidenceItem,
   P0ConfigState,
   QuotePreview,
@@ -304,6 +305,7 @@ function evidenceSource(value: string | undefined): EvidenceItem["source"] {
   if (value === "quote") return "quote";
   if (value === "simulation") return "simulation";
   if (value === "native_rpc" || value === "trace_rpc") return value;
+  if (value === "rpc") return "native_rpc";
   if (value === "account_allowance" || value === "explorer") return value;
   return "unknown";
 }
@@ -345,6 +347,7 @@ function evidence(value: unknown, replay: boolean): EvidenceItem | undefined {
     runtimeRevision: str(item?.runtimeRevision),
     fixtureId: str(item?.fixtureId),
     reproducibility: str(item?.reproducibility),
+    reason: str(item?.reason) ? cp(str(item?.reason) as string) : undefined,
     isMock,
   };
 }
@@ -456,6 +459,7 @@ function failed(
         reason: failureCopy(apiFailure),
       },
     ],
+    unavailable: [],
     intent: {
       tokenIn: input.tokenIn,
       tokenOut: input.tokenOut,
@@ -544,6 +548,23 @@ function mapRun(
   const provider = obj(providerEvidence?.provider);
   const execution = obj(providerEvidence?.execution);
   const providerProvenance = obj(providerEvidence?.provenance);
+  const scopeValues = (value: unknown) =>
+    arr(value)
+      .map(str)
+      .filter((item): item is string => !!item);
+  const traceRpc = obj(obj(providerEvidence?.providerData)?.traceRpc);
+  const providerCapabilities = traceRpc?.capabilities;
+  const traceCapabilities = providerCapabilities
+    ? Object.entries(providerCapabilities).map(([id, value]) => {
+        const capability = obj(value);
+        return {
+          id,
+          status: (str(capability?.status) ??
+            "unknown") as EvidenceCapabilityStatus,
+          reason: str(capability?.reason),
+        };
+      })
+    : undefined;
   const remediation = obj(p0?.remediation);
   const baseline = obj(p0?.expectationBaseline);
   const basicSimulationBlockNumber = str(basicSimulation?.blockNumber);
@@ -581,6 +602,9 @@ function mapRun(
         label: cp(str(item.label) ?? "Unknown"),
         reason: cp(str(item.reason) ?? "No reason provided"),
       })),
+    unavailable: scope
+      .filter((item) => item.status === "unavailable")
+      .map((item) => cp(str(item.label) ?? str(item.key) ?? "Unavailable")),
     evidence: mappedEvidence,
     ruleResults: arr(run?.ruleResults)
       .map(rule)
@@ -666,6 +690,11 @@ function mapRun(
           source: str(provider?.providerId),
           observedAt: str(providerProvenance?.fetchedAt),
           blockNumber: str(providerProvenance?.blockNumber),
+          blockHash: str(providerProvenance?.blockHash),
+          checkedScope: scopeValues(providerEvidence?.checkedScope),
+          unknownScope: scopeValues(providerEvidence?.unknownScope),
+          unavailableScope: scopeValues(providerEvidence?.unavailableScope),
+          capabilities: traceCapabilities,
         }
       : undefined,
     executionEvidence: execution

@@ -220,12 +220,22 @@ export type P0ConfigState =
     }
   | { status: "error"; apiFailure: ApiFailure };
 
+export type ProviderCapabilitySummary = {
+  id: string;
+  status: EvidenceCapabilityStatus;
+  reason?: string;
+};
+
 export type ProviderEvidenceSummary = {
   status: string;
   source?: string;
   observedAt?: string;
   blockNumber?: string;
   blockHash?: string;
+  checkedScope?: string[];
+  unknownScope?: string[];
+  unavailableScope?: string[];
+  capabilities?: ProviderCapabilitySummary[];
 };
 
 export type ExecutionEvidenceSummary = {
@@ -257,6 +267,7 @@ export type CheckSwapResult = {
   evidence: EvidenceItem[];
   ruleResults: RuleResult[];
   unknowns: UnknownItem[];
+  unavailable?: Copy[];
   intent: IntentSummary;
   diff?: RunDiff;
   quote: { expectedOutput: string; route: Copy; blockNumber: string };
