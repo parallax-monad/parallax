@@ -10,13 +10,13 @@ describe("HeroEvidenceReceipt", () => {
     expect(html).toContain("DEMO PRESET");
     expect(html).toContain("SAMPLE DATA");
     expect(html).toContain("READ ONLY");
-    expect(html).toContain("DEMO PRESET / SAMPLE");
+    expect(html).toContain("ARBITRUM SEPOLIA");
     expect(html).not.toContain("13,842,911");
     expect(html).not.toContain("v0.4");
     expect(html.match(/data-evidence-row/g)).toHaveLength(6);
     expect(html).toContain("Economic boundary");
-    expect(html).toContain("91.77 USDC");
-    expect(html).toContain("93.40 USDC");
+    expect(html).toContain("22.50 USDC");
+    expect(html).toContain("23.00 USDC");
     expect(html).toContain("ADJUST");
   });
 

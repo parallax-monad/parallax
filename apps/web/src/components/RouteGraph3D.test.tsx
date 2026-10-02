@@ -9,7 +9,8 @@ import { detachAndDisposeRenderer, getTouchDragIntent } from "./RouteGraph3D";
 
 describe("RouteGraph3D", () => {
   test("describes the hero visualization as a protocol route", () => {
-    expect(getEvidenceTraceAriaLabel("en")).toContain("Protocol route");
+    expect(getEvidenceTraceAriaLabel("en")).toContain("protocol constellation");
+    expect(getEvidenceTraceAriaLabel("en")).toContain("Arbitrum Sepolia");
     expect(getEvidenceTraceAriaLabel("en")).not.toContain("DeFi ecosystem");
   });
 
@@ -17,12 +18,12 @@ describe("RouteGraph3D", () => {
     const labels = EVIDENCE_TRACE_MARKERS.map((marker) => marker.label);
 
     expect(labels).toEqual([
-      "Kuru",
-      "PancakeSwap V2 / V3",
-      "WMON",
-      "ERC-20 / native MON",
-      "ERC-721",
-      "ERC-1155",
+      "Camelot V3",
+      "Arbitrum Sepolia",
+      "WETH",
+      "USDC",
+      "ETH",
+      "Native Balance",
     ]);
     expect(labels).not.toContain("BOUNDARY CHECK");
   });
