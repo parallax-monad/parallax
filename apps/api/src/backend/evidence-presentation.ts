@@ -108,34 +108,43 @@ function nativeCapabilities(
   const capability = (
     key: string,
     summary: string,
-    status: string,
-  ): EvidenceCapabilityPresentation => ({
-    ...common,
-    key,
-    summary,
-    ...(status === "NOT_RUN" ? {} : { observedAt: simulation.observedAt }),
     status:
-      status === "NOT_RUN"
-        ? "not_checked"
+      | (typeof simulation.call)["status"]
+      | (typeof simulation.gasEstimate)["status"],
+  ): EvidenceCapabilityPresentation => {
+    const availability = {
+      NOT_RUN: "not_checked",
+      UNAVAILABLE: "unavailable",
+      SUCCEEDED: "checked",
+      AVAILABLE: "checked",
+      REVERTED: "checked",
+    } as const satisfies Record<
+      typeof status,
+      EvidenceCapabilityPresentation["status"]
+    >;
+    return {
+      ...common,
+      key,
+      summary,
+      ...(status === "NOT_RUN" ? {} : { observedAt: simulation.observedAt }),
+      status: availability[status],
+      ...(status === "NOT_RUN"
+        ? { reason: "check_not_run" as const }
         : status === "UNAVAILABLE"
-          ? "unavailable"
-          : "checked",
-    ...(status === "NOT_RUN"
-      ? { reason: "check_not_run" as const }
-      : status === "UNAVAILABLE"
-        ? {
-            reason:
-              simulation.failureStage === "PREPARE"
-                ? ("binding_mismatch" as const)
-                : simulation.failureStage === "BLOCK"
-                  ? ("context_unverified" as const)
+          ? {
+              reason:
+                simulation.failureStage === "PREPARE"
+                  ? ("binding_mismatch" as const)
                   : result.providerEvidence?.provider.failure?.code ===
                       "TIMEOUT"
                     ? ("timeout" as const)
-                    : ("rpc_unavailable" as const),
-          }
-        : {}),
-  });
+                    : simulation.failureStage === "BLOCK"
+                      ? ("context_unverified" as const)
+                      : ("rpc_unavailable" as const),
+            }
+          : {}),
+    };
+  };
   return [
     capability(
       "native-rpc.eth_call",
@@ -185,13 +194,26 @@ function traceCapabilities(
   const checked = trace.checkedScope as string[];
   const unknown = trace.unknownScope as string[];
   const unavailable = trace.unavailableScope as string[];
+  // Context failures stop evaluation before either trace operation can run.
+  // Only inherit a reason when both normalized operations agree and the
+  // context was not checked; never borrow an independent tracer failure.
+  const call = capabilities.callTracer;
+  const diff = capabilities.prestateTracerDiff;
+  const contextFailure =
+    binding !== undefined &&
+    !checked.includes("trace-rpc.pinned-block") &&
+    call.status !== "observed" &&
+    call.status === diff.status &&
+    call.reason === diff.reason
+      ? call
+      : undefined;
   const operations: readonly (readonly [
     string,
     string,
     (typeof capabilities)[string] | undefined,
   ])[] = [
-    ["trace-rpc.chain", "Trace chain identity", undefined],
-    ["trace-rpc.pinned-block", "Trace pinned block", undefined],
+    ["trace-rpc.chain", "Trace chain identity", contextFailure],
+    ["trace-rpc.pinned-block", "Trace pinned block", contextFailure],
     [
       "trace-rpc.callTracer",
       "Supplementary call trace",
@@ -205,13 +227,21 @@ function traceCapabilities(
   ];
   return operations.map(
     ([scopeKey, summary, operation]): EvidenceCapabilityPresentation => {
+      const chainFailure =
+        scopeKey === "trace-rpc.chain" &&
+        !checked.includes(scopeKey) &&
+        contextFailure !== undefined;
       const status = checked.includes(scopeKey)
         ? "checked"
-        : unknown.includes(scopeKey)
-          ? "unknown"
-          : unavailable.includes(scopeKey)
+        : chainFailure
+          ? contextFailure.status === "unavailable"
             ? "unavailable"
-            : "unknown";
+            : "unknown"
+          : unknown.includes(scopeKey)
+            ? "unknown"
+            : unavailable.includes(scopeKey)
+              ? "unavailable"
+              : "unknown";
       return {
         key: scopeKey,
         summary,
@@ -237,7 +267,9 @@ function traceCapabilities(
           ? {}
           : {
               reason:
-                !unknown.includes(scopeKey) && !unavailable.includes(scopeKey)
+                !chainFailure &&
+                !unknown.includes(scopeKey) &&
+                !unavailable.includes(scopeKey)
                   ? "not_recorded"
                   : (operation?.reason ?? "context_unverified"),
             }),

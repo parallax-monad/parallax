@@ -257,6 +257,32 @@ describe("Backend Evidence presentation", () => {
     expect(call.observedAt).toBeUndefined();
   });
 
+  it("preserves Native timeout during block revalidation", () => {
+    const run = result();
+    if (!run.p0?.basicSimulation || !run.providerEvidence)
+      throw new Error("missing fixture");
+    run.p0.basicSimulation.failureStage = "BLOCK";
+    run.providerEvidence.provider.failure = {
+      code: "TIMEOUT",
+      message: "RPC timed out",
+      integrationStatus: "TIMEOUT",
+      source: "rpc",
+      normalization: "PRESERVED",
+    };
+    const view = projectEvidencePresentation(run);
+    expect(
+      view.capabilities.find((item) => item.key === "native-rpc.estimateGas"),
+    ).toMatchObject({ status: "unavailable", reason: "timeout" });
+    expect(run.p0.basicSimulation.failureStage).toBe("BLOCK");
+    expect(run.verdict).toBe("UNKNOWN");
+    delete run.providerEvidence.provider.failure;
+    expect(
+      projectEvidencePresentation(run).capabilities.find(
+        (item) => item.key === "native-rpc.estimateGas",
+      ),
+    ).toMatchObject({ status: "unavailable", reason: "context_unverified" });
+  });
+
   it("keeps Trace unknown/unavailable independent of Native and excludes raw extras", () => {
     const run = result();
     if (!run.providerEvidence) throw new Error("missing fixture provider");
@@ -308,5 +334,97 @@ describe("Backend Evidence presentation", () => {
         (item) => item.sourceCategory !== "trace_rpc",
       ),
     ).toBe(true);
+  });
+
+  it.each([
+    ["unknown", "timeout"],
+    ["unavailable", "rpc_unavailable"],
+    ["unknown", "context_unverified"],
+  ] as const)(
+    "preserves pinned-block context failure %s/%s",
+    (status, reason) => {
+      const run = result();
+      if (!run.providerEvidence) throw new Error("missing fixture provider");
+      const failure = { status, reason };
+      const scopes = [
+        "trace-rpc.pinned-block",
+        "trace-rpc.callTracer",
+        "trace-rpc.prestateTracer.diffMode",
+      ];
+      run.providerEvidence.providerData.traceRpc = JSON.parse(
+        JSON.stringify({
+          ...trace(),
+          status: status === "unavailable" ? "unavailable" : "unknown",
+          capabilities: { callTracer: failure, prestateTracerDiff: failure },
+          checkedScope: ["trace-rpc.chain"],
+          unknownScope: status === "unknown" ? scopes : [],
+          unavailableScope: status === "unavailable" ? scopes : [],
+        }),
+      );
+      const view = projectEvidencePresentation(run);
+      expect(
+        view.capabilities.find((item) => item.key === "trace-rpc.pinned-block"),
+      ).toMatchObject({
+        status,
+        reason,
+        blockContext: { status: "requested" },
+      });
+      expect(
+        view.capabilities.find((item) => item.key === "trace-rpc.chain"),
+      ).toMatchObject({ status: "checked" });
+    },
+  );
+
+  it("preserves an initial chain timeout without inventing a block check", () => {
+    const run = result();
+    if (!run.providerEvidence) throw new Error("missing fixture provider");
+    run.providerEvidence.providerData.traceRpc = JSON.parse(
+      JSON.stringify({
+        ...trace(),
+        capabilities: {
+          callTracer: { status: "unknown", reason: "timeout" },
+          prestateTracerDiff: { status: "unknown", reason: "timeout" },
+        },
+        checkedScope: [],
+        unknownScope: [
+          "trace-rpc.callTracer",
+          "trace-rpc.prestateTracer.diffMode",
+        ],
+        unavailableScope: [],
+      }),
+    );
+    const view = projectEvidencePresentation(run);
+    expect(
+      view.capabilities.find((item) => item.key === "trace-rpc.chain"),
+    ).toMatchObject({ status: "unknown", reason: "timeout" });
+    expect(
+      view.capabilities.find((item) => item.key === "trace-rpc.pinned-block"),
+    ).toMatchObject({ status: "unknown", reason: "not_recorded" });
+  });
+
+  it("does not copy matching tracer failures into checked context", () => {
+    const run = result();
+    if (!run.providerEvidence) throw new Error("missing fixture provider");
+    run.providerEvidence.providerData.traceRpc = JSON.parse(
+      JSON.stringify({
+        ...trace(),
+        capabilities: {
+          callTracer: { status: "unknown", reason: "timeout" },
+          prestateTracerDiff: { status: "unknown", reason: "timeout" },
+        },
+        unknownScope: [
+          "trace-rpc.callTracer",
+          "trace-rpc.prestateTracer.diffMode",
+        ],
+        unavailableScope: [],
+      }),
+    );
+    for (const item of projectEvidencePresentation(run).capabilities.filter(
+      (item) =>
+        item.key === "trace-rpc.chain" || item.key === "trace-rpc.pinned-block",
+    )) {
+      expect(item.status).toBe("checked");
+      expect(item.reason).toBeUndefined();
+    }
   });
 });
