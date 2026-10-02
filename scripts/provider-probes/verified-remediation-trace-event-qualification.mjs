@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
+import { normalizeRecipientTokenOutTransfers } from "./verified-remediation-trace-event-normalization.mjs";
 
 const RPC = process.env.ARBITRUM_SEPOLIA_RPC_URL;
 if (!RPC) throw new Error("ARBITRUM_SEPOLIA_RPC_URL is required");
@@ -34,8 +35,6 @@ const unsigned = {
 const txFingerprint =
   "sha256:" +
   createHash("sha256").update(JSON.stringify(unsigned)).digest("hex");
-const TRANSFER =
-  "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
 const IMPL_SLOT =
   "0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc";
 const BEACON_SLOT =
@@ -56,7 +55,6 @@ const sha = (x) =>
   createHash("sha256")
     .update(typeof x === "string" ? x : JSON.stringify(x))
     .digest("hex");
-const addrTopic = (t) => ("0x" + String(t).slice(-40)).toLowerCase();
 const slotAddr = (v) =>
   /^0x[0-9a-fA-F]{64}$/.test(v) && !/^0x0{64}$/.test(v)
     ? ("0x" + v.slice(-40)).toLowerCase()
@@ -86,65 +84,40 @@ async function replay() {
     { tracer: "callTracer", tracerConfig: { withLog: true } },
   ]);
   if (!result || typeof result !== "object") throw new Error("invalid trace");
-  const topSucceeded = !result.error && !result.revertReason;
-  const events = [];
-  let anyErroredAncestorForRelevantLog = false;
-  let logCount = 0;
-  function walk(frame, path = "0", ancestorErrored = false) {
-    if (!frame || typeof frame !== "object") return;
-    const errored =
-      ancestorErrored || Boolean(frame.error) || Boolean(frame.revertReason);
-    const logs = Array.isArray(frame.logs) ? frame.logs : [];
-    logCount += logs.length;
-    for (let i = 0; i < logs.length; i++) {
-      const l = logs[i],
-        topics = Array.isArray(l?.topics) ? l.topics : [];
-      if (
-        String(l?.address ?? "").toLowerCase() !== tokenOut ||
-        String(topics[0] ?? "").toLowerCase() !== TRANSFER ||
-        topics.length < 3
-      )
-        continue;
-      const from = addrTopic(topics[1]),
-        to = addrTopic(topics[2]);
-      const amount = /^0x[0-9a-fA-F]+$/.test(l.data ?? "")
-        ? BigInt(l.data).toString()
-        : null;
-      if (errored) anyErroredAncestorForRelevantLog = true;
-      events.push({
-        path: path + ".log" + i,
-        from,
-        to,
-        amount,
-        successfulAncestry: !errored,
-      });
-    }
-    for (let i = 0; i < (frame.calls ?? []).length; i++)
-      walk(frame.calls[i], path + "." + i, errored);
+  const normalized = normalizeRecipientTokenOutTransfers({
+    trace: result,
+    tokenOut,
+    recipient,
+  });
+  if (!normalized.qualificationUsable) {
+    throw new Error(
+      `trace event normalization failed closed: ${normalized.failClosedReasons.join(",")}`,
+    );
   }
-  walk(result);
-  const valid = events.filter((e) => e.successfulAncestry && e.amount !== null);
-  let incoming = 0n,
-    outgoing = 0n;
-  for (const e of valid) {
-    const a = BigInt(e.amount);
-    if (e.to === recipient && e.from !== recipient) incoming += a;
-    if (e.from === recipient && e.to !== recipient) outgoing += a;
-  }
+  const events = normalized.normalized.events.map(
+    ({ path, from, to, amount, successfulAncestry }) => ({
+      path,
+      from,
+      to,
+      amount,
+      successfulAncestry,
+    }),
+  );
   return {
     capturedAt,
     resultFingerprint: sha(result),
-    topLevelSucceeded: topSucceeded,
-    totalTraceLogCount: logCount,
-    relevantTokenOutTransferCount: events.length,
+    topLevelSucceeded: normalized.topLevelSucceeded,
+    totalTraceLogCount: normalized.totalTraceLogCount,
+    relevantTokenOutTransferCount: normalized.relevantTokenOutTransferCount,
     relevantTransferFingerprint: sha(events),
-    anyErroredAncestorForRelevantLog,
+    anyErroredAncestorForRelevantLog:
+      normalized.anyErroredAncestorForRelevantLog,
     normalized: {
-      recipient,
-      tokenOut,
-      incomingAtomic: incoming.toString(),
-      outgoingAtomic: outgoing.toString(),
-      netAtomic: (incoming - outgoing).toString(),
+      recipient: normalized.normalized.recipient,
+      tokenOut: normalized.normalized.tokenOut,
+      incomingAtomic: normalized.normalized.incomingAtomic,
+      outgoingAtomic: normalized.normalized.outgoingAtomic,
+      netAtomic: normalized.normalized.netAtomic,
       events,
     },
   };
