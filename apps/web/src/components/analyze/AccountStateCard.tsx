@@ -19,7 +19,7 @@ function atomic(
 function balanceText(
   balance: AccountStateSnapshot["balances"]["inputToken"],
 ): string {
-  if (balance.status !== "AVAILABLE" || !balance.metadata) {
+  if (balance.status !== "AVAILABLE") {
     return `UNAVAILABLE · ${value(balance.reason)}`;
   }
   return `${atomic(balance.amountAtomic, balance.metadata.decimals)} ${balance.metadata.symbol}`;
@@ -72,10 +72,17 @@ export function AccountStateCard({
     allowance.status === "NOT_APPLICABLE" ? undefined : inputMetadata.decimals;
   const allowanceSymbol =
     allowance.status === "NOT_APPLICABLE" ? "" : inputMetadata.symbol;
-  const allowanceText =
-    allowance.status === "NOT_APPLICABLE"
-      ? `NOT_APPLICABLE · ${allowance.reason}`
-      : `${allowance.status} · allowance ${atomic(allowance.allowanceAtomic, allowanceDecimals)} ${allowanceSymbol} · required ${atomic(allowance.requiredAmountAtomic, allowanceDecimals)} ${allowanceSymbol}`;
+  const allowanceText = (() => {
+    switch (allowance.status) {
+      case "NOT_APPLICABLE":
+        return `NOT_APPLICABLE · ${allowance.reason}`;
+      case "UNAVAILABLE":
+        return `UNAVAILABLE · ${allowance.reason} · required ${atomic(allowance.requiredAmountAtomic, allowanceDecimals)} ${allowanceSymbol}`;
+      case "SUFFICIENT":
+      case "INSUFFICIENT":
+        return `${allowance.status} · allowance ${atomic(allowance.allowanceAtomic, allowanceDecimals)} ${allowanceSymbol} · required ${atomic(allowance.requiredAmountAtomic, allowanceDecimals)} ${allowanceSymbol}`;
+    }
+  })();
   const spender =
     allowance.status === "NOT_APPLICABLE"
       ? "NOT_APPLICABLE"
