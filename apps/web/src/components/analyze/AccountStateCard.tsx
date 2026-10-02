@@ -67,15 +67,21 @@ export function AccountStateCard({
   language: Language;
 }) {
   const allowance = snapshot.allowance;
+  const inputMetadata = snapshot.balances.inputToken.metadata;
+  const allowanceDecimals =
+    allowance.status === "NOT_APPLICABLE" ? undefined : inputMetadata.decimals;
+  const allowanceSymbol =
+    allowance.status === "NOT_APPLICABLE" ? "" : inputMetadata.symbol;
   const allowanceText =
     allowance.status === "NOT_APPLICABLE"
       ? `NOT_APPLICABLE · ${allowance.reason}`
-      : `${allowance.status} · allowance ${atomic(allowance.allowanceAtomic, allowance.metadata?.decimals)} ${allowance.metadata?.symbol ?? ""} · required ${atomic(allowance.requiredAmountAtomic, allowance.metadata?.decimals)} ${allowance.metadata?.symbol ?? ""}`;
+      : `${allowance.status} · allowance ${atomic(allowance.allowanceAtomic, allowanceDecimals)} ${allowanceSymbol} · required ${atomic(allowance.requiredAmountAtomic, allowanceDecimals)} ${allowanceSymbol}`;
   const spender =
     allowance.status === "NOT_APPLICABLE"
       ? "NOT_APPLICABLE"
-      : (allowance.spender?.address ??
-        `UNAVAILABLE · ${allowance.reason ?? "SPENDER_NOT_QUALIFIED"}`);
+      : allowance.spender.status === "QUALIFIED"
+        ? allowance.spender.address
+        : `UNAVAILABLE · ${allowance.spender.status}`;
 
   return (
     <section className="rounded-[12px] border border-line bg-ink-elev2/30 p-3">

@@ -237,52 +237,8 @@ export type TokenMetadataPair = {
   tokenOut: TokenMetadata;
 };
 
-export type AccountStateStatus = "AVAILABLE" | "PARTIAL" | "UNAVAILABLE";
-export type AccountBalanceState = {
-  status: "AVAILABLE" | "UNAVAILABLE";
-  amountAtomic?: string;
-  metadata?: { symbol: string; decimals: number };
-  reason?: string;
-};
-export type AccountAllowanceState =
-  | {
-      status: "NOT_APPLICABLE";
-      reason: string;
-    }
-  | {
-      status: "SUFFICIENT" | "INSUFFICIENT" | "UNAVAILABLE";
-      allowanceAtomic?: string;
-      requiredAmountAtomic: string;
-      metadata: { symbol: string; decimals: number };
-      spender?: { status: string; address?: string; qualificationRef?: string };
-      reason?: string;
-    };
-export type AccountStateSnapshot = {
-  snapshotId: string;
-  status: AccountStateStatus;
-  context: {
-    chainId: number;
-    protocol: string;
-    sender: string;
-    recipient: string;
-    tokenIn: { kind: "native" } | { kind: "erc20"; address: string };
-    tokenOut: { kind: "native" } | { kind: "erc20"; address: string };
-    amountInAtomic: string;
-  };
-  block: {
-    status: string;
-    blockNumber?: string;
-    blockHash?: string;
-    observedAt: string;
-    reason?: string;
-  };
-  balances: {
-    inputToken: AccountBalanceState;
-    outputToken: AccountBalanceState;
-    native: AccountBalanceState;
-  };
-  allowance: AccountAllowanceState;
-};
+export type AccountStateSnapshot =
+  import("../../../../../packages/contracts/src/account-state.js").AccountStateSnapshot;
 export type AccountStateResult =
   | { status: "idle" }
   | { status: "loading" }

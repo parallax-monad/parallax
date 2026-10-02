@@ -174,11 +174,17 @@ function accountStateMatchesResult(
         a.address?.toLowerCase() === b?.address?.toLowerCase())
     );
   };
+  const rawSender =
+    typeof intent?.sender === "string" ? intent.sender : undefined;
+  const rawRecipient =
+    typeof intent?.recipient === "string" ? intent.recipient : undefined;
   return (
+    rawSender !== undefined &&
+    rawRecipient !== undefined &&
     snapshot.context.chainId === result.chainId &&
     snapshot.context.protocol === result.protocol &&
-    snapshot.context.sender.toLowerCase() === DEFAULT_SENDER.toLowerCase() &&
-    snapshot.context.recipient.toLowerCase() === DEFAULT_SENDER.toLowerCase() &&
+    snapshot.context.sender.toLowerCase() === rawSender.toLowerCase() &&
+    snapshot.context.recipient.toLowerCase() === rawRecipient.toLowerCase() &&
     snapshot.context.amountInAtomic === intent?.amountInAtomic &&
     equalAsset(snapshot.context.tokenIn, rawTokenIn) &&
     equalAsset(snapshot.context.tokenOut, rawTokenOut)
@@ -204,6 +210,8 @@ export function WalletApp({ language }: { language: Language }) {
   const [accountState, setAccountState] = useState<AccountStateResult>({
     status: "idle",
   });
+  const accountStateRef = useRef<AccountStateResult>({ status: "idle" });
+  const snapshotRecoveryControllerRef = useRef<AbortController | undefined>();
   const [p0Config, setP0Config] = useState<P0ConfigState | undefined>();
   const schedulerRef = useRef(createStageScheduler());
   // The mount-only recovery effect reads this from its eventual promise callback.
@@ -229,12 +237,23 @@ export function WalletApp({ language }: { language: Language }) {
   useEffect(() => {
     const snapshotId = storedAccountSnapshotId();
     if (!snapshotId) return;
+    const controller = new AbortController();
+    snapshotRecoveryControllerRef.current = controller;
     let active = true;
-    void loadAccountStateSnapshot(snapshotId).then((next) => {
-      if (active) setAccountState(next);
+    void loadAccountStateSnapshot(snapshotId, {
+      signal: controller.signal,
+    }).then((next) => {
+      if (active && !controller.signal.aborted) {
+        accountStateRef.current = next;
+        setAccountState(next);
+      }
     });
     return () => {
       active = false;
+      controller.abort();
+      if (snapshotRecoveryControllerRef.current === controller) {
+        snapshotRecoveryControllerRef.current = undefined;
+      }
     };
   }, []);
 
@@ -338,9 +357,12 @@ export function WalletApp({ language }: { language: Language }) {
       return;
     }
 
-    recoveryCancelledRef.current = true;
     const parent = result?.systemStatus === "OK" ? result : undefined;
     const submitted = plan.submitted;
+    const currentAccountState = accountStateRef.current;
+    recoveryCancelledRef.current = true;
+    snapshotRecoveryControllerRef.current?.abort();
+    accountStateRef.current = { status: "idle" };
     setFormErrors({});
     setStoredRunId(undefined);
     setStoredAccountSnapshotId(undefined);
@@ -383,8 +405,9 @@ export function WalletApp({ language }: { language: Language }) {
           p0Config?.status === "AVAILABLE" ? p0Config.tokenMetadata : undefined,
         );
         const withAccountState =
-          accountState.status === "available"
-            ? { ...displayResult, accountState: accountState.snapshot }
+          currentAccountState.status === "available" &&
+          accountStateMatchesResult(displayResult, currentAccountState.snapshot)
+            ? { ...displayResult, accountState: currentAccountState.snapshot }
             : displayResult;
         setStoredRunId(backendRunId(withAccountState));
         setStoredAccountSnapshotId(withAccountState.accountState?.snapshotId);
@@ -414,7 +437,8 @@ export function WalletApp({ language }: { language: Language }) {
     setFormErrors({});
     setDrawerOpen(false);
     setForm(INITIAL_FORM);
-    setQuote({ status: "idle" });
+    accountStateRef.current = { status: "idle" };
+    setAccountState({ status: "idle" });
     setScreen("home");
     setHomeVisit((visit) => visit + 1);
   };
@@ -468,6 +492,9 @@ export function WalletApp({ language }: { language: Language }) {
                     language={language}
                     onSwap={() => {
                       recoveryCancelledRef.current = true;
+                      snapshotRecoveryControllerRef.current?.abort();
+                      accountStateRef.current = { status: "idle" };
+                      setAccountState({ status: "idle" });
                       setScreen("swap");
                     }}
                   />
@@ -484,6 +511,7 @@ export function WalletApp({ language }: { language: Language }) {
                     onChange={(nextForm) => {
                       setForm(nextForm);
                       setQuote({ status: "idle" });
+                      accountStateRef.current = { status: "idle" };
                       setAccountState({ status: "idle" });
                       if (Object.keys(formErrors).length > 0) setFormErrors({});
                     }}

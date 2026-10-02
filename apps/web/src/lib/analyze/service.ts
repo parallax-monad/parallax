@@ -1,4 +1,5 @@
 import type { Copy } from "@/lib/i18n";
+import { accountStateSnapshotSchema } from "../../../../../packages/contracts/src/account-state.js";
 import {
   assetToSymbol,
   getChainIdForProtocol,
@@ -545,58 +546,51 @@ function failureCopy(failure: ApiFailure) {
 function parseAccountStateSnapshot(
   value: unknown,
 ): AccountStateSnapshot | undefined {
-  const snapshot = obj(value);
-  const context = obj(snapshot?.context);
-  const block = obj(snapshot?.block);
-  const balances = obj(snapshot?.balances);
-  const allowance = obj(snapshot?.allowance);
-  if (
-    !str(snapshot?.snapshotId) ||
-    !context ||
-    typeof context.chainId !== "number" ||
-    !str(context.protocol) ||
-    !str(context.sender) ||
-    !str(context.recipient) ||
-    !obj(context.tokenIn) ||
-    !obj(context.tokenOut) ||
-    !str(context.amountInAtomic) ||
-    !block ||
-    !str(block.status) ||
-    !str(block.observedAt) ||
-    !balances ||
-    !obj(balances.inputToken) ||
-    !obj(balances.outputToken) ||
-    !obj(balances.native) ||
-    !allowance ||
-    !str(allowance.status)
-  )
-    return;
-  const metadata = (value: unknown) => {
-    const item = obj(value);
-    return item &&
-      typeof item.symbol === "string" &&
-      typeof item.decimals === "number"
-      ? { symbol: item.symbol, decimals: item.decimals }
-      : undefined;
-  };
-  const normalizeBalance = (value: unknown) => {
-    const item = obj(value);
-    if (!item) return value;
-    return { ...item, metadata: metadata(item.metadata) };
-  };
-  const normalized = {
-    ...snapshot,
-    balances: {
-      inputToken: normalizeBalance(balances?.inputToken),
-      outputToken: normalizeBalance(balances?.outputToken),
-      native: normalizeBalance(balances?.native),
-    },
-    allowance: {
-      ...allowance,
-      metadata: metadata(allowance.metadata),
-    },
-  };
-  return normalized as unknown as AccountStateSnapshot;
+  const parsed = accountStateSnapshotSchema.safeParse(value);
+  return parsed.success ? parsed.data : undefined;
+}
+
+function sameAsset(
+  left: AccountStateSnapshot["context"]["tokenIn"],
+  right: AccountStateSnapshot["context"]["tokenIn"],
+): boolean {
+  if (left.kind !== right.kind) return false;
+  return (
+    left.kind === "native" ||
+    left.address.toLowerCase() === right.address.toLowerCase()
+  );
+}
+
+function atomicAmount(value: string, decimals: number): string | undefined {
+  if (!/^(?:0|[1-9]\d*)(?:\.\d+)?$/.test(value)) return undefined;
+  const [whole, fraction = ""] = value.split(".");
+  if (fraction.length > decimals) return undefined;
+  return `${whole}${fraction.padEnd(decimals, "0")}`.replace(/^0+(?=\d)/, "");
+}
+
+function accountStateMatchesRequest(
+  snapshot: AccountStateSnapshot,
+  input: CheckSwapInput,
+): boolean {
+  const chainId = getChainIdForProtocol(input.protocol);
+  const inputMetadata = snapshot.balances.inputToken.metadata;
+  const amountInAtomic = inputMetadata
+    ? atomicAmount(input.amountIn, inputMetadata.decimals)
+    : undefined;
+  if (amountInAtomic === undefined) return false;
+  const tokenIn = requestAsset(input.tokenIn, chainId);
+  const tokenOut = requestAsset(input.tokenOut, chainId);
+  return (
+    snapshot.context.chainId === chainId &&
+    snapshot.context.protocol === input.protocol &&
+    snapshot.context.sender.toLowerCase() ===
+      (input.sender ?? DEFAULT_SENDER).toLowerCase() &&
+    snapshot.context.recipient.toLowerCase() ===
+      (input.sender ?? DEFAULT_SENDER).toLowerCase() &&
+    snapshot.context.amountInAtomic === amountInAtomic &&
+    sameAsset(snapshot.context.tokenIn, tokenIn) &&
+    sameAsset(snapshot.context.tokenOut, tokenOut)
+  );
 }
 
 function accountStateFailure(response: Response, payload: unknown): ApiFailure {
@@ -663,7 +657,7 @@ export async function fetchAccountState(
       apiFailure: accountStateFailure(response, payload),
     };
   const snapshot = parseAccountStateSnapshot(payload);
-  return snapshot
+  return snapshot && accountStateMatchesRequest(snapshot, input)
     ? { status: "available", snapshot }
     : {
         status: "error",
@@ -714,7 +708,7 @@ export async function loadAccountStateSnapshot(
       apiFailure: accountStateFailure(response, payload),
     };
   const snapshot = parseAccountStateSnapshot(payload);
-  return snapshot
+  return snapshot && snapshot.snapshotId === snapshotId.toLowerCase()
     ? { status: "available", snapshot }
     : {
         status: "error",
@@ -725,6 +719,7 @@ export async function loadAccountStateSnapshot(
         },
       };
 }
+
 function failed(
   input: CheckSwapInput,
   apiFailure: ApiFailure,
