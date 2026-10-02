@@ -2892,7 +2892,17 @@ describe("Arbitrum composition P0 Risk wiring", () => {
     expect(candidateConstraintEvidence).not.toHaveBeenCalled();
   });
 
-  it("preserves canonical UNKNOWN despite a successful remediation candidate", async () => {
+  it("does not run remediation when the canonical parent derivation is incomplete", async () => {
+    const candidateConstraintEvidence = vi.fn(() => [
+      {
+        name: "maxPriceImpact" as const,
+        state: "VERIFIED" as const,
+        numerator: "1",
+        denominator: "1",
+        unit: "bps" as const,
+        evidenceKey: "candidate-impact",
+      },
+    ]);
     const availableIntent: NormalizedSwapIntent = {
       ...normalizedIntent,
       economicBoundary: {
@@ -2940,16 +2950,7 @@ describe("Arbitrum composition P0 Risk wiring", () => {
             maxAmountInAtomic: "3000",
             initialStepAtomic: "1000",
             maxEvaluations: 2,
-            constraintEvidenceForCandidate: () => [
-              {
-                name: "maxPriceImpact",
-                state: "VERIFIED",
-                numerator: "1",
-                denominator: "1",
-                unit: "bps",
-                evidenceKey: "candidate-impact",
-              },
-            ],
+            constraintEvidenceForCandidate: candidateConstraintEvidence,
           },
         },
       }),
@@ -2960,12 +2961,17 @@ describe("Arbitrum composition P0 Risk wiring", () => {
       "p0-unknown-parent-remediation",
       availableIntent,
     );
-    expect(execution.decisionOutput).toMatchObject({
-      p0: { remediation: { status: "VERIFIED" } },
-    });
     const result = runResultSchema.parse(execution.decisionOutput);
-    expect(result.verdict).toBe("UNKNOWN");
+    expect(result).toMatchObject({
+      status: "completed",
+      verdict: "UNKNOWN",
+      p0: { remediation: { status: "NOT_RUN" } },
+    });
     expect(result.recommendedActions).toEqual([]);
+    expect(result.irrelevantActions).toEqual([]);
+    expect(result.p0?.remediation).toEqual({ status: "NOT_RUN" });
+    expect(candidateConstraintEvidence).not.toHaveBeenCalled();
+    expect(JSON.stringify(result)).not.toContain("candidate-impact");
   });
 
   it("publishes a verified remediation through the existing RunResult Action Gate", async () => {
