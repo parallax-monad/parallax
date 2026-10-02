@@ -196,6 +196,11 @@ export class CheckApplicationService {
       parsedRequest.data.expectationBaseline,
     );
     if (!invoked.ok) {
+      if (
+        isBackendControlError(invoked.error) &&
+        invoked.error.code === "RUN_STORE_ERROR"
+      )
+        return storeErrorResponse();
       const unsupported = isUnsupportedCheckError(invoked.error);
       const mappedError = integrationErrorForFailure(
         unsupported ? "UNSUPPORTED" : "AGENT_FLOW_ERROR",
@@ -297,7 +302,13 @@ export class CheckApplicationService {
     | { kind: "result"; result: Extract<RunResult, { status: "completed" }> }
     | { kind: "blocked" }
   > {
-    if (!isActionGateCandidate(baseline)) {
+    // Explicit target-preserving opt-in is handled by the bounded P0 solver.
+    // Never fall back to the legacy size-reduction proposal for that request.
+    if (
+      baseline.intent.amountInIncreaseAuthorization !== undefined ||
+      baseline.p0 !== undefined ||
+      !isActionGateCandidate(baseline)
+    ) {
       return { kind: "result", result: baseline };
     }
 

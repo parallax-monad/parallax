@@ -18,6 +18,15 @@ export type ProtocolId = z.infer<typeof protocolIdSchema>;
 
 export const runIdSchema = z.string().trim().min(1);
 
+/** A child-owned Evidence locator; not a same-Run EvidenceRef. */
+export const crossRunEvidenceRefSchema = z
+  .object({
+    kind: z.literal("CROSS_RUN_EVIDENCE"),
+    runId: runIdSchema,
+    evidenceId: z.string().trim().min(1),
+  })
+  .strict();
+
 export const transactionAdjustmentFieldSchema = z.enum([
   "amountIn",
   "tokenPair",

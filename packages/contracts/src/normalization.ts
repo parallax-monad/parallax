@@ -7,6 +7,7 @@ export const intentNormalizationErrorCodeSchema = z.enum([
   "INVALID_DECIMAL",
   "TOO_MANY_DECIMAL_PLACES",
   "AMOUNT_EXCEEDS_UINT256",
+  "INVALID_AMOUNT_INCREASE_AUTHORIZATION",
 ]);
 
 export const intentNormalizationErrorSchema = z
@@ -17,6 +18,7 @@ export const intentNormalizationErrorSchema = z
       "tokenIn",
       "tokenOut",
       "amountIn",
+      "amountInIncreaseAuthorization.maximumAmountIn",
       "economicBoundary.minimumReceived",
     ]),
     message: z.string().trim().min(1),

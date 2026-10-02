@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import {
   convertAtomicAmountToHuman,
   type ExpectationBaseline,
@@ -6,6 +7,7 @@ import {
   type NormalizedSwapIntent,
   runResultSchema,
 } from "@parallax/contracts";
+import { closeUnverifiedAdjust } from "@parallax/orchestrator/application";
 import { economicFailStopResult } from "@parallax/orchestrator/application/action-gate-fixtures";
 import type { CallerConstraint, ConstraintEvidence } from "@parallax/risk";
 import { describe, expect, it, vi } from "vitest";
@@ -2340,6 +2342,15 @@ describe("Arbitrum production composition skeleton", () => {
 });
 
 const p0IntentAmountInAtomic = "1000";
+const p0AuthorizedIntent: NormalizedSwapIntent = {
+  ...normalizedIntent,
+  amountInIncreaseAuthorization: {
+    availability: "available",
+    source: "user_declared",
+    consent: true,
+    maximumAmountInAtomic: "3000",
+  },
+};
 const p0ObservedAt = "2026-09-01T00:00:00.000Z";
 
 function p0Field<T>(value: T) {
@@ -2505,6 +2516,7 @@ function p0CompositionOptions(
     chainAdapter: createFakeChainAdapter({
       chainId: 421614,
       blockNumber: "42",
+      blockHash: `0x${"5".repeat(64)}`,
       gasUnits: "21000",
       finality: { status: "finalized" },
     }),
@@ -2533,6 +2545,41 @@ function p0CompositionOptions(
     }),
     ...overrides,
   };
+}
+
+function boundP0Evidence(
+  input: { normalizedIntent: unknown; preparedExecution: unknown },
+  options: Parameters<typeof p0VerifiedEvidence>[1] = {},
+) {
+  const prepared = input.preparedExecution as { unsignedTransaction: unknown };
+  const evidence = p0VerifiedEvidence(
+    input.normalizedIntent as NormalizedSwapIntent,
+    options,
+  );
+  const receipt = evidence.receipt.value;
+  const outcome = evidence.outcome.value;
+  if (
+    receipt === null ||
+    typeof receipt !== "object" ||
+    Array.isArray(receipt) ||
+    outcome === null ||
+    typeof outcome !== "object" ||
+    Array.isArray(outcome)
+  )
+    throw new Error("Expected synthetic receipt and outcome");
+  const transactionFingerprint = `sha256:${createHash("sha256").update(JSON.stringify(prepared.unsignedTransaction)).digest("hex")}`;
+  return genericEvidenceSchema.parse({
+    ...evidence,
+    action: { ...evidence.action, value: [{ transactionFingerprint }] },
+    receipt: {
+      ...evidence.receipt,
+      value: { ...receipt, transactionFingerprint },
+    },
+    outcome: {
+      ...evidence.outcome,
+      value: { ...outcome, transactionFingerprint },
+    },
+  });
 }
 
 async function runP0Check(
@@ -2705,13 +2752,59 @@ describe("Arbitrum composition P0 Risk wiring", () => {
     });
   });
 
+  it("keeps a degraded selected target descriptive when the baseline Risk is PROCEED", async () => {
+    const store = new InMemoryRunStore();
+    const start = vi.spyOn(store, "start");
+    const composition = createArbitrumProductionComposition(
+      p0CompositionOptions({
+        runStore: store,
+        providerEvidenceMapper: boundP0Evidence,
+        p0Risk: {
+          remediation: {
+            maxAmountInAtomic: "3000",
+            initialStepAtomic: "1000",
+            maxEvaluations: 2,
+          },
+        },
+      }),
+    );
+    const execution = await runP0Check(
+      composition,
+      "proceed-degraded-target",
+      {
+        ...p0AuthorizedIntent,
+        economicBoundary: {
+          availability: "available",
+          minimumReceivedAtomic: "400000",
+          source: "user_declared",
+        },
+      },
+      {
+        ...p0ExpectationBaseline,
+        quote: { ...p0ExpectationBaseline.quote, estimatedAmountOut: "0.6" },
+      },
+    );
+    const result = runResultSchema.parse(execution.decisionOutput);
+    expect(result).toMatchObject({
+      verdict: "PROCEED",
+      recommendedActions: [],
+      p0: {
+        quoteFidelity: { status: "VERIFIED" },
+        transactionProtection: { status: "PASS" },
+        remediation: { status: "NOT_RUN" },
+      },
+    });
+    expect(
+      start.mock.calls.filter(([id]) => id.includes(":p0-child:")),
+    ).toEqual([]);
+  });
+
   it("runs bounded remediation through a terminal child Run before recording VERIFIED", async () => {
     const store = new InMemoryRunStore();
     const composition = createArbitrumProductionComposition(
       p0CompositionOptions({
         runStore: store,
-        providerEvidenceMapper: ({ normalizedIntent }) =>
-          p0VerifiedEvidence(normalizedIntent as NormalizedSwapIntent),
+        providerEvidenceMapper: boundP0Evidence,
         p0Risk: {
           constraints: p0Constraints,
           constraintEvidence: p0ConstraintEvidence,
@@ -2734,7 +2827,11 @@ describe("Arbitrum composition P0 Risk wiring", () => {
       }),
     );
 
-    const execution = await runP0Check(composition, "p0-remediation");
+    const execution = await runP0Check(
+      composition,
+      "p0-remediation",
+      p0AuthorizedIntent,
+    );
 
     expect(execution.decisionOutput).toMatchObject({
       p0: {
@@ -2743,19 +2840,452 @@ describe("Arbitrum composition P0 Risk wiring", () => {
           parentRunId: "p0-remediation",
           childRunId: expect.any(String),
           verificationBlock: "42",
+          verificationProof: {
+            targetAmountOutAtomic: "490000",
+            targetQuoteId: expect.any(String),
+            verifiedAmountOutAtomic: "500000",
+            resultEvidenceRef: {
+              kind: "CROSS_RUN_EVIDENCE",
+              runId: expect.any(String),
+              evidenceId: "live:simulated-token-out",
+            },
+          },
         },
       },
     });
     const result = runResultSchema.parse(execution.decisionOutput);
     expect(result).toMatchObject({
       status: "completed",
-      verdict: "STOP",
-      recommendedActions: [],
+      verdict: "ADJUST",
+      recommendedActions: [
+        { proposedChange: { before: "1000", after: "2000" } },
+      ],
     });
+    expect(result.intent.economicBoundary.availability).toBe("unavailable");
+    expect(
+      result.ruleResults.find((rule) => rule.ruleId === "P0-ECONOMIC-001")
+        ?.status,
+    ).toBe("NOT_APPLICABLE");
+    expect(
+      result.evidence.find((item) => item.kind === "action_verification"),
+    ).toMatchObject({ targetOutputProof: { targetAmountOutAtomic: "490000" } });
     expect(result.providerEvidence?.providerData).not.toHaveProperty(
       "backendP0",
     );
   });
+
+  it("does not recommend a target-qualified child that misses Transaction Protection", async () => {
+    const runtime = arbitrumRuntime();
+    const composition = createArbitrumProductionComposition(
+      p0CompositionOptions({
+        runtime,
+        providerEvidenceMapper: boundP0Evidence,
+        p0Risk: {
+          constraints: p0Constraints,
+          constraintEvidence: p0ConstraintEvidence,
+          remediation: {
+            maxAmountInAtomic: "3000",
+            initialStepAtomic: "1000",
+            maxEvaluations: 2,
+            constraintEvidenceForCandidate: () => [
+              {
+                name: "maxPriceImpact",
+                state: "VERIFIED",
+                numerator: "1",
+                denominator: "1",
+                unit: "bps",
+                evidenceKey: "candidate-impact",
+              },
+            ],
+          },
+        },
+      }),
+    );
+    const app = createBackendApp({
+      runtime,
+      composition: composition as unknown as BackendCompositionRuntime,
+    });
+
+    const response = await app.fetch(
+      new Request("https://api.example.test/api/check", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          chainId: 421614,
+          protocol: "camelot-v3",
+          sender: normalizedIntent.sender,
+          tokenIn: { kind: "native" },
+          tokenOut: { kind: "erc20", address: arbitrumTokenAddress },
+          amountIn: "0.000000000000001",
+          amountInIncreaseAuthorization: {
+            availability: "available",
+            source: "user_declared",
+            consent: true,
+            maximumAmountIn: "0.000000000000003",
+          },
+          expectationBaseline: p0ExpectationBaseline,
+          economicBoundary: {
+            availability: "available",
+            minimumReceived: "0.6",
+            source: "user_declared",
+          },
+        }),
+      }),
+    );
+    const result = runResultSchema.parse(await response.json());
+
+    expect(response.status).toBe(200);
+    expect(result).toMatchObject({
+      status: "completed",
+      verdict: "STOP",
+      ruleResults: expect.arrayContaining([
+        expect.objectContaining({
+          ruleId: "P0-ECONOMIC-001",
+          status: "FAIL",
+          reasonCode: "OUTPUT_BELOW_BOUNDARY",
+        }),
+      ]),
+    });
+    expect(result.p0?.remediation.status).not.toBe("VERIFIED");
+    expect(
+      result.recommendedActions.some(
+        (action) => action.action.kind === "TRANSACTION_ADJUSTMENT",
+      ),
+    ).toBe(false);
+  });
+
+  it("does not start remediation without explicit input-increase consent", async () => {
+    const store = new InMemoryRunStore();
+    const start = vi.spyOn(store, "start");
+    const composition = createArbitrumProductionComposition(
+      p0CompositionOptions({
+        runStore: store,
+        providerEvidenceMapper: ({ normalizedIntent }) =>
+          p0VerifiedEvidence(normalizedIntent as NormalizedSwapIntent),
+        p0Risk: {
+          constraints: p0Constraints,
+          constraintEvidence: p0ConstraintEvidence,
+          remediation: {
+            maxAmountInAtomic: "3000",
+            initialStepAtomic: "1000",
+            maxEvaluations: 2,
+          },
+        },
+      }),
+    );
+    const execution = await runP0Check(composition, "no-input-consent");
+    expect(
+      runResultSchema.parse(execution.decisionOutput).p0?.remediation,
+    ).toEqual({ status: "NOT_RUN" });
+    expect(start.mock.calls.some(([id]) => id.includes(":p0-child:"))).toBe(
+      false,
+    );
+  });
+
+  it("never falls back to automatic size reduction for a fresh P0 request without consent", async () => {
+    const store = new InMemoryRunStore();
+    const start = vi.spyOn(store, "start");
+    const runtime = arbitrumRuntime();
+    const composition = createArbitrumProductionComposition(
+      p0CompositionOptions({
+        runtime,
+        runStore: store,
+        providerEvidenceMapper: boundP0Evidence,
+      }),
+    );
+    const app = createBackendApp({
+      runtime,
+      composition: composition as unknown as BackendCompositionRuntime,
+    });
+    const response = await app.fetch(
+      new Request("https://api.example.test/api/check", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          chainId: 421614,
+          protocol: "camelot-v3",
+          sender: normalizedIntent.sender,
+          tokenIn: normalizedIntent.tokenIn,
+          tokenOut: normalizedIntent.tokenOut,
+          amountIn: "0.000000000000001",
+          expectationBaseline: p0ExpectationBaseline,
+          economicBoundary: {
+            availability: "available",
+            minimumReceived: "0.6",
+            source: "user_declared",
+          },
+        }),
+      }),
+    );
+    expect(response.status).toBe(200);
+    expect(runResultSchema.parse(await response.json())).toMatchObject({
+      verdict: "STOP",
+      recommendedActions: [],
+      p0: { remediation: { status: "NOT_RUN" } },
+    });
+    expect(start).toHaveBeenCalledTimes(1);
+  });
+
+  it("never substitutes a successful candidate quote for its smaller simulated output", async () => {
+    const composition = createArbitrumProductionComposition(
+      p0CompositionOptions({
+        providerEvidenceMapper: (input) =>
+          boundP0Evidence(input, { amountReceivedAtomic: "450000" }),
+        p0Risk: {
+          constraints: p0Constraints,
+          constraintEvidence: p0ConstraintEvidence,
+          remediation: {
+            maxAmountInAtomic: "3000",
+            initialStepAtomic: "1000",
+            maxEvaluations: 2,
+            constraintEvidenceForCandidate: () => [
+              {
+                name: "maxPriceImpact",
+                state: "VERIFIED",
+                numerator: "1",
+                denominator: "1",
+                unit: "bps",
+                evidenceKey: "candidate-impact",
+              },
+            ],
+          },
+        },
+      }),
+    );
+    const execution = await runP0Check(
+      composition,
+      "actual-output-shortfall",
+      p0AuthorizedIntent,
+    );
+    const result = runResultSchema.parse(execution.decisionOutput);
+    expect(result.p0?.remediation.status).not.toBe("VERIFIED");
+    expect(result.recommendedActions).toEqual([]);
+  });
+
+  it("caps child evaluation at the user budget rather than the configured search ceiling", async () => {
+    const store = new InMemoryRunStore();
+    const start = vi.spyOn(store, "start");
+    const composition = createArbitrumProductionComposition(
+      p0CompositionOptions({
+        runStore: store,
+        providerEvidenceMapper: boundP0Evidence,
+        p0Risk: {
+          constraints: p0Constraints,
+          constraintEvidence: p0ConstraintEvidence,
+          remediation: {
+            maxAmountInAtomic: "3000",
+            initialStepAtomic: "1000",
+            maxEvaluations: 2,
+          },
+        },
+      }),
+    );
+    await runP0Check(composition, "budget-cap", {
+      ...p0AuthorizedIntent,
+      amountInIncreaseAuthorization: {
+        availability: "available",
+        source: "user_declared",
+        consent: true,
+        maximumAmountInAtomic: "1500",
+      },
+    });
+    const children = start.mock.calls.filter(([id]) =>
+      id.includes(":p0-child:"),
+    );
+    expect(children).toHaveLength(1);
+    expect(children[0]?.[1].amountInAtomic).toBe("1500");
+    expect(children[0]?.[1].amountInIncreaseAuthorization).toMatchObject({
+      maximumAmountInAtomic: "1500",
+    });
+  });
+
+  it.each([
+    "execution",
+    "malformed",
+    "intent",
+    "constraints",
+    "malformed-constraints",
+    "constraints-with-economic-fail",
+  ] as const)(
+    "retains a terminal child when candidate %s fails",
+    async (failure) => {
+      const store = new InMemoryRunStore();
+      const start = vi.spyOn(store, "start");
+      const composition = createArbitrumProductionComposition(
+        p0CompositionOptions({
+          runStore: store,
+          providerEvidenceMapper: (input) => {
+            const intent = input.normalizedIntent as NormalizedSwapIntent;
+            if (intent.amountInAtomic !== "1000") {
+              if (failure === "execution")
+                throw new Error("sensitive upstream failure");
+              if (failure === "malformed") return { broken: true };
+              if (failure === "intent") return p0VerifiedEvidence();
+            }
+            return boundP0Evidence(input);
+          },
+          p0Risk: {
+            constraints: p0Constraints,
+            constraintEvidence: p0ConstraintEvidence,
+            remediation: {
+              maxAmountInAtomic: "3000",
+              initialStepAtomic: "1000",
+              maxEvaluations: 2,
+              constraintEvidenceForCandidate: () => {
+                if (failure === "malformed-constraints")
+                  return { broken: true } as unknown as ConstraintEvidence[];
+                throw new Error("constraint source failed");
+              },
+            },
+          },
+        }),
+      );
+      const execution = await runP0Check(
+        composition,
+        `failed-attempt-${failure}`,
+        failure === "constraints-with-economic-fail"
+          ? {
+              ...p0AuthorizedIntent,
+              economicBoundary: {
+                availability: "available",
+                minimumReceivedAtomic: "600000",
+                source: "user_declared",
+              },
+            }
+          : p0AuthorizedIntent,
+      );
+      expect(
+        runResultSchema.parse(execution.decisionOutput).p0?.remediation.status,
+      ).not.toBe("VERIFIED");
+      const children = start.mock.calls.filter(([id]) =>
+        id.includes(":p0-child:"),
+      );
+      expect(children.length).toBeGreaterThan(0);
+      for (const [id] of children) {
+        const record = await store.get(id);
+        expect(record).toMatchObject({
+          status: "failed",
+          parentRunId: `failed-attempt-${failure}`,
+          result: { verdict: "UNKNOWN", recommendedActions: [] },
+        });
+        expect(JSON.stringify(record)).not.toContain(
+          "sensitive upstream failure",
+        );
+        if (
+          failure === "constraints" ||
+          failure === "malformed-constraints" ||
+          failure === "constraints-with-economic-fail"
+        ) {
+          if (record?.status !== "failed")
+            throw new Error("Expected failed child");
+          expect(record?.result?.evidence.length).toBeGreaterThan(0);
+          expect(
+            record?.result?.ruleResults.some((rule) => rule.status === "PASS"),
+          ).toBe(true);
+          expect(record?.result?.scope).toContainEqual(
+            expect.objectContaining({
+              key: "P0-CHECK-ACTION-001",
+              status: "unknown",
+            }),
+          );
+          expect(
+            record.result.ruleResults.every((rule) => rule.status !== "FAIL"),
+          ).toBe(true);
+          if (failure === "constraints-with-economic-fail") {
+            expect(record.result.ruleResults).toContainEqual(
+              expect.objectContaining({
+                ruleId: "P0-ECONOMIC-001",
+                status: "UNKNOWN",
+                reasonCode: "SIMULATED_OUTPUT_UNAVAILABLE",
+              }),
+            );
+          }
+        }
+      }
+    },
+  );
+
+  it.each(["transaction", "block", "save", "read", "second-read"] as const)(
+    "fails closed when child %s proof cannot be verified",
+    async (failure) => {
+      const store = new InMemoryRunStore();
+      if (failure === "save")
+        vi.spyOn(store, "complete").mockRejectedValue(
+          new Error("store unavailable"),
+        );
+      if (failure === "read" || failure === "second-read") {
+        const get = store.get.bind(store);
+        let completedReads = 0;
+        vi.spyOn(store, "get").mockImplementation(async (id) => {
+          const record = await get(id);
+          if (id.includes(":p0-child:") && record?.status === "completed") {
+            completedReads++;
+            if (failure === "read" || completedReads > 1) return undefined;
+          }
+          return record;
+        });
+      }
+      const composition = createArbitrumProductionComposition(
+        p0CompositionOptions({
+          runStore: store,
+          providerEvidenceMapper: (input) => {
+            const intent = input.normalizedIntent as NormalizedSwapIntent;
+            if (failure === "transaction" && intent.amountInAtomic !== "1000")
+              return p0VerifiedEvidence(intent);
+            const evidence = boundP0Evidence(input);
+            if (failure !== "block" || intent.amountInAtomic === "1000")
+              return evidence;
+            const blockHash = `0x${"6".repeat(64)}`;
+            return genericEvidenceSchema.parse({
+              ...evidence,
+              receipt: {
+                ...evidence.receipt,
+                value: { ...(evidence.receipt.value as object), blockHash },
+              },
+              outcome: {
+                ...evidence.outcome,
+                value: { ...(evidence.outcome.value as object), blockHash },
+              },
+            });
+          },
+          p0Risk: {
+            constraints: p0Constraints,
+            constraintEvidence: p0ConstraintEvidence,
+            remediation: {
+              maxAmountInAtomic: "3000",
+              initialStepAtomic: "1000",
+              maxEvaluations: 2,
+              constraintEvidenceForCandidate: () => [
+                {
+                  name: "maxPriceImpact",
+                  state: "VERIFIED",
+                  numerator: "1",
+                  denominator: "1",
+                  unit: "bps",
+                  evidenceKey: "candidate-impact",
+                },
+              ],
+            },
+          },
+        }),
+      );
+      const executionPromise = runP0Check(
+        composition,
+        `invalid-child-${failure}`,
+        p0AuthorizedIntent,
+      );
+      if (failure === "read" || failure === "second-read") {
+        await expect(executionPromise).rejects.toMatchObject({
+          code: "RUN_STORE_ERROR",
+        });
+        return;
+      }
+      const execution = await executionPromise;
+      const result = runResultSchema.parse(execution.decisionOutput);
+      expect(result.p0?.remediation.status).not.toBe("VERIFIED");
+      expect(result.recommendedActions).toEqual([]);
+    },
+  );
 
   it("fails closed when candidate Evidence is bound to the baseline Intent", async () => {
     const composition = createArbitrumProductionComposition(
@@ -2783,7 +3313,11 @@ describe("Arbitrum composition P0 Risk wiring", () => {
       }),
     );
 
-    const execution = await runP0Check(composition, "p0-mismatched-candidate");
+    const execution = await runP0Check(
+      composition,
+      "p0-mismatched-candidate",
+      p0AuthorizedIntent,
+    );
 
     expect(runResultSchema.parse(execution.decisionOutput)).toMatchObject({
       status: "completed",
@@ -2809,7 +3343,11 @@ describe("Arbitrum composition P0 Risk wiring", () => {
       }),
     );
 
-    const execution = await runP0Check(composition, "p0-parent-constraints");
+    const execution = await runP0Check(
+      composition,
+      "p0-parent-constraints",
+      p0AuthorizedIntent,
+    );
 
     expect(runResultSchema.parse(execution.decisionOutput)).toMatchObject({
       status: "completed",
@@ -2977,7 +3515,7 @@ describe("Arbitrum composition P0 Risk wiring", () => {
   it("publishes a verified remediation through the existing RunResult Action Gate", async () => {
     const store = new InMemoryRunStore();
     const availableIntent: NormalizedSwapIntent = {
-      ...normalizedIntent,
+      ...p0AuthorizedIntent,
       economicBoundary: {
         availability: "available",
         minimumReceivedAtomic: "600000",
@@ -2987,9 +3525,10 @@ describe("Arbitrum composition P0 Risk wiring", () => {
     const composition = createArbitrumProductionComposition(
       p0CompositionOptions({
         runStore: store,
-        providerEvidenceMapper: ({ normalizedIntent }) => {
+        providerEvidenceMapper: (input) => {
+          const { normalizedIntent } = input;
           const candidate = normalizedIntent as NormalizedSwapIntent;
-          return p0VerifiedEvidence(candidate, {
+          return boundP0Evidence(input, {
             estimatedAmountOut:
               candidate.amountInAtomic === "1000" ? "0.5" : "0.7",
             amountReceivedAtomic:
@@ -3058,86 +3597,584 @@ describe("Arbitrum composition P0 Risk wiring", () => {
     }
   });
 
-  it("does not rerun the legacy Action Gate for an already-attested HTTP ADJUST", async () => {
-    const store = new InMemoryRunStore();
-    const startSpy = vi.spyOn(store, "start");
-    const runtime = arbitrumRuntime();
-    const composition = createArbitrumProductionComposition(
-      p0CompositionOptions({
-        runtime,
-        runStore: store,
-        providerEvidenceMapper: ({ normalizedIntent }) => {
-          const candidate = normalizedIntent as NormalizedSwapIntent;
-          return p0VerifiedEvidence(candidate, {
-            estimatedAmountOut:
-              candidate.amountInAtomic === "1000" ? "0.5" : "0.7",
-            amountReceivedAtomic:
-              candidate.amountInAtomic === "1000" ? "500000" : "700000",
+  it.each([
+    "none",
+    "missing",
+    "fingerprint",
+    "block-hash",
+    "lower-output",
+    "invalid-delta",
+    "recipient",
+    "token",
+    "input-amount",
+    "warning",
+    "unexplained-assets",
+    "missing-warnings",
+    "missing-quote",
+    "external-quote-source",
+    "missing-quote-observation-time",
+    "quote-unknown-scope",
+    "parent-missing-derivation",
+    "failed-terminalization",
+    "complete-terminalization",
+  ] as const)(
+    "persists the HTTP child proof only when the final Action Gate binding is intact (%s)",
+    async (finalReadFailure) => {
+      const store = new InMemoryRunStore();
+      const pendingChild =
+        finalReadFailure === "failed-terminalization" ||
+        finalReadFailure === "complete-terminalization";
+      if (pendingChild) {
+        vi.spyOn(store, "fail").mockRejectedValue(
+          new Error("sensitive persistence failure"),
+        );
+        if (finalReadFailure === "complete-terminalization") {
+          const complete = store.complete.bind(store);
+          vi.spyOn(store, "complete").mockImplementation(async (result) => {
+            if (result.parentRunId !== undefined)
+              throw new Error("child completion unavailable");
+            return complete(result);
           });
+        }
+      }
+      // Exercise JSON storage semantics, not in-memory undefined properties.
+      const get = store.get.bind(store);
+      let childReads = 0;
+      vi.spyOn(store, "get").mockImplementation(async (id) => {
+        const record = await get(id);
+        if (record?.status === "completed" && id.includes(":p0-child:")) {
+          childReads++;
+          if (finalReadFailure === "missing" && childReads > 3)
+            return undefined;
+          if (
+            childReads > 3 &&
+            (finalReadFailure === "fingerprint" ||
+              finalReadFailure === "block-hash" ||
+              finalReadFailure === "lower-output" ||
+              finalReadFailure === "invalid-delta" ||
+              finalReadFailure === "recipient" ||
+              finalReadFailure === "token" ||
+              finalReadFailure === "input-amount" ||
+              finalReadFailure === "warning" ||
+              finalReadFailure === "unexplained-assets" ||
+              finalReadFailure === "missing-warnings" ||
+              finalReadFailure === "missing-quote" ||
+              finalReadFailure === "external-quote-source" ||
+              finalReadFailure === "missing-quote-observation-time" ||
+              finalReadFailure === "quote-unknown-scope")
+          ) {
+            const changed = structuredClone(record);
+            const provider = changed.result.providerEvidence;
+            if (!provider) throw new Error("Missing provider fixture");
+            if (finalReadFailure === "warning") {
+              provider.warnings.value = ["Unclassified warning"];
+              return changed;
+            }
+            if (finalReadFailure === "unexplained-assets") {
+              provider.assetChangeAssessment = "UNEXPLAINED";
+              return changed;
+            }
+            if (finalReadFailure === "missing-warnings") {
+              provider.warnings.value = null;
+              return changed;
+            }
+            if (finalReadFailure === "missing-quote") {
+              provider.quote.value = null;
+              return changed;
+            }
+            if (finalReadFailure === "external-quote-source") {
+              provider.quote.source = "external";
+              return changed;
+            }
+            if (finalReadFailure === "missing-quote-observation-time") {
+              delete provider.quote.fetchedAt;
+              return changed;
+            }
+            if (finalReadFailure === "quote-unknown-scope") {
+              provider.unknownScope = [...provider.unknownScope, "quote"];
+              return changed;
+            }
+            const outcome = changed.result.providerEvidence?.outcome.value;
+            if (
+              outcome === null ||
+              typeof outcome !== "object" ||
+              Array.isArray(outcome)
+            )
+              throw new Error("Missing outcome fixture");
+            if (finalReadFailure === "fingerprint")
+              outcome.transactionFingerprint = `sha256:${"f".repeat(64)}`;
+            else if (finalReadFailure === "block-hash")
+              outcome.blockHash = `0x${"f".repeat(64)}`;
+            else if (finalReadFailure === "lower-output") {
+              outcome.amountReceivedAtomic = "400000";
+              outcome.balanceAfterAtomic = "400000";
+            } else if (finalReadFailure === "invalid-delta")
+              outcome.balanceAfterAtomic = "400000";
+            else if (finalReadFailure === "recipient")
+              outcome.recipient = "0x2222222222222222222222222222222222222222";
+            else if (finalReadFailure === "token")
+              outcome.tokenOut = "0x2222222222222222222222222222222222222222";
+            else outcome.amountInAtomic = "1000";
+            return changed;
+          }
+        }
+        return record === undefined
+          ? undefined
+          : JSON.parse(JSON.stringify(record));
+      });
+      const startSpy = vi.spyOn(store, "start");
+      const runtime = arbitrumRuntime();
+      const composition = createArbitrumProductionComposition(
+        p0CompositionOptions({
+          runtime,
+          runStore: store,
+          providerEvidenceMapper: (input) => {
+            const { normalizedIntent } = input;
+            const candidate = normalizedIntent as NormalizedSwapIntent;
+            if (
+              finalReadFailure === "failed-terminalization" &&
+              candidate.amountInAtomic !== "1000"
+            )
+              throw new Error("sensitive candidate failure");
+            const evidence = boundP0Evidence(input, {
+              estimatedAmountOut:
+                candidate.amountInAtomic === "1000" ? "0.5" : "0.7",
+              amountReceivedAtomic:
+                candidate.amountInAtomic === "1000" ? "500000" : "700000",
+            });
+            if (
+              finalReadFailure === "parent-missing-derivation" &&
+              candidate.amountInAtomic === "1000"
+            ) {
+              const outcome = evidence.outcome.value as Record<string, unknown>;
+              delete outcome.derivation;
+              delete outcome.derivationVersion;
+            }
+            return evidence;
+          },
+          p0Risk: {
+            constraints: p0Constraints,
+            constraintEvidence: p0ConstraintEvidence,
+            remediation: {
+              maxAmountInAtomic: "3000",
+              initialStepAtomic: "1000",
+              maxEvaluations: 2,
+              constraintEvidenceForCandidate: () => [
+                {
+                  name: "maxPriceImpact",
+                  state: "VERIFIED",
+                  numerator: "1",
+                  denominator: "1",
+                  unit: "bps",
+                  evidenceKey: "candidate-impact",
+                },
+              ],
+            },
+          },
+        }),
+      );
+      const app = createBackendApp({
+        runtime,
+        composition: composition as unknown as BackendCompositionRuntime,
+      });
+
+      const response = await app.fetch(
+        new Request("https://api.example.test/api/check", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            chainId: 421614,
+            protocol: "camelot-v3",
+            sender: normalizedIntent.sender,
+            tokenIn: { kind: "native" },
+            tokenOut: { kind: "erc20", address: arbitrumTokenAddress },
+            amountIn: "0.000000000000001",
+            amountInIncreaseAuthorization: {
+              availability: "available",
+              source: "user_declared",
+              consent: true,
+              maximumAmountIn: "0.000000000000003",
+            },
+            expectationBaseline: p0ExpectationBaseline,
+            economicBoundary: {
+              availability: "available",
+              minimumReceived: "0.6",
+              source: "user_declared",
+            },
+          }),
+        }),
+      );
+      const responseBody = await response.json();
+      if (pendingChild) {
+        expect(response.status).toBe(500);
+        expect(responseBody).toEqual({
+          error: {
+            code: "RUN_STORE_ERROR",
+            message: "The check run lifecycle could not be stored",
+          },
+        });
+        const parentId = startSpy.mock.calls[0]?.[0];
+        const childId = startSpy.mock.calls.find(([id]) =>
+          id.includes(":p0-child:"),
+        )?.[0];
+        if (!parentId || !childId) throw new Error("Missing started Runs");
+        expect(await store.get(parentId)).toMatchObject({ status: "started" });
+        expect(await store.get(childId)).toMatchObject({ status: "started" });
+        expect(responseBody).not.toHaveProperty("run");
+        return;
+      }
+      const result = runResultSchema.parse(responseBody);
+
+      expect(response.status).toBe(200);
+      if (finalReadFailure !== "none") {
+        if (finalReadFailure !== "parent-missing-derivation")
+          expect(childReads).toBeGreaterThan(3);
+        expect(result).toMatchObject({
+          verdict:
+            finalReadFailure === "parent-missing-derivation"
+              ? "UNKNOWN"
+              : "STOP",
+          recommendedActions: [],
+          p0: {
+            remediation: { status: "UNKNOWN", reason: "EVIDENCE_NOT_VERIFIED" },
+          },
+        });
+        expect(
+          result.evidence.filter((item) => item.kind === "action_verification"),
+        ).toEqual([]);
+        const response = await app.fetch(
+          new Request(`https://api.example.test/api/runs/${result.runId}`),
+        );
+        const body = (await response.json()) as { result: unknown };
+        expect(runResultSchema.parse(body.result)).toEqual(result);
+        return;
+      }
+      expect(result).toMatchObject({
+        status: "completed",
+        verdict: "ADJUST",
+        recommendedActions: [
+          {
+            proposedChange: { before: "1000", after: "2000" },
+          },
+        ],
+      });
+      expect(startSpy).toHaveBeenCalledTimes(2);
+      expect(
+        startSpy.mock.calls.filter(([runId]) => runId.includes(":p0-child:")),
+      ).toHaveLength(1);
+      const recovered = await app.fetch(
+        new Request(`https://api.example.test/api/runs/${result.runId}`),
+      );
+      expect(recovered.status).toBe(200);
+      const recoveredBody = (await recovered.json()) as { result: unknown };
+      expect(runResultSchema.parse(recoveredBody.result)).toEqual(result);
+      expect(result.intent.amountInIncreaseAuthorization).toEqual(
+        p0AuthorizedIntent.amountInIncreaseAuthorization,
+      );
+      const remediation = result.p0?.remediation;
+      expect(remediation?.status).toBe("VERIFIED");
+      if (remediation?.status !== "VERIFIED")
+        throw new Error("Expected verified fixture result");
+      const childResponse = await app.fetch(
+        new Request(
+          `https://api.example.test/api/runs/${encodeURIComponent(remediation.childRunId)}`,
+        ),
+      );
+      expect(childResponse.status).toBe(200);
+      const childBody = (await childResponse.json()) as { result: unknown };
+      const child = runResultSchema.parse(childBody.result);
+      expect(child).toMatchObject({
+        parentRunId: result.runId,
+        intent: {
+          amountInAtomic: "2000",
+          amountInIncreaseAuthorization:
+            p0AuthorizedIntent.amountInIncreaseAuthorization,
         },
-        p0Risk: {
-          constraints: p0Constraints,
-          constraintEvidence: p0ConstraintEvidence,
-          remediation: {
-            maxAmountInAtomic: "3000",
-            initialStepAtomic: "1000",
-            maxEvaluations: 2,
-            constraintEvidenceForCandidate: () => [
+      });
+      expect(
+        child.evidence.find(
+          (item) =>
+            item.key ===
+            remediation.verificationProof?.resultEvidenceRef.evidenceId,
+        ),
+      ).toMatchObject({
+        kind: "simulated_token_out",
+        amountReceivedAtomic:
+          remediation.verificationProof?.verifiedAmountOutAtomic,
+      });
+      expect(child.p0?.constraintVerification).toMatchObject({
+        candidateQuoteId: remediation.quoteId,
+        blockNumber: remediation.verificationBlock,
+        checks: [
+          {
+            declaration: p0Constraints[0],
+            measurements: [
               {
-                name: "maxPriceImpact",
-                state: "VERIFIED",
                 numerator: "1",
                 denominator: "1",
-                unit: "bps",
                 evidenceKey: "candidate-impact",
               },
             ],
+            outcome: { status: "PASS", declarationId: "impact" },
           },
-        },
-      }),
-    );
-    const app = createBackendApp({
-      runtime,
-      composition: composition as unknown as BackendCompositionRuntime,
-    });
-
-    const response = await app.fetch(
-      new Request("https://api.example.test/api/check", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          chainId: 421614,
-          protocol: "camelot-v3",
-          sender: normalizedIntent.sender,
-          tokenIn: { kind: "native" },
-          tokenOut: { kind: "erc20", address: arbitrumTokenAddress },
-          amountIn: "0.000000000000001",
-          expectationBaseline: p0ExpectationBaseline,
-          economicBoundary: {
-            availability: "available",
-            minimumReceived: "0.6",
-            source: "user_declared",
-          },
-        }),
-      }),
-    );
-    const result = runResultSchema.parse(await response.json());
-
-    expect(response.status).toBe(200);
-    expect(result).toMatchObject({
-      status: "completed",
-      verdict: "ADJUST",
-      recommendedActions: [
+        ],
+      });
+      for (const delta of [
         {
-          proposedChange: { before: "1000", after: "2000" },
+          evidence: result.evidence.map((item) =>
+            item.kind === "action_verification"
+              ? { ...item, targetOutputProof: undefined }
+              : item,
+          ),
         },
-      ],
-    });
-    expect(startSpy).toHaveBeenCalledTimes(2);
-    expect(
-      startSpy.mock.calls.filter(([runId]) => runId.includes(":p0-child:")),
-    ).toHaveLength(1);
-  });
+        {
+          intent: {
+            ...result.intent,
+            amountInIncreaseAuthorization: undefined,
+          },
+        },
+        {
+          intent: {
+            ...result.intent,
+            amountInIncreaseAuthorization: {
+              availability: "available",
+              source: "user_declared",
+              consent: true,
+              maximumAmountInAtomic: "1500",
+            },
+          },
+        },
+        {
+          evidence: result.evidence.map((item) =>
+            item.kind !== "action_verification"
+              ? item
+              : {
+                  ...item,
+                  targetOutputProof: {
+                    ...item.targetOutputProof,
+                    targetQuoteId: "another-target",
+                  },
+                },
+          ),
+        },
+        {
+          evidence: result.evidence.map((item) =>
+            item.kind !== "action_verification" ||
+            item.targetOutputProof === undefined
+              ? item
+              : {
+                  ...item,
+                  targetOutputProof: {
+                    ...item.targetOutputProof,
+                    resultEvidenceRef: {
+                      ...item.targetOutputProof.resultEvidenceRef,
+                      runId: "unrelated-child",
+                    },
+                  },
+                },
+          ),
+        },
+      ]) {
+        expect(runResultSchema.safeParse({ ...result, ...delta }).success).toBe(
+          false,
+        );
+      }
+      if (child.status !== "completed" || result.status !== "completed")
+        throw new Error("Expected completed fixture");
+      const actionVerification = result.evidence.find(
+        (item) => item.kind === "action_verification",
+      );
+      expect(actionVerification).toMatchObject({
+        targetOutputProof: {
+          resultEvidenceRef: {
+            kind: "CROSS_RUN_EVIDENCE",
+            runId: child.runId,
+          },
+        },
+      });
+      if (actionVerification?.kind !== "action_verification")
+        throw new Error("Expected selected-target Action Gate attestation");
+      expect(actionVerification.resultEvidenceKey).toBeUndefined();
+      expect(
+        result.recommendedActions[0]?.evidenceRefs.map((ref) => ref.key),
+      ).toEqual([actionVerification?.key]);
+      const childOutput = child.evidence.find(
+        (item) =>
+          item.key ===
+          remediation.verificationProof?.resultEvidenceRef.evidenceId,
+      );
+      if (childOutput?.kind !== "simulated_token_out")
+        throw new Error("Expected child output");
+      expect(
+        actionVerification.targetOutputProof?.resultEvidenceRef.evidenceId,
+      ).toBe(childOutput.key);
+      expect(
+        result.evidence.some((item) =>
+          item.key.startsWith(`action-verification:${child.runId}:`),
+        ),
+      ).toBe(false);
+      expect(
+        result.evidence.some(
+          (item) =>
+            item.kind === "simulated_token_out" &&
+            item.key.startsWith(`action-verification:${child.runId}:`),
+        ),
+      ).toBe(false);
+      const checks = child.p0?.constraintVerification;
+      if (!checks) throw new Error("Expected recorded constraints");
+      const tamperedChildren = [
+        {
+          ...child,
+          p0: {
+            ...child.p0,
+            constraintVerification: { ...checks, checks: [] },
+          },
+        },
+        {
+          ...child,
+          p0: {
+            ...child.p0,
+            constraintVerification: {
+              ...checks,
+              checks: [...checks.checks, ...checks.checks],
+            },
+          },
+        },
+        {
+          ...child,
+          p0: {
+            ...child.p0,
+            constraintVerification: {
+              ...checks,
+              checks: checks.checks.map((check) => ({
+                ...check,
+                declaration: { ...check.declaration, numerator: "999" },
+              })),
+            },
+          },
+        },
+        {
+          ...child,
+          p0: {
+            ...child.p0,
+            constraintVerification: {
+              ...checks,
+              checks: checks.checks.map((check) => ({
+                ...check,
+                measurements: check.measurements.map((measurement) => ({
+                  ...measurement,
+                  numerator: "999",
+                })),
+              })),
+            },
+          },
+        },
+        {
+          ...child,
+          evidence: child.evidence.map((item) =>
+            item.kind === "generic" &&
+            item.simulationInputRole === "RECIPIENT_BALANCE_SNAPSHOT"
+              ? { ...item, simulationInputRole: "SIMULATION_RECEIPT" as const }
+              : item,
+          ),
+        },
+        {
+          ...child,
+          evidence: child.evidence.map((item) =>
+            item.kind === "generic" &&
+            item.simulationInputRole === "RECIPIENT_BALANCE_SNAPSHOT"
+              ? { ...item, blockNumber: "999" }
+              : item,
+          ),
+        },
+        {
+          ...child,
+          evidence: child.evidence.map((item) =>
+            item.kind === "simulated_token_out"
+              ? {
+                  ...item,
+                  inputEvidenceRefs: item.inputEvidenceRefs.map((ref) => ({
+                    ...ref,
+                    key: "missing-source",
+                  })),
+                }
+              : item,
+          ),
+        },
+      ];
+      for (const tampered of tamperedChildren) {
+        // Storage corruption must close the gate even when recorded PASS is retained.
+        const closed = closeUnverifiedAdjust(
+          result,
+          new Map([
+            [
+              child.runId,
+              {
+                status: "completed" as const,
+                result: tampered as typeof child,
+              },
+            ],
+          ]),
+        );
+        expect(closed.verdict).not.toBe("ADJUST");
+        expect(closed.p0?.remediation.status).toBe("UNKNOWN");
+      }
+      const counted = runResultSchema.parse({
+        ...result,
+        p0: { ...result.p0, remediation: { ...remediation, evaluations: 2 } },
+      });
+      const closed = closeUnverifiedAdjust(counted, new Map());
+      expect(closed.p0?.remediation).toMatchObject({
+        status: "UNKNOWN",
+        evaluations: 2,
+      });
+      const multiParent = structuredClone(result);
+      const multiChild = structuredClone(child);
+      if (
+        !multiParent.p0?.constraintVerification ||
+        !multiChild.p0?.constraintVerification
+      )
+        throw new Error("Missing audit fixture");
+      for (const run of [multiParent, multiChild]) {
+        const audit = run.p0?.constraintVerification;
+        if (!audit || !run.p0) throw new Error("Missing audit");
+        const check = structuredClone(audit.checks[0]);
+        check.declaration.declarationId = "impact-secondary";
+        check.declaration.numerator = "20";
+        check.outcome.declarationId = "impact-secondary";
+        audit.checks.push(check);
+        run.p0.constraints.push(check.outcome);
+      }
+      expect(
+        closeUnverifiedAdjust(
+          multiParent,
+          new Map([
+            [multiChild.runId, { status: "completed", result: multiChild }],
+          ]),
+        ).verdict,
+      ).toBe("ADJUST");
+      const conflicting = structuredClone(multiChild);
+      const conflictingCheck =
+        conflicting.p0?.constraintVerification?.checks[1];
+      if (!conflictingCheck || !conflicting.p0)
+        throw new Error("Missing repeated metric fixture");
+      conflictingCheck.measurements[0].numerator = "2";
+      conflictingCheck.measurements[0].evidenceKey =
+        "different-impact-observation";
+      conflictingCheck.outcome.evidenceKey = "different-impact-observation";
+      conflicting.p0.constraints[1].evidenceKey =
+        "different-impact-observation";
+      expect(
+        closeUnverifiedAdjust(
+          multiParent,
+          new Map([
+            [conflicting.runId, { status: "completed", result: conflicting }],
+          ]),
+        ).verdict,
+      ).toBe("STOP");
+      expect(startSpy).toHaveBeenCalledTimes(2);
+    },
+  );
 
   it("leaves an injected custom core/decision override unchanged", async () => {
     const composition = createArbitrumProductionComposition(

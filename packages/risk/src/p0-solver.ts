@@ -24,6 +24,10 @@ export type CandidateVerification = {
   childStatus: "completed" | "failed" | "started";
   childAmountInAtomic: string;
   childAmountOutAtomic: string;
+  /** Canonical result in the persisted child Run; absent for legacy callers. */
+  resultEvidenceKey?: string;
+  /** Persisted execution hash, independently checked before publication. */
+  verificationBlockHash?: string;
   childQuoteId: string;
   verificationBlock: string;
   verificationTime: string;

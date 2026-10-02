@@ -80,6 +80,20 @@ export function resolveRerun(
 
   if (
     !isDeepStrictEqual(
+      parent.result.intent.amountInIncreaseAuthorization,
+      intent.amountInIncreaseAuthorization,
+    )
+  ) {
+    return {
+      success: false,
+      reason: "NOT_EXACTLY_ONE_CHANGE",
+      message:
+        "A verification Re-run must preserve the baseline input-increase authorization",
+    };
+  }
+
+  if (
+    !isDeepStrictEqual(
       parent.result.intent.economicBoundary,
       intent.economicBoundary,
     )

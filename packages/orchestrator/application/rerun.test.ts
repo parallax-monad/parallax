@@ -39,6 +39,25 @@ const completedParent: RerunRunRecord = {
 };
 
 describe("Re-run application use case", () => {
+  it("rejects adding input-increase consent while changing a baseline input", () => {
+    expect(
+      resolveRerun(
+        "run-1",
+        {
+          ...intent,
+          amountInAtomic: "2000000000000000000",
+          amountInIncreaseAuthorization: {
+            availability: "available",
+            source: "user_declared",
+            consent: true,
+            maximumAmountInAtomic: "3000000000000000000",
+          },
+        },
+        completedParent,
+      ),
+    ).toMatchObject({ success: false, reason: "NOT_EXACTLY_ONE_CHANGE" });
+  });
+
   it("resolves from a parent record preloaded by the application", () => {
     const result = resolveRerun(
       "run-1",
