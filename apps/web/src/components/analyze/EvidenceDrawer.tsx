@@ -82,7 +82,7 @@ function ScopeList({
           ))}
         </ul>
       ) : (
-        <p className="m-0 mt-1 text-[12px] text-faint">Unavailable</p>
+        <p className="m-0 mt-1 text-[12px] text-faint">No items reported</p>
       )}
     </div>
   );

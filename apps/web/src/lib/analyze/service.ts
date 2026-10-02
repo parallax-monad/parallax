@@ -316,6 +316,11 @@ function evidenceStatus(value: unknown): EvidenceItem["status"] {
   return "unknown";
 }
 
+function capabilityStatus(value: unknown): EvidenceCapabilityStatus {
+  if (value === "checked" || value === "unavailable") return value;
+  return "unknown";
+}
+
 function evidence(value: unknown, replay: boolean): EvidenceItem | undefined {
   const item = obj(value);
   const id = str(item?.key);
@@ -559,8 +564,7 @@ function mapRun(
         const capability = obj(value);
         return {
           id,
-          status: (str(capability?.status) ??
-            "unknown") as EvidenceCapabilityStatus,
+          status: capabilityStatus(capability?.status),
           reason: str(capability?.reason),
         };
       })
