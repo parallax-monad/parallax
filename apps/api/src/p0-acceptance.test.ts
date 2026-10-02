@@ -924,31 +924,47 @@ describe("Backend P0 acceptance matrix", () => {
       afterValue: "1000000000000000000",
       baselineBoundaryAtomic: "20000",
       verificationBoundaryAtomic: "20000",
-      resultEvidenceKey: "verified-output-improvement",
+      resultEvidenceRef: {
+        kind: "CROSS_RUN_EVIDENCE",
+        runId: "run-2",
+        evidenceId: expect.any(String),
+      },
     });
     if (attestation?.kind !== "action_verification" || action === undefined) {
       throw new Error("expected Action Gate attestation and Action");
     }
-
-    const verifiedOutput = response.body.evidence.find(
-      (item) => item.key === attestation.resultEvidenceKey,
-    );
-    expect(verifiedOutput).toMatchObject({
-      kind: "simulated_token_out",
-      key: "verified-output-improvement",
-    });
+    expect(attestation.resultEvidenceKey).toBeUndefined();
+    expect(
+      response.body.evidence.some(
+        (item) => item.key === "verified-output-improvement",
+      ),
+    ).toBe(false);
     expect(action.evidenceRefs.map((reference) => reference.key)).toEqual([
       attestation.key,
-      attestation.resultEvidenceKey,
     ]);
     expect(action.proposedChange).toEqual({
       field: "amountIn",
       before: attestation.beforeValue,
       after: attestation.afterValue,
     });
-    expect(await store.get("run-2")).toMatchObject({
+    const childRun = await store.get("run-2");
+    expect(childRun).toMatchObject({
       status: "completed",
       parentRunId: "run-1",
+    });
+    if (
+      childRun?.status !== "completed" ||
+      childRun.result.status !== "completed"
+    ) {
+      throw new Error("expected persisted verification child Run");
+    }
+    expect(
+      childRun.result.evidence.find(
+        (item) => item.key === attestation.resultEvidenceRef?.evidenceId,
+      ),
+    ).toMatchObject({
+      kind: "simulated_token_out",
+      amountReceivedAtomic: expect.any(String),
     });
   });
 

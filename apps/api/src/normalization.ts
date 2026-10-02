@@ -81,6 +81,34 @@ function normalizeSwapRequest(
     return conversionFailure("amountIn", amountIn.error);
   }
 
+  let authorization: NormalizedSwapIntent["amountInIncreaseAuthorization"];
+  if (request.amountInIncreaseAuthorization?.availability === "available") {
+    const maximum = convertHumanAmountToAtomic(
+      request.amountInIncreaseAuthorization.maximumAmountIn,
+      tokenIn.decimals,
+    );
+    if (!maximum.success)
+      return conversionFailure(
+        "amountInIncreaseAuthorization.maximumAmountIn",
+        maximum.error,
+      );
+    if (BigInt(maximum.amountAtomic) < BigInt(amountIn.amountAtomic)) {
+      return failure(
+        "INVALID_AMOUNT_INCREASE_AUTHORIZATION",
+        "amountInIncreaseAuthorization.maximumAmountIn",
+        "Authorized maximum must not be below amountIn",
+      );
+    }
+    authorization = {
+      availability: "available",
+      source: "user_declared",
+      consent: true,
+      maximumAmountInAtomic: maximum.amountAtomic,
+    };
+  } else {
+    authorization = request.amountInIncreaseAuthorization;
+  }
+
   let economicBoundary: NormalizedSwapIntent["economicBoundary"];
   if (request.economicBoundary.availability === "unavailable") {
     economicBoundary = request.economicBoundary;
@@ -116,6 +144,9 @@ function normalizeSwapRequest(
       tokenIn: tokenIn.asset,
       tokenOut: tokenOut.asset,
       amountInAtomic: amountIn.amountAtomic,
+      ...(authorization === undefined
+        ? {}
+        : { amountInIncreaseAuthorization: authorization }),
       economicBoundary,
     }),
   };
@@ -185,7 +216,10 @@ export function coerceIntentNormalizationResult(
 }
 
 function conversionFailure(
-  field: "amountIn" | "economicBoundary.minimumReceived",
+  field:
+    | "amountIn"
+    | "economicBoundary.minimumReceived"
+    | "amountInIncreaseAuthorization.maximumAmountIn",
   error: { code: AmountConversionErrorCode; message: string },
 ): IntentNormalizationResult {
   return failure(error.code, field, error.message);

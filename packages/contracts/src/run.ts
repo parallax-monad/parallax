@@ -1,5 +1,10 @@
 import { z } from "zod";
-import { type AssetReference, assetIdentity, runIdSchema } from "./common.js";
+import {
+  type AssetReference,
+  assetIdentity,
+  atomicAmountSchema,
+  runIdSchema,
+} from "./common.js";
 import {
   type ActionEvaluation,
   actionEvaluationSchema,
@@ -450,11 +455,19 @@ function validateActionEvaluationEvidence(
     });
   }
 
-  const resultEvidence = evidenceByKey.get(verification.resultEvidenceKey);
-  const resultIsReferenced = evaluation.evidenceRefs.some(
-    (reference) => reference.key === verification.resultEvidenceKey,
-  );
-  const resultIsTrusted =
+  const selectedTargetProof = verification.targetOutputProof;
+  const crossRunResultRef =
+    selectedTargetProof?.resultEvidenceRef ?? verification.resultEvidenceRef;
+  const resultEvidence =
+    verification.resultEvidenceKey === undefined
+      ? undefined
+      : evidenceByKey.get(verification.resultEvidenceKey);
+  const resultIsReferenced =
+    verification.resultEvidenceKey !== undefined &&
+    evaluation.evidenceRefs.some(
+      (reference) => reference.key === verification.resultEvidenceKey,
+    );
+  const sameRunResultIsTrusted =
     resultEvidence !== undefined &&
     resultIsReferenced &&
     resultEvidence.status === "confirmed" &&
@@ -466,8 +479,17 @@ function validateActionEvaluationEvidence(
     resultEvidence.reproducibility === verification.reproducibility &&
     resultEvidence.runtimeVersion === verification.runtimeVersion &&
     resultEvidence.runtimeRevision === verification.runtimeRevision;
+  const crossRunResultIsTrusted =
+    crossRunResultRef !== undefined &&
+    verification.resultEvidenceKey === undefined &&
+    verification.baselineRunId === runId &&
+    crossRunResultRef.runId === verification.verificationRunId &&
+    evaluation.evidenceRefs.length === 1 &&
+    evaluation.evidenceRefs[0]?.key === verification.key;
+  const resultIsTrusted = sameRunResultIsTrusted || crossRunResultIsTrusted;
   const resultMatchesReason =
     verification.actionReasonCode !== "OUTPUT_IMPROVEMENT_VERIFIED" ||
+    crossRunResultRef !== undefined ||
     resultEvidence?.kind === "simulated_token_out";
 
   if (!resultIsTrusted || !resultMatchesReason) {
@@ -1265,6 +1287,51 @@ function validateEconomicBoundary(
   }
 
   const simulatedOutput = simulationEvidence[0];
+  validateSimulatedOutputInputs(simulatedOutput, evidenceByKey, context);
+
+  if (
+    !sameAsset(
+      result.intent.chainId,
+      result.intent.tokenOut,
+      simulatedOutput.tokenOut,
+    )
+  ) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Simulated tokenOut must match the checked intent",
+      path: ["evidence", simulatedOutput.key, "tokenOut"],
+    });
+  }
+  if (
+    simulatedOutput.recipient.toLowerCase() !==
+    result.intent.recipient.toLowerCase()
+  ) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Simulated recipient must match the checked intent recipient",
+      path: ["evidence", simulatedOutput.key, "recipient"],
+    });
+  }
+  const received = BigInt(simulatedOutput.amountReceivedAtomic);
+  const minimum = BigInt(result.intent.economicBoundary.minimumReceivedAtomic);
+  const expectedStatus = received >= minimum ? "PASS" : "FAIL";
+  if (economicRule.status !== expectedStatus) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message:
+        "Economic Rule status must match the simulated tokenOut comparison",
+      path: ["ruleResults", economicRuleIndex, "status"],
+    });
+  }
+}
+
+/** Canonical result source proof is required independently of an economic floor. */
+function validateSimulatedOutputInputs(
+  simulatedOutput: SimulatedTokenOutEvidence,
+  evidenceByKey: Map<string, EvidenceItem>,
+  context: z.RefinementCtx,
+  requireQualification = false,
+) {
   const simulationInputs = resolveEvidenceRefs(
     simulatedOutput.inputEvidenceRefs,
     evidenceByKey,
@@ -1301,6 +1368,18 @@ function validateEconomicBoundary(
         input.simulationInputRole === "ASSET_CHANGE_SET",
     );
   if (
+    (requireQualification &&
+      !simulationInputs.some(
+        (input) =>
+          input.kind === "generic" &&
+          input.simulationInputRole ===
+            (simulatedOutput.derivation === "recipient_balance_delta"
+              ? "RECIPIENT_BALANCE_SNAPSHOT"
+              : "ASSET_CHANGE_SET"),
+      )) ||
+    (requireQualification &&
+      simulatedOutput.derivation === "asset_change" &&
+      !hasPairedQualification) ||
     simulatedOutput.inputEvidenceRefs.some(
       (reference) => reference.key === simulatedOutput.key,
     ) ||
@@ -1319,51 +1398,16 @@ function validateEconomicBoundary(
         input.reproducibility === simulatedOutput.reproducibility &&
         input.runtimeVersion === simulatedOutput.runtimeVersion &&
         input.runtimeRevision === simulatedOutput.runtimeRevision &&
-        input.simulatorPinnedBlock === simulatedOutput.simulatorPinnedBlock,
+        input.simulatorPinnedBlock === simulatedOutput.simulatorPinnedBlock &&
+        (!requireQualification ||
+          input.blockNumber === simulatedOutput.blockNumber),
     )
   ) {
     context.addIssue({
       code: z.ZodIssueCode.custom,
       message:
-        "Economic PASS/FAIL requires trusted resolving Simulation input Evidence",
+        "Simulated output requires trusted resolving Simulation input Evidence",
       path: ["evidence", simulatedOutput.key, "inputEvidenceRefs"],
-    });
-  }
-
-  if (
-    !sameAsset(
-      result.intent.chainId,
-      result.intent.tokenOut,
-      simulatedOutput.tokenOut,
-    )
-  ) {
-    context.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: "Simulated tokenOut must match the checked intent",
-      path: ["evidence", simulatedOutput.key, "tokenOut"],
-    });
-  }
-
-  if (
-    simulatedOutput.recipient.toLowerCase() !==
-    result.intent.recipient.toLowerCase()
-  ) {
-    context.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: "Simulated recipient must match the checked intent recipient",
-      path: ["evidence", simulatedOutput.key, "recipient"],
-    });
-  }
-
-  const received = BigInt(simulatedOutput.amountReceivedAtomic);
-  const minimum = BigInt(result.intent.economicBoundary.minimumReceivedAtomic);
-  const expectedStatus = received >= minimum ? "PASS" : "FAIL";
-  if (economicRule.status !== expectedStatus) {
-    context.addIssue({
-      code: z.ZodIssueCode.custom,
-      message:
-        "Economic Rule status must match the simulated tokenOut comparison",
-      path: ["ruleResults", economicRuleIndex, "status"],
     });
   }
 }
@@ -1394,11 +1438,88 @@ export const completedRunResultSchema = runIdentitySchema
   .superRefine((result, context) => {
     validateRunIdentity(result, context);
     validateRunDiff(result, context);
+    if (
+      result.verdict === "ADJUST" &&
+      result.p0?.remediation.status === "VERIFIED" &&
+      result.p0.remediation.verificationProof !== undefined &&
+      !result.evidence.some(
+        (item) =>
+          item.kind === "action_verification" &&
+          item.targetOutputProof !== undefined,
+      )
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["evidence"],
+        message:
+          "A new selected-target recommendation requires its selected-target attestation",
+      });
+    }
+    result.evidence.forEach((item, index) => {
+      if (
+        item.kind !== "action_verification" ||
+        item.targetOutputProof === undefined
+      )
+        return;
+      const authorization = result.intent.amountInIncreaseAuthorization;
+      const remediation = result.p0?.remediation;
+      const proof = item.targetOutputProof;
+      if (
+        authorization?.availability !== "available" ||
+        remediation?.status !== "VERIFIED" ||
+        !remediation.verificationProof ||
+        item.baselineRunId !== result.runId ||
+        item.verificationRunId !== remediation.childRunId ||
+        item.beforeValue !== result.intent.amountInAtomic ||
+        item.afterValue !== remediation.amountInAtomic ||
+        !atomicAmountSchema.safeParse(authorization.maximumAmountInAtomic)
+          .success ||
+        !atomicAmountSchema.safeParse(result.intent.amountInAtomic).success ||
+        !atomicAmountSchema.safeParse(item.afterValue).success ||
+        BigInt(item.afterValue) <= BigInt(result.intent.amountInAtomic) ||
+        BigInt(item.afterValue) > BigInt(authorization.maximumAmountInAtomic) ||
+        item.resultEvidenceKey !== undefined ||
+        item.resultEvidenceRef !== undefined ||
+        proof.resultEvidenceRef.runId !== item.verificationRunId ||
+        proof.resultEvidenceRef.runId !== remediation.childRunId ||
+        proof.targetQuoteId !== remediation.verificationProof.targetQuoteId ||
+        proof.targetAmountOutAtomic !==
+          remediation.verificationProof.targetAmountOutAtomic ||
+        proof.resultEvidenceRef.evidenceId !==
+          remediation.verificationProof.resultEvidenceRef.evidenceId ||
+        proof.verifiedAmountOutAtomic !==
+          remediation.verificationProof.verifiedAmountOutAtomic ||
+        JSON.stringify(proof.executionBinding) !==
+          JSON.stringify(remediation.verificationProof.executionBinding) ||
+        (result.intent.economicBoundary.availability === "available"
+          ? item.baselineBoundaryAtomic !==
+              result.intent.economicBoundary.minimumReceivedAtomic ||
+            item.verificationBoundaryAtomic !==
+              result.intent.economicBoundary.minimumReceivedAtomic
+          : item.baselineBoundaryAtomic !== undefined ||
+            item.verificationBoundaryAtomic !== undefined)
+      ) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["evidence", index, "targetOutputProof"],
+          message:
+            "Selected target Action Gate proof must preserve explicit consent, target identity, actual output and the separate transaction boundary",
+        });
+      }
+    });
     const evidenceByKey = collectEvidence(
       result.evidence,
       result.replayMode,
       context,
     );
+    if (
+      result.intent.amountInIncreaseAuthorization?.availability === "available"
+    ) {
+      for (const item of result.evidence) {
+        if (item.kind === "simulated_token_out")
+          validateSimulatedOutputInputs(item, evidenceByKey, context, true);
+      }
+    }
 
     validateRuleResults(
       result.ruleResults,

@@ -1,10 +1,16 @@
-import type { NormalizedSwapIntent, RunResult } from "@parallax/contracts";
+import {
+  evidenceItemSchema,
+  type NormalizedSwapIntent,
+  type RunResult,
+  runResultSchema,
+} from "@parallax/contracts";
 import { describe, expect, it } from "vitest";
 import {
   actionGateVerificationRunIds,
   buildVerifiedAdjustBaseline,
   childRunPassesActionGate,
   closeUnverifiedAdjust,
+  evidenceRefFromItem,
   isActionGateCandidate,
   proposeAmountInAdjustment,
 } from "./action-gate.js";
@@ -330,16 +336,204 @@ describe("Action Gate fixture helpers", () => {
     expect(childRunPassesActionGate(child, "run-1")).toBe(true);
     const baseline = economicFailStopResult(assets, "run-1", availableIntent);
     const verified = buildVerifiedAdjustBaseline(baseline, child, adjustment);
-    const output = verified.evidence.find(
-      (item) =>
-        item.kind === "simulated_token_out" &&
-        item.key === "verified-output-improvement",
+    expect(
+      verified.evidence.filter((item) => item.kind === "simulated_token_out"),
+    ).toEqual(
+      baseline.evidence.filter((item) => item.kind === "simulated_token_out"),
     );
-    expect(output).toMatchObject({
-      kind: "simulated_token_out",
-      amountReceivedAtomic: referenced.amountReceivedAtomic,
-      recipient: referenced.recipient,
+    const attestation = verified.evidence.find(
+      (item) => item.kind === "action_verification",
+    );
+    expect(attestation).toMatchObject({
+      resultEvidenceRef: {
+        kind: "CROSS_RUN_EVIDENCE",
+        runId: child.runId,
+        evidenceId: referenced.key,
+      },
     });
+    if (attestation?.kind !== "action_verification") {
+      throw new Error("expected Action Gate attestation");
+    }
+    expect(attestation.resultEvidenceKey).toBeUndefined();
+    expect(
+      verified.recommendedActions[0]?.evidenceRefs.map((ref) => ref.key),
+    ).toEqual([attestation.key]);
+  });
+
+  it("fails closed when a CrossRun Evidence locator does not resolve in its child", () => {
+    const baseline = economicFailStopResult(assets, "run-1", availableIntent);
+    const adjustment = proposeAmountInAdjustment(baseline.intent);
+    const child: Completed = {
+      ...economicPassChildResult(assets, "run-2", adjustment.nextIntent),
+      parentRunId: "run-1",
+      diff: {
+        previousRunId: "run-1",
+        previousVerdict: "STOP",
+        changedFields: [
+          {
+            field: "amountInAtomic",
+            before: adjustment.before,
+            after: adjustment.after,
+          },
+        ],
+      },
+    };
+    const verified = buildVerifiedAdjustBaseline(baseline, child, adjustment);
+    const attestation = verified.evidence.find(
+      (item) => item.kind === "action_verification",
+    );
+    if (attestation?.kind !== "action_verification") {
+      throw new Error("expected Action Gate attestation");
+    }
+    if (attestation.resultEvidenceRef === undefined) {
+      throw new Error("expected CrossRun Evidence reference");
+    }
+
+    const tampered = runResultSchema.parse({
+      ...verified,
+      evidence: verified.evidence.map((item) =>
+        item.key === attestation.key
+          ? {
+              ...item,
+              resultEvidenceRef: {
+                ...attestation.resultEvidenceRef,
+                evidenceId: "missing-child-output",
+              },
+            }
+          : item,
+      ),
+    });
+
+    expect(
+      closeUnverifiedAdjust(
+        tampered,
+        new Map([["run-2", { status: "completed", result: child }]]),
+      ),
+    ).toMatchObject({
+      verdict: "STOP",
+      recommendedActions: [],
+    });
+  });
+
+  it("does not turn a classified NO_ROUTE_FOUND STOP into ADJUST", () => {
+    const baseline = economicFailStopResult(assets, "run-1", availableIntent);
+    const routeEvidence = baseline.evidence.find(
+      (item) =>
+        item.kind === "generic" && item.routeInputRole === "ROUTE_QUOTE",
+    );
+    if (routeEvidence?.kind !== "generic") {
+      throw new Error("expected route Evidence in the baseline fixture");
+    }
+
+    const noRouteProvenance = {
+      blockNumber: routeEvidence.blockNumber,
+      simulatorPinnedBlock: routeEvidence.simulatorPinnedBlock,
+      runtimeVersion: routeEvidence.runtimeVersion,
+      runtimeRevision: routeEvidence.runtimeRevision,
+      reproducibility: routeEvidence.reproducibility,
+      isReplay: false,
+      isMock: false,
+    };
+    const rawEvidence = evidenceItemSchema.parse({
+      ...noRouteProvenance,
+      kind: "no_route_raw_output",
+      key: "raw-no-route",
+      status: "confirmed",
+      summary: "The provider reported no route for the baseline Intent",
+      source: "quote",
+      stage: "QUOTE",
+      payloadRef: {
+        locator: "quote://run-1/no-route",
+        encoding: "json",
+        fingerprint: `sha256:${"a".repeat(64)}`,
+      },
+    });
+    const classificationEvidence = evidenceItemSchema.parse({
+      ...noRouteProvenance,
+      kind: "no_route_classification",
+      key: "classified-no-route",
+      status: "confirmed",
+      summary: "The provider response was classified as NO_ROUTE",
+      source: "derived",
+      stage: "QUOTE",
+      protocol: baseline.intent.protocol,
+      chainId: baseline.intent.chainId,
+      sender: baseline.intent.sender,
+      recipient: baseline.intent.recipient,
+      tokenIn: baseline.intent.tokenIn,
+      tokenOut: baseline.intent.tokenOut,
+      amountInAtomic: baseline.intent.amountInAtomic,
+      rawEvidenceKey: rawEvidence.key,
+      normalizedCode: "NO_ROUTE",
+      normalizedMessage: "No route was available for the checked Intent",
+      normalizedSource: "quote",
+      normalizationKind: "PRESERVED",
+      normalizerVersion: "action-gate-test/v1",
+      integrationStatus: "OK",
+    });
+    const parsedNoRouteBaseline = runResultSchema.parse({
+      ...baseline,
+      verdict: "STOP",
+      ruleResults: baseline.ruleResults.map((rule) => {
+        if (rule.ruleId === "P0-EXECUTION-001") {
+          return {
+            ruleId: "P0-EXECUTION-001",
+            status: "FAIL",
+            reasonCode: "NO_ROUTE_FOUND",
+            evidenceRefs: [evidenceRefFromItem(classificationEvidence)],
+            actionEvaluations: [],
+          };
+        }
+        if (rule.ruleId === "P0-ECONOMIC-001") {
+          return {
+            ruleId: "P0-ECONOMIC-001",
+            status: "NOT_APPLICABLE",
+            applicabilityReasonCode: "STAGE_NOT_ENTERED_AFTER_TERMINAL_RESULT",
+            evidenceRefs: [],
+            actionEvaluations: [],
+          };
+        }
+        return rule;
+      }),
+      evidence: [...baseline.evidence, rawEvidence, classificationEvidence],
+      scope: baseline.scope.map((item) =>
+        item.key === "P0-ECONOMIC-001"
+          ? {
+              ...item,
+              status: "not_checked",
+              reason: "STAGE_NOT_ENTERED_AFTER_TERMINAL_RESULT",
+            }
+          : item,
+      ),
+      route: {
+        availability: "unavailable",
+        reason: "No route was available for the baseline Intent",
+      },
+    });
+    if (parsedNoRouteBaseline.status !== "completed") {
+      throw new Error("expected a completed NO_ROUTE baseline fixture");
+    }
+    const noRouteBaseline: Completed = parsedNoRouteBaseline;
+    const adjustment = proposeAmountInAdjustment(noRouteBaseline.intent);
+    const child: Completed = {
+      ...economicPassChildResult(assets, "run-2", adjustment.nextIntent),
+      parentRunId: noRouteBaseline.runId,
+      diff: {
+        previousRunId: noRouteBaseline.runId,
+        previousVerdict: "STOP",
+        changedFields: [
+          {
+            field: "amountInAtomic",
+            before: adjustment.before,
+            after: adjustment.after,
+          },
+        ],
+      },
+    };
+
+    expect(() =>
+      buildVerifiedAdjustBaseline(noRouteBaseline, child, adjustment),
+    ).toThrow(/NO_ROUTE_FOUND/);
   });
 
   it("rejects a child when Economic EvidenceRef does not resolve to matching tokenOut", () => {
