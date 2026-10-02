@@ -560,7 +560,32 @@ function parseAccountStateSnapshot(
     !str(allowance.status)
   )
     return;
-  return snapshot as unknown as AccountStateSnapshot;
+  const metadata = (value: unknown) => {
+    const item = obj(value);
+    return item &&
+      typeof item.symbol === "string" &&
+      typeof item.decimals === "number"
+      ? { symbol: item.symbol, decimals: item.decimals }
+      : undefined;
+  };
+  const normalizeBalance = (value: unknown) => {
+    const item = obj(value);
+    if (!item) return value;
+    return { ...item, metadata: metadata(item.metadata) };
+  };
+  const normalized = {
+    ...snapshot,
+    balances: {
+      inputToken: normalizeBalance(balances?.inputToken),
+      outputToken: normalizeBalance(balances?.outputToken),
+      native: normalizeBalance(balances?.native),
+    },
+    allowance: {
+      ...allowance,
+      metadata: metadata(allowance.metadata),
+    },
+  };
+  return normalized as unknown as AccountStateSnapshot;
 }
 
 function accountStateFailure(response: Response, payload: unknown): ApiFailure {

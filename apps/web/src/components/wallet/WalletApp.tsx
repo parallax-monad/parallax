@@ -143,6 +143,47 @@ function backendRunId(result: CheckSwapResult): string | undefined {
   return runId === result.runId ? runId : undefined;
 }
 
+function accountStateMatchesResult(
+  result: CheckSwapResult,
+  snapshot: NonNullable<CheckSwapResult["accountState"]>,
+): boolean {
+  const raw =
+    typeof result.rawResponse === "object" && result.rawResponse !== null
+      ? (result.rawResponse as Record<string, unknown>)
+      : undefined;
+  const rawRun =
+    typeof raw?.result === "object" && raw.result !== null
+      ? (raw.result as Record<string, unknown>)
+      : raw;
+  const intent =
+    typeof rawRun?.intent === "object" && rawRun.intent !== null
+      ? (rawRun.intent as Record<string, unknown>)
+      : undefined;
+  const rawTokenIn = intent?.tokenIn as
+    | { kind?: string; address?: string }
+    | undefined;
+  const rawTokenOut = intent?.tokenOut as
+    | { kind?: string; address?: string }
+    | undefined;
+  const equalAsset = (left: unknown, right: unknown) => {
+    const a = left as { kind?: string; address?: string } | undefined;
+    const b = right as { kind?: string; address?: string } | undefined;
+    return (
+      a?.kind === b?.kind &&
+      (a?.kind !== "erc20" ||
+        a.address?.toLowerCase() === b?.address?.toLowerCase())
+    );
+  };
+  return (
+    snapshot.context.chainId === result.chainId &&
+    snapshot.context.protocol === result.protocol &&
+    snapshot.context.sender.toLowerCase() === DEFAULT_SENDER.toLowerCase() &&
+    snapshot.context.recipient.toLowerCase() === DEFAULT_SENDER.toLowerCase() &&
+    snapshot.context.amountInAtomic === intent?.amountInAtomic &&
+    equalAsset(snapshot.context.tokenIn, rawTokenIn) &&
+    equalAsset(snapshot.context.tokenOut, rawTokenOut)
+  );
+}
 export function WalletApp({ language }: { language: Language }) {
   const [showIntro, setShowIntro] = useState(true);
   const [screen, setScreen] = useState<Screen>("home");
@@ -237,7 +278,12 @@ export function WalletApp({ language }: { language: Language }) {
   // aborts the previous one so a slow response cannot overwrite a newer one.
   const { protocol, tokenIn, tokenOut, amountIn } = form;
   useEffect(() => {
-    if (accountState.status !== "available" || !result || result.accountState)
+    if (
+      accountState.status !== "available" ||
+      !result ||
+      result.accountState ||
+      !accountStateMatchesResult(result, accountState.snapshot)
+    )
       return;
     setResult({ ...result, accountState: accountState.snapshot });
   }, [accountState, result]);
@@ -437,6 +483,8 @@ export function WalletApp({ language }: { language: Language }) {
                     p0Config={p0Config}
                     onChange={(nextForm) => {
                       setForm(nextForm);
+                      setQuote({ status: "idle" });
+                      setAccountState({ status: "idle" });
                       if (Object.keys(formErrors).length > 0) setFormErrors({});
                     }}
                     onSubmit={runCheck}

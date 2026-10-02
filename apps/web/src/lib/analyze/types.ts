@@ -241,8 +241,7 @@ export type AccountStateStatus = "AVAILABLE" | "PARTIAL" | "UNAVAILABLE";
 export type AccountBalanceState = {
   status: "AVAILABLE" | "UNAVAILABLE";
   amountAtomic?: string;
-  symbol: string;
-  decimals: number;
+  metadata?: { symbol: string; decimals: number };
   reason?: string;
 };
 export type AccountAllowanceState =
@@ -254,6 +253,7 @@ export type AccountAllowanceState =
       status: "SUFFICIENT" | "INSUFFICIENT" | "UNAVAILABLE";
       allowanceAtomic?: string;
       requiredAmountAtomic: string;
+      metadata: { symbol: string; decimals: number };
       spender?: { status: string; address?: string; qualificationRef?: string };
       reason?: string;
     };

@@ -4,6 +4,26 @@ import { type Copy, type Language, say } from "@/lib/i18n";
 function value(value: string | undefined): string {
   return value ?? "UNAVAILABLE";
 }
+function atomic(
+  value: string | undefined,
+  decimals: number | undefined,
+): string {
+  if (!value || !/^\d+$/.test(value) || decimals === undefined)
+    return "UNAVAILABLE";
+  if (decimals === 0) return value;
+  const padded = value.padStart(decimals + 1, "0");
+  const fraction = padded.slice(-decimals).replace(/0+$/, "");
+  return `${padded.slice(0, -decimals)}${fraction ? `.${fraction}` : ""}`;
+}
+
+function balanceText(
+  balance: AccountStateSnapshot["balances"]["inputToken"],
+): string {
+  if (balance.status !== "AVAILABLE" || !balance.metadata) {
+    return `UNAVAILABLE · ${value(balance.reason)}`;
+  }
+  return `${atomic(balance.amountAtomic, balance.metadata.decimals)} ${balance.metadata.symbol}`;
+}
 
 function Row({ label, text }: { label: Copy; text: string }) {
   return (
@@ -30,8 +50,8 @@ function Balance({ snapshot }: { snapshot: AccountStateSnapshot }) {
           label={{ en: label, zh: label }}
           text={
             balance.status === "AVAILABLE"
-              ? `${value(balance.amountAtomic)} atomic`
-              : `UNAVAILABLE · ${value(balance.reason)}`
+              ? balanceText(balance)
+              : `UNAVAILABLE · ${balance.reason ?? "UNKNOWN"}`
           }
         />
       ))}
@@ -50,12 +70,12 @@ export function AccountStateCard({
   const allowanceText =
     allowance.status === "NOT_APPLICABLE"
       ? `NOT_APPLICABLE · ${allowance.reason}`
-      : `${allowance.status} · allowance ${value(allowance.allowanceAtomic)} · required ${allowance.requiredAmountAtomic}`;
+      : `${allowance.status} · allowance ${atomic(allowance.allowanceAtomic, allowance.metadata?.decimals)} ${allowance.metadata?.symbol ?? ""} · required ${atomic(allowance.requiredAmountAtomic, allowance.metadata?.decimals)} ${allowance.metadata?.symbol ?? ""}`;
   const spender =
     allowance.status === "NOT_APPLICABLE"
       ? "NOT_APPLICABLE"
       : (allowance.spender?.address ??
-        `UNAVAILABLE · ${value(allowance.reason)}`);
+        `UNAVAILABLE · ${allowance.reason ?? "SPENDER_NOT_QUALIFIED"}`);
 
   return (
     <section className="rounded-[12px] border border-line bg-ink-elev2/30 p-3">
