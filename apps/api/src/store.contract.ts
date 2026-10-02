@@ -4,6 +4,7 @@ import type {
 } from "@parallax/contracts";
 import { economicFailStopResult } from "@parallax/orchestrator/application/action-gate-fixtures";
 import { describe, expect, it } from "vitest";
+import { projectEvidencePresentation } from "./backend/evidence-presentation.js";
 import type { RunStore } from "./store.js";
 
 export type RunStoreFactory = () => RunStore | Promise<RunStore>;
@@ -137,6 +138,38 @@ export function runStoreContract(
 ): void {
   const contractIt = options.skip === true ? it.skip : it;
   describe(`${implementationName} RunStore contract`, () => {
+    contractIt(
+      "round-trips the display projection for completed/failed Runs and preserves legacy absence",
+      async () => {
+        const store = await createStore();
+        for (const mode of ["completed", "failed"] as const) {
+          const result =
+            mode === "completed"
+              ? completedResultWithBasicSimulation(`presentation-${mode}`)
+              : failureResult(`presentation-${mode}`);
+          result.evidencePresentation = projectEvidencePresentation(result);
+          await store.start(result.runId, result.intent);
+          if (result.status === "integration_error")
+            await store.fail(result.runId, "AGENT_FLOW_ERROR", result);
+          else await store.complete(result);
+          const record = await store.get(result.runId);
+          expect(
+            record?.status === "started"
+              ? undefined
+              : record?.result.evidencePresentation,
+          ).toEqual(result.evidencePresentation);
+        }
+        const legacy = failureResult("presentation-legacy");
+        await store.start(legacy.runId, legacy.intent);
+        await store.fail(legacy.runId, "AGENT_FLOW_ERROR", legacy);
+        const record = await store.get(legacy.runId);
+        expect(
+          record?.status === "started"
+            ? undefined
+            : record?.result.evidencePresentation,
+        ).toBeUndefined();
+      },
+    );
     contractIt(
       "round-trips trusted metadata for completed and failed Runs, preserving legacy absence",
       async () => {

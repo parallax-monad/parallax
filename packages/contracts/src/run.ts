@@ -16,6 +16,7 @@ import {
   type SimulatedTokenOutEvidence,
   scopeDisclosureSchema,
 } from "./evidence.js";
+import { evidencePresentationSchema } from "./evidence-presentation.js";
 import { genericEvidenceSchema } from "./generic-evidence.js";
 import { normalizedSwapIntentSchema } from "./intent.js";
 import { p0RunResultSchema } from "./p0-run-result.js";
@@ -1355,6 +1356,8 @@ export const completedRunResultSchema = runIdentitySchema
     p0: p0RunResultSchema.optional(),
     /** Provisional Backend provider evidence; not part of canonical rule input. */
     providerEvidence: genericEvidenceSchema.optional(),
+    /** Additive Backend display metadata; not canonical decision evidence. */
+    evidencePresentation: evidencePresentationSchema.optional(),
     diff: runDiffSchema.optional(),
   })
   .strict()
@@ -1461,6 +1464,8 @@ export const failedRunResultSchema = runIdentitySchema
     route: routeSchema.optional(),
     /** Provisional Backend provider evidence; not part of canonical rule input. */
     providerEvidence: genericEvidenceSchema.optional(),
+    /** Absent on legacy Runs; historical reads must not synthesize it. */
+    evidencePresentation: evidencePresentationSchema.optional(),
   })
   .strict()
   .superRefine((result, context) => {
