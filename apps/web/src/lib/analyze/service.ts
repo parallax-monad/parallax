@@ -54,16 +54,16 @@ const unavailable = cp("unavailable");
 function parseAdjustReason(run: unknown): AdjustReason | undefined {
   const evidence = arr(obj(run)?.evidence);
   const summary = str(obj(run)?.summary);
-  
+
   // Look for PARAMETER-ADJUSTMENT-001 evidence
   const parameterAdjustment = evidence
     .map(obj)
     .find((item) => item?.key === "PARAMETER-ADJUSTMENT-001");
-  
+
   if (!parameterAdjustment) return undefined;
-  
+
   const evidenceSummary = str(parameterAdjustment.summary) || summary;
-  
+
   // Check for quoted output below minimum pattern
   if (
     evidenceSummary?.includes("Quoted output") &&
@@ -71,7 +71,7 @@ function parseAdjustReason(run: unknown): AdjustReason | undefined {
   ) {
     return "QUOTED_OUTPUT_BELOW_MINIMUM";
   }
-  
+
   // Check for insufficient balance pattern
   if (
     evidenceSummary?.includes("Input balance") &&
@@ -79,7 +79,7 @@ function parseAdjustReason(run: unknown): AdjustReason | undefined {
   ) {
     return "INPUT_BALANCE_INSUFFICIENT";
   }
-  
+
   return "UNKNOWN";
 }
 
@@ -962,8 +962,9 @@ function mapRun(
   const basicSimulationBlockNumber = str(basicSimulation?.blockNumber);
   const basicSimulationBlockHash = str(basicSimulation?.blockHash);
   const basicSimulationObservedAt = str(basicSimulation?.observedAt);
-  const adjustReason = verdict === "ADJUST" ? parseAdjustReason(run) : undefined;
-  
+  const adjustReason =
+    verdict === "ADJUST" ? parseAdjustReason(run) : undefined;
+
   return {
     runId,
     parentRunId: str(run?.parentRunId),
