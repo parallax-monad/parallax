@@ -9,7 +9,11 @@ import {
 } from "@parallax/contracts";
 import { closeUnverifiedAdjust } from "@parallax/orchestrator/application";
 import { economicFailStopResult } from "@parallax/orchestrator/application/action-gate-fixtures";
-import type { CallerConstraint, ConstraintEvidence } from "@parallax/risk";
+import {
+  applyBasicSimulationRiskPolicy,
+  type CallerConstraint,
+  type ConstraintEvidence,
+} from "@parallax/risk";
 import { describe, expect, it, vi } from "vitest";
 import canonicalRealCamelotCapture from "../../../../fixtures/provider-registry/be-063/camelot-sepolia-real-2026-09-18T08-47-56-715Z/capture.json";
 import { bootstrapBackendApp, createBackendApp } from "../bootstrap/backend.js";
@@ -381,6 +385,200 @@ function traceCheckRequest(): Request {
   });
 }
 
+describe("Arbitrum parameter adjustment HTTP contract", () => {
+  it.each([
+    {
+      name: "output below minimum",
+      minimum: "1",
+      verdict: "ADJUST",
+      revert: true,
+    },
+    {
+      name: "output equal to minimum",
+      minimum: "0.015882896725531551",
+      verdict: "ADJUST",
+    },
+    {
+      name: "output one atomic unit above minimum",
+      minimum: "0.015882896725531550",
+      verdict: "UNKNOWN",
+    },
+    {
+      name: "insufficient input balance despite a reverted simulation",
+      balance: "0",
+      verdict: "ADJUST",
+      revert: true,
+    },
+    {
+      name: "input balance equal to input amount",
+      balance: "1000000000000000",
+      verdict: "PROCEED",
+    },
+    {
+      name: "unavailable balance does not become zero",
+      unavailableBalance: true,
+      verdict: "UNKNOWN",
+      revert: true,
+    },
+    {
+      name: "changed account block hash invalidates balance",
+      balance: "0",
+      changedHash: true,
+      verdict: "UNKNOWN",
+      revert: true,
+    },
+    {
+      name: "unavailable quote cannot trigger an adjustment",
+      unavailableQuote: true,
+      minimum: "1",
+      verdict: "UNKNOWN",
+    },
+  ])("$name", async (scenario) => {
+    const replay = canonicalRealRpcReplay();
+    let balanceRead = false;
+    let rpcRequests = 0;
+    const client: ArbitrumRpcClient = {
+      async request(method, params = []) {
+        rpcRequests += 1;
+        if (method === "eth_getBalance") {
+          balanceRead = true;
+          if (scenario.unavailableBalance)
+            throw new Error("balance unavailable");
+          return `0x${BigInt(scenario.balance ?? "1000000000000000000").toString(16)}`;
+        }
+        const transaction = params[0] as { to?: string } | undefined;
+        if (
+          scenario.unavailableQuote &&
+          method === "eth_call" &&
+          transaction?.to?.toLowerCase() ===
+            CAMELOT_SEPOLIA_QUOTER.toLowerCase()
+        ) {
+          throw new Error("quote unavailable");
+        }
+        if (
+          method === "eth_call" &&
+          transaction?.to?.toLowerCase() === CAMELOT_SEPOLIA_USDC.toLowerCase()
+        ) {
+          return `0x${"0".repeat(64)}`;
+        }
+        if (
+          scenario.revert &&
+          (method === "eth_estimateGas" ||
+            (method === "eth_call" &&
+              transaction?.to?.toLowerCase() ===
+                CAMELOT_SEPOLIA_ROUTER.toLowerCase()))
+        ) {
+          throw new NativeRpcClientError(
+            "RPC_ERROR",
+            "execution reverted: test swap protection",
+            3,
+          );
+        }
+        if (
+          scenario.changedHash &&
+          balanceRead &&
+          method === "eth_getBlockByNumber"
+        ) {
+          return {
+            number: replay.capture.observations.pinnedBlock.number,
+            hash: `0x${"f".repeat(64)}`,
+          };
+        }
+        return replay.client.request(method, params);
+      },
+    };
+    const blockNumber = String(
+      BigInt(replay.capture.observations.pinnedBlock.number),
+    );
+    const tokenRegistry = {
+      chains: [{ chainId: 421614, symbol: "ETH", decimals: 18 }],
+      tokens: [
+        {
+          chainId: 421614,
+          address: CAMELOT_SEPOLIA_USDC,
+          symbol: "USDC",
+          decimals: 18,
+          decimalsSource: "onchain_verified" as const,
+          verifiedAtBlock: blockNumber,
+        },
+      ],
+    };
+    const runtime = bootstrapBackendRuntime({
+      environment: arbitrumEnvironment,
+      tokenRegistry,
+    });
+    const composition = createArbitrumProductionComposition({
+      runtime,
+      runStore: new InMemoryRunStore(),
+      rpcClient: client,
+    });
+    const app = bootstrapBackendApp({
+      environment: arbitrumEnvironment,
+      tokenRegistry,
+      arbitrumComposition: composition,
+    });
+    try {
+      const request = await traceCheckRequest().json();
+      if (scenario.minimum !== undefined) {
+        request.economicBoundary = {
+          availability: "available",
+          source: "user_declared",
+          minimumReceived: scenario.minimum,
+        };
+      }
+      const response = await app.fetch(
+        new Request("https://api.example.test/api/check", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(request),
+        }),
+      );
+      expect(response.status).toBe(scenario.unavailableQuote ? 502 : 200);
+      const body = await response.json();
+      const result = runResultSchema.parse(
+        scenario.unavailableQuote ? body.run : body,
+      );
+      expect(result.verdict).toBe(scenario.verdict);
+      expect(result.recommendedActions).toEqual([]);
+      if (!scenario.unavailableQuote)
+        expect(result.p0?.remediation.status).toBe("NOT_RUN");
+      expect(
+        result.evidence.some((item) => item.kind === "action_verification"),
+      ).toBe(false);
+      const adjustment = result.evidence.find(
+        (item) => item.key === "PARAMETER-ADJUSTMENT-001",
+      );
+      if (scenario.verdict === "ADJUST") {
+        expect(adjustment).toMatchObject({
+          status: "warning",
+          blockNumber,
+          simulatorPinnedBlock: blockNumber,
+          isMock: false,
+          isReplay: false,
+        });
+        expect(result.summary).toContain(
+          scenario.minimum === undefined ? "Input balance" : "Quoted output",
+        );
+      } else {
+        expect(adjustment).toBeUndefined();
+      }
+      const requestsBeforeRecovery = rpcRequests;
+      const historical = await app.fetch(
+        new Request(`https://api.example.test/api/runs/${result.runId}`),
+      );
+      expect(historical.status).toBe(200);
+      const record = await historical.json();
+      expect(record.result).toEqual(result);
+      expect(rpcRequests).toBe(requestsBeforeRecovery);
+      expect(JSON.stringify(record.result)).not.toContain("callReturnData");
+      if (result.providerEvidence !== undefined)
+        expect(result.providerEvidence.providerData).toEqual({});
+    } finally {
+      await app.close();
+    }
+  });
+});
+
 describe("Arbitrum production composition skeleton", () => {
   it("bootstraps runtime and composition without starting a server", () => {
     const input = options();
@@ -717,7 +915,7 @@ describe("Arbitrum production composition skeleton", () => {
     expect(response.status).toBe(200);
     expect(body).toMatchObject({
       status: "completed",
-      verdict: "UNKNOWN",
+      verdict: "PROCEED",
       providerEvidence: {
         provider: {
           providerId: NATIVE_RPC_ARBITRUM_PROVIDER_ID,
@@ -1022,7 +1220,7 @@ describe("Arbitrum production composition skeleton", () => {
     });
     expect(execution.decisionOutput).toMatchObject({
       status: "completed",
-      verdict: "UNKNOWN",
+      verdict: "PROCEED",
       providerEvidence: {
         provider: { providerId: NATIVE_RPC_ARBITRUM_PROVIDER_ID },
       },
@@ -1064,21 +1262,24 @@ describe("Arbitrum production composition skeleton", () => {
       method: "eth_call",
       params: [expect.anything(), "0x2a"],
     });
-    expect(calls.map(({ method }) => method)).toEqual([
-      "eth_chainId",
-      "eth_getBlockByNumber",
-      "eth_call",
-      "eth_estimateGas",
-      "eth_getBlockByNumber",
-      "eth_chainId",
-      "eth_getBlockByNumber",
-      "eth_call",
-      "eth_estimateGas",
-      "eth_getBlockByNumber",
+    expect(
+      calls.find(({ method }) => method === "eth_getBalance"),
+    ).toMatchObject({
+      params: [expect.any(String), "0x2a"],
+    });
+    expect(
+      calls.filter(
+        ({ method, params }) =>
+          method === "eth_call" &&
+          (params[0] as { to?: string } | undefined)?.to?.toLowerCase() ===
+            CAMELOT_SEPOLIA_ROUTER.toLowerCase(),
+      ),
+    ).toEqual([
+      expect.objectContaining({ params: [expect.anything(), "0x2a"] }),
     ]);
   });
 
-  it("stops before Native RPC evaluation when the chain gas preflight reverts", async () => {
+  it("retains UNKNOWN after a reverted Camelot gas preflight and pinned call without adjustment evidence", async () => {
     const blockHash = `0x${"a".repeat(64)}`;
     const calls: Array<{ method: string; params: readonly unknown[] }> = [];
     let gasRequests = 0;
@@ -1134,36 +1335,49 @@ describe("Arbitrum production composition skeleton", () => {
     });
     const pipeline = new BackendPipeline({ runtime: composition });
 
-    await expect(
-      pipeline.executeNormalized(
-        {
-          ...normalizedIntent,
-          tokenOut: { kind: "erc20", address: CAMELOT_SEPOLIA_USDC },
-          amountInAtomic: "1000000000000000",
+    const execution = await pipeline.executeNormalized(
+      {
+        ...normalizedIntent,
+        tokenOut: { kind: "erc20", address: CAMELOT_SEPOLIA_USDC },
+        amountInAtomic: "1000000000000000",
+      },
+      {
+        rawInput: normalizedIntent as never,
+        runId: "arbitrum-preflight-execution-revert",
+        chainId: 421614,
+        protocol: "camelot-v3",
+        capability: "simulate",
+      },
+    );
+    expect(execution.gasEstimate).toMatchObject({ status: "UNAVAILABLE" });
+    expect(execution.decisionOutput).toMatchObject({
+      status: "completed",
+      verdict: "UNKNOWN",
+      recommendedActions: [],
+      p0: {
+        basicSimulation: {
+          call: { status: "REVERTED" },
+          validityAtExecution: "INVALID",
         },
-        {
-          rawInput: normalizedIntent as never,
-          runId: "arbitrum-preflight-execution-revert",
-          chainId: 421614,
-          protocol: "camelot-v3",
-          capability: "simulate",
-        },
-      ),
-    ).rejects.toMatchObject({
-      code: "EXECUTION_REVERT",
-      operation: "estimateGas",
-      chainId: 421614,
+        remediation: { status: "NOT_RUN" },
+      },
     });
 
     expect(gasRequests).toBe(1);
     expect(
       calls.filter(({ method }) => method === "eth_estimateGas"),
     ).toHaveLength(1);
-    const callRequests = calls.filter(({ method }) => method === "eth_call");
+    const callRequests = calls.filter(
+      ({ method, params }) =>
+        method === "eth_call" &&
+        (params[0] as { to?: string } | undefined)?.to?.toLowerCase() ===
+          CAMELOT_SEPOLIA_ROUTER.toLowerCase(),
+    );
     expect(callRequests).toHaveLength(1);
-    expect(callRequests[0]?.params[0]).toMatchObject({
-      to: CAMELOT_SEPOLIA_QUOTER,
-    });
+    expect(callRequests[0]?.params).toEqual([
+      expect.objectContaining({ to: CAMELOT_SEPOLIA_ROUTER }),
+      "0x2a",
+    ]);
   });
 
   it("replays the committed QUALIFIED_REAL Camelot fixture through the production path", async () => {
@@ -1308,7 +1522,7 @@ describe("Arbitrum production composition skeleton", () => {
     expect(response.status).toBe(200);
     expect(body).toMatchObject({
       status: "completed",
-      verdict: "UNKNOWN",
+      verdict: "PROCEED",
       providerEvidence: {
         provider: { providerId: NATIVE_RPC_ARBITRUM_PROVIDER_ID },
         providerData: {
@@ -1482,7 +1696,7 @@ describe("Arbitrum production composition skeleton", () => {
     expect(response.status).toBe(200);
     expect(body).toMatchObject({
       status: "completed",
-      verdict: "UNKNOWN",
+      verdict: "PROCEED",
       providerEvidence: {
         provider: {
           providerId: NATIVE_RPC_ARBITRUM_PROVIDER_ID,
@@ -1770,7 +1984,7 @@ describe("Arbitrum production composition skeleton", () => {
     expect(response.status).toBe(200);
     expect(body).toMatchObject({
       status: "completed",
-      verdict: "UNKNOWN",
+      verdict: "PROCEED",
       p0: {
         basicSimulation: {
           call: { status: "SUCCEEDED" },
@@ -1798,6 +2012,62 @@ describe("Arbitrum production composition skeleton", () => {
     const stored = runResultSchema.parse(storedRecord.result);
 
     expect(storedResponse.status).toBe(200);
+    expect(stored).toEqual(body);
+    expect(body.p0?.evidenceState).toBe("INCOMPLETE");
+    expect(body.providerEvidence?.simulation.value?.complete).toBe(false);
+    expect(body.p0?.remediation.status).toBe("NOT_RUN");
+    expect(body.summary).toContain("BASIC-SIMULATION-001");
+    // This fixture-backed HTTP result exercises the policy's safety boundaries.
+    const present = <T>(value: T | undefined): T => {
+      if (value === undefined)
+        throw new Error("Expected recorded test evidence");
+      return value;
+    };
+    const mutations = [
+      (r: typeof body) => {
+        present(present(r.p0).basicSimulation).gasEstimate.status =
+          "UNAVAILABLE";
+      },
+      (r: typeof body) => {
+        present(present(r.p0).basicSimulation).call.status = "REVERTED";
+      },
+      (r: typeof body) => {
+        present(present(r.p0).basicSimulation).validityAtExecution = "UNKNOWN";
+      },
+      (r: typeof body) => {
+        present(
+          present(present(r.p0).basicSimulation).transactionBinding,
+        ).amountInAtomic = "1";
+      },
+      (r: typeof body) => {
+        present(r.providerEvidence).provider.status = "STALE";
+      },
+      (r: typeof body) => {
+        present(r.providerEvidence).provenance.mode = "RECORDED_REPLAY";
+      },
+      (r: typeof body) => {
+        present(r.providerEvidence).quote.fetchedAt = undefined;
+      },
+      (r: typeof body) => {
+        present(r.providerEvidence).unknownScope.push("quote");
+      },
+      (r: typeof body) => {
+        r.intent.economicBoundary = {
+          availability: "available",
+          source: "user_declared",
+          minimumReceivedAtomic: "1",
+        };
+      },
+      (r: typeof body) => {
+        r.verdict = "STOP";
+      },
+    ];
+    for (const mutate of mutations) {
+      const candidate = structuredClone(body);
+      candidate.verdict = "UNKNOWN";
+      mutate(candidate);
+      expect(applyBasicSimulationRiskPolicy(candidate)).toBe(candidate);
+    }
     expect(stored.p0?.basicSimulation).toEqual(body.p0?.basicSimulation);
     expect(JSON.stringify(stored)).not.toContain("callReturnData");
     expect(stored.providerEvidence?.providerData).toEqual({});

@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import {
+  type AccountStateObservation,
   ARBITRUM_SEPOLIA_CHAIN_ID,
   CAMELOT_V3_PROTOCOL_ID,
   type CheckSwapRequest,
@@ -35,6 +36,8 @@ import type {
   VerifiedCandidate,
 } from "@parallax/risk";
 import {
+  applyBasicSimulationRiskPolicy,
+  applyParameterAdjustment,
   evaluateConstraints,
   evaluateEvidence,
   solveSelectedTargetOutput,
@@ -457,11 +460,27 @@ export function createArbitrumProductionComposition(
           projectedRun,
           projection.risk.verdict,
         );
-        return projectVerifiedArbitrumRemediation(
+        const result = await projectVerifiedArbitrumRemediation(
           projected,
           projection.risk.verdict,
           projection.solver,
           options.runStore,
+        );
+        let accountState: AccountStateObservation | undefined;
+        try {
+          accountState = await accountStateReader?.readAccountState({
+            intent: pipelineContext.intent,
+            blockContext: pipelineContext.blockContext,
+          });
+        } catch {
+          // Missing account data is never interpreted as a zero balance.
+        }
+        return runResultSchema.parse(
+          applyParameterAdjustment(
+            applyBasicSimulationRiskPolicy(result),
+            accountState,
+            pipelineContext.quote,
+          ),
         );
       },
     } satisfies DecisionPort<unknown, unknown, unknown>);
