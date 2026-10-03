@@ -454,7 +454,80 @@ describe("WalletApp persisted Run recovery", () => {
     expect(checkBody?.expectationBaseline).toBeUndefined();
   });
 
-  test("does not expose fixture-only remediation controls in the active P0 path", async () => {
+  test("keeps the quote when minimum received or slippage changes", async () => {
+    let quoteRequestCount = 0;
+    const request = vi.fn<typeof fetch>().mockImplementation((url) => {
+      if (typeof url === "string" && url.includes("/api/quote")) {
+        quoteRequestCount += 1;
+        return Promise.resolve(
+          jsonResponse({
+            status: "available",
+            quote: {
+              source: "quote",
+              estimatedAmountOut: "1.5",
+              minimumAmountOut: "1.485",
+              blockNumber: "12345",
+              fetchedAt: "2026-01-01T00:00:00.000Z",
+              runtimeVersion: "arbitrum-camelot-v3",
+              runtimeRevision: "native-rpc",
+            },
+          }),
+        );
+      }
+      if (typeof url === "string" && url.includes("/api/p0-config")) {
+        return Promise.resolve(
+          jsonResponse({
+            status: "UNAVAILABLE",
+            reason: "ROUTE_NOT_CONFIGURED",
+          }),
+        );
+      }
+      return Promise.resolve(new Response("", { status: 404 }));
+    });
+    vi.stubGlobal("fetch", request);
+
+    const container = document.createElement("div");
+    document.body.append(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(<WalletApp language="en" />);
+      await Promise.resolve();
+    });
+    const swapButton = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent?.trim() === "Swap",
+    );
+    expect(swapButton).toBeDefined();
+
+    await act(async () => {
+      swapButton?.click();
+      await new Promise((resolve) => setTimeout(resolve, 550));
+    });
+
+    expect(quoteRequestCount).toBe(1);
+    expect(container.textContent).toContain("1.5");
+
+    const minimumReceived = container.querySelector<HTMLInputElement>(
+      'input[placeholder="Your accepted boundary"]',
+    );
+    const slippage = Array.from(
+      container.querySelectorAll<HTMLInputElement>("input"),
+    ).find((input) => input.value === "0.5");
+    expect(minimumReceived).toBeDefined();
+    expect(slippage).toBeDefined();
+
+    await act(async () => {
+      setInputValue(minimumReceived as HTMLInputElement, "1.2");
+      setInputValue(slippage as HTMLInputElement, "1");
+      await Promise.resolve();
+    });
+
+    expect(quoteRequestCount).toBe(1);
+    expect(container.textContent).toContain("1.5");
+    expect(container.textContent).not.toContain("No quote");
+  });
+
+
     const container = document.createElement("div");
     document.body.append(container);
     root = createRoot(container);
