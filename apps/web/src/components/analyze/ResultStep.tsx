@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { AccountStateCard } from "@/components/analyze/AccountStateCard";
 import { ExecutionEconomicsCard } from "@/components/analyze/ExecutionEconomicsCard";
 import { P0ExecutionDetails } from "@/components/analyze/P0ExecutionDetails";
 import { QuoteFidelityCard } from "@/components/analyze/QuoteFidelityCard";
@@ -316,6 +317,10 @@ export function ResultStep({
           <span className="mono text-white">{quote.blockNumber}</span>
         </div>
       </div>
+
+      {result.accountState && (
+        <AccountStateCard language={language} snapshot={result.accountState} />
+      )}
 
       {result.executionEconomics && (
         <ExecutionEconomicsCard

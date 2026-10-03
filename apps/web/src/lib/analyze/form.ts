@@ -209,6 +209,15 @@ export const INITIAL_FORM: FormState = {
   minimumReceived: "",
 };
 
+export const REVERSE_FORM: FormState = {
+  protocol: DEMO_PROTOCOL,
+  tokenIn: "USDC",
+  tokenOut: "WETH",
+  amountIn: "0.001",
+  slippage: DEMO_SLIPPAGE,
+  minimumReceived: "",
+};
+
 export function toInput(form: FormState, parentRunId?: string): CheckSwapInput {
   return {
     parentRunId,

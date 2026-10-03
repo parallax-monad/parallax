@@ -120,7 +120,7 @@ const jsonResponse = (body: unknown, status = 200) =>
 
 describe("checkSwap API adapter", () => {
   test("shows the same read-only identity that the API request submits", () => {
-    expect(DEMO_ADDRESS).toBe("0x1111...1111");
+    expect(DEMO_ADDRESS).toBe("0x01bb...db9d");
     expect(DEMO_RECIPIENT).toBe(DEMO_ADDRESS);
   });
 
@@ -136,7 +136,8 @@ describe("checkSwap API adapter", () => {
     expect(sent).toEqual({
       chainId: 143,
       protocol: "kuru",
-      sender: "0x1111111111111111111111111111111111111111",
+      sender: "0x01bb7b44cc398aaa2b76ac6253f0f5634279db9d",
+      recipient: "0x01bb7b44cc398aaa2b76ac6253f0f5634279db9d",
       tokenIn: { kind: "native" },
       tokenOut: {
         kind: "erc20",
@@ -251,6 +252,47 @@ describe("checkSwap API adapter", () => {
     expect(result.simulatedOutput).toBe("0.000223");
   });
 
+  test("resolves known Arbitrum assets when Run token metadata is absent", async () => {
+    const arbitrumRun = {
+      ...completed,
+      intent: {
+        ...intent,
+        chainId: 421614,
+        protocol: "camelot-v3",
+        tokenIn: {
+          kind: "erc20",
+          address: "0xb893E3334D4Bd6C5ba8277Fd559e99Ed683A9FC7",
+        },
+        tokenOut: {
+          kind: "erc20",
+          address: "0x980B62Da83eFf3D4576C647993b0c1D7faf17c73",
+        },
+      },
+      tokenMetadata: undefined,
+      route: {
+        path: [
+          {
+            kind: "erc20",
+            address: "0xb893E3334D4Bd6C5ba8277Fd559e99Ed683A9FC7",
+          },
+          {
+            kind: "erc20",
+            address: "0x980B62Da83eFf3D4576C647993b0c1D7faf17c73",
+          },
+        ],
+      },
+    };
+    const request = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(jsonResponse(arbitrumRun));
+
+    const result = await checkSwap(input, { fetch: request });
+
+    expect(result.intent.tokenIn).toBe("USDC");
+    expect(result.intent.tokenOut).toBe("WETH");
+    expect(result.quote.route.en).toBe("USDC → WETH");
+  });
+
   test("keeps atomic output unavailable without trusted token metadata", async () => {
     const request = vi.fn<typeof fetch>().mockResolvedValue(
       jsonResponse({
@@ -278,7 +320,7 @@ describe("checkSwap API adapter", () => {
     expect(result.quote.expectedOutput).toBe("unavailable");
     expect(result.simulatedOutput).toBe("unavailable");
     expect(result.intent.amountIn).toBe("unavailable");
-    expect(result.intent.tokenIn).toBe("unknown");
+    expect(result.intent.tokenIn).toBe("MON");
     expect(result.tokenMetadata).toBeUndefined();
   });
 
@@ -1071,7 +1113,7 @@ describe("fetchQuote", () => {
     expect(sent).toEqual({
       chainId: 143,
       protocol: "kuru",
-      sender: "0x1111111111111111111111111111111111111111",
+      sender: "0x01bb7b44cc398aaa2b76ac6253f0f5634279db9d",
       tokenIn: { kind: "native" },
       tokenOut: {
         kind: "erc20",
@@ -1223,6 +1265,7 @@ describe("fetchP0Config", () => {
 
     await expect(fetchP0Config({ fetch: request })).resolves.toEqual({
       status: "AVAILABLE",
+      pair: "eth-usdc",
       chainId: 421614,
       protocol: "camelot-v3",
       tokenMetadata: p0Metadata,

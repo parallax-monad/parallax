@@ -45,7 +45,7 @@ const BASE_COLOR: Record<PlanetKind, [number, number, number]> = {
   proceed: [0x22 / 255, 0xc5 / 255, 0x5e / 255],
   adjust: [0xea / 255, 0xb3 / 255, 0x08 / 255],
   stop: [0xef / 255, 0x44 / 255, 0x44 / 255],
-  unknown: [0xf9 / 255, 0x73 / 255, 0x16 / 255],
+  unknown: [0x38 / 255, 0x8b / 255, 0xf8 / 255],
 };
 
 function drawEth(ctx: CanvasRenderingContext2D) {
@@ -54,18 +54,49 @@ function drawEth(ctx: CanvasRenderingContext2D) {
 
   ctx.fillStyle = "#FFFFFF";
   ctx.beginPath();
-  ctx.moveTo(12, 4.5);
-  ctx.lineTo(7, 13);
-  ctx.lineTo(12, 16);
-  ctx.lineTo(17, 13);
+  ctx.moveTo(12, 2.5);
+  ctx.lineTo(7.25, 12.25);
+  ctx.lineTo(12, 9.75);
   ctx.closePath();
   ctx.fill();
 
+  ctx.fillStyle = "#D7E0FF";
   ctx.beginPath();
-  ctx.moveTo(12, 17.5);
-  ctx.lineTo(7, 15);
-  ctx.lineTo(12, 22.5);
-  ctx.lineTo(17, 15);
+  ctx.moveTo(12, 2.5);
+  ctx.lineTo(16.75, 12.25);
+  ctx.lineTo(12, 9.75);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.fillStyle = "#FFFFFF";
+  ctx.beginPath();
+  ctx.moveTo(7.25, 13.15);
+  ctx.lineTo(12, 16.1);
+  ctx.lineTo(12, 11.25);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.fillStyle = "#D7E0FF";
+  ctx.beginPath();
+  ctx.moveTo(16.75, 13.15);
+  ctx.lineTo(12, 16.1);
+  ctx.lineTo(12, 11.25);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.fillStyle = "#FFFFFF";
+  ctx.beginPath();
+  ctx.moveTo(12, 21.5);
+  ctx.lineTo(7.25, 14.1);
+  ctx.lineTo(12, 17.15);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.fillStyle = "#D7E0FF";
+  ctx.beginPath();
+  ctx.moveTo(12, 21.5);
+  ctx.lineTo(16.75, 14.1);
+  ctx.lineTo(12, 17.15);
   ctx.closePath();
   ctx.fill();
 }
@@ -149,7 +180,7 @@ function drawStop(ctx: CanvasRenderingContext2D) {
 }
 
 function drawUnknown(ctx: CanvasRenderingContext2D) {
-  ctx.fillStyle = "#F97316";
+  ctx.fillStyle = "#388BF8";
   ctx.fillRect(0, 0, 24, 24);
   ctx.strokeStyle = "#FFFFFF";
   ctx.lineCap = "round";

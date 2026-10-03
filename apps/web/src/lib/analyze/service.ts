@@ -1,7 +1,14 @@
 import type { Copy } from "@/lib/i18n";
-import { getChainIdForProtocol, symbolToAsset } from "./api-helpers";
+import { accountStateSnapshotSchema } from "../../../../../packages/contracts/src/account-state.js";
+import {
+  assetToSymbol,
+  getChainIdForProtocol,
+  symbolToAsset,
+} from "./api-helpers";
 import { type FormState, INITIAL_FORM, validateForm } from "./form";
 import type {
+  AccountStateResult,
+  AccountStateSnapshot,
   ActionSuggestion,
   ApiFailure,
   ApiFailureIssue,
@@ -17,6 +24,7 @@ import type {
   QuotePreview,
   QuoteState,
   QuoteSwapInput,
+  RoutePair,
   RuleResult,
   RunDiff,
   RunRecovery,
@@ -25,7 +33,7 @@ import type {
   Verdict,
 } from "./types";
 
-export const DEFAULT_SENDER = "0x1111111111111111111111111111111111111111";
+export const DEFAULT_SENDER = "0x01bb7b44cc398aaa2b76ac6253f0f5634279db9d";
 const API_BASE = "";
 const cp = (value: string) => ({ en: value, zh: value });
 const obj = (value: unknown): Record<string, unknown> | undefined =>
@@ -42,6 +50,32 @@ function metadataAssetKey(value: unknown): string {
   return str(asset?.address)?.toLowerCase() ?? "unknown";
 }
 
+function requestAssetWithMetadata(
+  value: string,
+  chainId: number,
+  metadata: TokenMetadataPair | undefined,
+  role: "tokenIn" | "tokenOut",
+) {
+  const resolved = metadata?.[role];
+  if (chainId === 421614 && value === "WETH") {
+    if (
+      resolved === undefined ||
+      resolved.chainId !== chainId ||
+      resolved.symbol.toLowerCase() !== value.toLowerCase()
+    ) {
+      throw new Error(
+        `Backend route metadata is required for ${value} on Arbitrum Sepolia`,
+      );
+    }
+    return resolved.asset;
+  }
+  return resolved &&
+    resolved.chainId === chainId &&
+    resolved.symbol.toLowerCase() === value.toLowerCase()
+    ? resolved.asset
+    : requestAsset(value, chainId);
+}
+
 function symbol(
   value: unknown,
   chainId: number,
@@ -49,6 +83,13 @@ function symbol(
 ): string {
   const resolved = metadata.get(`${chainId}:${metadataAssetKey(value)}`);
   if (resolved) return resolved.symbol;
+  const asset = obj(value);
+  if (asset?.kind === "native") return assetToSymbol(asset, chainId);
+  const address = str(asset?.address);
+  if (address) {
+    const known = assetToSymbol({ kind: "erc20", address }, chainId);
+    if (known !== `${address.slice(0, 6)}…${address.slice(-4)}`) return known;
+  }
   return "unknown";
 }
 
@@ -59,7 +100,7 @@ function requestAsset(
   return symbolToAsset(value, chainId);
 }
 
-function parseTokenMetadata(value: unknown): TokenMetadata | undefined {
+export function parseTokenMetadata(value: unknown): TokenMetadata | undefined {
   const item = obj(value);
   if (!item) return;
   const chainId = item.chainId;
@@ -69,6 +110,9 @@ function parseTokenMetadata(value: unknown): TokenMetadata | undefined {
   if (
     typeof chainId !== "number" ||
     typeof decimals !== "number" ||
+    !Number.isInteger(decimals) ||
+    decimals < 0 ||
+    decimals > 255 ||
     !symbolValue ||
     !asset
   ) {
@@ -529,6 +573,216 @@ function failureCopy(failure: ApiFailure) {
   };
 }
 
+function parseAccountStateSnapshot(
+  value: unknown,
+): AccountStateSnapshot | undefined {
+  const parsed = accountStateSnapshotSchema.safeParse(value);
+  return parsed.success ? parsed.data : undefined;
+}
+
+function sameAsset(
+  left: AccountStateSnapshot["context"]["tokenIn"],
+  right: AccountStateSnapshot["context"]["tokenIn"],
+): boolean {
+  if (left.kind !== right.kind) return false;
+  if (left.kind === "native") return true;
+  return (
+    right.kind === "erc20" &&
+    left.address.toLowerCase() === right.address.toLowerCase()
+  );
+}
+
+function atomicAmount(value: string, decimals: number): string | undefined {
+  if (!/^(?:0|[1-9]\d*)(?:\.\d+)?$/.test(value)) return undefined;
+  const [whole, fraction = ""] = value.split(".");
+  if (fraction.length > decimals) return undefined;
+  return `${whole}${fraction.padEnd(decimals, "0")}`.replace(/^0+(?=\d)/, "");
+}
+
+function accountStateMatchesRequest(
+  snapshot: AccountStateSnapshot,
+  input: CheckSwapInput,
+): boolean {
+  const chainId = getChainIdForProtocol(input.protocol);
+  const inputMetadata = snapshot.balances.inputToken.metadata;
+  const amountInAtomic = inputMetadata
+    ? atomicAmount(input.amountIn, inputMetadata.decimals)
+    : undefined;
+  if (amountInAtomic === undefined) return false;
+  const tokenIn = requestAssetWithMetadata(
+    input.tokenIn,
+    chainId,
+    input.tokenMetadata,
+    "tokenIn",
+  );
+  const tokenOut = requestAssetWithMetadata(
+    input.tokenOut,
+    chainId,
+    input.tokenMetadata,
+    "tokenOut",
+  );
+  return (
+    snapshot.context.chainId === chainId &&
+    snapshot.context.protocol === input.protocol &&
+    snapshot.context.sender.toLowerCase() ===
+      (input.sender ?? DEFAULT_SENDER).toLowerCase() &&
+    snapshot.context.recipient.toLowerCase() ===
+      (input.sender ?? DEFAULT_SENDER).toLowerCase() &&
+    snapshot.context.amountInAtomic === amountInAtomic &&
+    sameAsset(snapshot.context.tokenIn, tokenIn) &&
+    sameAsset(snapshot.context.tokenOut, tokenOut)
+  );
+}
+
+function accountStateFailure(response: Response, payload: unknown): ApiFailure {
+  const error = obj(obj(payload)?.error);
+  return {
+    httpStatus: response.status,
+    code: str(error?.code) ?? `HTTP_${response.status}`,
+    retryable: response.status >= 500,
+    message: str(error?.message),
+    issues: failureIssues(error?.issues),
+  };
+}
+
+export async function fetchAccountState(
+  input: CheckSwapInput,
+  options: CheckOptions = {},
+): Promise<AccountStateResult> {
+  const chainId = getChainIdForProtocol(input.protocol);
+  const sender = input.sender ?? DEFAULT_SENDER;
+  const recipient = sender;
+  let request: Record<string, unknown>;
+  try {
+    request = {
+      chainId,
+      protocol: input.protocol,
+      sender,
+      recipient,
+      tokenIn: requestAssetWithMetadata(
+        input.tokenIn,
+        chainId,
+        input.tokenMetadata,
+        "tokenIn",
+      ),
+      tokenOut: requestAssetWithMetadata(
+        input.tokenOut,
+        chainId,
+        input.tokenMetadata,
+        "tokenOut",
+      ),
+      amountIn: input.amountIn,
+    };
+  } catch (error) {
+    return {
+      status: "error",
+      apiFailure: {
+        code: "ROUTE_METADATA_UNAVAILABLE",
+        retryable: false,
+        message: error instanceof Error ? error.message : undefined,
+      },
+    };
+  }
+  let response: Response;
+  try {
+    response = await (options.fetch ?? fetch)(`${API_BASE}/api/account-state`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(request),
+      signal: options.signal,
+    });
+  } catch (error) {
+    return {
+      status: "error",
+      apiFailure: {
+        code: "NETWORK_ERROR",
+        retryable: true,
+        message: error instanceof Error ? error.message : undefined,
+      },
+    };
+  }
+  let payload: unknown;
+  try {
+    payload = await response.json();
+  } catch {
+    return {
+      status: "error",
+      apiFailure: {
+        httpStatus: response.status,
+        code: "INVALID_JSON_RESPONSE",
+        retryable: response.status >= 500,
+      },
+    };
+  }
+  if (!response.ok)
+    return {
+      status: "error",
+      apiFailure: accountStateFailure(response, payload),
+    };
+  const snapshot = parseAccountStateSnapshot(payload);
+  return snapshot && accountStateMatchesRequest(snapshot, input)
+    ? { status: "available", snapshot }
+    : {
+        status: "error",
+        apiFailure: {
+          httpStatus: response.status,
+          code: "INVALID_RESPONSE",
+          retryable: false,
+        },
+      };
+}
+
+export async function loadAccountStateSnapshot(
+  snapshotId: string,
+  options: CheckOptions = {},
+): Promise<AccountStateResult> {
+  let response: Response;
+  try {
+    response = await (options.fetch ?? fetch)(
+      `${API_BASE}/api/account-state/${encodeURIComponent(snapshotId)}`,
+      { signal: options.signal },
+    );
+  } catch (error) {
+    return {
+      status: "error",
+      apiFailure: {
+        code: "NETWORK_ERROR",
+        retryable: true,
+        message: error instanceof Error ? error.message : undefined,
+      },
+    };
+  }
+  let payload: unknown;
+  try {
+    payload = await response.json();
+  } catch {
+    return {
+      status: "error",
+      apiFailure: {
+        httpStatus: response.status,
+        code: "INVALID_JSON_RESPONSE",
+        retryable: response.status >= 500,
+      },
+    };
+  }
+  if (!response.ok)
+    return {
+      status: "error",
+      apiFailure: accountStateFailure(response, payload),
+    };
+  const snapshot = parseAccountStateSnapshot(payload);
+  return snapshot && snapshot.snapshotId === snapshotId.toLowerCase()
+    ? { status: "available", snapshot }
+    : {
+        status: "error",
+        apiFailure: {
+          httpStatus: response.status,
+          code: "INVALID_RESPONSE",
+          retryable: false,
+        },
+      };
+}
+
 function failed(
   input: CheckSwapInput,
   apiFailure: ApiFailure,
@@ -629,11 +883,17 @@ function mapRun(
   const routePath = arr(route?.path)
     .map((item) => symbol(item, chainId, metadataByAsset))
     .join(" → ");
+  const tokenIn = symbol(intent?.tokenIn, chainId, metadataByAsset);
+  const tokenOut = symbol(intent?.tokenOut, chainId, metadataByAsset);
+  const displayRoute =
+    routePath && !routePath.split(" → ").includes("unknown")
+      ? routePath
+      : tokenIn !== "unknown" && tokenOut !== "unknown"
+        ? `${tokenIn} → ${tokenOut}`
+        : "";
   const output = arr(run?.evidence)
     .map(obj)
     .find((item) => item?.kind === "simulated_token_out");
-  const tokenIn = symbol(intent?.tokenIn, chainId, metadataByAsset);
-  const tokenOut = symbol(intent?.tokenOut, chainId, metadataByAsset);
   const boundary = obj(intent?.economicBoundary);
   const p0 = obj(run?.p0);
   const basicSimulation = obj(p0?.basicSimulation);
@@ -723,7 +983,7 @@ function mapRun(
               decimalsFor(tokenOut, decimalMetadata),
             )
           : "unavailable"),
-      route: routePath ? cp(routePath) : unavailable,
+      route: displayRoute ? cp(displayRoute) : unavailable,
       blockNumber:
         str(runQuote?.blockNumber) ??
         str(route?.blockNumber) ??
@@ -808,7 +1068,6 @@ function mapRun(
       : undefined,
   };
 }
-
 function body(input: CheckSwapInput) {
   const baseline = input.expectationBaseline;
   const chainId = getChainIdForProtocol(input.protocol);
@@ -817,8 +1076,19 @@ function body(input: CheckSwapInput) {
     chainId,
     protocol: input.protocol,
     sender: input.sender ?? DEFAULT_SENDER,
-    tokenIn: requestAsset(input.tokenIn, chainId),
-    tokenOut: requestAsset(input.tokenOut, chainId),
+    recipient: input.sender ?? DEFAULT_SENDER,
+    tokenIn: requestAssetWithMetadata(
+      input.tokenIn,
+      chainId,
+      input.tokenMetadata,
+      "tokenIn",
+    ),
+    tokenOut: requestAssetWithMetadata(
+      input.tokenOut,
+      chainId,
+      input.tokenMetadata,
+      "tokenOut",
+    ),
     amountIn: input.amountIn,
     economicBoundary: input.minimumReceived
       ? {
@@ -841,8 +1111,18 @@ export function expectationBaseline(
   return {
     chainId,
     protocol: input.protocol,
-    tokenIn: requestAsset(input.tokenIn, chainId),
-    tokenOut: requestAsset(input.tokenOut, chainId),
+    tokenIn: requestAssetWithMetadata(
+      input.tokenIn,
+      chainId,
+      input.tokenMetadata,
+      "tokenIn",
+    ),
+    tokenOut: requestAssetWithMetadata(
+      input.tokenOut,
+      chainId,
+      input.tokenMetadata,
+      "tokenOut",
+    ),
     amountIn: input.amountIn,
     quote,
   };
@@ -855,8 +1135,18 @@ function quoteBody(input: QuoteSwapInput) {
     chainId,
     protocol: input.protocol,
     sender: input.sender ?? DEFAULT_SENDER,
-    tokenIn: requestAsset(input.tokenIn, chainId),
-    tokenOut: requestAsset(input.tokenOut, chainId),
+    tokenIn: requestAssetWithMetadata(
+      input.tokenIn,
+      chainId,
+      input.tokenMetadata,
+      "tokenIn",
+    ),
+    tokenOut: requestAssetWithMetadata(
+      input.tokenOut,
+      chainId,
+      input.tokenMetadata,
+      "tokenOut",
+    ),
     amountIn: input.amountIn,
   };
 }
@@ -989,13 +1279,20 @@ export async function fetchQuote(
  * and never implies a live quote, RPC, or Product P0 success.
  */
 export async function fetchP0Config(
-  options: CheckOptions = {},
+  pairOrOptions: RoutePair | CheckOptions = "eth-usdc",
+  maybeOptions: CheckOptions = {},
 ): Promise<P0ConfigState> {
+  const pair = typeof pairOrOptions === "string" ? pairOrOptions : "eth-usdc";
+  const options =
+    typeof pairOrOptions === "string" ? maybeOptions : pairOrOptions;
   let response: Response;
   try {
-    response = await (options.fetch ?? fetch)(`${API_BASE}/api/p0-config`, {
-      signal: options.signal,
-    });
+    response = await (options.fetch ?? fetch)(
+      `${API_BASE}/api/p0-config${pair === "eth-usdc" ? "" : `?pair=${pair}`}`,
+      {
+        signal: options.signal,
+      },
+    );
   } catch (error) {
     const aborted =
       error instanceof DOMException && error.name === "AbortError";
@@ -1054,7 +1351,16 @@ export async function fetchP0Config(
     result?.status !== "AVAILABLE" ||
     result.chainId !== 421614 ||
     result.protocol !== "camelot-v3" ||
-    !tokenMetadata
+    !tokenMetadata ||
+    tokenMetadata.tokenIn.chainId !== 421614 ||
+    tokenMetadata.tokenOut.chainId !== 421614 ||
+    (pair === "eth-usdc"
+      ? tokenMetadata.tokenIn.asset.kind !== "native" ||
+        tokenMetadata.tokenOut.symbol.toLowerCase() !== "usdc"
+      : tokenMetadata.tokenIn.symbol.toLowerCase() !== "usdc" ||
+        tokenMetadata.tokenOut.symbol.toLowerCase() !== "weth" ||
+        tokenMetadata.tokenIn.asset.kind !== "erc20" ||
+        tokenMetadata.tokenOut.asset.kind !== "erc20")
   ) {
     return {
       status: "error",
@@ -1068,6 +1374,7 @@ export async function fetchP0Config(
 
   return {
     status: "AVAILABLE",
+    pair,
     chainId: 421614,
     protocol: "camelot-v3",
     tokenMetadata,

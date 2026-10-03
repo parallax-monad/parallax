@@ -3356,6 +3356,80 @@ describe("Arbitrum composition P0 Risk wiring", () => {
     });
   });
 
+  it("does not enter remediation from PROCEED when output is degraded", async () => {
+    const store = new InMemoryRunStore();
+    const candidateConstraintEvidence = vi.fn(() => []);
+    const availableIntent: NormalizedSwapIntent = {
+      ...normalizedIntent,
+      economicBoundary: {
+        availability: "available",
+        minimumReceivedAtomic: "400000",
+        source: "user_declared",
+      },
+    };
+    const composition = createArbitrumProductionComposition(
+      p0CompositionOptions({
+        runStore: store,
+        protocolAdapter: createCamelotV3ProtocolAdapter({
+          quote: async (intent) => ({
+            estimatedAmountOut:
+              intent.amountInAtomic === "1000" ? "0.48" : "0.5",
+            blockNumber: "42",
+            runtimeVersion: "arbitrum-camelot-v3",
+            runtimeRevision: "native-rpc",
+          }),
+          buildTransaction: async () => ({
+            to: "0x2222222222222222222222222222222222222222",
+            data: "0x1234",
+            value: "0x0",
+          }),
+        }),
+        providerEvidenceMapper: ({ normalizedIntent }) => {
+          const candidate = normalizedIntent as NormalizedSwapIntent;
+          return p0VerifiedEvidence(candidate, {
+            estimatedAmountOut:
+              candidate.amountInAtomic === "1000" ? "0.48" : "0.5",
+            amountReceivedAtomic:
+              candidate.amountInAtomic === "1000" ? "480000" : "500000",
+          });
+        },
+        p0Risk: {
+          remediation: {
+            maxAmountInAtomic: "3000",
+            initialStepAtomic: "1000",
+            maxEvaluations: 2,
+            constraintEvidenceForCandidate: candidateConstraintEvidence,
+          },
+        },
+      }),
+    );
+
+    const execution = await runP0Check(
+      composition,
+      "p0-proceed-degraded-remediation",
+      availableIntent,
+    );
+    const result = runResultSchema.parse(execution.decisionOutput);
+
+    expect(execution.decisionOutput).toMatchObject({
+      p0: {
+        quoteFidelity: {
+          status: "VERIFIED",
+          observations: ["QUOTE_OUTPUT_DEGRADED"],
+        },
+        remediation: {
+          status: "NOT_RUN",
+        },
+      },
+    });
+    expect(result).toMatchObject({
+      status: "completed",
+      verdict: "PROCEED",
+      recommendedActions: [],
+    });
+    expect(candidateConstraintEvidence).not.toHaveBeenCalled();
+  });
+
   it("does not run remediation when the canonical parent derivation is incomplete", async () => {
     const candidateConstraintEvidence = vi.fn(() => [
       {

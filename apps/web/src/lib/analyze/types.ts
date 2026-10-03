@@ -28,6 +28,8 @@ export type ActionSuggestion = {
   proposedChange?: { before: string; after: string; unit: string };
 };
 
+export type RoutePair = "eth-usdc" | "usdc-weth";
+
 export type CheckSwapInput = {
   parentRunId?: string;
   sender?: string;
@@ -39,6 +41,7 @@ export type CheckSwapInput = {
   minimumReceived?: string;
   minimumReceivedSource?: BoundarySource;
   slippage?: string;
+  tokenMetadata?: TokenMetadataPair;
   expectationBaseline?: {
     chainId: number;
     protocol: Protocol;
@@ -56,6 +59,7 @@ export type QuoteSwapInput = {
   tokenIn: string;
   tokenOut: string;
   amountIn: string;
+  tokenMetadata?: TokenMetadataPair;
 };
 
 export type QuotePreview = {
@@ -237,6 +241,14 @@ export type TokenMetadataPair = {
   tokenOut: TokenMetadata;
 };
 
+export type AccountStateSnapshot =
+  import("../../../../../packages/contracts/src/account-state.js").AccountStateSnapshot;
+export type AccountStateResult =
+  | { status: "idle" }
+  | { status: "loading" }
+  | { status: "available"; snapshot: AccountStateSnapshot }
+  | { status: "error"; apiFailure: ApiFailure };
+
 /**
  * Read-only P0 configuration. AVAILABLE means the configured route and
  * registry metadata resolved; it is not a live quote, RPC, or Product pass.
@@ -244,6 +256,7 @@ export type TokenMetadataPair = {
 export type P0ConfigState =
   | {
       status: "AVAILABLE";
+      pair: RoutePair;
       chainId: 421614;
       protocol: "camelot-v3";
       tokenMetadata: TokenMetadataPair;
@@ -334,6 +347,7 @@ export type CheckSwapResult = {
   executionEvidence?: ExecutionEvidenceSummary;
   remediationStatus?: string;
   expectationBaseline?: ExpectationBaselineSummary;
+  accountState?: AccountStateSnapshot;
 };
 
 /** Optional swap-form patch when a user chooses this option. */

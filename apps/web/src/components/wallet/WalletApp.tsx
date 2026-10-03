@@ -24,14 +24,18 @@ import {
 import {
   applyTokenMetadata,
   checkSwap,
+  DEFAULT_SENDER,
   expectationBaseline,
+  fetchAccountState,
   fetchP0Config,
   fetchQuote,
   formFromRunResult,
+  loadAccountStateSnapshot,
   loadRun,
 } from "@/lib/analyze/service";
 import { createStageScheduler } from "@/lib/analyze/stageScheduler";
 import type {
+  AccountStateResult,
   CheckSwapResult,
   P0ConfigState,
   QuoteState,
@@ -48,6 +52,7 @@ const STAGE_MS = 380;
  */
 const QUOTE_DEBOUNCE_MS = 450;
 const LAST_RUN_ID_KEY = "parallax:last-run-id";
+const LAST_ACCOUNT_SNAPSHOT_ID_KEY = "parallax:last-account-snapshot-id";
 
 type Screen = "home" | "swap" | "checking" | "result";
 
@@ -99,6 +104,26 @@ function setStoredRunId(runId: string | undefined): void {
   }
 }
 
+function storedAccountSnapshotId(): string | undefined {
+  try {
+    return (
+      window.sessionStorage.getItem(LAST_ACCOUNT_SNAPSHOT_ID_KEY) ?? undefined
+    );
+  } catch {
+    return undefined;
+  }
+}
+
+function setStoredAccountSnapshotId(snapshotId: string | undefined): void {
+  try {
+    if (snapshotId === undefined)
+      window.sessionStorage.removeItem(LAST_ACCOUNT_SNAPSHOT_ID_KEY);
+    else
+      window.sessionStorage.setItem(LAST_ACCOUNT_SNAPSHOT_ID_KEY, snapshotId);
+  } catch {
+    // Session storage can be unavailable in privacy-restricted browsers.
+  }
+}
 function backendRunId(result: CheckSwapResult): string | undefined {
   if (result.replayMode) return undefined;
   const raw =
@@ -118,6 +143,97 @@ function backendRunId(result: CheckSwapResult): string | undefined {
   return runId === result.runId ? runId : undefined;
 }
 
+function accountStateMatchesResult(
+  result: CheckSwapResult,
+  snapshot: NonNullable<CheckSwapResult["accountState"]>,
+): boolean {
+  const raw =
+    typeof result.rawResponse === "object" && result.rawResponse !== null
+      ? (result.rawResponse as Record<string, unknown>)
+      : undefined;
+  const rawRun =
+    typeof raw?.result === "object" && raw.result !== null
+      ? (raw.result as Record<string, unknown>)
+      : raw;
+  const intent =
+    typeof rawRun?.intent === "object" && rawRun.intent !== null
+      ? (rawRun.intent as Record<string, unknown>)
+      : undefined;
+  const rawTokenIn = intent?.tokenIn as
+    | { kind?: string; address?: string }
+    | undefined;
+  const rawTokenOut = intent?.tokenOut as
+    | { kind?: string; address?: string }
+    | undefined;
+  const equalAsset = (left: unknown, right: unknown) => {
+    const a = left as { kind?: string; address?: string } | undefined;
+    const b = right as { kind?: string; address?: string } | undefined;
+    return (
+      a?.kind === b?.kind &&
+      (a?.kind !== "erc20" ||
+        a.address?.toLowerCase() === b?.address?.toLowerCase())
+    );
+  };
+  const rawSender =
+    typeof intent?.sender === "string" ? intent.sender : undefined;
+  const rawRecipient =
+    typeof intent?.recipient === "string" ? intent.recipient : undefined;
+  return (
+    rawSender !== undefined &&
+    rawRecipient !== undefined &&
+    snapshot.context.chainId === result.chainId &&
+    snapshot.context.protocol === result.protocol &&
+    snapshot.context.sender.toLowerCase() === rawSender.toLowerCase() &&
+    snapshot.context.recipient.toLowerCase() === rawRecipient.toLowerCase() &&
+    snapshot.context.amountInAtomic === intent?.amountInAtomic &&
+    equalAsset(snapshot.context.tokenIn, rawTokenIn) &&
+    equalAsset(snapshot.context.tokenOut, rawTokenOut)
+  );
+}
+function accountStateGateError(
+  form: FormState,
+  state: AccountStateResult,
+): FormFieldErrors["form"] {
+  if (
+    form.protocol !== "camelot-v3" ||
+    form.tokenIn !== "USDC" ||
+    form.tokenOut !== "WETH"
+  ) {
+    return undefined;
+  }
+  if (state.status !== "available") {
+    return {
+      en: "Account state is not available. Check the wallet address, token balance, allowance, and native ETH before retrying.",
+      zh: "账户状态不可用。请先确认钱包地址、代币余额、授权和原生 ETH，再重试。",
+    };
+  }
+  const snapshot = state.snapshot;
+  if (
+    snapshot.status !== "AVAILABLE" ||
+    snapshot.balances.inputToken.status !== "AVAILABLE" ||
+    BigInt(snapshot.balances.inputToken.amountAtomic) <
+      BigInt(snapshot.context.amountInAtomic)
+  ) {
+    return {
+      en: "The wallet does not have enough USDC for this check.",
+      zh: "该钱包没有足够的 USDC 进行本次检查。",
+    };
+  }
+  if (snapshot.allowance.status !== "SUFFICIENT") {
+    return {
+      en: "The wallet has not authorized enough USDC for the qualified Camelot spender. Approve it outside Parallax, then refresh account state.",
+      zh: "该钱包尚未向已资格认证的 Camelot spender 授权足够 USDC。请在 Parallax 外完成授权，然后重新查询账户状态。",
+    };
+  }
+  if (snapshot.balances.native.status !== "AVAILABLE") {
+    return {
+      en: "The wallet does not have enough native ETH for gas.",
+      zh: "该钱包没有足够的原生 ETH 支付 Gas。",
+    };
+  }
+  return undefined;
+}
+
 export function WalletApp({ language }: { language: Language }) {
   const [showIntro, setShowIntro] = useState(true);
   const [screen, setScreen] = useState<Screen>("home");
@@ -135,6 +251,11 @@ export function WalletApp({ language }: { language: Language }) {
   /** Bumped on every return home, so the background replays its entrance. */
   const [homeVisit, setHomeVisit] = useState(0);
   const [quote, setQuote] = useState<QuoteState>({ status: "idle" });
+  const [accountState, setAccountState] = useState<AccountStateResult>({
+    status: "idle",
+  });
+  const accountStateRef = useRef<AccountStateResult>({ status: "idle" });
+  const snapshotRecoveryControllerRef = useRef<AbortController | undefined>();
   const [p0Config, setP0Config] = useState<P0ConfigState | undefined>();
   const schedulerRef = useRef(createStageScheduler());
   // The mount-only recovery effect reads this from its eventual promise callback.
@@ -147,20 +268,46 @@ export function WalletApp({ language }: { language: Language }) {
     return () => scheduler.cancel();
   }, []);
 
+  const { protocol, tokenIn, tokenOut, amountIn } = form;
+
   useEffect(() => {
+    const pair =
+      tokenIn === "USDC" && tokenOut === "WETH" ? "usdc-weth" : "eth-usdc";
     let active = true;
-    void fetchP0Config().then((next) => {
+    void fetchP0Config(pair).then((next) => {
       if (active) setP0Config(next);
     });
     return () => {
       active = false;
+    };
+  }, [tokenIn, tokenOut]);
+
+  useEffect(() => {
+    const snapshotId = storedAccountSnapshotId();
+    if (!snapshotId) return;
+    const controller = new AbortController();
+    snapshotRecoveryControllerRef.current = controller;
+    let active = true;
+    void loadAccountStateSnapshot(snapshotId, {
+      signal: controller.signal,
+    }).then((next) => {
+      if (active && !controller.signal.aborted) {
+        accountStateRef.current = next;
+        setAccountState(next);
+      }
+    });
+    return () => {
+      active = false;
+      controller.abort();
+      if (snapshotRecoveryControllerRef.current === controller) {
+        snapshotRecoveryControllerRef.current = undefined;
+      }
     };
   }, []);
 
   useEffect(() => {
     const runId = storedRunId();
     if (runId === undefined) return;
-
     let active = true;
     void loadRun(runId).then((recovery) => {
       if (
@@ -196,12 +343,28 @@ export function WalletApp({ language }: { language: Language }) {
   // Quote is only meaningful while the user is editing the swap. Invalid input
   // clears it rather than leaving a stale amount on screen, and each request
   // aborts the previous one so a slow response cannot overwrite a newer one.
-  const { protocol, tokenIn, tokenOut, amountIn } = form;
   useEffect(() => {
-    if (screen !== "swap") return;
-    // Only the exact-input fields govern a Quote, so slippage and Minimum
-    // Received are held at neutral values here instead of gating the request.
     if (
+      accountState.status !== "available" ||
+      !result ||
+      result.accountState ||
+      !accountStateMatchesResult(result, accountState.snapshot)
+    )
+      return;
+    setResult({ ...result, accountState: accountState.snapshot });
+  }, [accountState, result]);
+
+  const routeMetadata =
+    p0Config?.status === "AVAILABLE" ? p0Config.tokenMetadata : undefined;
+
+  useEffect(() => {
+    const reversePair = tokenIn === "USDC" && tokenOut === "WETH";
+    const reverseRouteReady =
+      !reversePair ||
+      (p0Config?.status === "AVAILABLE" && p0Config.pair === "usdc-weth");
+    if (
+      screen !== "swap" ||
+      !reverseRouteReady ||
       !validateForm({
         protocol,
         tokenIn,
@@ -211,26 +374,78 @@ export function WalletApp({ language }: { language: Language }) {
         minimumReceived: "",
       }).valid
     ) {
-      setQuote({ status: "idle" });
+      setQuote(
+        reversePair && p0Config?.status !== "AVAILABLE"
+          ? {
+              status: "error",
+              apiFailure: {
+                code: "ROUTE_METADATA_UNAVAILABLE",
+                retryable: false,
+              },
+            }
+          : { status: "idle" },
+      );
+      setAccountState(
+        reversePair && p0Config?.status !== "AVAILABLE"
+          ? {
+              status: "error",
+              apiFailure: {
+                code: "ROUTE_METADATA_UNAVAILABLE",
+                retryable: false,
+              },
+            }
+          : { status: "idle" },
+      );
+      accountStateRef.current =
+        reversePair && p0Config?.status !== "AVAILABLE"
+          ? {
+              status: "error",
+              apiFailure: {
+                code: "ROUTE_METADATA_UNAVAILABLE",
+                retryable: false,
+              },
+            }
+          : { status: "idle" };
       return;
     }
-
     const controller = new AbortController();
     const timer = setTimeout(() => {
       setQuote({ status: "loading" });
-      fetchQuote(
-        { protocol, tokenIn, tokenOut, amountIn },
-        { signal: controller.signal },
-      ).then((next) => {
-        if (!controller.signal.aborted) setQuote(next);
+      setAccountState({ status: "loading" });
+      void Promise.all([
+        fetchQuote(
+          {
+            protocol,
+            tokenIn,
+            tokenOut,
+            amountIn,
+            tokenMetadata: routeMetadata,
+          },
+          { signal: controller.signal },
+        ),
+        fetchAccountState(
+          {
+            protocol,
+            tokenIn,
+            tokenOut,
+            amountIn,
+            sender: DEFAULT_SENDER,
+            tokenMetadata: routeMetadata,
+          },
+          { signal: controller.signal },
+        ),
+      ]).then(([nextQuote, nextAccountState]) => {
+        if (controller.signal.aborted) return;
+        accountStateRef.current = nextAccountState;
+        setQuote(nextQuote);
+        setAccountState(nextAccountState);
       });
     }, QUOTE_DEBOUNCE_MS);
-
     return () => {
       clearTimeout(timer);
       controller.abort();
     };
-  }, [screen, protocol, tokenIn, tokenOut, amountIn]);
+  }, [screen, protocol, tokenIn, tokenOut, amountIn, routeMetadata, p0Config]);
 
   const runCheck = (allowUnchanged = false) => {
     const plan = planSubmission(form, result ? submittedForm : undefined, {
@@ -241,11 +456,36 @@ export function WalletApp({ language }: { language: Language }) {
       return;
     }
 
-    recoveryCancelledRef.current = true;
+    if (
+      form.protocol === "camelot-v3" &&
+      form.tokenIn === "USDC" &&
+      form.tokenOut === "WETH" &&
+      (p0Config?.status !== "AVAILABLE" || p0Config.pair !== "usdc-weth")
+    ) {
+      setFormErrors({
+        form: {
+          en: "The Backend has not made the USDC → WETH route metadata available. No quote or check can be submitted for this pair yet.",
+          zh: "后端尚未提供 USDC → WETH 路径元数据，目前无法为此交易对提交报价或检查。",
+        },
+      });
+      return;
+    }
+
+    const accountError = accountStateGateError(form, accountStateRef.current);
+    if (accountError !== undefined) {
+      setFormErrors({ form: accountError });
+      return;
+    }
+
     const parent = result?.systemStatus === "OK" ? result : undefined;
     const submitted = plan.submitted;
+    const currentAccountState = accountStateRef.current;
+    recoveryCancelledRef.current = true;
+    snapshotRecoveryControllerRef.current?.abort();
+    accountStateRef.current = { status: "idle" };
     setFormErrors({});
     setStoredRunId(undefined);
+    setStoredAccountSnapshotId(undefined);
     setResult(undefined);
     setDrawerOpen(false);
     setStage(0);
@@ -266,6 +506,10 @@ export function WalletApp({ language }: { language: Language }) {
 
         const nextResult = await checkSwap({
           ...toInput(submitted, parent?.runId),
+          tokenMetadata:
+            p0Config?.status === "AVAILABLE"
+              ? p0Config.tokenMetadata
+              : undefined,
           ...(matchesQuoteRequest
             ? {
                 expectationBaseline: expectationBaseline(
@@ -284,8 +528,14 @@ export function WalletApp({ language }: { language: Language }) {
           nextResult,
           p0Config?.status === "AVAILABLE" ? p0Config.tokenMetadata : undefined,
         );
-        setStoredRunId(backendRunId(displayResult));
-        setResult(displayResult);
+        const withAccountState =
+          currentAccountState.status === "available" &&
+          accountStateMatchesResult(displayResult, currentAccountState.snapshot)
+            ? { ...displayResult, accountState: currentAccountState.snapshot }
+            : displayResult;
+        setStoredRunId(backendRunId(withAccountState));
+        setStoredAccountSnapshotId(withAccountState.accountState?.snapshotId);
+        setResult(withAccountState);
         setSubmittedForm(submitted);
         setScreen("result");
       },
@@ -305,12 +555,14 @@ export function WalletApp({ language }: { language: Language }) {
     recoveryCancelledRef.current = true;
     schedulerRef.current.cancel();
     setStoredRunId(undefined);
+    setStoredAccountSnapshotId(undefined);
     setResult(undefined);
     setSubmittedForm(undefined);
     setFormErrors({});
     setDrawerOpen(false);
     setForm(INITIAL_FORM);
-    setQuote({ status: "idle" });
+    accountStateRef.current = { status: "idle" };
+    setAccountState({ status: "idle" });
     setScreen("home");
     setHomeVisit((visit) => visit + 1);
   };
@@ -364,6 +616,9 @@ export function WalletApp({ language }: { language: Language }) {
                     language={language}
                     onSwap={() => {
                       recoveryCancelledRef.current = true;
+                      snapshotRecoveryControllerRef.current?.abort();
+                      accountStateRef.current = { status: "idle" };
+                      setAccountState({ status: "idle" });
                       setScreen("swap");
                     }}
                   />
@@ -375,9 +630,20 @@ export function WalletApp({ language }: { language: Language }) {
                     form={form}
                     language={language}
                     quote={quote}
+                    accountState={accountState}
                     p0Config={p0Config}
                     onChange={(nextForm) => {
+                      const quoteIdentityChanged =
+                        nextForm.protocol !== form.protocol ||
+                        nextForm.tokenIn !== form.tokenIn ||
+                        nextForm.tokenOut !== form.tokenOut ||
+                        nextForm.amountIn !== form.amountIn;
                       setForm(nextForm);
+                      if (quoteIdentityChanged) {
+                        setQuote({ status: "idle" });
+                        accountStateRef.current = { status: "idle" };
+                        setAccountState({ status: "idle" });
+                      }
                       if (Object.keys(formErrors).length > 0) setFormErrors({});
                     }}
                     onSubmit={runCheck}
