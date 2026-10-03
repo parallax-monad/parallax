@@ -8,7 +8,11 @@ import {
   type RunResult,
   type SimulatedTokenOutEvidence,
 } from "@parallax/contracts";
-import { evaluateConstraints, evaluateEvidence } from "@parallax/risk";
+import {
+  evaluateConstraints,
+  evaluateEvidence,
+  isParameterAdjustment,
+} from "@parallax/risk";
 import { projectGenericEvidenceToRunResult } from "../agent-flow/index.js";
 import { extractSimulatedOutput } from "../agent-flow/simulated-output.js";
 import { backendEvidenceState } from "./evidence-state.js";
@@ -467,6 +471,7 @@ export function closeUnverifiedAdjust(
   if (
     result.status !== "completed" ||
     result.verdict !== "ADJUST" ||
+    isParameterAdjustment(result) ||
     hasVerifiedActionGate(result, verificationChildren)
   ) {
     return result;
