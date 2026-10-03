@@ -446,6 +446,11 @@ export class BackendPipeline<
         error.chainId !== input.chainId ||
         error.operation !== "estimateGas" ||
         (error.code !== "INSUFFICIENT_NATIVE_BALANCE" &&
+          !(
+            error.code === "EXECUTION_REVERT" &&
+            input.chainId === 421614 &&
+            input.protocol === "camelot-v3"
+          ) &&
           error.code !== "UNAVAILABLE") ||
         !provider.routingCapabilities?.includes(
           PROVIDER_OWNED_GAS_ESTIMATE_CAPABILITY,
@@ -454,8 +459,9 @@ export class BackendPipeline<
         throw error;
       }
 
-      // Only a matching, typed balance/RPC-unavailable preflight failure may
-      // continue to a Provider that explicitly owns the pinned gas check.
+      // Matching typed balance/unavailable failures, and Camelot execution
+      // reverts, may continue to the Provider-owned pinned check. Reverts remain
+      // failed observations; the decision may report a parameter adjustment.
       // This absence is not itself a gas observation; the Provider must still
       // perform and report its authoritative pinned check.
       gasEstimate = {

@@ -96,6 +96,10 @@ export type AccountStateApplicationResponse =
 
 export type AccountStateReaderInput = {
   readonly intent: import("@parallax/contracts").NormalizedSwapIntent;
+  readonly blockContext?: {
+    readonly blockNumber: string;
+    readonly blockHash?: string;
+  };
 };
 
 export interface AccountStateReader {

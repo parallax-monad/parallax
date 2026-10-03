@@ -122,8 +122,22 @@ export class ArbitrumAccountStateReader implements AccountStateReader {
     let pinnedBlock: PinnedBlock;
     try {
       pinnedBlock = parsePinnedBlock(
-        await this.request("eth_getBlockByNumber", ["latest", false]),
+        await this.request("eth_getBlockByNumber", [
+          input.blockContext === undefined
+            ? "latest"
+            : `0x${BigInt(input.blockContext.blockNumber).toString(16)}`,
+          false,
+        ]),
       );
+      if (
+        input.blockContext !== undefined &&
+        (pinnedBlock.blockNumber !== input.blockContext.blockNumber ||
+          input.blockContext.blockHash === undefined ||
+          pinnedBlock.blockHash.toLowerCase() !==
+            input.blockContext.blockHash.toLowerCase())
+      ) {
+        throw new TypeError("Pinned account block does not match execution");
+      }
       observedAt = this.now();
     } catch (error) {
       return this.unavailableObservation({
