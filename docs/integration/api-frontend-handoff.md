@@ -5,6 +5,38 @@ Status: BACKEND HANDOFF FOR ANALYZE 联调 — LIVE SIMULATION SUCCEEDED ON THE 
 Owner: Clare (`apps/api`)
 Consumers: Antony (`apps/web`)
 
+## Reverse asset discovery and account-state boundary — #151
+
+`GET /api/p0-config?pair=usdc-weth` discovers the explicitly configured
+Arbitrum Sepolia Camelot USDC → WETH route. The response uses the exported
+`assetRouteConfigSchema`: `AVAILABLE` includes chain/protocol and trusted
+`tokenMetadata.tokenIn` / `tokenOut` identities, symbols, decimals, decimals
+sources and verification blocks. Frontend must consume these records rather
+than infer decimals from the symbol or maintain its own route metadata.
+The default request without `pair` remains the native ETH → USDC P0 response
+validated by `p0ConfigSchema`.
+
+An unconfigured pair returns `UNAVAILABLE / ROUTE_NOT_CONFIGURED`; missing
+trusted metadata returns `UNAVAILABLE / TOKEN_METADATA_UNAVAILABLE`.
+`AVAILABLE` means configured discovery only, not a successful live quote,
+simulation, sufficient allowance or Product acceptance. Responses are read-only
+and use `cache-control: no-store`.
+
+Account-state snapshots remain the allowance authority. Use the input token's
+trusted metadata for display; preserve the returned spender identity, pinned
+block and `sufficient` / `insufficient` / `unavailable` distinctions. The shared
+account-state schema validates allowance identity and atomic-amount consistency,
+and rejects invalid decimals (only integers from 0 through 255 are accepted).
+Backend validates snapshots before saving and on recovery; invalid metadata is
+not silently removed to produce a successful snapshot.
+
+Missing canonical parent derivation produces `UNKNOWN` with remediation
+`NOT_RUN` and no recommended or irrelevant actions. A partial execution fact
+must not override that missing canonical Evidence with a `STOP` verdict.
+This handoff does not supply #144's real-browser acceptance evidence: Frontend
+still needs to record the actual quote/check, allowance display and saved-result
+refresh/re-check flow against the deployed Backend revision.
+
 ## Evidence provenance and capability display — #145 / #92
 
 New Check Runs include optional `result.evidencePresentation` (version `1`).

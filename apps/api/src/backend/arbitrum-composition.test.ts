@@ -3356,6 +3356,88 @@ describe("Arbitrum composition P0 Risk wiring", () => {
     });
   });
 
+  it("does not run remediation when the canonical parent derivation is incomplete", async () => {
+    const candidateConstraintEvidence = vi.fn(() => [
+      {
+        name: "maxPriceImpact" as const,
+        state: "VERIFIED" as const,
+        numerator: "1",
+        denominator: "1",
+        unit: "bps" as const,
+        evidenceKey: "candidate-impact",
+      },
+    ]);
+    const availableIntent: NormalizedSwapIntent = {
+      ...normalizedIntent,
+      economicBoundary: {
+        availability: "available",
+        minimumReceivedAtomic: "400000",
+        source: "user_declared",
+      },
+    };
+    const composition = createArbitrumProductionComposition(
+      p0CompositionOptions({
+        protocolAdapter: createCamelotV3ProtocolAdapter({
+          quote: async (intent) => ({
+            estimatedAmountOut:
+              intent.amountInAtomic === "1000" ? "0.48" : "0.5",
+            blockNumber: "42",
+            runtimeVersion: "arbitrum-camelot-v3",
+            runtimeRevision: "native-rpc",
+          }),
+          buildTransaction: async () => ({
+            to: "0x2222222222222222222222222222222222222222",
+            data: "0x1234",
+            value: "0x0",
+          }),
+        }),
+        providerEvidenceMapper: ({ normalizedIntent }) => {
+          const candidate = normalizedIntent as NormalizedSwapIntent;
+          const evidence = p0VerifiedEvidence(candidate, {
+            estimatedAmountOut:
+              candidate.amountInAtomic === "1000" ? "0.48" : "0.5",
+            amountReceivedAtomic:
+              candidate.amountInAtomic === "1000" ? "480000" : "500000",
+          });
+          if (candidate.amountInAtomic === "1000") {
+            // The parent lacks canonical derivation; child success cannot repair it.
+            const outcome = evidence.outcome.value as Record<string, unknown>;
+            delete outcome.derivation;
+            delete outcome.derivationVersion;
+          }
+          return evidence;
+        },
+        p0Risk: {
+          constraints: p0Constraints,
+          constraintEvidence: p0ConstraintEvidence,
+          remediation: {
+            maxAmountInAtomic: "3000",
+            initialStepAtomic: "1000",
+            maxEvaluations: 2,
+            constraintEvidenceForCandidate: candidateConstraintEvidence,
+          },
+        },
+      }),
+    );
+
+    const execution = await runP0Check(
+      composition,
+      "p0-unknown-parent-remediation",
+      availableIntent,
+    );
+    const result = runResultSchema.parse(execution.decisionOutput);
+    expect(result).toMatchObject({
+      status: "completed",
+      verdict: "UNKNOWN",
+      p0: { remediation: { status: "NOT_RUN" } },
+    });
+    expect(result.recommendedActions).toEqual([]);
+    expect(result.irrelevantActions).toEqual([]);
+    expect(result.p0?.remediation).toEqual({ status: "NOT_RUN" });
+    expect(candidateConstraintEvidence).not.toHaveBeenCalled();
+    expect(JSON.stringify(result)).not.toContain("candidate-impact");
+  });
+
   it("publishes a verified remediation through the existing RunResult Action Gate", async () => {
     const store = new InMemoryRunStore();
     const availableIntent: NormalizedSwapIntent = {
@@ -3680,9 +3762,17 @@ describe("Arbitrum composition P0 Risk wiring", () => {
               : "STOP",
           recommendedActions: [],
           p0: {
-            remediation: { status: "UNKNOWN", reason: "EVIDENCE_NOT_VERIFIED" },
+            remediation:
+              finalReadFailure === "parent-missing-derivation"
+                ? { status: "NOT_RUN" }
+                : { status: "UNKNOWN", reason: "EVIDENCE_NOT_VERIFIED" },
           },
         });
+        if (finalReadFailure === "parent-missing-derivation") {
+          expect(result.irrelevantActions).toEqual([]);
+          expect(startSpy).toHaveBeenCalledTimes(1);
+          expect(childReads).toBe(0);
+        }
         expect(
           result.evidence.filter((item) => item.kind === "action_verification"),
         ).toEqual([]);

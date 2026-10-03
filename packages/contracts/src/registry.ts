@@ -118,7 +118,7 @@ export const tokenMetadataPairSchema = z
 export type TokenMetadataPair = z.infer<typeof tokenMetadataPairSchema>;
 
 /** Configured P0 identity; availability does not imply live execution success. */
-export const p0ConfigSchema = z
+export const assetRouteConfigSchema = z
   .discriminatedUnion("status", [
     z
       .object({
@@ -139,17 +139,32 @@ export const p0ConfigSchema = z
     if (
       config.status === "AVAILABLE" &&
       (config.tokenMetadata.tokenIn.chainId !== config.chainId ||
-        config.tokenMetadata.tokenIn.asset.kind !== "native" ||
+        config.tokenMetadata.tokenOut.chainId !== config.chainId ||
         config.tokenMetadata.tokenOut.asset.kind !== "erc20")
     ) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
-        message:
-          "P0 metadata must describe the configured native-to-ERC20 route",
+        message: "Route metadata must describe assets on the configured chain",
         path: ["tokenMetadata"],
       });
     }
   });
+
+/** The default P0 response remains the native-to-ERC20 route. */
+export const p0ConfigSchema = assetRouteConfigSchema.superRefine(
+  (config, context) => {
+    if (
+      config.status === "AVAILABLE" &&
+      config.tokenMetadata.tokenIn.asset.kind !== "native"
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "P0 input must be native",
+        path: ["tokenMetadata", "tokenIn"],
+      });
+    }
+  },
+);
 
 export type TrustedTokenRegistry = {
   hasChain(chainId: number): boolean;

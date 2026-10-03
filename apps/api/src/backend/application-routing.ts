@@ -16,6 +16,12 @@ export type BackendApplicationRoute = {
     readonly tokenIn: AssetReference;
     readonly tokenOut: AssetReference;
   };
+  /** Explicitly configured additional pairs for pre-submit metadata discovery. */
+  readonly assetRoutes?: readonly {
+    readonly protocol: "camelot-v3";
+    readonly tokenIn: AssetReference;
+    readonly tokenOut: AssetReference;
+  }[];
   readonly composition: {
     readonly runStore: RunStore;
     normalize(input: unknown): BackendOperationResult<unknown>;
