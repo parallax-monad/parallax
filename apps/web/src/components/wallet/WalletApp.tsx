@@ -358,8 +358,13 @@ export function WalletApp({ language }: { language: Language }) {
     p0Config?.status === "AVAILABLE" ? p0Config.tokenMetadata : undefined;
 
   useEffect(() => {
+    const reversePair = tokenIn === "USDC" && tokenOut === "WETH";
+    const reverseRouteReady =
+      !reversePair ||
+      (p0Config?.status === "AVAILABLE" && p0Config.pair === "usdc-weth");
     if (
       screen !== "swap" ||
+      !reverseRouteReady ||
       !validateForm({
         protocol,
         tokenIn,
@@ -369,8 +374,38 @@ export function WalletApp({ language }: { language: Language }) {
         minimumReceived: "",
       }).valid
     ) {
-      setQuote({ status: "idle" });
-      setAccountState({ status: "idle" });
+      setQuote(
+        reversePair && p0Config?.status !== "AVAILABLE"
+          ? {
+              status: "error",
+              apiFailure: {
+                code: "ROUTE_METADATA_UNAVAILABLE",
+                retryable: false,
+              },
+            }
+          : { status: "idle" },
+      );
+      setAccountState(
+        reversePair && p0Config?.status !== "AVAILABLE"
+          ? {
+              status: "error",
+              apiFailure: {
+                code: "ROUTE_METADATA_UNAVAILABLE",
+                retryable: false,
+              },
+            }
+          : { status: "idle" },
+      );
+      accountStateRef.current =
+        reversePair && p0Config?.status !== "AVAILABLE"
+          ? {
+              status: "error",
+              apiFailure: {
+                code: "ROUTE_METADATA_UNAVAILABLE",
+                retryable: false,
+              },
+            }
+          : { status: "idle" };
       return;
     }
     const controller = new AbortController();
@@ -410,7 +445,7 @@ export function WalletApp({ language }: { language: Language }) {
       clearTimeout(timer);
       controller.abort();
     };
-  }, [screen, protocol, tokenIn, tokenOut, amountIn, routeMetadata]);
+  }, [screen, protocol, tokenIn, tokenOut, amountIn, routeMetadata, p0Config]);
 
   const runCheck = (allowUnchanged = false) => {
     const plan = planSubmission(form, result ? submittedForm : undefined, {
@@ -418,6 +453,21 @@ export function WalletApp({ language }: { language: Language }) {
     });
     if (!plan.allowed) {
       setFormErrors(plan.errors);
+      return;
+    }
+
+    if (
+      form.protocol === "camelot-v3" &&
+      form.tokenIn === "USDC" &&
+      form.tokenOut === "WETH" &&
+      (p0Config?.status !== "AVAILABLE" || p0Config.pair !== "usdc-weth")
+    ) {
+      setFormErrors({
+        form: {
+          en: "The Backend has not made the USDC → WETH route metadata available. No quote or check can be submitted for this pair yet.",
+          zh: "后端尚未提供 USDC → WETH 路径元数据，目前无法为此交易对提交报价或检查。",
+        },
+      });
       return;
     }
 

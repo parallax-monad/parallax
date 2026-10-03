@@ -59,10 +59,9 @@ export function symbolToAsset(symbol: string, chainId: number) {
   }
 
   if (symbol === "WETH" && chainId === ARBITRUM_SEPOLIA_CHAIN_ID) {
-    return {
-      kind: "erc20" as const,
-      address: ARBITRUM_SEPOLIA_WETH_ADDRESS,
-    };
+    throw new Error(
+      "WETH asset metadata must come from the Backend route configuration",
+    );
   }
 
   throw new Error(`Unsupported token: ${symbol} on chain ${chainId}`);

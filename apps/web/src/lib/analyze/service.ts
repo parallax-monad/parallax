@@ -57,6 +57,18 @@ function requestAssetWithMetadata(
   role: "tokenIn" | "tokenOut",
 ) {
   const resolved = metadata?.[role];
+  if (chainId === 421614 && value === "WETH") {
+    if (
+      resolved === undefined ||
+      resolved.chainId !== chainId ||
+      resolved.symbol.toLowerCase() !== value.toLowerCase()
+    ) {
+      throw new Error(
+        `Backend route metadata is required for ${value} on Arbitrum Sepolia`,
+      );
+    }
+    return resolved.asset;
+  }
   return resolved &&
     resolved.chainId === chainId &&
     resolved.symbol.toLowerCase() === value.toLowerCase()
@@ -640,25 +652,37 @@ export async function fetchAccountState(
   const chainId = getChainIdForProtocol(input.protocol);
   const sender = input.sender ?? DEFAULT_SENDER;
   const recipient = sender;
-  const request = {
-    chainId,
-    protocol: input.protocol,
-    sender,
-    recipient,
-    tokenIn: requestAssetWithMetadata(
-      input.tokenIn,
+  let request: Record<string, unknown>;
+  try {
+    request = {
       chainId,
-      input.tokenMetadata,
-      "tokenIn",
-    ),
-    tokenOut: requestAssetWithMetadata(
-      input.tokenOut,
-      chainId,
-      input.tokenMetadata,
-      "tokenOut",
-    ),
-    amountIn: input.amountIn,
-  };
+      protocol: input.protocol,
+      sender,
+      recipient,
+      tokenIn: requestAssetWithMetadata(
+        input.tokenIn,
+        chainId,
+        input.tokenMetadata,
+        "tokenIn",
+      ),
+      tokenOut: requestAssetWithMetadata(
+        input.tokenOut,
+        chainId,
+        input.tokenMetadata,
+        "tokenOut",
+      ),
+      amountIn: input.amountIn,
+    };
+  } catch (error) {
+    return {
+      status: "error",
+      apiFailure: {
+        code: "ROUTE_METADATA_UNAVAILABLE",
+        retryable: false,
+        message: error instanceof Error ? error.message : undefined,
+      },
+    };
+  }
   let response: Response;
   try {
     response = await (options.fetch ?? fetch)(`${API_BASE}/api/account-state`, {
@@ -1328,9 +1352,15 @@ export async function fetchP0Config(
     result.chainId !== 421614 ||
     result.protocol !== "camelot-v3" ||
     !tokenMetadata ||
+    tokenMetadata.tokenIn.chainId !== 421614 ||
+    tokenMetadata.tokenOut.chainId !== 421614 ||
     (pair === "eth-usdc"
-      ? tokenMetadata.tokenIn.asset.kind !== "native"
-      : tokenMetadata.tokenIn.asset.kind !== "erc20")
+      ? tokenMetadata.tokenIn.asset.kind !== "native" ||
+        tokenMetadata.tokenOut.symbol.toLowerCase() !== "usdc"
+      : tokenMetadata.tokenIn.symbol.toLowerCase() !== "usdc" ||
+        tokenMetadata.tokenOut.symbol.toLowerCase() !== "weth" ||
+        tokenMetadata.tokenIn.asset.kind !== "erc20" ||
+        tokenMetadata.tokenOut.asset.kind !== "erc20")
   ) {
     return {
       status: "error",
