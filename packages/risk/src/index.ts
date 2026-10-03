@@ -1,3 +1,7 @@
+export {
+  applyBasicSimulationRiskPolicy,
+  BASIC_SIMULATION_POLICY,
+} from "./basic-simulation-policy.js";
 export { evidenceCompleteness } from "./evidence-completeness.js";
 export { executionReason } from "./execution.js";
 export * from "./p0-diagnosis.js";

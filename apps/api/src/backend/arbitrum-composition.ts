@@ -35,6 +35,7 @@ import type {
   VerifiedCandidate,
 } from "@parallax/risk";
 import {
+  applyBasicSimulationRiskPolicy,
   evaluateConstraints,
   evaluateEvidence,
   solveSelectedTargetOutput,
@@ -457,12 +458,13 @@ export function createArbitrumProductionComposition(
           projectedRun,
           projection.risk.verdict,
         );
-        return projectVerifiedArbitrumRemediation(
+        const result = await projectVerifiedArbitrumRemediation(
           projected,
           projection.risk.verdict,
           projection.solver,
           options.runStore,
         );
+        return runResultSchema.parse(applyBasicSimulationRiskPolicy(result));
       },
     } satisfies DecisionPort<unknown, unknown, unknown>);
 
