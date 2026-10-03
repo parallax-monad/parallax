@@ -60,13 +60,13 @@ export function P0ExecutionDetails({
 
   return (
     <details
-      className="min-w-0 rounded-[12px] border border-line bg-ink-elev2/30"
+      className="min-w-0 rounded-[12px] border border-line bg-ink-elev2/30 px-3 py-2"
       aria-label={say(language, {
         en: "P0 execution facts",
         zh: "P0 执行信息",
       })}
     >
-      <summary className="flex min-h-11 w-full cursor-pointer list-none items-center justify-between gap-3 overflow-hidden px-5 py-3 text-left text-[12px] font-bold uppercase text-dim marker:hidden focus-visible:outline focus-visible:outline-2 focus-visible:outline-monad-dim focus-visible:outline-offset-2">
+      <summary className="flex min-h-6 w-full cursor-pointer list-none items-center justify-between gap-3 overflow-hidden text-left text-[12px] font-bold uppercase text-dim marker:hidden focus-visible:outline focus-visible:outline-2 focus-visible:outline-monad-dim focus-visible:outline-offset-2">
         <span className="min-w-0 flex-1 break-words">
           {say(language, {
             en: "Execution details",
@@ -77,7 +77,7 @@ export function P0ExecutionDetails({
           +
         </span>
       </summary>
-      <div className="min-w-0 border-t border-line px-5 pb-2">
+      <div className="min-w-0 border-t border-line pb-2">
         <h3 className="m-0 min-w-0 break-words pt-3 text-[12px] font-bold uppercase text-dim">
           {routeLabel(result)}
         </h3>
