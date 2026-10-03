@@ -409,7 +409,7 @@ describe("Backend chain application routing", () => {
     const body = runResultSchema.parse(await response.json());
     expect(body).toMatchObject({
       status: "completed",
-      verdict: "UNKNOWN",
+      verdict: "PROCEED",
       p0: {
         basicSimulation: {
           call: { status: "SUCCEEDED" },
@@ -437,7 +437,7 @@ describe("Backend chain application routing", () => {
     expect(historyResponse.status).toBe(200);
     expect(history).toMatchObject({
       status: "completed",
-      result: { status: "completed", verdict: "UNKNOWN" },
+      result: { status: "completed", verdict: "PROCEED" },
     });
     expect((history as { result?: { p0?: unknown } }).result?.p0).toMatchObject(
       {
