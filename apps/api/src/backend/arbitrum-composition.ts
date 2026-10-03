@@ -871,6 +871,19 @@ async function evaluateArbitrumP0Decision(
     ...(selectedQuote === undefined ? {} : { selectedQuote }),
   };
   const risk = evaluateBackendP0Risk(baseInput);
+  // Required canonical parent evidence is checked before consent/solver gates.
+  // A narrower Backend Risk result cannot override missing parent outcome proof.
+  const canonicalParent = projectGenericEvidenceToRunResult(
+    pipeline.runId,
+    pipeline.intent,
+    evidence,
+  );
+  if (canonicalParent.verdict === "UNKNOWN") {
+    return {
+      risk: { ...risk, verdict: "UNKNOWN" },
+      ...(selectedQuote === undefined ? {} : { selectedQuote }),
+    };
+  }
   const remediation = options.p0Risk?.remediation;
   const authorization = pipeline.intent.amountInIncreaseAuthorization;
   // This slice remedies an already Risk-blocked baseline. A descriptive

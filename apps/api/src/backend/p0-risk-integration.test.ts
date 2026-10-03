@@ -891,9 +891,12 @@ describe("Backend P0 Risk verdict merge", () => {
       summary: "projected summary",
     });
     expect(applyBackendP0Verdict(projected("STOP"), "UNKNOWN")).toMatchObject({
-      verdict: "STOP",
-      summary: "projected summary",
+      verdict: "UNKNOWN",
+      summary: "Live check could not establish a trustworthy result",
     });
+    expect(applyBackendP0Verdict(projected("UNKNOWN"), "STOP").verdict).toBe(
+      "UNKNOWN",
+    );
   });
 
   it("keeps a PROCEED projection only when P0 also proceeds", () => {

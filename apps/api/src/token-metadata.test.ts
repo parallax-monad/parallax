@@ -5,6 +5,7 @@ import {
 } from "@parallax/contracts";
 import { economicFailStopResult } from "@parallax/orchestrator/application/action-gate-fixtures";
 import { describe, expect, it, vi } from "vitest";
+import { CAMELOT_V3_WETH_ADDRESS } from "./backend/camelot-v3-binding.js";
 import { CAMELOT_SEPOLIA_USDC } from "./backend/camelot-v3-protocol-adapter.js";
 import { ChainRegistry } from "./backend/chain-registry.js";
 import { createBackendComposition } from "./backend/composition.js";
@@ -80,6 +81,71 @@ function completed(runId: string, intent: NormalizedSwapIntent) {
 }
 
 describe("Backend trusted token metadata", () => {
+  it("discovers the configured reverse pair and fails closed without trusted WETH metadata", async () => {
+    const usdc = {
+      ...config.tokens[0],
+      chainId: 421614,
+      address: CAMELOT_SEPOLIA_USDC,
+      symbol: "USDC",
+      decimals: 18,
+    };
+    const weth = { ...usdc, address: CAMELOT_V3_WETH_ADDRESS, symbol: "WETH" };
+    const app = bootstrapBackendApp({
+      environment: {
+        MONAD_RPC_URL: "https://rpc.example.test",
+        ARBITRUM_RPC_URL: "https://rpc.example.test",
+        MOSS_RUNTIME_VERSION: "v1",
+        MOSS_RUNTIME_REVISION: "rev1",
+      },
+      tokenRegistry: {
+        chains: [{ chainId: 421614, symbol: "ETH", decimals: 18 }],
+        tokens: [usdc, weth],
+      },
+    });
+    expect(
+      await (await app.request("/api/p0-config?pair=usdc-weth")).json(),
+    ).toMatchObject({
+      status: "AVAILABLE",
+      chainId: 421614,
+      protocol: "camelot-v3",
+      tokenMetadata: {
+        tokenIn: {
+          asset: { kind: "erc20", address: CAMELOT_SEPOLIA_USDC },
+          symbol: "USDC",
+          decimals: 18,
+          decimalsSource: "onchain_verified",
+          verifiedAtBlock: "42",
+        },
+        tokenOut: {
+          asset: { kind: "erc20", address: CAMELOT_V3_WETH_ADDRESS },
+          symbol: "WETH",
+          decimals: 18,
+          decimalsSource: "onchain_verified",
+          verifiedAtBlock: "42",
+        },
+      },
+    });
+    await app.close();
+    const missing = createP0ConfigApp(
+      createTrustedTokenRegistry({
+        chains: [{ chainId: 421614, symbol: "ETH", decimals: 18 }],
+        tokens: [usdc],
+      }),
+      true,
+      true,
+    );
+    expect(
+      await (await missing.request("/api/p0-config?pair=usdc-weth")).json(),
+    ).toEqual({ status: "UNAVAILABLE", reason: "TOKEN_METADATA_UNAVAILABLE" });
+    expect(
+      await (
+        await createP0ConfigApp(
+          createTrustedTokenRegistry(config),
+          true,
+        ).request("/api/p0-config?pair=usdc-weth")
+      ).json(),
+    ).toEqual({ status: "UNAVAILABLE", reason: "ROUTE_NOT_CONFIGURED" });
+  });
   it("discovers P0 through production routes and a direct composition without executing adapters", async () => {
     const tokenRegistry = {
       chains: [{ chainId: 421614, symbol: "ETH", decimals: 18 }],

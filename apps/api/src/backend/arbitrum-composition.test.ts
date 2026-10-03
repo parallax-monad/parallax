@@ -3356,6 +3356,7 @@ describe("Arbitrum composition P0 Risk wiring", () => {
     });
   });
 
+
   it("does not enter remediation from PROCEED when output is degraded", async () => {
     const store = new InMemoryRunStore();
     const candidateConstraintEvidence = vi.fn(() => []);
@@ -3430,6 +3431,8 @@ describe("Arbitrum composition P0 Risk wiring", () => {
     expect(candidateConstraintEvidence).not.toHaveBeenCalled();
   });
 
+=======
+>>>>>>> origin/main
   it("does not run remediation when the canonical parent derivation is incomplete", async () => {
     const candidateConstraintEvidence = vi.fn(() => [
       {
@@ -3836,9 +3839,17 @@ describe("Arbitrum composition P0 Risk wiring", () => {
               : "STOP",
           recommendedActions: [],
           p0: {
-            remediation: { status: "UNKNOWN", reason: "EVIDENCE_NOT_VERIFIED" },
+            remediation:
+              finalReadFailure === "parent-missing-derivation"
+                ? { status: "NOT_RUN" }
+                : { status: "UNKNOWN", reason: "EVIDENCE_NOT_VERIFIED" },
           },
         });
+        if (finalReadFailure === "parent-missing-derivation") {
+          expect(result.irrelevantActions).toEqual([]);
+          expect(startSpy).toHaveBeenCalledTimes(1);
+          expect(childReads).toBe(0);
+        }
         expect(
           result.evidence.filter((item) => item.kind === "action_verification"),
         ).toEqual([]);
