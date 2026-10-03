@@ -633,10 +633,17 @@ export function WalletApp({ language }: { language: Language }) {
                     accountState={accountState}
                     p0Config={p0Config}
                     onChange={(nextForm) => {
+                      const quoteIdentityChanged =
+                        nextForm.protocol !== form.protocol ||
+                        nextForm.tokenIn !== form.tokenIn ||
+                        nextForm.tokenOut !== form.tokenOut ||
+                        nextForm.amountIn !== form.amountIn;
                       setForm(nextForm);
-                      setQuote({ status: "idle" });
-                      accountStateRef.current = { status: "idle" };
-                      setAccountState({ status: "idle" });
+                      if (quoteIdentityChanged) {
+                        setQuote({ status: "idle" });
+                        accountStateRef.current = { status: "idle" };
+                        setAccountState({ status: "idle" });
+                      }
                       if (Object.keys(formErrors).length > 0) setFormErrors({});
                     }}
                     onSubmit={runCheck}

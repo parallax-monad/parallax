@@ -21,7 +21,7 @@ export type WalletAsset = {
 };
 
 export const ASSETS: readonly WalletAsset[] = [
-  { symbol: "MON", name: "Monad", balance: 1800, price: 0.42 },
+  { symbol: "ETH", name: "Ethereum", balance: 0.18, price: 4200 },
   { symbol: "USDC", name: "USD Coin", balance: 500, price: 1 },
 ];
 

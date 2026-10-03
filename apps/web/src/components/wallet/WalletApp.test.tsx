@@ -477,8 +477,28 @@ describe("WalletApp persisted Run recovery", () => {
       if (typeof url === "string" && url.includes("/api/p0-config")) {
         return Promise.resolve(
           jsonResponse({
-            status: "UNAVAILABLE",
-            reason: "ROUTE_NOT_CONFIGURED",
+            status: "AVAILABLE",
+            chainId: 421614,
+            protocol: "camelot-v3",
+            tokenMetadata: {
+              tokenIn: {
+                chainId: 421614,
+                asset: { kind: "native" },
+                symbol: "ETH",
+                decimals: 18,
+                decimalsSource: "chain_config",
+              },
+              tokenOut: {
+                chainId: 421614,
+                asset: {
+                  kind: "erc20",
+                  address: "0xb893E3334D4Bd6C5ba8277Fd559e99Ed683A9FC7",
+                },
+                symbol: "USDC",
+                decimals: 6,
+                decimalsSource: "onchain_verified",
+              },
+            },
           }),
         );
       }
@@ -501,7 +521,7 @@ describe("WalletApp persisted Run recovery", () => {
 
     await act(async () => {
       swapButton?.click();
-      await new Promise((resolve) => setTimeout(resolve, 550));
+      await new Promise((resolve) => setTimeout(resolve, 1000));
     });
 
     expect(quoteRequestCount).toBe(1);
@@ -526,8 +546,7 @@ describe("WalletApp persisted Run recovery", () => {
     expect(container.textContent).toContain("1.5");
     expect(container.textContent).not.toContain("No quote");
   });
-
-
+  test("does not expose fixture-only remediation controls in the active P0 path", async () => {
     const container = document.createElement("div");
     document.body.append(container);
     root = createRoot(container);
