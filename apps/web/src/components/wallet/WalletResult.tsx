@@ -190,9 +190,6 @@ export function WalletResult({
     );
   }
 
-  const hasOptions =
-    result.remediationOptions && result.remediationOptions.length > 0;
-  
   // Show timeline for all ADJUST verdicts, not just when there are remediation options
   const showTimeline = result.verdict === "ADJUST";
 
