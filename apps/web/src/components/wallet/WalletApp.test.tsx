@@ -465,7 +465,7 @@ describe("WalletApp persisted Run recovery", () => {
     });
 
     expect(container.textContent).toContain(
-      "This demo checks a supported swap intent before signing",
+      "This demo checks execution evidence before signing",
     );
     expect(container.textContent).not.toContain("Your quote has changed");
     expect(container.textContent).not.toContain("View verified options");
