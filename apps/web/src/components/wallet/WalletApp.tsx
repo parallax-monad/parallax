@@ -13,6 +13,7 @@ import { WalletSwap } from "@/components/wallet/WalletSwap";
 import { flaggedFields } from "@/lib/analyze/fields";
 import {
   applyRemediationOption,
+  changedLogicalFields,
   DEMO_SLIPPAGE,
   type FormFieldErrors,
   type FormState,
@@ -404,9 +405,9 @@ export function WalletApp({ language }: { language: Language }) {
     };
   }, [screen, protocol, tokenIn, tokenOut, amountIn, routeMetadata, p0Config]);
 
-  const runCheck = (allowUnchanged = false) => {
+  const runCheck = () => {
     const plan = planSubmission(form, result ? submittedForm : undefined, {
-      allowUnchanged,
+      allowUnchanged: true,
     });
     if (!plan.allowed) {
       setFormErrors(plan.errors);
@@ -428,8 +429,14 @@ export function WalletApp({ language }: { language: Language }) {
       return;
     }
 
-    const parent = result?.systemStatus === "OK" ? result : undefined;
     const submitted = plan.submitted;
+    const parent =
+      result?.systemStatus === "OK" &&
+      submittedForm !== undefined &&
+      changedLogicalFields(submittedForm, submitted).length === 1 &&
+      submittedForm.minimumReceived === submitted.minimumReceived
+        ? result
+        : undefined;
     const currentAccountState = accountStateRef.current;
     const currentP0Config = p0Config;
     const currentQuote = quote;
@@ -609,8 +616,6 @@ export function WalletApp({ language }: { language: Language }) {
                     form={form}
                     language={language}
                     quote={quote}
-                    accountState={accountState}
-                    p0Config={p0Config}
                     onChange={(nextForm) => {
                       const quoteIdentityChanged =
                         nextForm.protocol !== form.protocol ||
@@ -641,7 +646,7 @@ export function WalletApp({ language }: { language: Language }) {
                     result={result}
                     tokenMetadata={result.tokenMetadata}
                     onDiscard={discard}
-                    onRetry={() => runCheck(true)}
+                    onRetry={() => runCheck()}
                     onKeep={() => setScreen("swap")}
                     onOpenEvidence={() => setDrawerOpen(true)}
                     onSelectOption={applyOption}

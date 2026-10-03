@@ -214,7 +214,7 @@ export function WalletResult({
         </div>
       )}
 
-      <p className="text-[12px] leading-[1.6] text-dim">
+      <p className="hidden text-[12px] leading-[1.6] text-dim">
         {say(language, MODE_EXPLANATION[result.productRunMode])}
       </p>
 

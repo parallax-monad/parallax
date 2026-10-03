@@ -4,11 +4,7 @@ import { ChevronDownIcon, SwapIcon } from "@/components/wallet/WalletIcons";
 import { DEMO_RECIPIENT } from "@/components/wallet/walletData";
 import type { FieldFlag } from "@/lib/analyze/fields";
 import type { FormFieldErrors, FormState } from "@/lib/analyze/form";
-import type {
-  AccountStateResult,
-  P0ConfigState,
-  QuoteState,
-} from "@/lib/analyze/types";
+import type { QuoteState } from "@/lib/analyze/types";
 import { type Copy, type Language, say } from "@/lib/i18n";
 
 const P0_TOKENS_IN = ["ETH", "USDC"] as const;
@@ -95,8 +91,6 @@ export function WalletSwap({
   errors = {},
   flags = [],
   quote = { status: "idle" },
-  accountState = { status: "idle" },
-  p0Config,
   onChange,
   onSubmit,
 }: {
@@ -107,9 +101,6 @@ export function WalletSwap({
   flags?: FieldFlag[];
   /** Pre-submit `/api/quote` state. Never a locally computed estimate. */
   quote?: QuoteState;
-  accountState?: AccountStateResult;
-  /** Configured route identity only; AVAILABLE is not a live quote or Product pass. */
-  p0Config?: P0ConfigState;
   onChange: (form: FormState) => void;
   onSubmit: () => void;
 }) {
@@ -124,9 +115,6 @@ export function WalletSwap({
   const amountFlag = flagFor("amountIn");
   const tokenInLabel = form.tokenIn;
   const tokenOutLabel = form.tokenOut;
-  const routeLabel = `Arbitrum Sepolia · Camelot V3 · ${tokenInLabel} → ${tokenOutLabel}`;
-  const configUnavailable =
-    p0Config !== undefined && p0Config.status !== "AVAILABLE";
   const amountError = errors.amountIn;
   const slippageError = errors.slippage;
   const minimumReceivedError = errors.minimumReceived;
@@ -139,32 +127,10 @@ export function WalletSwap({
         onSubmit();
       }}
     >
-      <section className="border-y border-line py-3">
-        <div className="text-[11px] font-bold uppercase tracking-[0.08em] text-dim">
-          {say(language, { en: "Active P0 path", zh: "当前 P0 路径" })}
-        </div>
-        <div className="mt-1 text-[13px] font-semibold text-white">
-          {say(language, { en: routeLabel, zh: routeLabel })}
-        </div>
-        {configUnavailable && (
-          <p className="mt-2 text-[13px] leading-[1.5] text-risk-elevated">
-            {say(language, {
-              en: "Configured P0 metadata is unavailable. This is configuration discovery, not a live quote or RPC failure.",
-              zh: "当前 P0 配置元数据不可用。这是配置发现结果，不是实时报价或 RPC 失败。",
-            })}
-          </p>
-        )}
-      </section>
-
       <section className="rounded-[16px] border border-white/[0.08] bg-white/[0.02] p-5 backdrop-blur-xl">
-        <div className="flex items-baseline justify-between gap-3">
+        <div>
           <span className="text-[12px] font-bold uppercase tracking-[0.08em] text-dim">
             {say(language, { en: "Account state", zh: "账户状态" })}
-          </span>
-          <span className="mono text-[12px] text-white">
-            {accountState.status === "available"
-              ? accountState.snapshot.status
-              : accountState.status.toUpperCase()}
           </span>
         </div>
         <p className="mt-2 text-[12px] leading-[1.5] text-dim">
@@ -206,13 +172,6 @@ export function WalletSwap({
             }
           />
         </div>
-        <button
-          type="button"
-          className="mt-1 text-[12px] font-bold uppercase tracking-[0.08em] text-dim"
-          disabled
-        >
-          {say(language, { en: "Balance unavailable", zh: "余额不可用" })}
-        </button>
         {amountError && (
           <p
             id="swap-amount-error"
