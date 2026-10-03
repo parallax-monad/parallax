@@ -3431,8 +3431,6 @@ describe("Arbitrum composition P0 Risk wiring", () => {
     expect(candidateConstraintEvidence).not.toHaveBeenCalled();
   });
 
-=======
->>>>>>> origin/main
   it("does not run remediation when the canonical parent derivation is incomplete", async () => {
     const candidateConstraintEvidence = vi.fn(() => [
       {
