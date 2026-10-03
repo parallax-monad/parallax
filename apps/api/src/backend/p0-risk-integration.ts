@@ -332,8 +332,8 @@ function intentBoundCurrentQuote(
 const VERDICT_RESTRICTIVENESS: Record<Verdict, number> = {
   PROCEED: 0,
   ADJUST: 1,
-  UNKNOWN: 2,
-  STOP: 3,
+  STOP: 2,
+  UNKNOWN: 3,
 };
 
 /**

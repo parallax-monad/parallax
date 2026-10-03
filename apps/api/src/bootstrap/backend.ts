@@ -34,6 +34,7 @@ import type {
   ArbitrumProductionComposition,
 } from "../backend/arbitrum-composition.js";
 import { createArbitrumProductionComposition } from "../backend/arbitrum-composition.js";
+import { CAMELOT_V3_WETH_ADDRESS } from "../backend/camelot-v3-binding.js";
 import { CAMELOT_SEPOLIA_USDC } from "../backend/camelot-v3-protocol-adapter.js";
 import { createCamelotV3QualifiedAllowanceSpenderResolver } from "../backend/camelot-v3-qualified-spender.js";
 import type { BackendCompositionRuntime } from "../backend/composition.js";
@@ -269,6 +270,18 @@ export function createBackendApp(
           ) === true
         );
       })(),
+      dependencies.routes
+        ?.find((route) => route.chainId === ARBITRUM_SEPOLIA_CHAIN_ID)
+        ?.assetRoutes?.some(
+          (route) =>
+            route.protocol === CAMELOT_V3_PROTOCOL_ID &&
+            route.tokenIn.kind === "erc20" &&
+            route.tokenIn.address.toLowerCase() ===
+              CAMELOT_SEPOLIA_USDC.toLowerCase() &&
+            route.tokenOut.kind === "erc20" &&
+            route.tokenOut.address.toLowerCase() ===
+              CAMELOT_V3_WETH_ADDRESS.toLowerCase(),
+        ) === true,
     ),
   );
   app.route("/", createRunQueryApp(runQueryService));
@@ -550,6 +563,19 @@ export function bootstrapBackendApp(
                       address: CAMELOT_SEPOLIA_USDC,
                     },
                   },
+                  assetRoutes: [
+                    {
+                      protocol: CAMELOT_V3_PROTOCOL_ID,
+                      tokenIn: {
+                        kind: "erc20" as const,
+                        address: CAMELOT_SEPOLIA_USDC,
+                      },
+                      tokenOut: {
+                        kind: "erc20" as const,
+                        address: CAMELOT_V3_WETH_ADDRESS,
+                      },
+                    },
+                  ],
                 }
               : {}),
             composition: {
