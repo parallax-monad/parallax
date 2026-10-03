@@ -59,7 +59,13 @@ export function P0ExecutionDetails({
   const remediation = result.remediationStatus ?? "UNKNOWN";
 
   return (
-    <details className="border-y border-line" aria-label="P0 execution facts">
+    <details
+      className="border-y border-line"
+      aria-label={say(language, {
+        en: "P0 execution facts",
+        zh: "P0 执行信息",
+      })}
+    >
       <summary className="flex min-h-11 w-full cursor-pointer list-none items-center justify-between gap-3 overflow-hidden py-3 text-left text-[12px] font-bold uppercase text-dim marker:hidden focus-visible:outline focus-visible:outline-2 focus-visible:outline-monad-dim focus-visible:outline-offset-2">
         <span className="min-w-0 flex-1 break-words">
           {say(language, {
@@ -71,8 +77,8 @@ export function P0ExecutionDetails({
           +
         </span>
       </summary>
-      <div className="border-t border-line pb-2">
-        <h3 className="m-0 pt-3 text-[12px] font-bold uppercase text-dim">
+      <div className="border-t border-line pb-2 min-w-0">
+        <h3 className="m-0 min-w-0 break-words pt-3 text-[12px] font-bold uppercase text-dim">
           {routeLabel(result)}
         </h3>
         <dl className="m-0 mt-2">

@@ -120,7 +120,7 @@ const jsonResponse = (body: unknown, status = 200) =>
 
 describe("checkSwap API adapter", () => {
   test("shows the same read-only identity that the API request submits", () => {
-    expect(DEMO_ADDRESS).toBe("0x1111...1111");
+    expect(DEMO_ADDRESS).toBe("0x01bb...db9d");
     expect(DEMO_RECIPIENT).toBe(DEMO_ADDRESS);
   });
 
@@ -136,8 +136,8 @@ describe("checkSwap API adapter", () => {
     expect(sent).toEqual({
       chainId: 143,
       protocol: "kuru",
-      sender: "0x1111111111111111111111111111111111111111",
-      recipient: "0x1111111111111111111111111111111111111111",
+      sender: "0x01bb7b44cc398aaa2b76ac6253f0f5634279db9d",
+      recipient: "0x01bb7b44cc398aaa2b76ac6253f0f5634279db9d",
       tokenIn: { kind: "native" },
       tokenOut: {
         kind: "erc20",
@@ -1113,7 +1113,7 @@ describe("fetchQuote", () => {
     expect(sent).toEqual({
       chainId: 143,
       protocol: "kuru",
-      sender: "0x1111111111111111111111111111111111111111",
+      sender: "0x01bb7b44cc398aaa2b76ac6253f0f5634279db9d",
       tokenIn: { kind: "native" },
       tokenOut: {
         kind: "erc20",
@@ -1265,6 +1265,7 @@ describe("fetchP0Config", () => {
 
     await expect(fetchP0Config({ fetch: request })).resolves.toEqual({
       status: "AVAILABLE",
+      pair: "eth-usdc",
       chainId: 421614,
       protocol: "camelot-v3",
       tokenMetadata: p0Metadata,

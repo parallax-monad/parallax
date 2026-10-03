@@ -24,6 +24,7 @@ import type {
   QuotePreview,
   QuoteState,
   QuoteSwapInput,
+  RoutePair,
   RuleResult,
   RunDiff,
   RunRecovery,
@@ -32,7 +33,7 @@ import type {
   Verdict,
 } from "./types";
 
-export const DEFAULT_SENDER = "0x1111111111111111111111111111111111111111";
+export const DEFAULT_SENDER = "0x01bb7b44cc398aaa2b76ac6253f0f5634279db9d";
 const API_BASE = "";
 const cp = (value: string) => ({ en: value, zh: value });
 const obj = (value: unknown): Record<string, unknown> | undefined =>
@@ -47,6 +48,20 @@ function metadataAssetKey(value: unknown): string {
   const asset = obj(value);
   if (asset?.kind === "native") return "native";
   return str(asset?.address)?.toLowerCase() ?? "unknown";
+}
+
+function requestAssetWithMetadata(
+  value: string,
+  chainId: number,
+  metadata: TokenMetadataPair | undefined,
+  role: "tokenIn" | "tokenOut",
+) {
+  const resolved = metadata?.[role];
+  return resolved &&
+    resolved.chainId === chainId &&
+    resolved.symbol.toLowerCase() === value.toLowerCase()
+    ? resolved.asset
+    : requestAsset(value, chainId);
 }
 
 function symbol(
@@ -73,7 +88,7 @@ function requestAsset(
   return symbolToAsset(value, chainId);
 }
 
-function parseTokenMetadata(value: unknown): TokenMetadata | undefined {
+export function parseTokenMetadata(value: unknown): TokenMetadata | undefined {
   const item = obj(value);
   if (!item) return;
   const chainId = item.chainId;
@@ -83,6 +98,9 @@ function parseTokenMetadata(value: unknown): TokenMetadata | undefined {
   if (
     typeof chainId !== "number" ||
     typeof decimals !== "number" ||
+    !Number.isInteger(decimals) ||
+    decimals < 0 ||
+    decimals > 255 ||
     !symbolValue ||
     !asset
   ) {
@@ -579,8 +597,18 @@ function accountStateMatchesRequest(
     ? atomicAmount(input.amountIn, inputMetadata.decimals)
     : undefined;
   if (amountInAtomic === undefined) return false;
-  const tokenIn = requestAsset(input.tokenIn, chainId);
-  const tokenOut = requestAsset(input.tokenOut, chainId);
+  const tokenIn = requestAssetWithMetadata(
+    input.tokenIn,
+    chainId,
+    input.tokenMetadata,
+    "tokenIn",
+  );
+  const tokenOut = requestAssetWithMetadata(
+    input.tokenOut,
+    chainId,
+    input.tokenMetadata,
+    "tokenOut",
+  );
   return (
     snapshot.context.chainId === chainId &&
     snapshot.context.protocol === input.protocol &&
@@ -617,8 +645,18 @@ export async function fetchAccountState(
     protocol: input.protocol,
     sender,
     recipient,
-    tokenIn: requestAsset(input.tokenIn, chainId),
-    tokenOut: requestAsset(input.tokenOut, chainId),
+    tokenIn: requestAssetWithMetadata(
+      input.tokenIn,
+      chainId,
+      input.tokenMetadata,
+      "tokenIn",
+    ),
+    tokenOut: requestAssetWithMetadata(
+      input.tokenOut,
+      chainId,
+      input.tokenMetadata,
+      "tokenOut",
+    ),
     amountIn: input.amountIn,
   };
   let response: Response;
@@ -1015,8 +1053,18 @@ function body(input: CheckSwapInput) {
     protocol: input.protocol,
     sender: input.sender ?? DEFAULT_SENDER,
     recipient: input.sender ?? DEFAULT_SENDER,
-    tokenIn: requestAsset(input.tokenIn, chainId),
-    tokenOut: requestAsset(input.tokenOut, chainId),
+    tokenIn: requestAssetWithMetadata(
+      input.tokenIn,
+      chainId,
+      input.tokenMetadata,
+      "tokenIn",
+    ),
+    tokenOut: requestAssetWithMetadata(
+      input.tokenOut,
+      chainId,
+      input.tokenMetadata,
+      "tokenOut",
+    ),
     amountIn: input.amountIn,
     economicBoundary: input.minimumReceived
       ? {
@@ -1039,8 +1087,18 @@ export function expectationBaseline(
   return {
     chainId,
     protocol: input.protocol,
-    tokenIn: requestAsset(input.tokenIn, chainId),
-    tokenOut: requestAsset(input.tokenOut, chainId),
+    tokenIn: requestAssetWithMetadata(
+      input.tokenIn,
+      chainId,
+      input.tokenMetadata,
+      "tokenIn",
+    ),
+    tokenOut: requestAssetWithMetadata(
+      input.tokenOut,
+      chainId,
+      input.tokenMetadata,
+      "tokenOut",
+    ),
     amountIn: input.amountIn,
     quote,
   };
@@ -1053,8 +1111,18 @@ function quoteBody(input: QuoteSwapInput) {
     chainId,
     protocol: input.protocol,
     sender: input.sender ?? DEFAULT_SENDER,
-    tokenIn: requestAsset(input.tokenIn, chainId),
-    tokenOut: requestAsset(input.tokenOut, chainId),
+    tokenIn: requestAssetWithMetadata(
+      input.tokenIn,
+      chainId,
+      input.tokenMetadata,
+      "tokenIn",
+    ),
+    tokenOut: requestAssetWithMetadata(
+      input.tokenOut,
+      chainId,
+      input.tokenMetadata,
+      "tokenOut",
+    ),
     amountIn: input.amountIn,
   };
 }
@@ -1187,13 +1255,20 @@ export async function fetchQuote(
  * and never implies a live quote, RPC, or Product P0 success.
  */
 export async function fetchP0Config(
-  options: CheckOptions = {},
+  pairOrOptions: RoutePair | CheckOptions = "eth-usdc",
+  maybeOptions: CheckOptions = {},
 ): Promise<P0ConfigState> {
+  const pair = typeof pairOrOptions === "string" ? pairOrOptions : "eth-usdc";
+  const options =
+    typeof pairOrOptions === "string" ? maybeOptions : pairOrOptions;
   let response: Response;
   try {
-    response = await (options.fetch ?? fetch)(`${API_BASE}/api/p0-config`, {
-      signal: options.signal,
-    });
+    response = await (options.fetch ?? fetch)(
+      `${API_BASE}/api/p0-config${pair === "eth-usdc" ? "" : `?pair=${pair}`}`,
+      {
+        signal: options.signal,
+      },
+    );
   } catch (error) {
     const aborted =
       error instanceof DOMException && error.name === "AbortError";
@@ -1252,7 +1327,10 @@ export async function fetchP0Config(
     result?.status !== "AVAILABLE" ||
     result.chainId !== 421614 ||
     result.protocol !== "camelot-v3" ||
-    !tokenMetadata
+    !tokenMetadata ||
+    (pair === "eth-usdc"
+      ? tokenMetadata.tokenIn.asset.kind !== "native"
+      : tokenMetadata.tokenIn.asset.kind !== "erc20")
   ) {
     return {
       status: "error",
@@ -1266,6 +1344,7 @@ export async function fetchP0Config(
 
   return {
     status: "AVAILABLE",
+    pair,
     chainId: 421614,
     protocol: "camelot-v3",
     tokenMetadata,

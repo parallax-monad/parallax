@@ -28,6 +28,8 @@ export type ActionSuggestion = {
   proposedChange?: { before: string; after: string; unit: string };
 };
 
+export type RoutePair = "eth-usdc" | "usdc-weth";
+
 export type CheckSwapInput = {
   parentRunId?: string;
   sender?: string;
@@ -39,6 +41,7 @@ export type CheckSwapInput = {
   minimumReceived?: string;
   minimumReceivedSource?: BoundarySource;
   slippage?: string;
+  tokenMetadata?: TokenMetadataPair;
   expectationBaseline?: {
     chainId: number;
     protocol: Protocol;
@@ -56,6 +59,7 @@ export type QuoteSwapInput = {
   tokenIn: string;
   tokenOut: string;
   amountIn: string;
+  tokenMetadata?: TokenMetadataPair;
 };
 
 export type QuotePreview = {
@@ -252,6 +256,7 @@ export type AccountStateResult =
 export type P0ConfigState =
   | {
       status: "AVAILABLE";
+      pair: RoutePair;
       chainId: 421614;
       protocol: "camelot-v3";
       tokenMetadata: TokenMetadataPair;

@@ -190,6 +190,50 @@ function accountStateMatchesResult(
     equalAsset(snapshot.context.tokenOut, rawTokenOut)
   );
 }
+function accountStateGateError(
+  form: FormState,
+  state: AccountStateResult,
+): FormFieldErrors["form"] {
+  if (
+    form.protocol !== "camelot-v3" ||
+    form.tokenIn !== "USDC" ||
+    form.tokenOut !== "WETH"
+  ) {
+    return undefined;
+  }
+  if (state.status !== "available") {
+    return {
+      en: "Account state is not available. Check the wallet address, token balance, allowance, and native ETH before retrying.",
+      zh: "账户状态不可用。请先确认钱包地址、代币余额、授权和原生 ETH，再重试。",
+    };
+  }
+  const snapshot = state.snapshot;
+  if (
+    snapshot.status !== "AVAILABLE" ||
+    snapshot.balances.inputToken.status !== "AVAILABLE" ||
+    BigInt(snapshot.balances.inputToken.amountAtomic) <
+      BigInt(snapshot.context.amountInAtomic)
+  ) {
+    return {
+      en: "The wallet does not have enough USDC for this check.",
+      zh: "该钱包没有足够的 USDC 进行本次检查。",
+    };
+  }
+  if (snapshot.allowance.status !== "SUFFICIENT") {
+    return {
+      en: "The wallet has not authorized enough USDC for the qualified Camelot spender. Approve it outside Parallax, then refresh account state.",
+      zh: "该钱包尚未向已资格认证的 Camelot spender 授权足够 USDC。请在 Parallax 外完成授权，然后重新查询账户状态。",
+    };
+  }
+  if (snapshot.balances.native.status !== "AVAILABLE") {
+    return {
+      en: "The wallet does not have enough native ETH for gas.",
+      zh: "该钱包没有足够的原生 ETH 支付 Gas。",
+    };
+  }
+  return undefined;
+}
+
 export function WalletApp({ language }: { language: Language }) {
   const [showIntro, setShowIntro] = useState(true);
   const [screen, setScreen] = useState<Screen>("home");
@@ -224,15 +268,19 @@ export function WalletApp({ language }: { language: Language }) {
     return () => scheduler.cancel();
   }, []);
 
+  const { protocol, tokenIn, tokenOut, amountIn } = form;
+
   useEffect(() => {
+    const pair =
+      tokenIn === "USDC" && tokenOut === "WETH" ? "usdc-weth" : "eth-usdc";
     let active = true;
-    void fetchP0Config().then((next) => {
+    void fetchP0Config(pair).then((next) => {
       if (active) setP0Config(next);
     });
     return () => {
       active = false;
     };
-  }, []);
+  }, [tokenIn, tokenOut]);
 
   useEffect(() => {
     const snapshotId = storedAccountSnapshotId();
@@ -295,7 +343,6 @@ export function WalletApp({ language }: { language: Language }) {
   // Quote is only meaningful while the user is editing the swap. Invalid input
   // clears it rather than leaving a stale amount on screen, and each request
   // aborts the previous one so a slow response cannot overwrite a newer one.
-  const { protocol, tokenIn, tokenOut, amountIn } = form;
   useEffect(() => {
     if (
       accountState.status !== "available" ||
@@ -306,6 +353,9 @@ export function WalletApp({ language }: { language: Language }) {
       return;
     setResult({ ...result, accountState: accountState.snapshot });
   }, [accountState, result]);
+
+  const routeMetadata =
+    p0Config?.status === "AVAILABLE" ? p0Config.tokenMetadata : undefined;
 
   useEffect(() => {
     if (
@@ -329,15 +379,29 @@ export function WalletApp({ language }: { language: Language }) {
       setAccountState({ status: "loading" });
       void Promise.all([
         fetchQuote(
-          { protocol, tokenIn, tokenOut, amountIn },
+          {
+            protocol,
+            tokenIn,
+            tokenOut,
+            amountIn,
+            tokenMetadata: routeMetadata,
+          },
           { signal: controller.signal },
         ),
         fetchAccountState(
-          { protocol, tokenIn, tokenOut, amountIn, sender: DEFAULT_SENDER },
+          {
+            protocol,
+            tokenIn,
+            tokenOut,
+            amountIn,
+            sender: DEFAULT_SENDER,
+            tokenMetadata: routeMetadata,
+          },
           { signal: controller.signal },
         ),
       ]).then(([nextQuote, nextAccountState]) => {
         if (controller.signal.aborted) return;
+        accountStateRef.current = nextAccountState;
         setQuote(nextQuote);
         setAccountState(nextAccountState);
       });
@@ -346,7 +410,7 @@ export function WalletApp({ language }: { language: Language }) {
       clearTimeout(timer);
       controller.abort();
     };
-  }, [screen, protocol, tokenIn, tokenOut, amountIn]);
+  }, [screen, protocol, tokenIn, tokenOut, amountIn, routeMetadata]);
 
   const runCheck = (allowUnchanged = false) => {
     const plan = planSubmission(form, result ? submittedForm : undefined, {
@@ -354,6 +418,12 @@ export function WalletApp({ language }: { language: Language }) {
     });
     if (!plan.allowed) {
       setFormErrors(plan.errors);
+      return;
+    }
+
+    const accountError = accountStateGateError(form, accountStateRef.current);
+    if (accountError !== undefined) {
+      setFormErrors({ form: accountError });
       return;
     }
 
@@ -386,6 +456,10 @@ export function WalletApp({ language }: { language: Language }) {
 
         const nextResult = await checkSwap({
           ...toInput(submitted, parent?.runId),
+          tokenMetadata:
+            p0Config?.status === "AVAILABLE"
+              ? p0Config.tokenMetadata
+              : undefined,
           ...(matchesQuoteRequest
             ? {
                 expectationBaseline: expectationBaseline(
