@@ -40,28 +40,65 @@ const DECAL_SPAN = Math.sin(DECAL_CONE);
 
 /** Fills the gaps where a mark does not cover its own square. */
 const BASE_COLOR: Record<PlanetKind, [number, number, number]> = {
-  mon: [0x6e / 255, 0x56 / 255, 0xf8 / 255],
+  mon: [0x62 / 255, 0x7e / 255, 0xea / 255],
   usdc: [0x27 / 255, 0x75 / 255, 0xca / 255],
   proceed: [0x22 / 255, 0xc5 / 255, 0x5e / 255],
   adjust: [0xea / 255, 0xb3 / 255, 0x08 / 255],
   stop: [0xef / 255, 0x44 / 255, 0x44 / 255],
-  unknown: [0xf9 / 255, 0x73 / 255, 0x16 / 255],
+  unknown: [0x38 / 255, 0x8b / 255, 0xf8 / 255],
 };
 
 function drawMon(ctx: CanvasRenderingContext2D) {
-  ctx.fillStyle = "#6E56F8";
+  ctx.fillStyle = "#627EEA";
   ctx.fillRect(0, 0, 24, 24);
 
-  ctx.save();
-  ctx.translate(12, 12);
-  ctx.rotate(Math.PI / 4);
-  ctx.translate(-12, -12);
-  ctx.strokeStyle = "#FFFFFF";
-  ctx.lineWidth = 2.6;
+  ctx.fillStyle = "#FFFFFF";
   ctx.beginPath();
-  ctx.roundRect(5.75, 5.75, 12.5, 12.5, 4);
-  ctx.stroke();
-  ctx.restore();
+  ctx.moveTo(12, 2.5);
+  ctx.lineTo(7.25, 12.25);
+  ctx.lineTo(12, 9.75);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.fillStyle = "#D7E0FF";
+  ctx.beginPath();
+  ctx.moveTo(12, 2.5);
+  ctx.lineTo(16.75, 12.25);
+  ctx.lineTo(12, 9.75);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.fillStyle = "#FFFFFF";
+  ctx.beginPath();
+  ctx.moveTo(7.25, 13.15);
+  ctx.lineTo(12, 16.1);
+  ctx.lineTo(12, 11.25);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.fillStyle = "#D7E0FF";
+  ctx.beginPath();
+  ctx.moveTo(16.75, 13.15);
+  ctx.lineTo(12, 16.1);
+  ctx.lineTo(12, 11.25);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.fillStyle = "#FFFFFF";
+  ctx.beginPath();
+  ctx.moveTo(12, 21.5);
+  ctx.lineTo(7.25, 14.1);
+  ctx.lineTo(12, 17.15);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.fillStyle = "#D7E0FF";
+  ctx.beginPath();
+  ctx.moveTo(12, 21.5);
+  ctx.lineTo(16.75, 14.1);
+  ctx.lineTo(12, 17.15);
+  ctx.closePath();
+  ctx.fill();
 }
 
 function drawUsdc(ctx: CanvasRenderingContext2D) {
@@ -143,7 +180,7 @@ function drawStop(ctx: CanvasRenderingContext2D) {
 }
 
 function drawUnknown(ctx: CanvasRenderingContext2D) {
-  ctx.fillStyle = "#F97316";
+  ctx.fillStyle = "#388BF8";
   ctx.fillRect(0, 0, 24, 24);
   ctx.strokeStyle = "#FFFFFF";
   ctx.lineCap = "round";
