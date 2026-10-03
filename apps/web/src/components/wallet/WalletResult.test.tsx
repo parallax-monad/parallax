@@ -202,7 +202,7 @@ describe("WalletResult", () => {
     expect(html).toContain("4.746");
     expect(html).toContain("-1.37%");
     expect(html).toContain("Adjust before proceeding");
-    expect(html).toContain("View verified options →");
+    expect(html).toContain("View options →");
     expect(html).toContain("Execution economics");
     expect(html).toContain("1.08%");
     expect(html).toContain("Re-check immediately before signing");

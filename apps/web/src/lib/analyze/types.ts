@@ -11,6 +11,11 @@ export type SystemStatus = "OK" | "INTEGRATION_ERROR";
 export type ProductRunMode = "LIVE" | "RECORDED_REPLAY";
 export type Verdict = "PROCEED" | "ADJUST" | "STOP" | "UNKNOWN";
 
+export type AdjustReason =
+  | "QUOTED_OUTPUT_BELOW_MINIMUM"
+  | "INPUT_BALANCE_INSUFFICIENT"
+  | "UNKNOWN";
+
 export type AdjustableField =
   | "amountIn"
   | "tokenPair"
@@ -313,6 +318,7 @@ export type CheckSwapResult = {
   systemStatus: SystemStatus;
   verdict: Verdict;
   summary: Copy;
+  adjustReason?: AdjustReason;
   recommendedActions: ActionSuggestion[];
   irrelevantActions: ActionSuggestion[];
   checked: Copy[];

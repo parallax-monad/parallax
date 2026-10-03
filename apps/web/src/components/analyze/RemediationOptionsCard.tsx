@@ -229,19 +229,28 @@ function RemediationOptionRow({
       <button
         type="button"
         aria-pressed={selected}
-        className={`pointer-events-auto w-full rounded-[14px] border p-5 text-left transition-all duration-200 ease-out hover:-translate-y-0.5 ${cardStyle}`}
+        className={`group pointer-events-auto relative w-full overflow-hidden rounded-[14px] border p-5 text-left transition-all duration-200 ease-out hover:-translate-y-0.5 ${cardStyle}`}
         onPointerMove={handlePointerMove}
         onPointerLeave={() => setPointer(null)}
         onClick={() => onSelectOption(option)}
       >
         {pointer && (
-          <span
-            aria-hidden="true"
-            className="pointer-events-none absolute inset-0 rounded-[14px] opacity-70 transition-opacity duration-150"
-            style={{
-              background: `radial-gradient(234px circle at ${pointer.x}px ${pointer.y}px, rgba(74,222,128,0.16), transparent 70%)`,
-            }}
-          />
+          <>
+            <span
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-0 rounded-[14px] opacity-60 transition-opacity duration-150"
+              style={{
+                background: `radial-gradient(280px circle at ${pointer.x}px ${pointer.y}px, rgba(123,97,255,0.25), transparent 65%)`,
+              }}
+            />
+            <span
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-0 rounded-[14px] opacity-40 blur-md transition-opacity duration-150"
+              style={{
+                background: `radial-gradient(200px circle at ${pointer.x}px ${pointer.y}px, rgba(123,97,255,0.4), transparent 50%)`,
+              }}
+            />
+          </>
         )}
         <span className="relative z-10">{content}</span>
       </button>

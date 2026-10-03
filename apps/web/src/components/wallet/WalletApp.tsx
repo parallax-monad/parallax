@@ -190,49 +190,6 @@ function accountStateMatchesResult(
     equalAsset(snapshot.context.tokenOut, rawTokenOut)
   );
 }
-function accountStateGateError(
-  form: FormState,
-  state: AccountStateResult,
-): FormFieldErrors["form"] {
-  if (
-    form.protocol !== "camelot-v3" ||
-    form.tokenIn !== "USDC" ||
-    form.tokenOut !== "WETH"
-  ) {
-    return undefined;
-  }
-  if (state.status !== "available") {
-    return {
-      en: "Account state is not available. Check the wallet address, token balance, allowance, and native ETH before retrying.",
-      zh: "账户状态不可用。请先确认钱包地址、代币余额、授权和原生 ETH，再重试。",
-    };
-  }
-  const snapshot = state.snapshot;
-  if (
-    snapshot.status !== "AVAILABLE" ||
-    snapshot.balances.inputToken.status !== "AVAILABLE" ||
-    BigInt(snapshot.balances.inputToken.amountAtomic) <
-      BigInt(snapshot.context.amountInAtomic)
-  ) {
-    return {
-      en: "The wallet does not have enough USDC for this check.",
-      zh: "该钱包没有足够的 USDC 进行本次检查。",
-    };
-  }
-  if (snapshot.allowance.status !== "SUFFICIENT") {
-    return {
-      en: "The wallet has not authorized enough USDC for the qualified Camelot spender. Approve it outside Parallax, then refresh account state.",
-      zh: "该钱包尚未向已资格认证的 Camelot spender 授权足够 USDC。请在 Parallax 外完成授权，然后重新查询账户状态。",
-    };
-  }
-  if (snapshot.balances.native.status !== "AVAILABLE") {
-    return {
-      en: "The wallet does not have enough native ETH for gas.",
-      zh: "该钱包没有足够的原生 ETH 支付 Gas。",
-    };
-  }
-  return undefined;
-}
 
 export function WalletApp({ language }: { language: Language }) {
   const [showIntro, setShowIntro] = useState(true);
@@ -471,15 +428,11 @@ export function WalletApp({ language }: { language: Language }) {
       return;
     }
 
-    const accountError = accountStateGateError(form, accountStateRef.current);
-    if (accountError !== undefined) {
-      setFormErrors({ form: accountError });
-      return;
-    }
-
     const parent = result?.systemStatus === "OK" ? result : undefined;
     const submitted = plan.submitted;
     const currentAccountState = accountStateRef.current;
+    const currentP0Config = p0Config;
+    const currentQuote = quote;
     recoveryCancelledRef.current = true;
     snapshotRecoveryControllerRef.current?.abort();
     accountStateRef.current = { status: "idle" };
@@ -492,25 +445,21 @@ export function WalletApp({ language }: { language: Language }) {
     setCheckingMode("live");
     setScreen("checking");
 
-    schedulerRef.current.run({
-      stageCount: WALLET_STAGE_COUNT,
-      stageMs: STAGE_MS,
-      onStage: setStage,
-      onSettle: async () => {
-        const matchesQuoteRequest =
-          quote.status === "available" &&
-          quote.requestIdentity.protocol === submitted.protocol &&
-          quote.requestIdentity.tokenIn === submitted.tokenIn &&
-          quote.requestIdentity.tokenOut === submitted.tokenOut &&
-          quote.requestIdentity.amountIn === submitted.amountIn;
-
-        const nextResult = await checkSwap({
+    const matchesQuoteRequest =
+      currentQuote.status === "available" &&
+      currentQuote.requestIdentity.protocol === submitted.protocol &&
+      currentQuote.requestIdentity.tokenIn === submitted.tokenIn &&
+      currentQuote.requestIdentity.tokenOut === submitted.tokenOut &&
+      currentQuote.requestIdentity.amountIn === submitted.amountIn;
+    const checkRequest = Promise.resolve()
+      .then(() =>
+        checkSwap({
           ...toInput(submitted, parent?.runId),
           tokenMetadata:
-            p0Config?.status === "AVAILABLE"
-              ? p0Config.tokenMetadata
+            currentP0Config?.status === "AVAILABLE"
+              ? currentP0Config.tokenMetadata
               : undefined,
-          ...(matchesQuoteRequest
+          ...(matchesQuoteRequest && currentQuote.status === "available"
             ? {
                 expectationBaseline: expectationBaseline(
                   {
@@ -518,15 +467,45 @@ export function WalletApp({ language }: { language: Language }) {
                     tokenIn: submitted.tokenIn,
                     tokenOut: submitted.tokenOut,
                     amountIn: submitted.amountIn,
+                    tokenMetadata:
+                      currentP0Config?.status === "AVAILABLE"
+                        ? currentP0Config.tokenMetadata
+                        : undefined,
                   },
-                  quote.quote,
+                  currentQuote.quote,
                 ),
               }
             : {}),
-        });
+        }),
+      )
+      .then(
+        (value) => ({ ok: true as const, value }),
+        (error: unknown) => ({ ok: false as const, error }),
+      );
+
+    schedulerRef.current.run({
+      stageCount: WALLET_STAGE_COUNT,
+      stageMs: STAGE_MS,
+      onStage: setStage,
+      onSettle: async () => {
+        const settled = await checkRequest;
+        if (!settled.ok) {
+          const error = settled.error;
+          setFormErrors({
+            form: {
+              en: `The check could not be started${error instanceof Error ? ` (${error.message})` : ""}. No transaction was signed or broadcast.`,
+              zh: `检查无法启动${error instanceof Error ? `（${error.message}）` : ""}。没有签名或广播交易。`,
+            },
+          });
+          setScreen("swap");
+          return;
+        }
+        const nextResult = settled.value;
         const displayResult = applyTokenMetadata(
           nextResult,
-          p0Config?.status === "AVAILABLE" ? p0Config.tokenMetadata : undefined,
+          currentP0Config?.status === "AVAILABLE"
+            ? currentP0Config.tokenMetadata
+            : undefined,
         );
         const withAccountState =
           currentAccountState.status === "available" &&
