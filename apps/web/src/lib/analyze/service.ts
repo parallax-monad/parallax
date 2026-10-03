@@ -10,6 +10,7 @@ import type {
   AccountStateResult,
   AccountStateSnapshot,
   ActionSuggestion,
+  AdjustReason,
   ApiFailure,
   ApiFailureIssue,
   CheckSwapInput,
@@ -43,6 +44,44 @@ const obj = (value: unknown): Record<string, unknown> | undefined =>
 const str = (value: unknown) => (typeof value === "string" ? value : undefined);
 const arr = (value: unknown): unknown[] => (Array.isArray(value) ? value : []);
 const unavailable = cp("unavailable");
+
+/**
+ * Parse ADJUST reason from backend response.
+ * Backend returns two types of ADJUST via PARAMETER-ADJUSTMENT-001 policy:
+ * 1. "Quoted output X is at or below minimum received Y" - QUOTED_OUTPUT_BELOW_MINIMUM
+ * 2. "Input balance X is below requested amount Y" - INPUT_BALANCE_INSUFFICIENT
+ */
+function parseAdjustReason(run: unknown): AdjustReason | undefined {
+  const evidence = arr(obj(run)?.evidence);
+  const summary = str(obj(run)?.summary);
+  
+  // Look for PARAMETER-ADJUSTMENT-001 evidence
+  const parameterAdjustment = evidence
+    .map(obj)
+    .find((item) => item?.key === "PARAMETER-ADJUSTMENT-001");
+  
+  if (!parameterAdjustment) return undefined;
+  
+  const evidenceSummary = str(parameterAdjustment.summary) || summary;
+  
+  // Check for quoted output below minimum pattern
+  if (
+    evidenceSummary?.includes("Quoted output") &&
+    evidenceSummary?.includes("is at or below minimum received")
+  ) {
+    return "QUOTED_OUTPUT_BELOW_MINIMUM";
+  }
+  
+  // Check for insufficient balance pattern
+  if (
+    evidenceSummary?.includes("Input balance") &&
+    evidenceSummary?.includes("is below requested amount")
+  ) {
+    return "INPUT_BALANCE_INSUFFICIENT";
+  }
+  
+  return "UNKNOWN";
+}
 
 function metadataAssetKey(value: unknown): string {
   const asset = obj(value);
@@ -923,6 +962,8 @@ function mapRun(
   const basicSimulationBlockNumber = str(basicSimulation?.blockNumber);
   const basicSimulationBlockHash = str(basicSimulation?.blockHash);
   const basicSimulationObservedAt = str(basicSimulation?.observedAt);
+  const adjustReason = verdict === "ADJUST" ? parseAdjustReason(run) : undefined;
+  
   return {
     runId,
     parentRunId: str(run?.parentRunId),
@@ -936,6 +977,7 @@ function mapRun(
             str(run?.summary) ??
               (apiFailure ? failureCopy(apiFailure).en : "No summary provided"),
           ),
+    adjustReason,
     recommendedActions: arr(run?.recommendedActions)
       .map((item) => suggestion(item, tokenIn, tokenOut, decimalMetadata))
       .filter((item): item is ActionSuggestion => !!item),

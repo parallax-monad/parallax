@@ -265,6 +265,36 @@ export function ResultStep({
         </div>
       </section>
 
+      {verdict === "ADJUST" && result.adjustReason && (
+        <section className="flex items-start gap-2.5 rounded-[12px] border border-risk-moderate/50 bg-risk-moderate/10 p-3.5 text-risk-moderate">
+          <svg
+            className="mt-0.5 h-6 w-6 shrink-0"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={2.5}
+            viewBox="0 0 24 24"
+          >
+            <path
+              d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+          <div className="min-w-0 flex-1">
+            <strong className="block text-[20px] font-extrabold leading-[1.1] tracking-[-0.04em]">
+              {result.adjustReason === "QUOTED_OUTPUT_BELOW_MINIMUM" && say(language, { en: "Quoted output is below your minimum", zh: "报价输出低于你的最低要求" })}
+              {result.adjustReason === "INPUT_BALANCE_INSUFFICIENT" && say(language, { en: "Input amount exceeds your balance", zh: "输入金额超过你的余额" })}
+              {result.adjustReason === "UNKNOWN" && say(language, { en: "Adjustment needed", zh: "需要调整" })}
+            </strong>
+            <p className="mt-1 text-[13px] leading-[1.4] text-white">
+              {result.adjustReason === "QUOTED_OUTPUT_BELOW_MINIMUM" && say(language, { en: "The current quote does not meet your declared minimum. Review parameters or accept a lower minimum.", zh: "当前报价未达到你声明的最低接受量。请查看你的参数或接受更低的最低要求。" })}
+              {result.adjustReason === "INPUT_BALANCE_INSUFFICIENT" && say(language, { en: "Your account balance is insufficient for the requested amount. Reduce the amount or add more funds.", zh: "你的账户余额不足以支付请求的金额。请减少金额或添加更多资金。" })}
+              {result.adjustReason === "UNKNOWN" && say(language, { en: "Review the swap parameters and adjust as needed.", zh: "查看兑换参数并根据需要进行调整。" })}
+            </p>
+          </div>
+        </section>
+      )}
+
       <SwapSummary
         amountIn={amountIn}
         amountOut={amountOut}
@@ -354,7 +384,19 @@ export function ResultStep({
         </p>
       </section>
 
-      {hasOptions && (
+      {verdict === "ADJUST" && (
+        <button
+          type="button"
+          className="btn btn-monad mt-1 w-full"
+          onClick={onNext}
+        >
+          {say(language, {
+            en: "View options →",
+            zh: "查看选项 →",
+          })}
+        </button>
+      )}
+      {verdict !== "ADJUST" && hasOptions && (
         <button
           type="button"
           className="btn btn-monad mt-1 w-full"
@@ -366,7 +408,7 @@ export function ResultStep({
           })}
         </button>
       )}
-      {!hasOptions && (
+      {verdict !== "ADJUST" && !hasOptions && (
         <div className="rounded-[16px] border border-line bg-ink-elev2/30 p-4 text-center text-[13px] text-dim">
           {say(language, {
             en: "No verified transaction adjustment is available for this result.",

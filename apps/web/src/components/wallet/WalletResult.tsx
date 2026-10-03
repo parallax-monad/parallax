@@ -192,6 +192,9 @@ export function WalletResult({
 
   const hasOptions =
     result.remediationOptions && result.remediationOptions.length > 0;
+  
+  // Show timeline for all ADJUST verdicts, not just when there are remediation options
+  const showTimeline = result.verdict === "ADJUST";
 
   return (
     <div className="flex flex-col gap-4 px-5 pb-6 pt-2">
@@ -204,7 +207,7 @@ export function WalletResult({
         </span>
       </div>
 
-      {hasOptions && (
+      {showTimeline && (
         <div className="sticky top-0 z-30 -mx-5 border-b border-line/50 bg-gradient-to-b from-ink-elev/95 via-ink-elev/80 to-transparent px-5 pb-2 pt-1 backdrop-blur-xl">
           <StepTimeline
             currentStep={currentStep}
@@ -231,6 +234,7 @@ export function WalletResult({
           result={result}
           onSelectOption={onSelectOption}
           onBack={() => setCurrentStep("result")}
+          onKeep={onKeep}
         />
       )}
 
