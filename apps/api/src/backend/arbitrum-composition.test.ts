@@ -3356,7 +3356,6 @@ describe("Arbitrum composition P0 Risk wiring", () => {
     });
   });
 
-
   it("does not enter remediation from PROCEED when output is degraded", async () => {
     const store = new InMemoryRunStore();
     const candidateConstraintEvidence = vi.fn(() => []);
