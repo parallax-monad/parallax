@@ -83,7 +83,7 @@ export function AccountStateCard({
   language: Language;
 }) {
   const [expanded, setExpanded] = useState(false);
-  
+
   const allowance = snapshot.allowance;
   const inputMetadata = snapshot.balances.inputToken.metadata;
   const allowanceDecimals =
@@ -135,9 +135,7 @@ export function AccountStateCard({
         >
           {say(
             language,
-            expanded
-              ? { en: "Hide", zh: "收起" }
-              : { en: "View", zh: "查看" },
+            expanded ? { en: "Hide", zh: "收起" } : { en: "View", zh: "查看" },
           )}
         </button>
       </div>
