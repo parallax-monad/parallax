@@ -15,9 +15,7 @@ describe("HeroEvidenceReceipt", () => {
     expect(html).toContain("Provenance");
     expect(html).toContain("DEMO PRESET / SAMPLE");
     expect(html).toContain("DISCLOSED");
-    expect(html).not.toContain(
-      "real simulation evidence",
-    );
+    expect(html).not.toContain("real simulation evidence");
     expect(html).not.toContain("v0.4");
     expect(html.match(/data-evidence-row/g)).toHaveLength(7);
     expect(html).toContain("Economic boundary");

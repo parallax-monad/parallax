@@ -5,31 +5,6 @@
  */
 export type TokenIconProps = { symbol: string; size?: number };
 
-function MonMark({ size }: { size: number }) {
-  return (
-    <svg
-      aria-hidden="true"
-      height={size}
-      viewBox="0 0 24 24"
-      width={size}
-      xmlns="http://www.w3.org/2000/svg"
-    >
-      <rect fill="#6E56F8" height="24" rx="6" width="24" />
-      <rect
-        fill="none"
-        height="12.5"
-        rx="4"
-        stroke="#FFFFFF"
-        strokeWidth="2.6"
-        transform="rotate(45 12 12)"
-        width="12.5"
-        x="5.75"
-        y="5.75"
-      />
-    </svg>
-  );
-}
-
 function UsdcMark({ size }: { size: number }) {
   return (
     <svg
