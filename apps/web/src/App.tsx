@@ -35,38 +35,38 @@ const DIMENSIONS: Dimension[] = [
     accent: "#ff8ea1",
     title: { en: "What happened", zh: "发生了什么" },
     body: {
-      en: "Parallax presents what the checked quote, prepared action, and simulation evidence actually showed.",
-      zh: "Parallax 呈现本次检查中的报价、已生成操作与模拟证据实际显示了什么。",
+      en: "Parallax shows what the execution evidence actually revealed: the quote, prepared transaction, simulation result, and any warnings—without speculation.",
+      zh: "Parallax 展示执行证据的真实结果：报价、已生成交易、模拟结果与警告信息，不做推测。",
     },
   },
   {
     key: "Evidence",
     displayKey: { en: "Evidence", zh: "证据" },
     accent: "#9d8cff",
-    title: { en: "What supports it", zh: "哪些证据支持结论" },
+    title: { en: "What proves it", zh: "哪些证据支持" },
     body: {
-      en: "Each displayed conclusion is tied to the available evidence and its disclosed source, mode, and provenance.",
-      zh: "每个展示的结论都关联到现有证据，并明确披露其来源、模式与溯源信息。",
+      en: "Every conclusion links to traceable evidence with disclosed source, reproducibility, and provenance. Unknown evidence stays unknown.",
+      zh: "每个结论都关联到可追溯证据，明确披露来源、可重现性与溯源信息。未知证据保持未知。",
     },
   },
   {
     key: "Adjust",
     displayKey: { en: "Adjust", zh: "调整" },
     accent: "#75e6b1",
-    title: { en: "What can change", zh: "哪些条件可以调整" },
+    title: { en: "What can change", zh: "哪些可以调整" },
     body: {
-      en: "When a verified adjustment is available, Parallax identifies the supported condition and asks you to rerun the check.",
-      zh: "当存在经过验证的调整时，Parallax 会指出有证据支持的条件，并要求重新运行检查。",
+      en: "When a verified improvement exists, Parallax shows exactly what transaction condition to adjust and re-checks the result.",
+      zh: "当存在经过验证的改进时，Parallax 明确指出应调整的交易条件，并重新检查结果。",
     },
   },
   {
     key: "Irrelevant",
     displayKey: { en: "Irrelevant", zh: "无关项" },
     accent: "#91b8ff",
-    title: { en: "What will not help", zh: "哪些修改不会有帮助" },
+    title: { en: "What will not help", zh: "哪些修改无效" },
     body: {
-      en: "When verified, changes that do not address the observed cause are separated from relevant actions.",
-      zh: "经过验证后，未针对已观察原因的修改会与相关操作分开显示。",
+      en: "Changes that do not address the identified cause are clearly separated from relevant actions, preventing wasted attempts.",
+      zh: "未针对已识别原因的修改会与相关操作明确区分，避免无效尝试。",
     },
   },
 ];
@@ -306,8 +306,8 @@ function Home({
                 <p className="m-0 mt-7 max-w-[620px] text-[14px] leading-[1.75] text-dim sm:mt-9 sm:text-[16px]">
                   {pick(
                     language,
-                    "This demo previews how Parallax organizes a checked swap intent, available execution evidence, the acceptance boundary, and provenance into a traceable decision receipt—without signing or broadcasting.",
-                    "本演示展示 Parallax 如何将已检查的兑换意图、现有执行证据、接受边界与溯源信息整理为可追溯的决策回执，全程不签名，也不广播。",
+                    "Parallax is a pre-sign decision layer that converts execution evidence into clear, actionable conclusions. This demo shows how a swap intent, sample execution evidence, and disclosed provenance are organized into a traceable decision receipt—without signing or broadcasting.",
+                    "Parallax 是签名前决策层，将执行证据转化为清晰、可执行的结论。本演示展示如何将兑换意图、示例执行证据与明确披露的溯源信息整理为可追溯的决策回执，全程不签名，也不广播。",
                   )}
                 </p>
                 <div className="pointer-events-auto mt-8 flex flex-wrap gap-3 sm:mt-10">
@@ -373,8 +373,8 @@ function Home({
             <p className="mb-9 max-w-[700px] text-[14px] leading-[1.7] text-faint sm:mb-11 sm:text-[16px]">
               {pick(
                 language,
-                "A completed check separates what happened, what supports the conclusion, what can be changed, and what will not help—while keeping missing evidence explicit.",
-                "一次完成的检查会分别说明发生了什么、哪些证据支持结论、哪些条件可以调整，以及哪些修改不会有帮助，同时明确保留缺失证据。",
+                "Before you sign, Parallax answers four questions using real execution evidence: what happened, what proves it, what you can change, and what will not help. Missing evidence stays explicit—never hidden.",
+                "签名之前，Parallax 使用真实执行证据回答四个问题：发生了什么、哪些证据支持、哪些可以调整、哪些修改无效。缺失证据明确展示，绝不隐藏。",
               )}
             </p>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -415,8 +415,8 @@ function Home({
               <p className="mx-auto mt-6 max-w-[680px] text-[15px] leading-[1.75] text-faint sm:text-[16px]">
                 {pick(
                   language,
-                  "If this were your transaction, review the evidence and choose one outcome below. One person, one vote—change your choice and the same dot moves with you.",
-                  "如果这是你的交易，看完证据后从下方四个结论中选择一个。一人一票；改变选择时，同一枚圆点会随之移动，不会重复计票。",
+                  "If this were your transaction, review the checked evidence and choose what you would do next. One person, one vote—your vote replaces any previous choice.",
+                  "如果这是你的交易，查看检查证据后选择你的下一步操作。一人一票，新投票会替换之前的选择。",
                 )}
               </p>
             </div>
@@ -425,15 +425,15 @@ function Home({
 
           <section className="decision-receipt border border-line px-7 py-16">
             <span className="eyebrow">
-              {pick(language, "Decision receipt", "决策回执")}
+              {pick(language, "Decision support", "决策支持")}
             </span>
             <h2
               data-section-heading=""
               className="m-0 mb-6 text-[clamp(28px,4vw,48px)] font-extrabold uppercase leading-[0.95] tracking-[-0.07em]"
             >
-              {pick(language, "Know what to do", "签署之前")}
+              {pick(language, "Evidence first.", "证据先行，")}
               <br />
-              {pick(language, "before you sign.", "明确该怎么做")}
+              {pick(language, "Then decide.", "再做决定")}
             </h2>
             {/* biome-ignore lint/a11y/useValidAnchor: this is a real client-side hash route with native link semantics */}
             <a
@@ -448,8 +448,8 @@ function Home({
           <footer className="pt-6 text-[9px] font-semibold tracking-[0.04em] text-faint">
             {pick(
               language,
-              "Parallax · Pre-sign decision layer · Evidence, scope, and decision support only; not investment advice.",
-              "Parallax · 签名前决策层 · 仅提供证据、检查范围与决策支持；不构成投资建议。",
+              "Parallax · Pre-sign decision layer · Converts execution evidence into actionable decisions; does not guarantee safety or provide investment advice.",
+              "Parallax · 签名前决策层 · 将执行证据转化为可执行决策；不保证安全，不构成投资建议。",
             )}
           </footer>
         </div>

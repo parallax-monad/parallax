@@ -12,7 +12,7 @@ export type ParticleCloud = {
 };
 
 export type PlanetKind =
-  | "mon"
+  | "eth"
   | "usdc"
   | "proceed"
   | "adjust"
@@ -40,7 +40,7 @@ const DECAL_SPAN = Math.sin(DECAL_CONE);
 
 /** Fills the gaps where a mark does not cover its own square. */
 const BASE_COLOR: Record<PlanetKind, [number, number, number]> = {
-  mon: [0x62 / 255, 0x7e / 255, 0xea / 255],
+  eth: [0x62 / 255, 0x7e / 255, 0xea / 255],
   usdc: [0x27 / 255, 0x75 / 255, 0xca / 255],
   proceed: [0x22 / 255, 0xc5 / 255, 0x5e / 255],
   adjust: [0xea / 255, 0xb3 / 255, 0x08 / 255],
@@ -48,7 +48,7 @@ const BASE_COLOR: Record<PlanetKind, [number, number, number]> = {
   unknown: [0x38 / 255, 0x8b / 255, 0xf8 / 255],
 };
 
-function drawMon(ctx: CanvasRenderingContext2D) {
+function drawEth(ctx: CanvasRenderingContext2D) {
   ctx.fillStyle = "#627EEA";
   ctx.fillRect(0, 0, 24, 24);
 
@@ -197,7 +197,7 @@ function drawUnknown(ctx: CanvasRenderingContext2D) {
 }
 
 const PAINTERS: Record<PlanetKind, (ctx: CanvasRenderingContext2D) => void> = {
-  mon: drawMon,
+  eth: drawEth,
   usdc: drawUsdc,
   proceed: drawProceed,
   adjust: drawAdjust,

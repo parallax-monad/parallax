@@ -198,7 +198,7 @@ export function WalletBackground({
     const stars = buildStars();
     scene.add(stars);
     const base = [
-      buildBase("mon", { x: -PLANET_START_X, y: 0.3, z: 0, scale: 1 }),
+      buildBase("eth", { x: -PLANET_START_X, y: 0.3, z: 0, scale: 1 }),
       buildBase("usdc", { x: PLANET_START_X, y: -0.26, z: 0, scale: 1 }),
     ].filter((planet): planet is BasePlanet => planet !== undefined);
     for (const planet of base) {
