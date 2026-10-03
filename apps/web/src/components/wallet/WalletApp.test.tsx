@@ -292,7 +292,7 @@ describe("WalletApp persisted Run recovery", () => {
       swapButton?.click();
     });
 
-    expect(container.textContent).toContain(
+    expect(container.textContent).not.toContain(
       "Arbitrum Sepolia · Camelot V3 · ETH → USDC",
     );
     expect(container.textContent).not.toContain("ADJUST");

@@ -45,30 +45,52 @@ export function OptionsStep({
       adjustReason === "QUOTED_OUTPUT_BELOW_MINIMUM"
         ? [
             {
-              id: "accept-quote",
-              title: { en: "Accept current quote", zh: "接受当前报价" },
-              description: {
-                en: "Lower minimum and accept fresh quote",
-                zh: "降低最低要求并接受新报价",
+              id: "lower-minimum",
+              title: {
+                en: "Lower minimum received",
+                zh: "降低最低接受量",
               },
-              change: {
-                label: { en: "CHANGE", zh: "变化" },
-                before: result.intent.amountIn,
-                after: result.quote.expectedOutput,
-                unit: `${result.intent.tokenIn} → ${result.intent.tokenOut}`,
+              description: {
+                en: "Reduce the acceptance boundary to match the current quote",
+                zh: "降低最低接受量，让它符合当前报价",
               },
               outcome: {
                 label: { en: "PREDICTED OUTCOME", zh: "预期结果" },
                 text: {
-                  en: "You will receive the quoted amount under current market conditions",
-                  zh: "在当前市场条件下你将收到报价金额",
+                  en: "The expected output is no longer below your acceptance boundary",
+                  zh: "预期出币数量不会低于最低接受量",
                 },
               },
               tradeoff: {
                 label: { en: "TRADE-OFF", zh: "权衡" },
                 text: {
-                  en: "Market conditions may change after this quote",
-                  zh: "此报价后市场条件可能变化",
+                  en: "You accept less output protection if market conditions change",
+                  zh: "市场条件变化时，你接受的出币保护会降低",
+                },
+              },
+            },
+            {
+              id: "increase-input",
+              title: {
+                en: "Increase input to meet minimum",
+                zh: "增加输入以达到最低接受量",
+              },
+              description: {
+                en: "Raise the input amount so the expected output is not below your minimum",
+                zh: "增加输入数量，让预期出币数量不低于最低接受量",
+              },
+              outcome: {
+                label: { en: "PREDICTED OUTCOME", zh: "预期结果" },
+                text: {
+                  en: "The expected output may meet your current minimum after a fresh quote",
+                  zh: "重新报价后，预期出币数量可能达到当前最低接受量",
+                },
+              },
+              tradeoff: {
+                label: { en: "TRADE-OFF", zh: "权衡" },
+                text: {
+                  en: "You spend more input and must confirm the fresh quote",
+                  zh: "你需要支付更多输入，并确认新的报价",
                 },
               },
             },
@@ -151,7 +173,9 @@ export function OptionsStep({
                 {say(language, s.description)}
               </p>
               {s.change && (
-                <div className="mt-4 border-t border-line/30 pt-4">
+                <div
+                  className={`${s.id === "lower-minimum" || s.id === "increase-input" ? "hidden " : ""}mt-4 border-t border-line/30 pt-4`}
+                >
                   <div className="text-[11px] font-bold uppercase tracking-wider text-dim">
                     {say(language, s.change.label)}
                   </div>

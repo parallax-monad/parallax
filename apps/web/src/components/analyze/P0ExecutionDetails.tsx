@@ -78,7 +78,7 @@ export function P0ExecutionDetails({
         </span>
       </summary>
       <div className="min-w-0 border-t border-line pb-2">
-        <h3 className="m-0 min-w-0 break-words pt-3 text-[12px] font-bold uppercase text-dim">
+        <h3 className="hidden m-0 min-w-0 break-words pt-3 text-[12px] font-bold uppercase text-dim">
           {routeLabel(result)}
         </h3>
         <dl className="m-0 mt-2 min-w-0">

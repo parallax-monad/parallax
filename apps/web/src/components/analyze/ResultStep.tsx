@@ -334,7 +334,7 @@ export function ResultStep({
       )}
 
       {hasMinimumBoundary && (
-        <section className="rounded-[12px] border border-line bg-ink-elev2/30 p-3">
+        <section className="hidden rounded-[12px] border border-line bg-ink-elev2/30 p-3">
           <div className="text-[12px] font-bold uppercase tracking-[0.08em] text-dim">
             {say(language, { en: "Minimum received", zh: "最低收到量" })}
           </div>
@@ -353,7 +353,7 @@ export function ResultStep({
         </section>
       )}
 
-      <div className="rounded-[16px] border border-line bg-ink-elev2/30 px-4 py-3 text-[13px]">
+      <div className="hidden rounded-[16px] border border-line bg-ink-elev2/30 px-4 py-3 text-[13px]">
         <div className="flex items-center justify-between gap-3">
           <span className="text-dim">
             {say(language, { en: "Route", zh: "路径" })}
@@ -371,7 +371,12 @@ export function ResultStep({
       </div>
 
       {result.accountState && (
-        <AccountStateCard language={language} snapshot={result.accountState} />
+        <div className="hidden">
+          <AccountStateCard
+            language={language}
+            snapshot={result.accountState}
+          />
+        </div>
       )}
 
       {result.executionEconomics && (
@@ -382,25 +387,29 @@ export function ResultStep({
       )}
 
       {hasDiagnosis && (
-        <ScopeSummary
-          expanded={scopeOpen}
-          language={language}
-          onToggle={() => setScopeOpen(!scopeOpen)}
-          result={result}
-        />
+        <div className="hidden">
+          <ScopeSummary
+            expanded={scopeOpen}
+            language={language}
+            onToggle={() => setScopeOpen(!scopeOpen)}
+            result={result}
+          />
+        </div>
       )}
       {!hasDiagnosis && (
-        <ScopeSummary
-          expanded={scopeOpen}
-          language={language}
-          onToggle={() => setScopeOpen(!scopeOpen)}
-          result={result}
-        />
+        <div className="hidden">
+          <ScopeSummary
+            expanded={scopeOpen}
+            language={language}
+            onToggle={() => setScopeOpen(!scopeOpen)}
+            result={result}
+          />
+        </div>
       )}
 
       <P0ExecutionDetails language={language} result={result} />
 
-      <section className="rounded-[12px] border border-line bg-ink-elev2/30 p-3">
+      <section className="hidden rounded-[12px] border border-line bg-ink-elev2/30 p-3">
         <p className="m-0 text-[13px] leading-[1.6] text-dim">
           {say(language, RECHECK_COPY)}
         </p>
@@ -430,7 +439,7 @@ export function ResultStep({
           })}
         </button>
       )}
-      {verdict !== "ADJUST" && !hasOptions && (
+      {verdict === "ADJUST" && !hasOptions && (
         <div className="rounded-[16px] border border-line bg-ink-elev2/30 p-4 text-center text-[13px] text-dim">
           {say(language, {
             en: "No verified transaction adjustment is available for this result.",
