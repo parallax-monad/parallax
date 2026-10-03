@@ -3,7 +3,7 @@ import { describe, expect, test } from "vitest";
 import { HeroEvidenceReceipt } from "./HeroEvidenceReceipt";
 
 describe("HeroEvidenceReceipt", () => {
-  test("shows one disclosed demo receipt with six evidence rows", () => {
+  test("shows one disclosed demo receipt with seven evidence rows", () => {
     const html = renderToStaticMarkup(<HeroEvidenceReceipt language="en" />);
 
     expect(html).toContain("EVIDENCE RECEIPT");
@@ -11,9 +11,15 @@ describe("HeroEvidenceReceipt", () => {
     expect(html).toContain("SAMPLE DATA");
     expect(html).toContain("READ ONLY");
     expect(html).toContain("ARBITRUM SEPOLIA");
-    expect(html).not.toContain("13,842,911");
+    expect(html).toContain("Network / chain");
+    expect(html).toContain("Provenance");
+    expect(html).toContain("DEMO PRESET / SAMPLE");
+    expect(html).toContain("DISCLOSED");
+    expect(html).not.toContain(
+      "real simulation evidence",
+    );
     expect(html).not.toContain("v0.4");
-    expect(html.match(/data-evidence-row/g)).toHaveLength(6);
+    expect(html.match(/data-evidence-row/g)).toHaveLength(7);
     expect(html).toContain("Economic boundary");
     expect(html).toContain("22.50 USDC");
     expect(html).toContain("23.00 USDC");

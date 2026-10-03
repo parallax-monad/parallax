@@ -35,9 +35,15 @@ const EVIDENCE_ROWS = [
   },
   {
     index: "06",
-    label: ["Provenance", "证据溯源"] as const,
+    label: ["Network / chain", "网络／链"] as const,
     value: ["ARBITRUM SEPOLIA", "ARBITRUM SEPOLIA"] as const,
-    status: ["TRACEABLE", "可追溯"] as const,
+    status: ["IDENTIFIED", "已识别"] as const,
+  },
+  {
+    index: "07",
+    label: ["Provenance", "证据溯源"] as const,
+    value: ["DEMO PRESET / SAMPLE", "演示预设／示例"] as const,
+    status: ["DISCLOSED", "已披露"] as const,
   },
 ];
 

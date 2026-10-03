@@ -306,8 +306,8 @@ function Home({
                 <p className="m-0 mt-7 max-w-[620px] text-[14px] leading-[1.75] text-dim sm:mt-9 sm:text-[16px]">
                   {pick(
                     language,
-                    "Parallax is a pre-sign decision layer that converts execution evidence into clear, actionable conclusions. This demo shows how a swap intent, real simulation evidence, and provenance are organized into a traceable decision receipt—without signing or broadcasting.",
-                    "Parallax 是签名前决策层，将执行证据转化为清晰、可执行的结论。本演示展示如何将兑换意图、真实模拟证据与溯源信息整理为可追溯的决策回执，全程不签名，也不广播。",
+                    "Parallax is a pre-sign decision layer that converts execution evidence into clear, actionable conclusions. This demo shows how a swap intent, sample execution evidence, and disclosed provenance are organized into a traceable decision receipt—without signing or broadcasting.",
+                    "Parallax 是签名前决策层，将执行证据转化为清晰、可执行的结论。本演示展示如何将兑换意图、示例执行证据与明确披露的溯源信息整理为可追溯的决策回执，全程不签名，也不广播。",
                   )}
                 </p>
                 <div className="pointer-events-auto mt-8 flex flex-wrap gap-3 sm:mt-10">
