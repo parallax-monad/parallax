@@ -190,3 +190,64 @@ Recorded consequences for sequencing only:
   Risk.
 - #107 remains NOT COMPLETE / not currently reachable under frozen semantics; details stay in
   `docs/integration/verified-remediation-107-blocker.md`.
+
+## 2026-10-04 — Optional Decision Registry MVP boundary
+
+Per the user's authorization, implement a minimal optional Parallax Decision Registry on
+Arbitrum Sepolia (421614): a single immutable-attestor contract stores one domain-separated
+commitment per persisted completed, non-replay Run. The off-chain V1 bundle contains the
+versioned public decision snapshot; it excludes UI-only projection and raw `providerData`.
+Anchoring proves only that the saved snapshot matches the registered commitment, not that its
+Evidence is authentic or its Risk decision is correct.
+
+This scope does not alter the public API, Risk rules, Frontend, swap transaction path, signing
+or custody of user assets. Contract Owner confirmation is not to be requested; the user stated
+that such approvals should be treated as granted. This authorization does not itself record a
+deployment or anchoring transaction.
+
+The anchor CLI must resolve the selected Foundry account locally and require its address to
+match the Registry's immutable attestor before sending. A mismatch is rejected before any
+transaction write, avoiding a predictable revert and testnet gas loss.
+The deployment flow also rejects zero addresses and includes a separate read-only verification
+command for chain ID, exact deployed runtime bytecode, and immutable attestor before preparing a
+Run bundle.
+
+The MVP remains an explicit operator-triggered CLI flow over a persisted Run, not automatic
+anchoring from `POST /api/check`. This keeps Registry anchoring separate from the existing
+opaque Receipt lifecycle, whose frozen contract still leaves payload, commitment, durable
+retry, and public projection semantics unresolved; no new public lifecycle semantics are
+inferred here. The current lifecycle also starts during `BackendPipeline` execution, before the
+Run store marks the result completed. Reusing it directly would attempt the Registry operation
+before its persisted-Run precondition holds; automatic anchoring would need a separate
+post-persistence hook and durable retry design.
+
+At the implementation checkpoint on 2026-10-04, the shared project's configured RPC was checked
+read-only and `eth_chainId` returned `421614` (Arbitrum Sepolia). The RPC credential was neither
+displayed nor copied into the feature worktree. At that checkpoint the attestor and deployed
+Registry address were not yet configured and no transaction had occurred; the live execution
+checkpoint below supersedes that temporary status.
+
+### Live execution checkpoint — 2026-10-04
+
+The user supplied the attestor address and explicitly authorized deployment and one commitment
+anchor. Registry `0xdfc1f61e75fd551b9c309ec0bfae015adf6fe359` was deployed on Arbitrum Sepolia
+(`421614`) by `0x1d6e2221af2a0ecea9e497e65bef31f3912a3633` in transaction
+`0x46cd3fd97086a40c157be0cdc50baa9a40db9c24417d723cc5dd6f08e6e000f6` at block `315701144`.
+The read-only verifier returned `MATCH` for chain, deployed runtime, and immutable attestor.
+
+One completed persisted Run was then anchored. Independent bundle verification returned `MATCH`
+for runKey `0x105baed92e95a4ac1c4345f14ae6965671a7d721836db79aabe265dd9836061a`, record hash
+`0x6fa9fb5aab04497f65a28340b3a381c7c8cab848e27b83f23bc532559313a055`, and commitment
+`0x8ebcbeb7aa0f6c27c68e3a20f9f963f3268acf1a1c1e87f4618328bcd8f31356`. Anchor transaction
+`0x3e40db4fdc33b8bf3b726fa7f8a60049e0518c19e6cbc98eb69c20932f374af0` succeeded at block
+`315701961` (receipt status `true`). This records integrity/equality only; it does not certify
+Evidence authenticity, Risk correctness, transaction safety, or `VERIFIED` remediation.
+
+After the final source-boundary review, the `anchor` CLI was tightened to re-fetch the bundle's
+Run ID from the Backend API and compare the re-derived V1 record hash and commitment before any
+chain write. A mismatched or unavailable API Run now stops the signing path. This does not change
+the contract, public API, Risk behavior, or the already anchored commitment. A fresh read-only
+API recomputation returned the same record hash and commitment; the updated CLI's idempotent
+anchor path also re-fetched the Run, confirmed the existing chain value, and reported that no
+transaction was sent. The original anchor transaction predates this guard; no new transaction was
+submitted after the code change.

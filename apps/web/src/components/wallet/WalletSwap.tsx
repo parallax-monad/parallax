@@ -109,7 +109,6 @@ export function WalletSwap({
   const [advancedOpen, setAdvancedOpen] = useState(showMinimumReceived);
   const [previousQuote, setPreviousQuote] = useState<string | null>(null);
   const [isUpdating, setIsUpdating] = useState(false);
-  const [userEditedMinimum, setUserEditedMinimum] = useState(false);
 
   const set = <K extends keyof FormState>(key: K, value: FormState[K]) =>
     onChange({ ...form, [key]: value });
@@ -141,12 +140,6 @@ export function WalletSwap({
       setIsUpdating(false);
     }
   }, [quote]);
-
-  // Reset user-edited flag when amount or token changes
-  // biome-ignore lint/correctness/useExhaustiveDependencies: we intentionally watch form.amountIn and form.tokenIn to reset the flag
-  useEffect(() => {
-    setUserEditedMinimum(false);
-  }, [form.amountIn, form.tokenIn]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: form is intentionally partial to avoid infinite loops
   useEffect(() => {

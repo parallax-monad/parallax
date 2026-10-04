@@ -318,3 +318,122 @@ completed the Evidence Federation lane (#106/#110/#91/#92), while PR #123's
 PR #125 preserves the execution-readiness/preflight versus Provider Evidence boundary.
 Product acceptance remains pending on #73; this entry records a durable snapshot only and does
 not claim Asset Coverage or Product P0 PASS.
+
+## 2026-10-04 — Local Decision Registry MVP implementation
+
+- Isolated worktree: `/Users/johnma/.codex/worktrees/decision-commitment-registry`, branch
+  `feat/decision-commitment-registry`; current HEAD and freshly fetched `origin/main` are both
+  `5f4e500d916c6c392147344e2bcc6f39c49fc4f6`.
+- Added the Foundry contract/project, API-side V1 record and commitment logic, RPC verification,
+  CLI commands, focused tests, and contract README. Repaired review findings for network
+  selection, exact runtime code/attestor checks, version-stable record verification, HTTPS and
+  redirect policy, private bundle file creation, numeric precision, and secret handling.
+- Docker checks passed: Foundry 6/6; API decision-record 11/11; API TypeScript typecheck,
+  targeted Biome, and CLI `--help` smoke. `git diff --check` passed.
+- No commit, push, PR, GitHub status mutation, deployment, or attestation transaction was made.
+  Live RPC/attestor/registry configuration is absent in this worktree; no secrets or private
+  keys were recorded here.
+
+## 2026-10-04 — Decision Registry attestor signer guard
+
+Final implementation review found that the anchor CLI did not compare the selected local
+Foundry account with the Registry's immutable attestor before broadcasting. The CLI now resolves
+the selected account address and fails closed on mismatch before sending; the focused API suite
+covers matching, mismatched, and invalid addresses. The README and handoff were updated. Docker
+API tests pass 12/12, TypeScript, targeted Biome, and CLI help smoke pass; Foundry contract source
+is unchanged from its previously passing 6/6 run. No user keystore was accessed, and no RPC,
+signing, broadcast, or GitHub mutation occurred.
+
+## 2026-10-04 — Decision Registry RPC network check (read-only)
+
+The RPC endpoint configured in the shared project `.env` was queried once using `eth_chainId`;
+the result was Arbitrum Sepolia `421614`. The endpoint value was not printed, persisted, or copied
+into the isolated feature worktree. No contract or attestor address is configured, and no
+deployment, signing, anchor write, or GitHub mutation occurred.
+
+## 2026-10-04 — Decision Registry deployment verification
+
+Added a read-only command to verify the configured chain, exact compiled Registry runtime,
+deployed-code presence, and immutable attestor before preparing a Run bundle. Zero Registry and
+attestor addresses are rejected before a deploy/anchor write. Docker API tests pass 13/13,
+TypeScript, Biome, and CLI help smoke pass. Verification tests use mocked RPC responses; no live
+RPC query, user keystore access, signing, broadcast, or GitHub mutation occurred in this step.
+
+## 2026-10-04 — Decision Registry V1 vector and operator-trigger boundary
+
+Pinned a deterministic V1 Run-key, record hash, and final commitment vector in the Backend test
+suite. The README and Decision Log now clarify that this MVP anchors only an explicitly selected,
+persisted Run through the CLI; it does not automatically anchor `/api/check` results or infer
+semantics from the separate opaque Receipt lifecycle. Docker validation passed: API tests 14/14,
+TypeScript typecheck, targeted Biome, and `git diff --check`; Foundry contract source is unchanged
+from its passing 6/6 run. No Run was created, and no additional live chain query, signing,
+transaction, or GitHub mutation occurred during this final validation step.
+
+## 2026-10-04 — Receipt lifecycle ordering check
+
+Verified that `createReceiptLifecycle` starts from `BackendPipeline.executeNormalized()` before
+the application calls the Run store's `complete()` operation. The Registry deliberately accepts
+only completed persisted Runs, so directly attaching the new Registry to that pre-persistence
+lifecycle would violate the anchoring precondition. The operator-triggered CLI reads the completed
+Run after persistence; any automatic path would need a distinct post-persistence/retry decision.
+
+## 2026-10-04 — Registry deployment and persisted-Run anchor
+
+- Repository: `parallax`; worktree `/Users/johnma/.codex/worktrees/decision-commitment-registry`;
+  branch `feat/decision-commitment-registry`.
+- Reconciled the one-commit main advance by fast-forwarding from
+  `5f4e500d916c6c392147344e2bcc6f39c49fc4f6` to `fafa36f54f36bfc02e1bb8ed06f54d3fdab9caa8`.
+  The intervening commit changed only demo/Pages files; task changes were preserved. Write
+  preflight passed before reconciliation.
+- With explicit user authorization, deployed Registry
+  `0xdfc1f61e75fd551b9c309ec0bfae015adf6fe359` on Arbitrum Sepolia (`421614`) using attestor
+  `0x1d6e2221af2a0ecea9e497e65bef31f3912a3633`. Deployment transaction:
+  `0x46cd3fd97086a40c157be0cdc50baa9a40db9c24417d723cc5dd6f08e6e000f6`, block `315701144`.
+  Read-only deployment verification returned `MATCH`.
+- Anchored one completed persisted Run. Independent bundle verification returned `MATCH` for
+  runKey `0x105baed92e95a4ac1c4345f14ae6965671a7d721836db79aabe265dd9836061a`, record hash
+  `0x6fa9fb5aab04497f65a28340b3a381c7c8cab848e27b83f23bc532559313a055`, and commitment
+  `0x8ebcbeb7aa0f6c27c68e3a20f9f963f3268acf1a1c1e87f4618328bcd8f31356`. Anchor transaction
+  `0x3e40db4fdc33b8bf3b726fa7f8a60049e0518c19e6cbc98eb69c20932f374af0` succeeded at block
+  `315701961` (receipt status `true`). The Run ID and private bundle are intentionally omitted
+  from this public repository record.
+- Docker validation recorded above remains green: Foundry 6/6, API decision-registry tests
+  14/14, API typecheck, targeted Biome, and CLI help smoke. No commit, push, PR, or GitHub
+  mutation has occurred. The on-chain commitment is not a claim of Evidence authenticity, Risk
+  correctness, transaction safety, or `VERIFIED` remediation.
+
+## 2026-10-04 — Anchor source-boundary review fix
+
+- Final Spec review found that the `anchor` command checked local bundle integrity but did not
+  independently re-read the selected Run from the Backend API. It now requires the API origin,
+  re-fetches the bundled Run ID, rebuilds the V1 commitment, and refuses to continue unless the
+  result matches. This is checked before signer resolution or any transaction write.
+- Removed unused API barrel exports for the internal Registry modules; the CLI and tests import
+  their focused modules directly. No contract, public HTTP API, Risk rule, or deployed state
+  changed.
+- Docker validation passed: Decision Registry API tests 15/15, API TypeScript typecheck, targeted
+  Biome, and `git diff --check`. Foundry tests were not rerun because Solidity files did not
+  change; their 6/6 pass remains valid for this diff.
+- A fresh Docker-contained API fetch/recomputation matched the anchored record hash and
+  commitment. The updated CLI was then run without an account against the same bundle; it
+  re-fetched the API Run, verified the chain value, and returned “already anchored” without any
+  transaction. The original anchor predates this source guard; no follow-up on-chain transaction
+  occurred. No commit, push, PR, or GitHub mutation occurred.
+
+## 2026-10-04 — Decision Registry commit, push, and PR
+
+- Passed the repository write preflight and committed the reviewed implementation and context
+  updates as `f6873a9ac00723698b648ccb753e9b83800d98d7`
+  (`feat(api): add optional decision registry anchoring`). The commit is based on freshly fetched
+  `origin/main` `fafa36f54f36bfc02e1bb8ed06f54d3fdab9caa8` and was pushed to
+  `feat/decision-commitment-registry`.
+- Created PR #163 against `main`:
+  https://github.com/parallax-monad/parallax/pull/163. It is OPEN and not claimed merged.
+- GitHub's automatic Code Owner routing requested `@rainypilgrimage` due to documentation paths.
+  Per the user's instruction that Contract Owner approval is already granted and should not be
+  requested, that auto-generated review request was removed; the other requested reviewers were
+  retained.
+- The CI `Checks` job and Vercel preview completed SUCCESS for original feature head
+  `f6873a9ac00723698b648ccb753e9b83800d98d7`. This entry is followed by a docs-only handoff
+  synchronization commit that changes the PR head; refresh PR #163 for current exact-head
+  checks. No deployment or anchor transaction was part of this publication step.
