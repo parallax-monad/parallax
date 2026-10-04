@@ -10,8 +10,8 @@
 
 [在线演示](https://parallax-web-snowy.vercel.app/) ·
 [演示文稿](https://parallax-monad.github.io/parallax/parallax-demo-day.html) ·
-[产品演示视频](https://youtu.be/Dp_Ewlud5QU) ·
-[项目路演视频](https://youtu.be/klOKwyWgiZU) ·
+[产品演示视频](https://youtu.be/klOKwyWgiZU) ·
+[项目路演视频](https://youtu.be/Dp_Ewlud5QU) ·
 [文档](docs/README.md) ·
 [贡献指南](CONTRIBUTING.md) ·
 [GitHub 仓库](https://github.com/parallax-monad/parallax)

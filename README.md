@@ -10,8 +10,8 @@ A pre-execution decision layer for onchain transactions.
 
 [Live Demo](https://parallax-web-snowy.vercel.app/) ·
 [Pitch Deck](https://parallax-monad.github.io/parallax/parallax-demo-day.html) ·
-[Demo Video](https://youtu.be/Dp_Ewlud5QU) ·
-[Pitch Video](https://youtu.be/klOKwyWgiZU) ·
+[Demo Video](https://youtu.be/klOKwyWgiZU) ·
+[Pitch Video](https://youtu.be/Dp_Ewlud5QU) ·
 [Documentation](docs/README.md) ·
 [Contributing](CONTRIBUTING.md) ·
 [GitHub](https://github.com/parallax-monad/parallax)

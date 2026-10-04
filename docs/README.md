@@ -60,8 +60,10 @@ shipped.
   ecosystem and technical-selection research; implementation status has since advanced.
 - [Explorer Evidence feasibility](./research/be-108-explorer-evidence-feasibility.md) —
   partial feasibility findings and qualification limits.
-- Current Provider handoff and qualification records: [Native RPC](./research/native-rpc-provider-handoff-p0.md)
-  and [Tenderly](./research/be-072-tenderly-provider-handoff.md).
+- Current execution-evidence roles: Native RPC is the primary path and Trace RPC is
+  supplementary. Dated Provider handoff records include [Native RPC](./research/native-rpc-provider-handoff-p0.md)
+  and [Tenderly](./research/be-072-tenderly-provider-handoff.md); the Tenderly record does
+  not establish a runtime-qualified integration.
 
 ## Historical integration records
 
