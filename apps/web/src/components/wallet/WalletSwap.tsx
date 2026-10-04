@@ -107,12 +107,39 @@ export function WalletSwap({
   onSubmit: () => void;
 }) {
   const [advancedOpen, setAdvancedOpen] = useState(showMinimumReceived);
+  const [previousQuote, setPreviousQuote] = useState<string | null>(null);
+  const [isUpdating, setIsUpdating] = useState(false);
 
   const set = <K extends keyof FormState>(key: K, value: FormState[K]) =>
     onChange({ ...form, [key]: value });
 
   const flagFor = (key: FieldFlag["field"]) =>
     flags.find((flag) => flag.field === key);
+
+  // Track quote changes and trigger highlight animation
+  // biome-ignore lint/correctness/useExhaustiveDependencies: previousQuote is intentionally excluded to avoid infinite loop
+  useEffect(() => {
+    if (quote.status === "available") {
+      const currentQuote = quote.quote.estimatedAmountOut;
+
+      // Only trigger animation if quote actually changed (not first load)
+      if (previousQuote !== null && previousQuote !== currentQuote) {
+        setIsUpdating(true);
+        setPreviousQuote(currentQuote);
+        const timer = setTimeout(() => setIsUpdating(false), 600);
+        return () => clearTimeout(timer);
+      }
+
+      // Set initial quote value (no animation)
+      if (previousQuote === null) {
+        setPreviousQuote(currentQuote);
+      }
+    } else {
+      // Reset when quote is not available
+      setPreviousQuote(null);
+      setIsUpdating(false);
+    }
+  }, [quote]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: form is intentionally partial to avoid infinite loops
   useEffect(() => {
@@ -219,14 +246,16 @@ export function WalletSwap({
         <div className="mt-3 flex items-center gap-3">
           <strong
             aria-live="polite"
-            className={`min-w-0 flex-1 truncate text-[30px] font-extrabold tracking-[-0.04em] ${
-              quote.status === "available" ? "text-white" : "text-faint"
+            className={`min-w-0 flex-1 truncate text-[30px] font-extrabold tracking-[-0.04em] transition-all duration-300 ${
+              isUpdating
+                ? "animate-pulse text-monad-bright"
+                : quote.status === "available"
+                  ? "text-white"
+                  : "text-faint"
             }`}
           >
             {quote.status === "available"
-              ? // Printed verbatim: the backend already returns human units, and
-                // re-parsing to a number would drop precision.
-                quote.quote.estimatedAmountOut
+              ? parseFloat(quote.quote.estimatedAmountOut).toFixed(3)
               : say(
                   language,
                   quote.status === "loading"

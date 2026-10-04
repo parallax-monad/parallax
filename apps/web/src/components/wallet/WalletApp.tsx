@@ -405,6 +405,49 @@ export function WalletApp({ language }: { language: Language }) {
     };
   }, [screen, protocol, tokenIn, tokenOut, amountIn, routeMetadata, p0Config]);
 
+  // Poll quote every 3 seconds when on swap screen with valid input
+  useEffect(() => {
+    const reversePair = tokenIn === "USDC" && tokenOut === "WETH";
+    const reverseRouteReady =
+      !reversePair ||
+      (p0Config?.status === "AVAILABLE" && p0Config.pair === "usdc-weth");
+    if (
+      screen !== "swap" ||
+      !reverseRouteReady ||
+      !validateForm({
+        protocol,
+        tokenIn,
+        tokenOut,
+        amountIn,
+        slippage: DEMO_SLIPPAGE,
+        minimumReceived: "",
+      }).valid
+    ) {
+      return;
+    }
+
+    const pollQuote = () => {
+      void fetchQuote(
+        {
+          protocol,
+          tokenIn,
+          tokenOut,
+          amountIn,
+          tokenMetadata: routeMetadata,
+        },
+        {},
+      ).then((nextQuote) => {
+        setQuote(nextQuote);
+      });
+    };
+
+    const intervalId = setInterval(pollQuote, 3000);
+
+    return () => {
+      clearInterval(intervalId);
+    };
+  }, [screen, protocol, tokenIn, tokenOut, amountIn, routeMetadata, p0Config]);
+
   const runCheck = async () => {
     const plan = planSubmission(form, result ? submittedForm : undefined, {
       allowUnchanged: true,
