@@ -38,16 +38,31 @@ type SuggestionCard = {
 
 function formatAvailableBalance(
   snapshot: AccountStateSnapshot | undefined,
+  isNativeToken: boolean,
 ): string | undefined {
   if (snapshot?.status !== "AVAILABLE") return undefined;
   const balance = snapshot.balances.inputToken;
   if (balance.status !== "AVAILABLE") return undefined;
   const { amountAtomic, metadata } = balance;
   if (!amountAtomic || !/^\d+$/.test(amountAtomic)) return undefined;
-  if (metadata.decimals === 0) return amountAtomic;
-  const padded = amountAtomic.padStart(metadata.decimals + 1, "0");
-  const fraction = padded.slice(-metadata.decimals).replace(/0+$/, "");
-  return `${padded.slice(0, -metadata.decimals)}${fraction ? `.${fraction}` : ""}`;
+  
+  const divisor = 10n ** BigInt(metadata.decimals);
+  const balanceWei = BigInt(amountAtomic);
+  
+  const gasReserveWei = isNativeToken 
+    ? BigInt(Math.floor(0.001 * 10 ** metadata.decimals))
+    : 0n;
+  
+  if (balanceWei <= gasReserveWei) return undefined;
+  
+  const availableWei = balanceWei - gasReserveWei;
+  const integerPart = availableWei / divisor;
+  const fractionalPart = availableWei % divisor;
+  
+  const fractionalStr = fractionalPart.toString().padStart(metadata.decimals, "0");
+  const twoDecimals = fractionalStr.slice(0, 2);
+  
+  return `${integerPart}.${twoDecimals}`;
 }
 
 export function OptionsStep({
@@ -78,7 +93,8 @@ export function OptionsStep({
       result.quote.expectedOutput,
       currentMinimumReceived,
     );
-  const availableBalance = formatAvailableBalance(result.accountState);
+  const isNativeToken = result.intent.tokenIn === "ETH" || result.intent.tokenIn === "MATIC" || result.intent.tokenIn === "BNB";
+  const availableBalance = formatAvailableBalance(result.accountState, isNativeToken);
   const [hoveredCard, setHoveredCard] = useState<string | null>(null);
   const [pointer, setPointer] = useState<{ x: number; y: number } | null>(null);
 
@@ -93,9 +109,7 @@ export function OptionsStep({
 
   if (!hasOptions) {
     const suggestions: SuggestionCard[] =
-      adjustReason === "QUOTED_OUTPUT_BELOW_MINIMUM" &&
-      suggestedMinimum &&
-      currentMinimumReceived
+      adjustReason === "QUOTED_OUTPUT_BELOW_MINIMUM" && suggestedMinimum
         ? [
             {
               id: "lower-minimum",
@@ -109,7 +123,7 @@ export function OptionsStep({
               },
               change: {
                 label: { en: "SUGGESTED MINIMUM", zh: "建议最低接受量" },
-                before: currentMinimumReceived,
+                before: currentMinimumReceived || result.quote.expectedOutput,
                 after: suggestedMinimum,
                 unit: result.intent.tokenOut,
               },

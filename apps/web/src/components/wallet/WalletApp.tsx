@@ -430,17 +430,34 @@ export function WalletApp({ language }: { language: Language }) {
       return;
     }
 
-    // Demo mode: if user inputs amount > 0.07 ETH, show balance insufficient scenario
-    if (
-      form.tokenIn === "ETH" &&
-      parseFloat(form.amountIn) > 0.07 &&
-      parseFloat(form.amountIn) <= 10
-    ) {
+    // Demo mode: show balance insufficient scenario
+    const isDemoBalanceInsufficient =
+      (form.tokenIn === "ETH" && parseFloat(form.amountIn) > 0.07) ||
+      (form.tokenIn === "USDC" && parseFloat(form.amountIn) > 87898181);
+    
+    if (isDemoBalanceInsufficient) {
       const { arbitrumSampleBalanceInsufficient } = await import(
         "@/lib/analyze/arbitrum-samples"
       );
+      
+      // Adjust the sample data based on input token
+      const accountState = form.tokenIn === "USDC" 
+        ? {
+            ...arbitrumSampleBalanceInsufficient.accountState!,
+            balances: {
+              ...arbitrumSampleBalanceInsufficient.accountState!.balances,
+              inputToken: {
+                status: "AVAILABLE" as const,
+                amountAtomic: "87898181000000",
+                metadata: { symbol: "USDC", decimals: 6 },
+              },
+            },
+          }
+        : arbitrumSampleBalanceInsufficient.accountState;
+      
       const demoResult = {
         ...arbitrumSampleBalanceInsufficient,
+        accountState,
         intent: {
           tokenIn: form.tokenIn,
           tokenOut: form.tokenOut,
@@ -495,16 +512,7 @@ export function WalletApp({ language }: { language: Language }) {
       currentQuote.requestIdentity.tokenIn === submitted.tokenIn &&
       currentQuote.requestIdentity.tokenOut === submitted.tokenOut &&
       currentQuote.requestIdentity.amountIn === submitted.amountIn;
-    // Demo mode: trigger balance insufficient scenario
-    const isDemoBalanceInsufficient =
-      submitted.tokenIn === "ETH" && parseFloat(submitted.amountIn) > 0.07;
-
-    const checkRequest = isDemoBalanceInsufficient
-      ? Promise.resolve({
-          ok: true as const,
-          value: arbitrumSampleBalanceInsufficient,
-        })
-      : Promise.resolve()
+    const checkRequest = Promise.resolve()
           .then(() =>
             checkSwap({
               ...toInput(submitted, parent?.runId),
