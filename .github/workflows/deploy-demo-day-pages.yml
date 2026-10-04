@@ -7,19 +7,32 @@ on:
     paths:
       - docs/demo/parallax-demo-day/**
       - .github/workflows/deploy-demo-day-pages.yml
+  pull_request_target:
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - closed
+    paths:
+      - docs/demo/parallax-demo-day/**
+      - .github/workflows/deploy-demo-day-pages.yml
   workflow_dispatch:
 
 permissions:
   contents: read
+  pull-requests: read
   pages: write
   id-token: write
 
 concurrency:
   group: demo-day-pages
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   deploy:
+    if: >-
+      github.event_name != 'pull_request_target' ||
+      github.event.pull_request.head.repo.full_name == github.repository
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
@@ -27,14 +40,53 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          ref: main
+          fetch-depth: 1
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v6
 
-      - name: Upload Demo Day PPT
+      - name: Assemble production presentation and active PR previews
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          site_dir="$RUNNER_TEMP/parallax-pages"
+          main_sha="$(git rev-parse HEAD)"
+          mkdir -p "$site_dir"
+          cp -R docs/demo/parallax-demo-day/. "$site_dir/"
+
+          gh api --paginate --slurp \
+            "repos/${GITHUB_REPOSITORY}/pulls?state=open&per_page=100" |
+            jq -r --arg repo "$GITHUB_REPOSITORY" \
+              '.[][] | select(.head.repo.full_name == $repo) | .number' \
+              > "$RUNNER_TEMP/open-same-repo-prs.txt"
+
+          while IFS= read -r pr_number; do
+            [[ "$pr_number" =~ ^[0-9]+$ ]] || continue
+
+            pr_ref="refs/remotes/pr-preview/$pr_number"
+            git fetch --no-tags --depth=1 origin \
+              "refs/pull/$pr_number/head:$pr_ref"
+
+            if git diff --quiet "$main_sha" "$pr_ref" -- docs/demo/parallax-demo-day; then
+              continue
+            fi
+
+            preview_dir="$site_dir/previews/pr-$pr_number"
+            mkdir -p "$preview_dir"
+
+            # Archive static presentation files only; never check out or run PR scripts.
+            git archive --format=tar "$pr_ref" docs/demo/parallax-demo-day |
+              tar -xf - -C "$preview_dir" --strip-components=3
+          done < "$RUNNER_TEMP/open-same-repo-prs.txt"
+
+      - name: Upload Demo Day site
         uses: actions/upload-pages-artifact@v5
         with:
-          path: docs/demo/parallax-demo-day
+          path: ${{ runner.temp }}/parallax-pages
 
       - name: Deploy to GitHub Pages
         id: deployment

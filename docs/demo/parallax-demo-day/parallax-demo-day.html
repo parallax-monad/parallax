@@ -1365,7 +1365,7 @@
         <div class="layer-nb">LAYER 03 · USER CONTROL</div>
         <i data-lucide="move-up-right" class="lucide"></i>
         <div class="layer-ttl">You decide</div>
-        <div class="layer-desc">The user chooses. Changes need a verified child check; Parallax never signs, executes, broadcasts, or takes custody of funds.</div>
+        <div class="layer-desc">The user chooses. Re-checks create a distinct child Run; Parallax never signs, executes, broadcasts, or takes custody of funds.</div>
         <div class="layer-tag">PROCEED · ADJUST · STOP · UNKNOWN</div>
       </article>
     </div>
@@ -1412,21 +1412,60 @@
   </div>
 </section>
 
-<section class="slide light" data-layout="S17" data-animate="system-diagram">
+<!-- 第 5 页：市场竞品类别与 Parallax 差异化。 -->
+<section class="slide light" data-layout="S19" data-animate="four-cards">
   <div class="canvas-card">
     <div class="chrome-min">
-      <div class="l">ARBITRUM INTEGRATION · EVIDENCE + ATTESTATION</div>
+      <div class="l">WHY PARALLAX · MARKET LANDSCAPE</div>
       <div class="r">05 / 07</div>
     </div>
     <div data-anim="line" style="display:flex;flex-direction:column;gap:1.4vh">
-      <div class="t-meta">A REAL TESTNET PATH · WITH CLEAR BOUNDARIES</div>
-      <h1 style="font-family:var(--sans),var(--sans-zh);font-weight:200;font-size:min(5.9vw,9.6vh);line-height:.96;letter-spacing:-.04em">Arbitrum Sepolia × Camelot V3.<br/>ETH → USDC, checked with real evidence.<br/><span style="color:var(--accent)">Decisions stay user-led.</span></h1>
+      <div style="height:2px;background:var(--accent);width:100%"></div>
+      <div style="display:flex;flex-direction:column;gap:1.2vh;padding-top:1.2vh">
+        <div class="t-meta">WHAT EXISTS—AND WHERE PARALLAX FITS</div>
+        <h1 style="font-family:var(--sans),var(--sans-zh);font-weight:200;font-size:min(6.05vw,10.1vh);line-height:.96;letter-spacing:-.04em">The evidence is there.<br/><span style="color:var(--accent)">Parallax adds decision context.</span></h1>
+      </div>
+    </div>
+    <div data-anim="up" style="flex:1;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1.2vw;align-items:stretch;margin-top:4.2vh;padding-bottom:var(--nav-safe-bottom)">
+      <article class="card-fill" style="padding:2vh 1.15vw;display:flex;flex-direction:column;justify-content:space-between;min-width:0">
+        <div style="font-family:var(--mono);font-size:max(14px,.76vw);letter-spacing:.16em;color:var(--accent)">01</div>
+        <div><h2 style="font-family:var(--sans),var(--sans-zh);font-weight:300;font-size:min(3.05vw,5.15vh);line-height:1;letter-spacing:-.03em">DEXs + AGGREGATORS</h2><div class="t-meta" style="margin-top:1.4vh">QUOTES + ROUTING</div><div class="body-sm" style="margin-top:1vh">Help users compare prices, routes, and transaction settings.</div></div>
+        <p class="body-sm" style="margin-top:2vh">Examples: Uniswap · LI.FI</p>
+      </article>
+      <article class="card-fill" style="padding:2vh 1.15vw;display:flex;flex-direction:column;justify-content:space-between;min-width:0">
+        <div style="font-family:var(--mono);font-size:max(14px,.76vw);letter-spacing:.16em;color:var(--accent)">02</div>
+        <div><h2 style="font-family:var(--sans),var(--sans-zh);font-weight:300;font-size:min(3.05vw,5.15vh);line-height:1;letter-spacing:-.03em">WALLETS + SECURITY</h2><div class="t-meta" style="margin-top:1.4vh">PREVIEWS + PROTECTION</div><div class="body-sm" style="margin-top:1vh">Can show transaction effects, warnings, and recovery suggestions.</div></div>
+        <p class="body-sm" style="margin-top:2vh">Examples: Rabby · Blockaid</p>
+      </article>
+      <article class="card-fill" style="padding:2vh 1.15vw;display:flex;flex-direction:column;justify-content:space-between;min-width:0">
+        <div style="font-family:var(--mono);font-size:max(14px,.76vw);letter-spacing:.16em;color:var(--accent)">03</div>
+        <div><h2 style="font-family:var(--sans),var(--sans-zh);font-weight:300;font-size:min(3.05vw,5.15vh);line-height:1;letter-spacing:-.03em">SIMULATORS</h2><div class="t-meta" style="margin-top:1.4vh">EXECUTION + DEBUGGING</div><div class="body-sm" style="margin-top:1vh">Expose execution behavior, traces, and technical diagnostics.</div></div>
+        <p class="body-sm" style="margin-top:2vh">Example: Tenderly</p>
+      </article>
+      <article class="card-accent" style="padding:2vh 1.15vw;display:flex;flex-direction:column;justify-content:space-between;min-width:0">
+        <div style="font-family:var(--mono);font-size:max(14px,.76vw);letter-spacing:.16em;opacity:.72">04</div>
+        <div><h2 style="font-family:var(--sans),var(--sans-zh);font-weight:300;font-size:min(3.05vw,5.15vh);line-height:1;letter-spacing:-.03em">PARALLAX</h2><div class="t-meta" style="color:rgba(255,255,255,.72);margin-top:1.4vh">EVIDENCE → DECISION → RE-CHECK</div><div class="body-sm" style="margin-top:1vh;color:rgba(255,255,255,.88)">Provider-agnostic evidence, bounded explanations, relevant conditions, and persisted state-bound comparisons.</div></div>
+        <p class="body-sm" style="margin-top:2vh;color:rgba(255,255,255,.84)">From what happened to what to examine next.</p>
+      </article>
+    </div>
+  </div>
+</section>
+
+<section class="slide light" data-layout="S17" data-animate="system-diagram">
+  <div class="canvas-card">
+    <div class="chrome-min">
+      <div class="l">ARBITRUM ARCHITECTURE · EVIDENCE → DECISION → ATTESTATION</div>
+      <div class="r">06 / 07</div>
+    </div>
+    <div data-anim="line" style="display:flex;flex-direction:column;gap:1.4vh">
+      <div class="t-meta">ARBITRUM SEPOLIA · CAMELOT V3</div>
+      <h1 style="font-family:var(--sans),var(--sans-zh);font-weight:200;font-size:min(5.9vw,9.6vh);line-height:.96;letter-spacing:-.04em">Real swap evidence.<br/>Explainable decisions.<br/><span style="color:var(--accent)">Optional on-chain commitments.</span></h1>
     </div>
     <div data-anim="up" style="flex:1;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4vw;align-items:center;padding-top:2vh">
       <div style="display:flex;flex-direction:column;gap:2.4vh;max-width:31ch">
         <div style="border-top:2px solid var(--accent);padding-top:1.2vh"><div class="t-meta">EXECUTION ENVIRONMENT</div><p class="lead" style="font-weight:300;margin-top:1vh">Arbitrum Sepolia × Camelot V3: real quotes and exact unsigned-transaction checks.</p></div>
-        <div style="border-top:1px solid var(--border-subtle);padding-top:1.2vh"><div class="t-meta">EVIDENCE + PROVENANCE</div><p class="body" style="font-weight:400;margin-top:1vh">Native RPC is primary; Trace adds supplementary evidence tied to its source and state.</p></div>
-        <div style="border-top:1px solid var(--border-subtle);padding-top:1.2vh"><div class="t-meta">ON-CHAIN ATTESTATION · IN DEVELOPMENT</div><p class="body" style="font-weight:400;margin-top:1vh">An in-development backend attestor wallet will anchor optional cryptographic commitments to completed decisions in an Arbitrum registry. The record is independent of—and does not prove—the Risk verdict.</p></div>
+        <div style="border-top:1px solid var(--border-subtle);padding-top:1.2vh"><div class="t-meta">EVIDENCE + PROVENANCE</div><p class="body" style="font-weight:400;margin-top:1vh">Native RPC is primary; Trace adds supplementary evidence tied to source and state.</p></div>
+        <div style="border-top:1px solid var(--border-subtle);padding-top:1.2vh"><div class="t-meta">ON-CHAIN DECISION ATTESTATION</div><p class="body" style="font-weight:400;margin-top:1vh">Design: a backend-operated wallet signs an optional Arbitrum transaction to anchor a completed decision’s commitment hash and minimal verification metadata in a registry. Users need not connect or sign. The reference supports record-integrity checks—not Risk correctness, transaction safety, or VERIFIED remediation.</p></div>
       </div>
       <div style="min-width:0;display:grid;grid-template-rows:1fr auto;gap:2vh;align-items:center">
         <div style="position:relative;min-height:31vh;display:grid;place-items:center">
@@ -1446,50 +1485,11 @@
           <div class="decision-diagram-label" style="position:absolute;left:50%;bottom:4%;transform:translateX(-50%);font-family:var(--mono);font-size:max(14px,.72vw);letter-spacing:.12em">TRACE · SUPPLEMENTARY</div>
         </div>
         <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1.2vw;border-top:1px solid var(--border-subtle);padding-top:1.6vh">
-          <div><div class="t-meta">ATTESTOR</div><p class="body-sm" style="margin-top:.6vh">Backend-operated</p></div>
-          <div><div class="t-meta">REGISTRY</div><p class="body-sm" style="margin-top:.6vh">Arbitrum · in development</p></div>
+          <div><div class="t-meta">ATTESTOR</div><p class="body-sm" style="margin-top:.6vh">Backend-operated wallet</p></div>
+          <div><div class="t-meta">REGISTRY</div><p class="body-sm" style="margin-top:.6vh">Hash + metadata</p></div>
           <div><div class="t-meta">USER SIGNATURE</div><p class="body-sm" style="margin-top:.6vh">Not required</p></div>
         </div>
       </div>
-    </div>
-  </div>
-</section>
-
-<!-- 第 6 页：四个产品 verdict 的含义与边界。 -->
-<section class="slide light" data-layout="S19" data-animate="four-cards">
-  <div class="canvas-card">
-    <div class="chrome-min">
-      <div class="l">WHY PARALLAX · BEYOND SIMULATION</div>
-      <div class="r">06 / 07</div>
-    </div>
-    <div data-anim="line" style="display:flex;flex-direction:column;gap:1.4vh">
-      <div style="height:2px;background:var(--accent);width:100%"></div>
-      <div style="display:flex;flex-direction:column;gap:1.2vh;padding-top:1.2vh">
-        <div class="t-meta">FOUR WAYS TO TURN EVIDENCE INTO DECISIONS</div>
-        <h1 style="font-family:var(--sans),var(--sans-zh);font-weight:200;font-size:min(6.05vw,10.1vh);line-height:.96;letter-spacing:-.04em">More than a simulation.<br/><span style="color:var(--accent)">A decision layer.</span></h1>
-      </div>
-    </div>
-    <div data-anim="up" style="flex:1;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1.2vw;align-items:stretch;margin-top:4.2vh;padding-bottom:var(--nav-safe-bottom)">
-      <article class="card-fill" style="padding:2vh 1.15vw;display:flex;flex-direction:column;justify-content:space-between;min-width:0">
-        <div style="font-family:var(--mono);font-size:max(14px,.76vw);letter-spacing:.16em;color:var(--accent)">01</div>
-        <div><h2 style="font-family:var(--sans),var(--sans-zh);font-weight:300;font-size:min(3.05vw,5.15vh);line-height:1;letter-spacing:-.03em">BEYOND SIMULATION</h2><div class="t-meta" style="margin-top:1.4vh">ACTIONABLE CONTEXT</div><div class="body-sm" style="margin-top:1vh">Turn execution results into a clearer, bounded next-step decision.</div></div>
-        <p class="body-sm" style="margin-top:2vh">PROCEED applies only to the scope actually checked.</p>
-      </article>
-      <article class="card-fill" style="padding:2vh 1.15vw;display:flex;flex-direction:column;justify-content:space-between;min-width:0">
-        <div style="font-family:var(--mono);font-size:max(14px,.76vw);letter-spacing:.16em;color:var(--accent)">02</div>
-        <div><h2 style="font-family:var(--sans),var(--sans-zh);font-weight:300;font-size:min(3.05vw,5.15vh);line-height:1;letter-spacing:-.03em">EVIDENCE-FIRST</h2><div class="t-meta" style="margin-top:1.4vh">SCOPE + PROVENANCE</div><div class="body-sm" style="margin-top:1vh">See what was checked, where evidence came from, and what remains unknown.</div></div>
-        <p class="body-sm" style="margin-top:2vh">UNKNOWN is not a pass.</p>
-      </article>
-      <article class="card-fill" style="padding:2vh 1.15vw;display:flex;flex-direction:column;justify-content:space-between;min-width:0">
-        <div style="font-family:var(--mono);font-size:max(14px,.76vw);letter-spacing:.16em;color:var(--accent)">03</div>
-        <div><h2 style="font-family:var(--sans),var(--sans-zh);font-weight:300;font-size:min(3.05vw,5.15vh);line-height:1;letter-spacing:-.03em">RE-CHECKABLE</h2><div class="t-meta" style="margin-top:1.4vh">PERSISTED RUNS</div><div class="body-sm" style="margin-top:1vh">Compare evidence after an explicit change, bound to a new Run and state.</div></div>
-        <p class="body-sm" style="margin-top:2vh">A re-check does not promise improvement.</p>
-      </article>
-      <article class="card-accent" style="padding:2vh 1.15vw;display:flex;flex-direction:column;justify-content:space-between;min-width:0">
-        <div style="font-family:var(--mono);font-size:max(14px,.76vw);letter-spacing:.16em;opacity:.72">04</div>
-        <div><h2 style="font-family:var(--sans),var(--sans-zh);font-weight:300;font-size:min(3.05vw,5.15vh);line-height:1;letter-spacing:-.03em">BUILT TO INTEGRATE</h2><div class="t-meta" style="color:rgba(255,255,255,.72);margin-top:1.4vh">API + TYPED SDK</div><div class="body-sm" style="margin-top:1vh;color:rgba(255,255,255,.88)">A reusable API and typed SDK create a foundation for embedded decision workflows.</div></div>
-        <p class="body-sm" style="margin-top:2vh;color:rgba(255,255,255,.84)">A foundation for future wallet, DEX, and dApp workflows.</p>
-      </article>
     </div>
   </div>
 </section>
@@ -1510,7 +1510,7 @@
         </div>
         <div data-anim="signature" style="display:flex;justify-content:space-between;align-items:end;border-top:1px solid rgba(255,255,255,.22);padding-top:2vh;position:relative;z-index:1">
           <div class="t-meta" style="color:rgba(255,255,255,.62)">KAI · REI · JIE · CLARE · ANTONY</div>
-          <div class="t-meta" style="color:rgba(255,255,255,.62)">PARALLAX · FROM SIMULATION TO A DECISION LAYER FOR THE ONCHAIN ECONOMY</div>
+          <div class="t-meta" style="color:rgba(255,255,255,.62)">PARALLAX · ONCHAIN DECISION LAYER</div>
         </div>
       </div>
       <div class="half" style="padding:5.6vh 3.6vw 4.4vh;justify-content:space-between">
@@ -1521,15 +1521,15 @@
         <ul data-anim="rules" class="takeaway-list" style="list-style:none;display:flex;flex-direction:column;gap:0">
           <li style="display:grid;grid-template-columns:auto 1fr;gap:1.6vw;align-items:start;padding:2.2vh 0;border-top:1px solid var(--border-subtle)">
             <div style="font-family:var(--sans);font-weight:200;font-size:min(4vw,7vh);line-height:.9">01</div>
-          <div><h3 style="font-family:var(--sans),var(--sans-zh);font-weight:400;font-size:max(18px,1.7vw);line-height:1.2;color:var(--text-primary);margin-bottom:.7vh">EXPAND COVERAGE</h3><p style="font-family:var(--sans),var(--sans-zh);font-size:max(16px,.92vw);line-height:1.5;color:var(--text-secondary)">More verified assets, pairs, DeFi protocols, and execution environments—one reusable decision layer.</p></div>
+          <div><h3 style="font-family:var(--sans),var(--sans-zh);font-weight:400;font-size:max(18px,1.7vw);line-height:1.2;color:var(--text-primary);margin-bottom:.7vh">EXPAND COVERAGE</h3><p style="font-family:var(--sans),var(--sans-zh);font-size:max(16px,.92vw);line-height:1.5;color:var(--text-secondary)">Broaden supported assets and pairs across DeFi protocols, transaction types, and execution environments.</p></div>
           </li>
           <li style="display:grid;grid-template-columns:auto 1fr;gap:1.6vw;align-items:start;padding:2.2vh 0;border-top:1px solid var(--border-subtle)">
             <div style="font-family:var(--sans);font-weight:200;font-size:min(4vw,7vh);line-height:.9">02</div>
-          <div><h3 style="font-family:var(--sans),var(--sans-zh);font-weight:400;font-size:max(18px,1.7vw);line-height:1.2;color:var(--text-primary);margin-bottom:.7vh">EMBED INTO THE ECOSYSTEM</h3><p style="font-family:var(--sans),var(--sans-zh);font-size:max(16px,.92vw);line-height:1.5;color:var(--text-secondary)">A typed SDK and API could support developer infrastructure and embedded B2B checks in wallet, DEX, aggregator, and dApp workflows.</p></div>
+          <div><h3 style="font-family:var(--sans),var(--sans-zh);font-weight:400;font-size:max(18px,1.7vw);line-height:1.2;color:var(--text-primary);margin-bottom:.7vh">DISTRIBUTE THROUGH INTEGRATIONS</h3><p style="font-family:var(--sans),var(--sans-zh);font-size:max(16px,.92vw);line-height:1.5;color:var(--text-secondary)">The existing TypeScript SDK and API could embed pre-sign checks in wallets, DEXs, aggregators, DeFi apps, and developer platforms—creating reusable infrastructure and potential B2B/API delivery.</p></div>
           </li>
           <li style="display:grid;grid-template-columns:auto 1fr;gap:1.6vw;align-items:start;padding:2.2vh 0;border-top:1px solid var(--border-subtle);border-bottom:2px solid var(--accent)">
             <div style="font-family:var(--sans);font-weight:200;font-size:min(4vw,7vh);line-height:.9;color:var(--accent)">03</div>
-          <div><h3 style="font-family:var(--sans),var(--sans-zh);font-weight:400;font-size:max(18px,1.7vw);line-height:1.2;color:var(--accent);margin-bottom:.7vh">AGENT-READY INFRASTRUCTURE</h3><p style="font-family:var(--sans),var(--sans-zh);font-size:max(16px,.92vw);line-height:1.5;color:var(--text-secondary)">Explore future AI-agent and Model Context Protocol (MCP) access for bounded preflight and visible uncertainty—not signing or execution.</p></div>
+          <div><h3 style="font-family:var(--sans),var(--sans-zh);font-weight:400;font-size:max(18px,1.7vw);line-height:1.2;color:var(--accent);margin-bottom:.7vh">ENABLE AGENT-NATIVE WORKFLOWS</h3><p style="font-family:var(--sans),var(--sans-zh);font-size:max(16px,.92vw);line-height:1.5;color:var(--text-secondary)">Future AI-agent and MCP-compatible workflows could request policy-aware preflight checks and consume bounded decisions with machine-readable scope, provenance, and uncertainty—not execute transactions.</p></div>
           </li>
         </ul>
         <div data-anim="foot" style="display:flex;flex-direction:column;gap:.75vh;padding-top:1.6vh;color:var(--text-helper);font-family:var(--mono);font-size:max(14px,.72vw);letter-spacing:.05em;line-height:1.5">

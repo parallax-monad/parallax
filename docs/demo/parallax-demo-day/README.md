@@ -19,9 +19,17 @@ http://localhost:8000/parallax-demo-day.html
 
 ## 在线访问
 
-GitHub Pages 部署后，可直接打开公开链接：
+正式版由 `main` 发布，地址保持不变：
 
-[打开 Demo Day 演示文稿](https://parallax-monad.github.io/parallax/parallax-demo-day.html)
+<https://parallax-monad.github.io/parallax/parallax-demo-day.html>
+
+PR 预览使用独立目录，不会覆盖正式版：
+
+```text
+https://parallax-monad.github.io/parallax/previews/pr-<PR-number>/parallax-demo-day.html
+```
+
+同仓库 PR 新建、更新或重新打开时，GitHub Actions 会从 PR 分支发布演示目录的静态文件；关闭 PR 时也会触发重建并移除对应预览。每次 `main` 部署都会从正式版和仍打开的同仓库演示 PR 重建站点。Fork PR 不发布，部署流程不会运行 PR 脚本。首次启用预览触发器时，可通过同一工作流的 `workflow_dispatch` 手动生成预览。
 
 ## 操作方式
 
