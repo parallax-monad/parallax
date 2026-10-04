@@ -2,6 +2,40 @@
 
 Checkpoint: 2026-09-29
 
+## Active local work — 2026-10-04 Decision Registry MVP
+
+- Worktree: `/Users/johnma/.codex/worktrees/decision-commitment-registry`; branch:
+  `feat/decision-commitment-registry`; current HEAD is `fafa36f54f36bfc02e1bb8ed06f54d3fdab9caa8`,
+  matching freshly fetched `origin/main`. The branch was fast-forwarded from
+  `5f4e500d916c6c392147344e2bcc6f39c49fc4f6`; its intervening main commit touched only demo
+  presentation and Pages workflow files, and all local task changes were preserved.
+- The local implementation remains uncommitted. Review fixes verify the selected Foundry signer
+  matches the Registry's immutable attestor before a write, reject zero addresses, and provide a
+  read-only deployment verifier for chain, runtime code, and immutable attestor. The `anchor`
+  command now re-fetches the selected Run from the Backend API and refuses to sign unless that
+  persisted result recomputes to the exact bundle commitment. Anchoring is an explicit
+  operator-selected CLI action, separate from the opaque Receipt lifecycle; it is not automatic
+  for every `/api/check`. Docker validation: Foundry 6/6, API focused suite 15/15 (including a
+  fixed V1 Run-key/record-hash/commitment vector and API-source matching guard), API typecheck,
+  targeted Biome, and CLI help smoke passed.
+- Live Arbitrum Sepolia deployment is verified: chain `421614`, Registry
+  `0xdfc1f61e75fd551b9c309ec0bfae015adf6fe359`, immutable attestor
+  `0x1d6e2221af2a0ecea9e497e65bef31f3912a3633`, deployment transaction
+  `0x46cd3fd97086a40c157be0cdc50baa9a40db9c24417d723cc5dd6f08e6e000f6`, block `315701144`.
+  The read-only deployment verifier returned `MATCH`. One completed persisted Run was anchored;
+  the independent bundle verifier returned `MATCH` for runKey
+  `0x105baed92e95a4ac1c4345f14ae6965671a7d721836db79aabe265dd9836061a`, record hash
+  `0x6fa9fb5aab04497f65a28340b3a381c7c8cab848e27b83f23bc532559313a055`, and final commitment
+  `0x8ebcbeb7aa0f6c27c68e3a20f9f963f3268acf1a1c1e87f4618328bcd8f31356`. Anchor transaction
+  `0x3e40db4fdc33b8bf3b726fa7f8a60049e0518c19e6cbc98eb69c20932f374af0` succeeded at block
+  `315701961`. After the subsequent API-source guard was added, the API record was re-fetched and
+  re-hashed to the same commitment, and the updated CLI returned its already-anchored/no-write
+  result. This proves commitment equality only, not Evidence authenticity, Risk correctness, or
+  transaction safety. The RPC secret was not printed or copied into this worktree.
+- Contract Owner approval requests are intentionally omitted per the user's direct instruction;
+  treat that review gate as approved. Local code/docs remain uncommitted; no push or PR has been
+  created. The only Git history movement was the non-destructive fast-forward to current main.
+
 ## Takeover
 
 1. Run `./scripts/agent-preflight.sh --read`.
