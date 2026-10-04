@@ -1689,7 +1689,7 @@ describe("form validation and backend-supported reruns", () => {
     expect(
       changedLogicalFields(INITIAL_FORM, {
         ...INITIAL_FORM,
-        amountIn: "0.02",
+        amountIn: "0.03",
         minimumReceived: "20",
       }),
     ).toEqual(["amountIn", "minimumReceived"]);
@@ -1706,10 +1706,28 @@ describe("form validation and backend-supported reruns", () => {
     expect(plan.allowed).toBe(false);
   });
 
-  test("allows exactly one supported rerun change", () => {
+  test("allows one or more supported rerun changes", () => {
     expect(
-      planSubmission({ ...INITIAL_FORM, amountIn: "0.02" }, INITIAL_FORM)
+      planSubmission({ ...INITIAL_FORM, amountIn: "0.03" }, INITIAL_FORM)
         .allowed,
     ).toBe(true);
+    expect(
+      planSubmission(
+        { ...INITIAL_FORM, amountIn: "0.03", minimumReceived: "20" },
+        INITIAL_FORM,
+      ).allowed,
+    ).toBe(true);
+    expect(
+      planSubmission({ ...INITIAL_FORM, protocol: "pancake" }, INITIAL_FORM)
+        .allowed,
+    ).toBe(true);
+  });
+
+  test("rejects rerun with no changes", () => {
+    const plan = planSubmission(INITIAL_FORM, INITIAL_FORM);
+    expect(plan.allowed).toBe(false);
+    if (!plan.allowed) {
+      expect(plan.errors.form?.en).toContain("at least one condition");
+    }
   });
 });

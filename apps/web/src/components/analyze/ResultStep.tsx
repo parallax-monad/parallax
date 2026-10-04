@@ -439,14 +439,6 @@ export function ResultStep({
           })}
         </button>
       )}
-      {verdict === "ADJUST" && !hasOptions && (
-        <div className="rounded-[16px] border border-line bg-ink-elev2/30 p-4 text-center text-[13px] text-dim">
-          {say(language, {
-            en: "No verified transaction adjustment is available for this result.",
-            zh: "此结果没有可用的已验证交易调整。",
-          })}
-        </div>
-      )}
     </div>
   );
 }

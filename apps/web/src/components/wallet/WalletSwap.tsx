@@ -91,6 +91,7 @@ export function WalletSwap({
   errors = {},
   flags = [],
   quote = { status: "idle" },
+  showMinimumReceived = false,
   onChange,
   onSubmit,
 }: {
@@ -101,10 +102,11 @@ export function WalletSwap({
   flags?: FieldFlag[];
   /** Pre-submit `/api/quote` state. Never a locally computed estimate. */
   quote?: QuoteState;
+  showMinimumReceived?: boolean;
   onChange: (form: FormState) => void;
   onSubmit: () => void;
 }) {
-  const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [advancedOpen, setAdvancedOpen] = useState(showMinimumReceived);
 
   const set = <K extends keyof FormState>(key: K, value: FormState[K]) =>
     onChange({ ...form, [key]: value });
@@ -325,13 +327,26 @@ export function WalletSwap({
               )}
             </label>
 
-            <label>
-              <span>
-                {say(language, {
-                  en: "Minimum received (optional)",
-                  zh: "最低收到量（选填）",
-                })}
-              </span>
+            <label
+              className={
+                showMinimumReceived
+                  ? "rounded-[12px] border border-white/[0.12] bg-white/[0.02] p-3"
+                  : ""
+              }
+            >
+              <div className="mb-2 flex items-center justify-between gap-3">
+                <span className="m-0 text-[12px] font-bold uppercase tracking-[0.08em] text-dim">
+                  {say(language, {
+                    en: "Minimum received (optional)",
+                    zh: "最低收到量（选填）",
+                  })}
+                </span>
+                {showMinimumReceived && !minimumReceivedError && (
+                  <span className="shrink-0 rounded-full bg-white/[0.08] px-3 py-1 text-[10px] font-extrabold uppercase tracking-wider text-white/60">
+                    {say(language, { en: "Suggested", zh: "建议" })}
+                  </span>
+                )}
+              </div>
               <input
                 aria-describedby={[
                   "swap-minimum-received-help",
@@ -349,7 +364,9 @@ export function WalletSwap({
                 className={
                   minimumReceivedError || flagFor("minimumReceived")
                     ? "border-risk-high"
-                    : "border-line-strong"
+                    : showMinimumReceived
+                      ? "!border-risk-low !border-2"
+                      : "border-line-strong"
                 }
                 inputMode="decimal"
                 placeholder={say(language, {

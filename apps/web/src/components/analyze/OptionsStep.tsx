@@ -1,7 +1,31 @@
 import { useState } from "react";
 import { RemediationOptionsCard } from "@/components/analyze/RemediationOptionsCard";
-import type { CheckSwapResult, RemediationOption } from "@/lib/analyze/types";
+import type {
+  AccountStateSnapshot,
+  CheckSwapResult,
+  RemediationOption,
+} from "@/lib/analyze/types";
 import { type Copy, type Language, say } from "@/lib/i18n";
+
+export function suggestedMinimumReceived(
+  quote: string,
+  current: string,
+): string | undefined {
+  const decimal = /^(?:0|[1-9]\d*)(?:\.\d+)?$/;
+  if (!decimal.test(quote) || !decimal.test(current)) return undefined;
+  const [whole, fraction = ""] = quote.split(".");
+  const cents =
+    BigInt(whole) * 100n + BigInt(fraction.padEnd(2, "0").slice(0, 2));
+  const belowQuote = cents - (/[^0]/.test(fraction.slice(2)) ? 0n : 1n);
+  const [currentWhole, currentFraction = ""] = current.split(".");
+  const scale = Math.max(fraction.length, currentFraction.length);
+  const quoteScaled = BigInt(whole + fraction.padEnd(scale, "0"));
+  const currentScaled = BigInt(
+    currentWhole + currentFraction.padEnd(scale, "0"),
+  );
+  if (belowQuote <= 0n || currentScaled <= quoteScaled) return undefined;
+  return `${belowQuote / 100n}.${(belowQuote % 100n).toString().padStart(2, "0")}`;
+}
 
 type SuggestionCard = {
   id: string;
@@ -12,22 +36,49 @@ type SuggestionCard = {
   tradeoff?: { label: Copy; text: Copy };
 };
 
+function formatAvailableBalance(
+  snapshot: AccountStateSnapshot | undefined,
+): string | undefined {
+  if (snapshot?.status !== "AVAILABLE") return undefined;
+  const balance = snapshot.balances.inputToken;
+  if (balance.status !== "AVAILABLE") return undefined;
+  const { amountAtomic, metadata } = balance;
+  if (!amountAtomic || !/^\d+$/.test(amountAtomic)) return undefined;
+  if (metadata.decimals === 0) return amountAtomic;
+  const padded = amountAtomic.padStart(metadata.decimals + 1, "0");
+  const fraction = padded.slice(-metadata.decimals).replace(/0+$/, "");
+  return `${padded.slice(0, -metadata.decimals)}${fraction ? `.${fraction}` : ""}`;
+}
+
 export function OptionsStep({
   result,
   language,
   onSelectOption,
   onBack,
   onKeep,
+  currentMinimumReceived,
+  onApplyMinimumReceived,
+  onApplyAmountIn,
 }: {
   result: CheckSwapResult;
   language: Language;
   onSelectOption?: (option: RemediationOption) => void;
   onBack: () => void;
   onKeep?: () => void;
+  currentMinimumReceived?: string;
+  onApplyMinimumReceived?: (value: string) => void;
+  onApplyAmountIn?: (value: string) => void;
 }) {
   const hasOptions =
     result.remediationOptions && result.remediationOptions.length > 0;
   const adjustReason = result.adjustReason ?? "UNKNOWN";
+  const suggestedMinimum =
+    currentMinimumReceived &&
+    suggestedMinimumReceived(
+      result.quote.expectedOutput,
+      currentMinimumReceived,
+    );
+  const availableBalance = formatAvailableBalance(result.accountState);
   const [hoveredCard, setHoveredCard] = useState<string | null>(null);
   const [pointer, setPointer] = useState<{ x: number; y: number } | null>(null);
 
@@ -42,7 +93,9 @@ export function OptionsStep({
 
   if (!hasOptions) {
     const suggestions: SuggestionCard[] =
-      adjustReason === "QUOTED_OUTPUT_BELOW_MINIMUM"
+      adjustReason === "QUOTED_OUTPUT_BELOW_MINIMUM" &&
+      suggestedMinimum &&
+      currentMinimumReceived
         ? [
             {
               id: "lower-minimum",
@@ -51,8 +104,14 @@ export function OptionsStep({
                 zh: "降低最低接受量",
               },
               description: {
-                en: "Reduce the acceptance boundary to match the current quote",
-                zh: "降低最低要求，让它符合当前报价",
+                en: "Consider a lower acceptance boundary and review a fresh quote before signing",
+                zh: "可考虑降低接受边界，并在签名前重新检查报价",
+              },
+              change: {
+                label: { en: "SUGGESTED MINIMUM", zh: "建议最低接受量" },
+                before: currentMinimumReceived,
+                after: suggestedMinimum,
+                unit: result.intent.tokenOut,
               },
               outcome: {
                 label: { en: "PREDICTED OUTCOME", zh: "预期结果" },
@@ -70,7 +129,7 @@ export function OptionsStep({
               },
             },
           ]
-        : adjustReason === "INPUT_BALANCE_INSUFFICIENT"
+        : adjustReason === "INPUT_BALANCE_INSUFFICIENT" && availableBalance
           ? [
               {
                 id: "reduce-input",
@@ -80,9 +139,9 @@ export function OptionsStep({
                   zh: "降低金额以适应余额",
                 },
                 change: {
-                  label: { en: "CHANGE", zh: "变化" },
+                  label: { en: "SUGGESTED AMOUNT", zh: "建议金额" },
                   before: result.intent.amountIn,
-                  after: "Available",
+                  after: availableBalance,
                   unit: result.intent.tokenIn,
                 },
                 outcome: {
@@ -109,13 +168,28 @@ export function OptionsStep({
           <button
             key={s.id}
             type="button"
-            className="relative w-full overflow-hidden rounded-[16px] border border-line bg-ink-elev2/30 p-5 text-left transition-all duration-200 hover:-translate-y-0.5 hover:border-risk-low/70 hover:bg-risk-low/5"
+            disabled={
+              (s.id === "lower-minimum" &&
+                (!suggestedMinimum || !onApplyMinimumReceived)) ||
+              (s.id === "reduce-input" &&
+                (!availableBalance || !onApplyAmountIn))
+            }
+            className="relative w-full overflow-hidden rounded-[16px] border border-line bg-ink-elev2/30 p-5 text-left transition-all duration-200 enabled:hover:-translate-y-0.5 enabled:hover:border-risk-low/70 enabled:hover:bg-risk-low/5 disabled:cursor-default"
             onPointerMove={(e) => handlePointerMove(e, s.id)}
             onPointerLeave={() => {
               setHoveredCard(null);
               setPointer(null);
             }}
-            onClick={onKeep || onBack}
+            onClick={() => {
+              if (s.id === "lower-minimum") {
+                if (suggestedMinimum)
+                  onApplyMinimumReceived?.(suggestedMinimum);
+              } else if (s.id === "reduce-input") {
+                if (availableBalance) onApplyAmountIn?.(availableBalance);
+              } else {
+                (onKeep || onBack)();
+              }
+            }}
           >
             {hoveredCard === s.id && pointer && (
               <>
@@ -137,47 +211,50 @@ export function OptionsStep({
             )}
             <div className="relative z-10">
               <div className="flex items-start justify-between gap-3">
-                <strong className="text-[18px] font-bold text-white">
-                  {say(language, s.title)}
-                </strong>
-                <span className="shrink-0 rounded-full border border-risk-low/40 bg-risk-low/8 px-3 py-1 text-[10px] font-extrabold uppercase tracking-wider text-risk-low/80">
-                  Verified
-                </span>
+                <div className="min-w-0 flex-1">
+                  <strong className="block text-[15px] font-bold leading-tight text-white">
+                    {say(language, s.title)}
+                  </strong>
+                  <p className="mt-0.5 text-[13px] leading-[1.4] text-dim">
+                    {say(language, s.description)}
+                  </p>
+                </div>
+                {s.id !== "lower-minimum" && (
+                  <span className="shrink-0 rounded-full border border-risk-low/40 bg-risk-low/8 px-2.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-risk-low/80">
+                    Verified
+                  </span>
+                )}
               </div>
-              <p className="mt-1.5 text-[14px] text-dim">
-                {say(language, s.description)}
-              </p>
               {s.change && (
-                <div
-                  className={`${s.id === "lower-minimum" || s.id === "increase-input" ? "hidden " : ""}mt-4 border-t border-line/30 pt-4`}
-                >
-                  <div className="text-[11px] font-bold uppercase tracking-wider text-dim">
+                <div className="mt-3">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-dim/70">
                     {say(language, s.change.label)}
                   </div>
-                  <div className="mt-2 text-[16px] text-white">
-                    {s.change.before} → {s.change.after}
-                  </div>
-                  <div className="mt-1 text-[12px] text-dim">
-                    {s.change.unit}
+                  <div className="mt-1 flex flex-wrap items-baseline gap-2 text-[15px] font-semibold text-white">
+                    <del className="text-dim">{s.change.before}</del>
+                    <span aria-hidden="true">→</span>
+                    <span>
+                      {s.change.after} {s.change.unit}
+                    </span>
                   </div>
                 </div>
               )}
               {s.outcome && (
-                <div className="mt-4">
-                  <div className="text-[11px] font-bold uppercase tracking-wider text-dim">
+                <div className="mt-3">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-dim/70">
                     {say(language, s.outcome.label)}
                   </div>
-                  <p className="mt-1.5 text-[14px] text-white">
+                  <p className="mt-1 text-[13px] leading-[1.4] text-white">
                     {say(language, s.outcome.text)}
                   </p>
                 </div>
               )}
               {s.tradeoff && (
-                <div className="mt-3">
-                  <div className="text-[11px] font-bold uppercase tracking-wider text-dim">
+                <div className="mt-2.5">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-dim/70">
                     {say(language, s.tradeoff.label)}
                   </div>
-                  <p className="mt-1.5 text-[13px] text-dim">
+                  <p className="mt-1 text-[13px] leading-[1.4] text-dim">
                     {say(language, s.tradeoff.text)}
                   </p>
                 </div>

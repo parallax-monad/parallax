@@ -1,5 +1,9 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, test } from "vitest";
+import {
+  OptionsStep,
+  suggestedMinimumReceived,
+} from "@/components/analyze/OptionsStep";
 import { arbitrumSampleSuccess } from "@/lib/analyze/arbitrum-sample-data";
 import type { CheckSwapResult } from "@/lib/analyze/types";
 import { WalletResult } from "./WalletResult";
@@ -47,6 +51,44 @@ const render = (value: CheckSwapResult, onSelectOption?: () => void) =>
       onSelectOption={onSelectOption}
     />,
   );
+
+describe("minimum received suggestion", () => {
+  test("rounds below the quoted output to two decimals", () => {
+    expect(suggestedMinimumReceived("4.812", "5.00")).toBe("4.81");
+    expect(suggestedMinimumReceived("4.8101", "5.00")).toBe("4.81");
+    expect(suggestedMinimumReceived("4.81", "5.00")).toBe("4.80");
+    expect(suggestedMinimumReceived("5", "6")).toBe("4.99");
+  });
+
+  test("rejects unavailable, tiny, or already acceptable boundaries", () => {
+    expect(suggestedMinimumReceived("unavailable", "5")).toBeUndefined();
+    expect(suggestedMinimumReceived("0.01", "1")).toBeUndefined();
+    expect(suggestedMinimumReceived("4.81", "4.80")).toBeUndefined();
+    expect(suggestedMinimumReceived("4.81", "")).toBeUndefined();
+  });
+
+  test("shows the original minimum struck through and the suggested value", () => {
+    const html = renderToStaticMarkup(
+      <OptionsStep
+        language="en"
+        result={result({
+          verdict: "ADJUST",
+          adjustReason: "QUOTED_OUTPUT_BELOW_MINIMUM",
+          quote: {
+            expectedOutput: "4.812",
+            route: { en: "route", zh: "路径" },
+            blockNumber: "1",
+          },
+        })}
+        currentMinimumReceived="5.00"
+        onApplyMinimumReceived={() => undefined}
+        onBack={() => undefined}
+      />,
+    );
+    expect(html).toContain('<del class="text-dim">5.00</del>');
+    expect(html).toContain("4.81 USDC");
+  });
+});
 
 describe("WalletResult", () => {
   test("labels normal backend results as live", () => {

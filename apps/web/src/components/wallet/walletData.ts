@@ -21,8 +21,8 @@ export type WalletAsset = {
 };
 
 export const ASSETS: readonly WalletAsset[] = [
-  { symbol: "ETH", name: "Ethereum", balance: 2.5, price: 2400 },
-  { symbol: "USDC", name: "USD Coin", balance: 500, price: 1 },
+  { symbol: "ETH", name: "Ethereum", balance: 0.07, price: 2400 },
+  { symbol: "USDC", name: "USD Coin", balance: 87898181, price: 1 },
 ];
 
 export function assetFor(symbol: string): WalletAsset | undefined {
