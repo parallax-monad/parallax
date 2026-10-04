@@ -39,13 +39,19 @@ DEX 和聚合器提供报价与路由，钱包和安全产品提供交易预览�
 
 ## 工作流程
 
-```text
-Swap 意图
-→ 报价与已准备的未签名交易
-→ 执行证据
-→ 可解释、范围明确的决策
-→ 用户主动调整
-→ 重新检查并比较 Run
+```mermaid
+flowchart TD
+    I["用户 Swap 意图"] --> E["报价 + 执行证据"]
+    E --> P["Parallax 决策引擎"]
+    P --> D{"范围明确的决策"}
+    D -->|PROCEED - 仅限已检查范围| C["用户决定是否继续"]
+    D -->|ADJUST - 相关调整路径| A["用户审阅并明确调整"]
+    D -->|STOP| S["用户停止"]
+    D -->|UNKNOWN - 不代表通过| U["用户审阅不确定性"]
+    A --> R["发起新的复查"]
+    U -->|用户请求更多证据时| R
+    R --> V["基于新证据重新评估<br/>不会自动成为 VERIFIED"]
+    V --> E
 ```
 
 ## 构建于 Arbitrum
@@ -126,6 +132,19 @@ pnpm --filter @parallax/web build
 | `contracts/decision-registry` | 可选的链上 Decision Registry |
 | `fixtures` | 确定性测试数据与保留的证据记录 |
 | `docs` | 产品、集成、研究与项目历史参考 |
+
+```mermaid
+flowchart TD
+    APP["Parallax Web App + TypeScript SDK"] --> API["Parallax Backend API<br/>不签署、广播或执行用户 Swap，也不托管资产"]
+    API --> ADAPTER["链 / 协议适配器边界<br/>当前集成：Arbitrum Sepolia × Camelot V3"]
+    ADAPTER --> TX["报价 + 精确的未签名交易"]
+    TX --> NATIVE["Native RPC<br/>主要执行证据来源"]
+    TX --> TRACE["Trace RPC<br/>补充证据来源"]
+    NATIVE --> ENGINE["范围明确的决策引擎"]
+    TRACE --> ENGINE
+    ENGINE --> RUNS["持久化 Run / 复查记录"]
+    RUNS -. Run 持久化后由运营者触发 .-> REGISTRY["可选 Decision Registry<br/>仅支持记录完整性核验；不证明 Risk 结论正确"]
+```
 
 ## 团队
 

@@ -49,13 +49,19 @@ not a verified improvement until a fresh child check supports that conclusion.
 
 ## How it works
 
-```text
-Swap Intent
-→ Quote and prepared unsigned transaction
-→ Execution Evidence
-→ Explainable, scope-aware decision
-→ User-directed adjustment
-→ Fresh re-check and Run comparison
+```mermaid
+flowchart TD
+    I["User Swap Intent"] --> E["Quote + Execution Evidence"]
+    E --> P["Parallax Decision Engine"]
+    P --> D{"Scope-aware Decision"}
+    D -->|PROCEED - within checked scope| C["User decides whether to continue"]
+    D -->|ADJUST - relevant path| A["User reviews and explicitly adjusts"]
+    D -->|STOP| S["User stops"]
+    D -->|UNKNOWN - not a pass| U["User reviews uncertainty"]
+    A --> R["Fresh Re-check"]
+    U -->|if the user requests more Evidence| R
+    R --> V["Re-evaluate with fresh Evidence<br/>not automatically VERIFIED"]
+    V --> E
 ```
 
 ## Built on Arbitrum
@@ -169,6 +175,19 @@ pnpm --filter @parallax/web build
 | `contracts/decision-registry` | Optional on-chain Decision Registry |
 | `fixtures` | Deterministic test data and retained Evidence captures |
 | `docs` | Product, integration, research, and project-history references |
+
+```mermaid
+flowchart TD
+    APP["Parallax Web App + TypeScript SDK"] --> API["Parallax Backend API<br/>No user-swap signing, broadcasting, execution, or custody"]
+    API --> ADAPTER["Chain / Protocol Adapter Boundary<br/>Current integration: Arbitrum Sepolia × Camelot V3"]
+    ADAPTER --> TX["Quote + exact unsigned transaction"]
+    TX --> NATIVE["Native RPC<br/>Primary execution Evidence"]
+    TX --> TRACE["Trace RPC<br/>Supplementary Evidence"]
+    NATIVE --> ENGINE["Scope-aware Decision Engine"]
+    TRACE --> ENGINE
+    ENGINE --> RUNS["Persisted Runs / re-check history"]
+    RUNS -. operator-triggered after Run persistence .-> REGISTRY["Optional Decision Registry<br/>Commitment integrity only; not proof of Risk correctness"]
+```
 
 ## Team
 
