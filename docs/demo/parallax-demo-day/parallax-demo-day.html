@@ -601,7 +601,7 @@
 
   /* S17 右侧系统图：放大视觉主体并上移，减少标题与图示之间的空段 */
   .slide[data-layout="S17"] [data-anim="up"]{
-    grid-template-columns:minmax(0,.94fr) minmax(0,1.06fr)!important;
+    grid-template-columns:minmax(0,1.12fr) minmax(0,.88fr)!important;
     gap:2.6vw!important;
   }
   .slide[data-layout="S17"] [data-anim="up"] > div:last-child{
@@ -938,6 +938,16 @@
   .stack-block .layer-desc{font-family:var(--sans),var(--sans-zh);font-weight:400;font-size:max(16px,.94vw);line-height:1.55;opacity:.88;margin-top:1.4vh}
   .stack-block .lucide{width:2.6vw;height:2.6vw;stroke-width:1.4;margin-bottom:1.6vh;flex-shrink:0}
   .stack-block .layer-tag{font-family:var(--mono);font-size:max(14px,.74vw);letter-spacing:.16em;text-transform:uppercase;opacity:.7;margin-top:1.6vh;border-top:1px solid currentColor;padding-top:1vh}
+  .slide[data-layout="S05"] .stack-block .layer-nb{margin-bottom:1.6vh}
+  .slide[data-layout="S05"] .stack-block .layer-tag{margin-top:auto}
+
+  /* S19 四张竞品卡片：统一主内容起点，并将示例/收束语对齐到底部 */
+  .slide[data-layout="S19"] .card-fill,
+  .slide[data-layout="S19"] .card-accent{justify-content:flex-start!important}
+  .slide[data-layout="S19"] .card-fill > div:first-child,
+  .slide[data-layout="S19"] .card-accent > div:first-child{margin-bottom:2vh}
+  .slide[data-layout="S19"] .card-fill > p:last-child,
+  .slide[data-layout="S19"] .card-accent > p:last-child{margin-top:auto!important}
 
   /* 不等高柱状 KPI 塔 (参考图 6) */
   .bar-towers{
@@ -1314,7 +1324,7 @@
         <div class="col-tag"><span class="num">01</span> USER PAIN</div>
         <div class="col-ttl">It fails. Or succeeds—but misses the goal.</div>
         <div class="col-desc">Failed or uncertain swaps leave users guessing what to change. Even a successful transaction can miss the outcome the user expected.</div>
-        <ul class="col-list" style="margin-top:1.4vh">
+        <ul class="col-list">
           <li>What condition explains the outcome?</li>
           <li>What change would address it?</li>
         </ul>
@@ -1382,14 +1392,14 @@
       <div class="t-meta">USER-LED · EVIDENCE-BOUND · STATE-AWARE</div>
       <h1 style="font-family:var(--sans),var(--sans-zh);font-weight:200;font-size:min(6.8vw,11.5vh);line-height:.96;letter-spacing:-.04em">Understand. Decide.<br/><span style="color:var(--accent)">Re-check. Compare.</span></h1>
     </div>
-    <div data-anim="up" style="flex:1;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4vw;align-items:center;padding-top:3vh">
+    <div data-anim="up" style="flex:1;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4vw;align-items:center;padding-top:1vh">
       <div style="display:flex;flex-direction:column;gap:1.2vh">
         <div class="step accent-top"><div class="step-nb">01</div><div class="step-title">Understand</div><div class="step-desc">See what was checked—and what remains unknown.</div></div>
         <div class="step"><div class="step-nb">02</div><div class="step-title">Decide</div><div class="step-desc">You choose whether to proceed, adjust, stop, or wait.</div></div>
         <div class="step"><div class="step-nb">03</div><div class="step-title">Re-check</div><div class="step-desc">Check again after an explicit change.</div></div>
         <div class="step"><div class="step-nb">04</div><div class="step-title">Compare</div><div class="step-desc">Compare Runs; a new result is not a promise of improvement.</div></div>
       </div>
-      <div class="loop-diagram" style="position:relative;min-height:54vh;display:grid;place-items:center">
+      <div class="loop-diagram" style="position:relative;min-height:52vh;display:grid;place-items:center">
         <svg viewBox="0 0 420 420" aria-hidden="true" style="width:min(34vw,52vh);height:min(34vw,52vh);overflow:visible">
           <defs><marker id="arrow-loop" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="var(--accent)"/></marker></defs>
           <circle cx="210" cy="210" r="150" fill="none" stroke="var(--grey-2)" stroke-width="1"/>
@@ -1453,7 +1463,7 @@
 
 <section class="slide light" data-layout="S17" data-animate="system-diagram">
   <div class="canvas-card">
-    <div class="chrome-min">
+    <div class="chrome-min" style="margin-bottom:var(--sp-7)">
       <div class="l">ARBITRUM ARCHITECTURE · EVIDENCE → DECISION → ATTESTATION</div>
       <div class="r">06 / 07</div>
     </div>
@@ -1461,11 +1471,11 @@
       <div class="t-meta">ARBITRUM SEPOLIA · CAMELOT V3</div>
       <h1 style="font-family:var(--sans),var(--sans-zh);font-weight:200;font-size:min(5.9vw,9.6vh);line-height:.96;letter-spacing:-.04em">Real swap evidence.<br/>Explainable decisions.<br/><span style="color:var(--accent)">Optional on-chain commitments.</span></h1>
     </div>
-    <div data-anim="up" style="flex:1;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4vw;align-items:center;padding-top:2vh">
-      <div style="display:flex;flex-direction:column;gap:2.4vh;max-width:31ch">
+    <div data-anim="up" style="flex:1;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4vw;align-items:center;padding-top:1vh">
+      <div style="display:flex;flex-direction:column;gap:1vh;max-width:none">
         <div style="border-top:2px solid var(--accent);padding-top:1.2vh"><div class="t-meta">EXECUTION ENVIRONMENT</div><p class="lead" style="font-weight:300;margin-top:1vh">Arbitrum Sepolia × Camelot V3: real quotes and exact unsigned-transaction checks.</p></div>
         <div style="border-top:1px solid var(--border-subtle);padding-top:1.2vh"><div class="t-meta">EVIDENCE + PROVENANCE</div><p class="body" style="font-weight:400;margin-top:1vh">Native RPC is primary; Trace adds supplementary evidence tied to source and state.</p></div>
-        <div style="border-top:1px solid var(--border-subtle);padding-top:1.2vh"><div class="t-meta">ON-CHAIN DECISION ATTESTATION</div><p class="body" style="font-weight:400;margin-top:1vh">Design: a backend-operated wallet signs an optional Arbitrum transaction to anchor a completed decision’s commitment hash and minimal verification metadata in a registry. Users need not connect or sign. The reference supports record-integrity checks—not Risk correctness, transaction safety, or VERIFIED remediation.</p></div>
+        <div style="border-top:1px solid var(--border-subtle);padding-top:1.2vh"><div class="t-meta">ON-CHAIN DECISION ATTESTATION</div><p class="body" style="font-weight:400;margin-top:1vh;line-height:1.45">Design: a backend-operated wallet signs an optional Arbitrum transaction to anchor a completed decision’s commitment hash and minimal verification metadata in a registry. Users need not connect or sign. The reference supports record-integrity checks—not Risk correctness, transaction safety, or VERIFIED remediation.</p></div>
       </div>
       <div style="min-width:0;display:grid;grid-template-rows:1fr auto;gap:2vh;align-items:center">
         <div style="position:relative;min-height:31vh;display:grid;place-items:center">
