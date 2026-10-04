@@ -443,25 +443,8 @@ export function WalletApp({ language }: { language: Language }) {
         throw new Error("Demo account state not available");
       }
 
-      // Adjust the sample data based on input token
-      const accountState =
-        form.tokenIn === "USDC"
-          ? {
-              ...arbitrumSampleBalanceInsufficient.accountState,
-              balances: {
-                ...arbitrumSampleBalanceInsufficient.accountState.balances,
-                inputToken: {
-                  status: "AVAILABLE" as const,
-                  amountAtomic: "87898181000000",
-                  metadata: { symbol: "USDC", decimals: 6 },
-                },
-              },
-            }
-          : arbitrumSampleBalanceInsufficient.accountState;
-
       const demoResult = {
         ...arbitrumSampleBalanceInsufficient,
-        accountState,
         intent: {
           tokenIn: form.tokenIn,
           tokenOut: form.tokenOut,

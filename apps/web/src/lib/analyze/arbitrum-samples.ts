@@ -257,41 +257,64 @@ export const arbitrumSampleBalanceInsufficient: CheckSwapResult = {
     balances: {
       inputToken: {
         status: "AVAILABLE",
+        account: "0x01bb7b44cc398aaa2b76ac6253f0f5634279db9d",
+        asset: { kind: "native" },
         amountAtomic: "70270868758068858",
         metadata: {
           symbol: "ETH",
           decimals: 18,
-          chainId: 421614,
+          decimalsSource: "chain_config",
+        },
+        explorerUrls: {
+          account: "https://sepolia.arbiscan.io/address/0x01bb7b44cc398aaa2b76ac6253f0f5634279db9d",
         },
       },
       outputToken: {
         status: "AVAILABLE",
+        account: "0x01bb7b44cc398aaa2b76ac6253f0f5634279db9d",
+        asset: {
+          kind: "erc20",
+          address: "0x75faf114eafb1bdbe2f0316df893fd58ce46aa4d",
+        },
         amountAtomic: "87898181000000",
         metadata: {
           symbol: "USDC",
           decimals: 6,
-          chainId: 421614,
+          decimalsSource: "onchain_verified",
+          verifiedAtBlock: "92820400",
+        },
+        explorerUrls: {
+          account: "https://sepolia.arbiscan.io/address/0x01bb7b44cc398aaa2b76ac6253f0f5634279db9d",
+          asset: "https://sepolia.arbiscan.io/token/0x75faf114eafb1bdbe2f0316df893fd58ce46aa4d",
         },
       },
       native: {
         status: "AVAILABLE",
+        account: "0x01bb7b44cc398aaa2b76ac6253f0f5634279db9d",
+        asset: { kind: "native" },
         amountAtomic: "70270868758068858",
         metadata: {
           symbol: "ETH",
           decimals: 18,
-          chainId: 421614,
+          decimalsSource: "chain_config",
+        },
+        explorerUrls: {
+          account: "https://sepolia.arbiscan.io/address/0x01bb7b44cc398aaa2b76ac6253f0f5634279db9d",
         },
       },
     },
     allowance: {
       status: "NOT_APPLICABLE",
-      reason: "INPUT_TOKEN_IS_NATIVE",
+      owner: "0x01bb7b44cc398aaa2b76ac6253f0f5634279db9d",
+      reason: "NATIVE_INPUT",
       spender: {
         status: "NOT_APPLICABLE",
       },
+      blockNumber: "92820400",
     },
     block: {
-      status: "AVAILABLE",
+      status: "VERIFIED",
+      chainId: 421614,
       blockNumber: "92820400",
       blockHash:
         "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
