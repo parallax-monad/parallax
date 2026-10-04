@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Parallax — Demo Day Pitch · Monad Playground</title>
+<title>Parallax — Demo Day Pitch</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@200;300;400;500;600;700;800;900&family=JetBrains+Mono:wght@300;400;500;600&family=Noto+Sans+SC:wght@200;300;400;500;700;900&display=swap" rel="stylesheet">
@@ -1254,7 +1254,7 @@
     window.__lowPowerMode = stored === '1' || (stored === null && reduced);
     function updateHint(){
       const hint = document.getElementById('hint');
-      if(hint) hint.textContent = `← → 翻页 · B ${window.__lowPowerMode ? '动态' : '静态'} · ESC 索引`;
+      if(hint) hint.textContent = '← → NAVIGATE · B TOGGLE MOTION · ESC OVERVIEW';
     }
     window.__setLowPowerMode = function(on, opts={}){
       window.__lowPowerMode = !!on;
@@ -1273,7 +1273,7 @@
 </script>
 
 <canvas id="bg-grid" class="bg"></canvas>
-<div id="hint">← → 翻页 · B 静态 · ESC 索引</div>
+<div id="hint">← → NAVIGATE · B TOGGLE MOTION · ESC OVERVIEW</div>
 
 <div id="deck">
 
@@ -1281,16 +1281,16 @@
   <div class="canvas-card">
     <canvas class="ascii-bg" aria-hidden="true"></canvas>
     <div class="chrome-min">
-      <div class="l">PARALLAX · MONAD PLAYGROUND</div>
+      <div class="l">PARALLAX · PRE-SIGN DECISION LAYER</div>
       <div class="r">DEMO DAY · 01 / 07</div>
     </div>
     <div style="flex:1;padding:0;display:grid;grid-template-rows:auto 1fr auto;gap:2.6vh">
       <div data-anim="kicker" class="t-meta" style="color:rgba(255,255,255,.78);letter-spacing:.22em">PRE-TRANSACTION DECISION LAYER</div>
       <h1 data-anim="title" style="align-self:center;font-family:var(--sans),var(--sans-zh);font-weight:200;font-size:min(10.6vw,17.4vh);line-height:.94;letter-spacing:-.035em;color:#fff">Before you sign,<br/>know what to <span style="font-style:italic;font-weight:300">do next</span>.</h1>
       <div data-anim="bottom" style="display:grid;grid-template-rows:auto auto;gap:1.6vh;border-top:1px solid rgba(255,255,255,.22);padding-top:2vh">
-      <div data-anim="lead" class="lead" style="max-width:52ch;color:rgba(255,255,255,.86)">Moss 说明会发生什么。Parallax 说明下一步该怎么做。</div>
+      <div data-anim="lead" class="lead" style="max-width:52ch;color:rgba(255,255,255,.86)">Parallax binds execution evidence to user intent and returns a bounded next-step decision.</div>
         <div style="display:flex;justify-content:space-between;align-items:end">
-          <div class="t-meta" style="color:rgba(255,255,255,.6)">MONAD SWAPS · 3-MINUTE PITCH</div>
+          <div class="t-meta" style="color:rgba(255,255,255,.6)">CURRENT P0 · ARBITRUM SEPOLIA × CAMELOT V3</div>
           <div class="t-meta" style="color:rgba(255,255,255,.6)">PARALLAX</div>
         </div>
       </div>
@@ -1307,16 +1307,16 @@
     </div>
     <div data-anim="line" style="display:flex;flex-direction:column;gap:1.4vh">
       <div class="t-meta">THE GAP BETWEEN EVIDENCE AND ACTION</div>
-      <h1 style="font-family:var(--sans),var(--sans-zh);font-weight:200;font-size:min(5.75vw,9.7vh);line-height:.96;letter-spacing:-.04em">Existing tools show you<br/><span style="color:var(--accent)">what happened</span> — not always what to do.</h1>
+      <h1 style="font-family:var(--sans),var(--sans-zh);font-weight:200;font-size:min(5.75vw,9.7vh);line-height:.96;letter-spacing:-.04em">Existing tools show what happened,<br/><span style="color:var(--accent)">but not always what to do.</span></h1>
     </div>
     <div class="duo-compare" style="margin-top:2.2vh">
       <div class="col">
         <div class="col-tag"><span class="num">01</span> USER PAIN</div>
         <div class="col-ttl">Swap failed.</div>
-        <div class="col-desc">用户看到错误、警告或模拟结果，却仍要自己猜下一步。</div>
+        <div class="col-desc">Users see an error, warning, or simulation result, yet still have to guess what to do next.</div>
         <ul class="col-list" style="margin-top:1.4vh">
-          <li>不知道当前原因对应哪一个条件</li>
-          <li>凭感觉反复改 Slippage、Amount 或 Route</li>
+          <li>They cannot tell which condition explains the result</li>
+          <li>They keep changing slippage, amount, or route by guesswork</li>
         </ul>
       </div>
       <div class="vrule"></div>
@@ -1324,12 +1324,12 @@
         <div>
           <div class="col-tag"><span class="num">02</span> WHAT EXISTS</div>
           <div class="col-ttl" style="font-size:min(3.1vw,5.1vh)">Evidence exists.</div>
-          <div class="col-desc" style="margin-top:1.2vh">DEX / aggregator 提供 quote、route、slippage；wallet / simulation 提供 warnings 与执行证据。</div>
+          <div class="col-desc" style="margin-top:1.2vh">DEXs and aggregators provide quotes, routes, and slippage controls. Wallets and simulators add warnings and execution evidence.</div>
         </div>
         <div style="border-top:1px solid var(--grey-2);padding-top:2vh">
           <div class="col-tag"><span class="num">03</span> WHAT IS STILL MISSING</div>
           <div class="col-ttl" style="font-size:min(3.1vw,5.1vh)">Cause → action.</div>
-          <div class="col-desc" style="margin-top:1.2vh">还需要把原因连到相关调整，并用一次 re-run 证明结果是否改变。</div>
+          <div class="col-desc" style="margin-top:1.2vh">The gap is linking a cause to a relevant adjustment, then comparing evidence on a re-run. A difference alone does not mean remediation is verified.</div>
         </div>
       </div>
     </div>
@@ -1350,22 +1350,22 @@
       <article class="stack-block b-ink">
         <div class="layer-nb">LAYER 01 · EXECUTION</div>
         <i data-lucide="scan-search" class="lucide"></i>
-        <div class="layer-ttl">Moss</div>
-        <div class="layer-desc">构建并模拟未签名操作，返回它将如何执行的证据。</div>
-        <div class="layer-tag">QUOTE · ACTION · SIMULATION</div>
+        <div class="layer-ttl">Providers &amp; RPC</div>
+        <div class="layer-desc">Provides quotes, account state, and execution checks. Native RPC is primary for the current P0.</div>
+        <div class="layer-tag">QUOTE · ACCOUNT STATE · CHECK</div>
       </article>
       <article class="stack-block b-accent">
         <div class="layer-nb">LAYER 02 · INTERPRETATION</div>
         <i data-lucide="workflow" class="lucide"></i>
         <div class="layer-ttl">Parallax</div>
-        <div class="layer-desc">找出原因，区分相关与无关的变化，给出边界清晰的结论。</div>
+        <div class="layer-desc">Standardizes evidence and applies rules. Incomplete evidence remains UNKNOWN.</div>
         <div class="layer-tag">CAUSE · RULES · VERDICT</div>
       </article>
       <article class="stack-block b-grey">
         <div class="layer-nb">LAYER 03 · ACTION</div>
         <i data-lucide="move-up-right" class="lucide"></i>
         <div class="layer-ttl">The user</div>
-        <div class="layer-desc">签名前选择继续、调整、停止，或等待更多证据。</div>
+        <div class="layer-desc">The user chooses what to do. Missing evidence means wait.</div>
         <div class="layer-tag">PROCEED · ADJUST · STOP · UNKNOWN</div>
       </article>
     </div>
@@ -1379,15 +1379,15 @@
       <div class="r">04 / 07</div>
     </div>
     <div data-anim="line" style="display:flex;flex-direction:column;gap:1.4vh">
-      <div class="t-meta">ONE CHANGE · ONE RE-CHECK · ONE CLEAR ANSWER</div>
-      <h1 style="font-family:var(--sans),var(--sans-zh);font-weight:200;font-size:min(6.8vw,11.5vh);line-height:.96;letter-spacing:-.04em">The product is a small,<br/><span style="color:var(--accent)">verifiable decision loop.</span></h1>
+      <div class="t-meta">ONE CHANGE · ONE RE-CHECK · EVIDENCE-BOUND RESULT</div>
+      <h1 style="font-family:var(--sans),var(--sans-zh);font-weight:200;font-size:min(6.8vw,11.5vh);line-height:.96;letter-spacing:-.04em">The product is a small,<br/><span style="color:var(--accent)">state-bound decision loop.</span></h1>
     </div>
     <div data-anim="up" style="flex:1;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4vw;align-items:center;padding-top:3vh">
       <div style="display:flex;flex-direction:column;gap:1.2vh">
-        <div class="step accent-top"><div class="step-nb">01</div><div class="step-title">Swap intent</div><div class="step-desc">用户想做什么。</div></div>
-        <div class="step"><div class="step-nb">02</div><div class="step-title">Evidence + cause</div><div class="step-desc">会发生什么，以及为什么。</div></div>
-        <div class="step"><div class="step-nb">03</div><div class="step-title">Relevant adjustment</div><div class="step-desc">修改一个真正可能产生影响的条件。</div></div>
-        <div class="step"><div class="step-nb">04</div><div class="step-title">Re-run + diff</div><div class="step-desc">对比修改前后的结果。</div></div>
+        <div class="step accent-top"><div class="step-nb">01</div><div class="step-title">Swap intent</div><div class="step-desc">What the user wants to do.</div></div>
+        <div class="step"><div class="step-nb">02</div><div class="step-title">Evidence + cause</div><div class="step-desc">What may happen, and why.</div></div>
+        <div class="step"><div class="step-nb">03</div><div class="step-title">User decides + adjusts</div><div class="step-desc">The user decides whether to change a potentially relevant condition.</div></div>
+        <div class="step"><div class="step-nb">04</div><div class="step-title">Persist + re-check</div><div class="step-desc">Save the Run, re-check, and compare the new evidence.</div></div>
       </div>
       <div class="loop-diagram" style="position:relative;min-height:54vh;display:grid;place-items:center">
         <svg viewBox="0 0 420 420" aria-hidden="true" style="width:min(34vw,52vh);height:min(34vw,52vh);overflow:visible">
@@ -1403,10 +1403,10 @@
           <circle cx="60" cy="210" r="8" fill="var(--accent)"/>
         </svg>
         <div style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);font-family:var(--mono);font-size:max(14px,.82vw);letter-spacing:.2em;line-height:1.5;color:var(--accent);white-space:nowrap">RE-CHECK<br/><span style="font-family:var(--sans);font-size:min(3.8vw,6.2vh);font-weight:200;letter-spacing:-.04em;color:var(--ink)">LOOP</span></div>
-        <div style="position:absolute;left:50%;top:3%;transform:translateX(-50%);font-family:var(--mono);font-size:max(14px,.72vw);letter-spacing:.12em">INTENT · 意图</div>
-        <div class="loop-diagram-side-label loop-diagram-evidence" style="position:absolute;right:0;top:50%;transform:translateY(-50%);font-family:var(--mono);font-size:max(14px,.72vw);letter-spacing:.12em">EVIDENCE · 证据</div>
-        <div style="position:absolute;left:50%;bottom:3%;transform:translateX(-50%);font-family:var(--mono);font-size:max(14px,.72vw);letter-spacing:.12em">DIFF · 差异</div>
-        <div class="loop-diagram-side-label" style="position:absolute;left:0;top:50%;transform:translateY(-50%);font-family:var(--mono);font-size:max(14px,.72vw);letter-spacing:.12em">ACTION · 行动</div>
+        <div style="position:absolute;left:50%;top:3%;transform:translateX(-50%);font-family:var(--mono);font-size:max(14px,.72vw);letter-spacing:.12em">INTENT</div>
+        <div class="loop-diagram-side-label loop-diagram-evidence" style="position:absolute;right:0;top:50%;transform:translateY(-50%);font-family:var(--mono);font-size:max(14px,.72vw);letter-spacing:.12em">EVIDENCE</div>
+        <div style="position:absolute;left:50%;bottom:3%;transform:translateX(-50%);font-family:var(--mono);font-size:max(14px,.72vw);letter-spacing:.12em">DIFF</div>
+        <div class="loop-diagram-side-label" style="position:absolute;left:0;top:50%;transform:translateY(-50%);font-family:var(--mono);font-size:max(14px,.72vw);letter-spacing:.12em">ACTION</div>
       </div>
     </div>
   </div>
@@ -1415,18 +1415,18 @@
 <section class="slide light" data-layout="S17" data-animate="system-diagram">
   <div class="canvas-card">
     <div class="chrome-min">
-      <div class="l">MONAD / MOSS INTEGRATION · BOUNDED SCOPE</div>
+      <div class="l">CURRENT P0 · EXECUTION PATH</div>
       <div class="r">05 / 07</div>
     </div>
     <div data-anim="line" style="display:flex;flex-direction:column;gap:1.4vh">
-      <div class="t-meta">WHY MONAD · WHY MOSS · WHY PARALLAX</div>
-      <h1 style="font-family:var(--sans),var(--sans-zh);font-weight:200;font-size:min(5.9vw,9.6vh);line-height:.96;letter-spacing:-.04em">Monad provides the environment.<br/>Moss provides the evidence.<br/><span style="color:var(--accent)">Parallax makes it actionable.</span></h1>
+      <div class="t-meta">CURRENT P0 · EVIDENCE BOUNDARY</div>
+      <h1 style="font-family:var(--sans),var(--sans-zh);font-weight:200;font-size:min(5.9vw,9.6vh);line-height:.96;letter-spacing:-.04em">Arbitrum Sepolia × Camelot V3.<br/>ETH → USDC is the current P0.<br/><span style="color:var(--accent)">Parallax keeps verdicts bounded.</span></h1>
     </div>
     <div data-anim="up" style="flex:1;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4vw;align-items:center;padding-top:2vh">
       <div style="display:flex;flex-direction:column;gap:2.4vh;max-width:31ch">
-        <div style="border-top:2px solid var(--accent);padding-top:1.2vh"><div class="t-meta">EXECUTION ENVIRONMENT</div><p class="lead" style="font-weight:300;margin-top:1vh">一条具体的 Monad 交易路径，用来在签名前检查。</p></div>
-        <div style="border-top:1px solid var(--border-subtle);padding-top:1.2vh"><div class="t-meta">INTEGRATION BOUNDARY</div><p class="body" style="font-weight:400;margin-top:1vh">Moss 处理未签名的执行证据。Parallax 将其标准化、应用规则，并引导下一步用户操作。</p></div>
-        <div style="border-top:1px solid var(--border-subtle);padding-top:1.2vh"><div class="t-meta">USER CONTROL</div><p class="body" style="font-weight:400;margin-top:1vh">不签名。不广播。不托管资产。</p></div>
+        <div style="border-top:2px solid var(--accent);padding-top:1.2vh"><div class="t-meta">EXECUTION ENVIRONMENT</div><p class="lead" style="font-weight:300;margin-top:1vh">Current P0: ETH → USDC on Arbitrum Sepolia × Camelot V3.</p></div>
+        <div style="border-top:1px solid var(--border-subtle);padding-top:1.2vh"><div class="t-meta">INTEGRATION BOUNDARY</div><p class="body" style="font-weight:400;margin-top:1vh">Native RPC is primary. Trace is supplementary and does not affect Risk verdicts.</p></div>
+        <div style="border-top:1px solid var(--border-subtle);padding-top:1.2vh"><div class="t-meta">USER CONTROL</div><p class="body" style="font-weight:400;margin-top:1vh">No signing, broadcasting, or custody.</p></div>
       </div>
       <div style="min-width:0;display:grid;grid-template-rows:1fr auto;gap:2vh;align-items:center">
         <div style="position:relative;min-height:31vh;display:grid;place-items:center">
@@ -1440,15 +1440,15 @@
             <path d="M260 281 V328" fill="none" stroke="var(--accent)" stroke-width="2"/>
           </svg>
           <div class="decision-diagram-label decision-diagram-core" style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);font-family:var(--mono);font-size:max(14px,.82vw);letter-spacing:.12em;color:#fff;white-space:nowrap">PARALLAX<br/><span style="font-family:var(--sans);font-weight:300;font-size:1.25em;letter-spacing:-.02em">Decision layer</span></div>
-          <div class="decision-diagram-label" style="position:absolute;left:0;top:47%;font-family:var(--mono);font-size:max(14px,.72vw);letter-spacing:.12em">MONAD · PLAYGROUND</div>
-          <div class="decision-diagram-label" style="position:absolute;right:0;top:47%;font-family:var(--mono);font-size:max(14px,.72vw);letter-spacing:.12em">USER ACTION · 用户操作</div>
-          <div class="decision-diagram-label" style="position:absolute;left:50%;top:7%;transform:translateX(-50%);font-family:var(--mono);font-size:max(14px,.72vw);letter-spacing:.12em;color:var(--accent)">MOSS · EVIDENCE</div>
-          <div class="decision-diagram-label" style="position:absolute;left:50%;bottom:4%;transform:translateX(-50%);font-family:var(--mono);font-size:max(14px,.72vw);letter-spacing:.12em">RULES · VERDICT</div>
+          <div class="decision-diagram-label" style="position:absolute;left:0;top:47%;font-family:var(--mono);font-size:max(14px,.72vw);letter-spacing:.12em">ARBITRUM · P0</div>
+          <div class="decision-diagram-label" style="position:absolute;right:0;top:47%;font-family:var(--mono);font-size:max(14px,.72vw);letter-spacing:.12em">USER ACTION</div>
+          <div class="decision-diagram-label" style="position:absolute;left:50%;top:7%;transform:translateX(-50%);font-family:var(--mono);font-size:max(14px,.72vw);letter-spacing:.12em;color:var(--accent)">NATIVE RPC · PRIMARY</div>
+          <div class="decision-diagram-label" style="position:absolute;left:50%;bottom:4%;transform:translateX(-50%);font-family:var(--mono);font-size:max(14px,.72vw);letter-spacing:.12em">TRACE · SUPPLEMENTARY</div>
         </div>
         <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1.2vw;border-top:1px solid var(--border-subtle);padding-top:1.6vh">
-          <div><div class="t-meta">MOSS</div><p class="body-sm" style="margin-top:.6vh">构建 · 模拟</p></div>
-          <div><div class="t-meta">PARALLAX</div><p class="body-sm" style="margin-top:.6vh">规则 · 结论</p></div>
-          <div><div class="t-meta">STATUS</div><p class="body-sm" style="margin-top:.6vh">实时边界 · 待定义</p></div>
+          <div><div class="t-meta">CURRENT P0</div><p class="body-sm" style="margin-top:.6vh">Arbitrum · Camelot</p></div>
+          <div><div class="t-meta">NATIVE RPC</div><p class="body-sm" style="margin-top:.6vh">Primary check path</p></div>
+          <div><div class="t-meta">TRACE</div><p class="body-sm" style="margin-top:.6vh">Supplementary only</p></div>
         </div>
       </div>
     </div>
@@ -1472,23 +1472,23 @@
     <div data-anim="up" style="flex:1;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1.2vw;align-items:stretch;margin-top:4.2vh;padding-bottom:var(--nav-safe-bottom)">
       <article class="card-fill" style="padding:2vh 1.15vw;display:flex;flex-direction:column;justify-content:space-between;min-width:0">
         <div style="font-family:var(--mono);font-size:max(14px,.76vw);letter-spacing:.16em;color:var(--accent)">01</div>
-        <div><h2 style="font-family:var(--sans),var(--sans-zh);font-weight:300;font-size:min(3.05vw,5.15vh);line-height:1;letter-spacing:-.03em">PROCEED</h2><div class="t-meta" style="margin-top:1.4vh">NO BLOCKING EVIDENCE</div><div class="body-sm" style="margin-top:1vh">在已检查范围内，没有发现阻断性证据。</div></div>
-        <p class="body-sm" style="margin-top:2vh">不是安全保证；先查看哪些内容尚未检查。</p>
+        <div><h2 style="font-family:var(--sans),var(--sans-zh);font-weight:300;font-size:min(3.05vw,5.15vh);line-height:1;letter-spacing:-.03em">PROCEED</h2><div class="t-meta" style="margin-top:1.4vh">BOUNDED CHECKS PASS</div><div class="body-sm" style="margin-top:1vh">The bounded policy checks pass for the scope actually checked.</div></div>
+        <p class="body-sm" style="margin-top:2vh">This is not a safety guarantee. Review what remains unchecked.</p>
       </article>
       <article class="card-fill" style="padding:2vh 1.15vw;display:flex;flex-direction:column;justify-content:space-between;min-width:0">
         <div style="font-family:var(--mono);font-size:max(14px,.76vw);letter-spacing:.16em;color:var(--accent)">02</div>
-        <div><h2 style="font-family:var(--sans),var(--sans-zh);font-weight:300;font-size:min(3.05vw,5.15vh);line-height:1;letter-spacing:-.03em">ADJUST</h2><div class="t-meta" style="margin-top:1.4vh">CHANGE ONE CONDITION</div><div class="body-sm" style="margin-top:1vh">存在经过验证的相关调整，可以再次检查。</div></div>
-        <p class="body-sm" style="margin-top:2vh">不猜测；只展示有证据支持的行动。</p>
+        <div><h2 style="font-family:var(--sans),var(--sans-zh);font-weight:300;font-size:min(3.05vw,5.15vh);line-height:1;letter-spacing:-.03em">ADJUST</h2><div class="t-meta" style="margin-top:1.4vh">ADVISORY ONLY</div><div class="body-sm" style="margin-top:1vh">For example, the balance is too low or the same-block quote does not exceed the user's minimum received amount.</div></div>
+        <p class="body-sm" style="margin-top:2vh">The user decides. A re-check does not automatically mean VERIFIED.</p>
       </article>
       <article class="card-fill" style="padding:2vh 1.15vw;display:flex;flex-direction:column;justify-content:space-between;min-width:0">
         <div style="font-family:var(--mono);font-size:max(14px,.76vw);letter-spacing:.16em;color:var(--accent)">03</div>
-        <div><h2 style="font-family:var(--sans),var(--sans-zh);font-weight:300;font-size:min(3.05vw,5.15vh);line-height:1;letter-spacing:-.03em">STOP</h2><div class="t-meta" style="margin-top:1.4vh">DO NOT CONTINUE</div><div class="body-sm" style="margin-top:1vh">当前路径不应继续，或无法在当前范围内执行。</div></div>
-        <p class="body-sm" style="margin-top:2vh">结论只针对当前 Intent、路径与检查范围。</p>
+        <div><h2 style="font-family:var(--sans),var(--sans-zh);font-weight:300;font-size:min(3.05vw,5.15vh);line-height:1;letter-spacing:-.03em">STOP</h2><div class="t-meta" style="margin-top:1.4vh">DO NOT CONTINUE</div><div class="body-sm" style="margin-top:1vh">Do not continue on this path, or it cannot execute within the checked scope.</div></div>
+        <p class="body-sm" style="margin-top:2vh">Applies only to this Intent, path, and check scope.</p>
       </article>
       <article class="card-accent" style="padding:2vh 1.15vw;display:flex;flex-direction:column;justify-content:space-between;min-width:0">
         <div style="font-family:var(--mono);font-size:max(14px,.76vw);letter-spacing:.16em;opacity:.72">04</div>
-        <div><h2 style="font-family:var(--sans),var(--sans-zh);font-weight:300;font-size:min(3.05vw,5.15vh);line-height:1;letter-spacing:-.03em">UNKNOWN</h2><div class="t-meta" style="color:rgba(255,255,255,.72);margin-top:1.4vh">EVIDENCE INCOMPLETE</div><div class="body-sm" style="margin-top:1vh;color:rgba(255,255,255,.88)">证据缺失、不完整或无法归类，不能得出可靠结论。</div></div>
-        <p class="body-sm" style="margin-top:2vh;color:rgba(255,255,255,.84)">UNKNOWN 不是通过；不把未知伪装成风险或许可。</p>
+        <div><h2 style="font-family:var(--sans),var(--sans-zh);font-weight:300;font-size:min(3.05vw,5.15vh);line-height:1;letter-spacing:-.03em">UNKNOWN</h2><div class="t-meta" style="color:rgba(255,255,255,.72);margin-top:1.4vh">EVIDENCE INCOMPLETE</div><div class="body-sm" style="margin-top:1vh;color:rgba(255,255,255,.88)">Evidence is missing, incomplete, or unclassifiable, so no reliable conclusion is possible.</div></div>
+        <p class="body-sm" style="margin-top:2vh;color:rgba(255,255,255,.84)">UNKNOWN means evidence is incomplete. It establishes no risk verdict and grants no permission.</p>
       </article>
     </div>
   </div>
@@ -1504,32 +1504,32 @@
           <div class="r">07 / 07</div>
         </div>
         <div data-anim="manifesto" style="display:flex;flex-direction:column;gap:2vh;position:relative;z-index:1">
-          <div class="t-meta" style="color:rgba(255,255,255,.78);letter-spacing:.22em;margin-bottom:1.6vh">FUTURE DIRECTION</div>
-          <h2 style="font-family:var(--sans),var(--sans-zh);font-size:min(5.7vw,10.2vh);line-height:.94;letter-spacing:-.035em;font-weight:200;color:#fff">From a standalone demo<br/>to an <span style="font-style:italic;font-weight:300">embedded</span><br/>pre-sign decision layer.</h2>
-          <div style="font-family:var(--sans),var(--sans-zh);font-size:max(16px,1vw);line-height:1.6;color:rgba(255,255,255,.82);font-weight:400;max-width:36ch;margin-top:1.4vh">我们不替用户做决定，只让决定建立在更多信息之上。</div>
+          <div class="t-meta" style="color:rgba(255,255,255,.78);letter-spacing:.22em;margin-bottom:1.6vh">PROJECT STATUS · 04 OCT 2026</div>
+          <h2 style="font-family:var(--sans),var(--sans-zh);font-size:min(5.7vw,10.2vh);line-height:.94;letter-spacing:-.035em;font-weight:200;color:#fff">P0 implementation<br/>merged.<br/><span style="font-style:italic;font-weight:300">Acceptance pending.</span></h2>
+          <div style="font-family:var(--sans),var(--sans-zh);font-size:max(16px,1vw);line-height:1.6;color:rgba(255,255,255,.82);font-weight:400;max-width:36ch;margin-top:1.4vh">Product acceptance requires more than a merged implementation. VERIFIED requires qualified Evidence and a child re-check that meets the gate.</div>
         </div>
         <div data-anim="signature" style="display:flex;justify-content:space-between;align-items:end;border-top:1px solid rgba(255,255,255,.22);padding-top:2vh;position:relative;z-index:1">
           <div class="t-meta" style="color:rgba(255,255,255,.62)">KAI · REI · JIE · CLARE · ANTONY</div>
-          <div class="t-meta" style="color:rgba(255,255,255,.62)">MONAD PLAYGROUND</div>
+          <div class="t-meta" style="color:rgba(255,255,255,.62)">PARALLAX · CURRENT P0</div>
         </div>
       </div>
       <div class="half" style="padding:5.6vh 3.6vw 4.4vh;justify-content:space-between">
         <div class="chrome-min">
-          <div class="l">NEXT · NOW / LATER</div>
+          <div class="l">CURRENT STATUS · NEXT GATES</div>
           <div class="r">LINKS</div>
         </div>
         <ul data-anim="rules" class="takeaway-list" style="list-style:none;display:flex;flex-direction:column;gap:0">
           <li style="display:grid;grid-template-columns:auto 1fr;gap:1.6vw;align-items:start;padding:2.2vh 0;border-top:1px solid var(--border-subtle)">
             <div style="font-family:var(--sans);font-weight:200;font-size:min(4vw,7vh);line-height:.9">01</div>
-          <div><h3 style="font-family:var(--sans),var(--sans-zh);font-weight:400;font-size:max(18px,1.7vw);line-height:1.2;color:var(--text-primary);margin-bottom:.7vh">Now · prove one stable loop</h3><p style="font-family:var(--sans),var(--sans-zh);font-size:max(16px,.92vw);line-height:1.5;color:var(--text-secondary)">先跑通一条稳定、可解释、可验证的闭环。</p></div>
+          <div><h3 style="font-family:var(--sans),var(--sans-zh);font-weight:400;font-size:max(18px,1.7vw);line-height:1.2;color:var(--text-primary);margin-bottom:.7vh">Product P0 · acceptance pending</h3><p style="font-family:var(--sans),var(--sans-zh);font-size:max(16px,.92vw);line-height:1.5;color:var(--text-secondary)">PR #141 is merged. Final browser evidence and Product acceptance remain pending in #73.</p></div>
           </li>
           <li style="display:grid;grid-template-columns:auto 1fr;gap:1.6vw;align-items:start;padding:2.2vh 0;border-top:1px solid var(--border-subtle)">
             <div style="font-family:var(--sans);font-weight:200;font-size:min(4vw,7vh);line-height:.9">02</div>
-          <div><h3 style="font-family:var(--sans),var(--sans-zh);font-weight:400;font-size:max(18px,1.7vw);line-height:1.2;color:var(--text-primary);margin-bottom:.7vh">Next · expand evidence-backed causes</h3><p style="font-family:var(--sans),var(--sans-zh);font-size:max(16px,.92vw);line-height:1.5;color:var(--text-secondary)">覆盖更多路径与场景，验证每次调整是否有证据支持。</p></div>
+          <div><h3 style="font-family:var(--sans),var(--sans-zh);font-weight:400;font-size:max(18px,1.7vw);line-height:1.2;color:var(--text-primary);margin-bottom:.7vh">Asset Coverage · acceptance pending</h3><p style="font-family:var(--sans),var(--sans-zh);font-size:max(16px,.92vw);line-height:1.5;color:var(--text-secondary)">Backend validation is complete. Frontend follow-up #144 is closed. Asset Coverage PASS remains unrecorded in #105.</p></div>
           </li>
           <li style="display:grid;grid-template-columns:auto 1fr;gap:1.6vw;align-items:start;padding:2.2vh 0;border-top:1px solid var(--border-subtle);border-bottom:2px solid var(--accent)">
             <div style="font-family:var(--sans);font-weight:200;font-size:min(4vw,7vh);line-height:.9;color:var(--accent)">03</div>
-          <div><h3 style="font-family:var(--sans),var(--sans-zh);font-weight:400;font-size:max(18px,1.7vw);line-height:1.2;color:var(--accent);margin-bottom:.7vh">Later · embed the decision layer</h3><p style="font-family:var(--sans),var(--sans-zh);font-size:max(16px,.92vw);line-height:1.5;color:var(--text-secondary)">嵌入钱包、DEX 和 agent 工作流。</p></div>
+          <div><h3 style="font-family:var(--sans),var(--sans-zh);font-weight:400;font-size:max(18px,1.7vw);line-height:1.2;color:var(--accent);margin-bottom:.7vh">Verified Remediation · incomplete</h3><p style="font-family:var(--sans),var(--sans-zh);font-size:max(16px,.92vw);line-height:1.5;color:var(--text-secondary)">Requires qualified Evidence and a child Run that re-checks to VERIFIED.</p></div>
           </li>
         </ul>
         <div data-anim="foot" style="display:flex;flex-direction:column;gap:.75vh;padding-top:1.6vh;color:var(--text-helper);font-family:var(--mono);font-size:max(14px,.72vw);letter-spacing:.05em;line-height:1.5">
