@@ -109,6 +109,32 @@ export function WalletSwap({
   const [advancedOpen, setAdvancedOpen] = useState(showMinimumReceived);
   const [previousQuote, setPreviousQuote] = useState<string | null>(null);
   const [isUpdating, setIsUpdating] = useState(false);
+  const [simulatedQuote, setSimulatedQuote] = useState<string | null>(null);
+
+  // Test mode: simulate quote changes every 3 seconds
+  // Remove this after testing
+  useEffect(() => {
+    if (
+      quote.status === "available" &&
+      process.env.NODE_ENV === "development"
+    ) {
+      const testValues = [
+        "0.315",
+        "0.317",
+        "0.319",
+        "0.316",
+        "0.318",
+        "0.320",
+        "0.314",
+      ];
+      let index = 0;
+      const interval = setInterval(() => {
+        index = (index + 1) % testValues.length;
+        setSimulatedQuote(testValues[index]);
+      }, 3000);
+      return () => clearInterval(interval);
+    }
+  }, [quote.status]);
 
   const set = <K extends keyof FormState>(key: K, value: FormState[K]) =>
     onChange({ ...form, [key]: value });
@@ -119,7 +145,7 @@ export function WalletSwap({
   // Track quote changes and trigger highlight animation
   useEffect(() => {
     if (quote.status === "available") {
-      const currentQuote = quote.quote.estimatedAmountOut;
+      const currentQuote = simulatedQuote || quote.quote.estimatedAmountOut;
       if (previousQuote !== null && previousQuote !== currentQuote) {
         setIsUpdating(true);
         const timer = setTimeout(() => setIsUpdating(false), 600);
@@ -127,7 +153,7 @@ export function WalletSwap({
       }
       setPreviousQuote(currentQuote);
     }
-  }, [quote, previousQuote]);
+  }, [quote, previousQuote, simulatedQuote]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: form is intentionally partial to avoid infinite loops
   useEffect(() => {
@@ -236,10 +262,11 @@ export function WalletSwap({
             aria-live="polite"
             className={`min-w-0 flex-1 truncate text-[30px] font-extrabold tracking-[-0.04em] transition-all duration-300 ${
               quote.status === "available" ? "text-white" : "text-faint"
-            } ${isUpdating ? "animate-pulse text-[#22D3EE]" : ""}`}
+            } ${isUpdating ? "animate-pulse text-monad-bright" : ""}`}
           >
             {quote.status === "available"
-              ? parseFloat(quote.quote.estimatedAmountOut).toFixed(3)
+              ? simulatedQuote ||
+                parseFloat(quote.quote.estimatedAmountOut).toFixed(3)
               : say(
                   language,
                   quote.status === "loading"
