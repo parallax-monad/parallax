@@ -477,7 +477,7 @@ export function createArbitrumProductionComposition(
         }
         return runResultSchema.parse(
           applyParameterAdjustment(
-            applyBasicSimulationRiskPolicy(result),
+            applyBasicSimulationRiskPolicy(result, pipelineContext.quote),
             accountState,
             pipelineContext.quote,
           ),

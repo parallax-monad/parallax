@@ -3,19 +3,22 @@ import type { AssetReference, RunResult } from "@parallax/contracts";
 export const BASIC_SIMULATION_POLICY = "BASIC-SIMULATION-001";
 
 /**
- * Bounded execution-readiness policy for an unconstrained live swap.
+ * Bounded execution-readiness policy for a live swap. An explicit minimum also
+ * requires a same-block quote strictly above it and exact calldata protection.
  * PROCEED accepts the recorded call/gas/binding checks only. It does not certify
  * complete simulation, asset changes, quote fidelity or a remediation child.
  * The original evidence, required-rule observations and P0 states stay intact.
  */
-export function applyBasicSimulationRiskPolicy(run: RunResult): RunResult {
+export function applyBasicSimulationRiskPolicy(
+  run: RunResult,
+  quote?: unknown,
+): RunResult {
   if (
     run.status !== "completed" ||
     run.replayMode ||
     run.intent.chainId !== 421614 ||
     run.intent.protocol !== "camelot-v3" ||
     run.verdict !== "UNKNOWN" ||
-    run.intent.economicBoundary.availability !== "unavailable" ||
     run.intent.amountInIncreaseAuthorization?.availability === "available" ||
     run.route?.availability !== "available" ||
     run.recommendedActions.length !== 0 ||
@@ -107,10 +110,32 @@ export function applyBasicSimulationRiskPolicy(run: RunResult): RunResult {
     return run;
   }
 
+  const boundary = intent.economicBoundary;
+  if (boundary.availability === "available") {
+    if (
+      binding.amountOutMinimumAtomic !== boundary.minimumReceivedAtomic ||
+      typeof quote !== "object" ||
+      quote === null ||
+      !("source" in quote) ||
+      quote.source !== "quote" ||
+      !("amountOutAtomic" in quote) ||
+      typeof quote.amountOutAtomic !== "string" ||
+      !/^\d+$/.test(quote.amountOutAtomic) ||
+      !("blockNumber" in quote) ||
+      quote.blockNumber !== simulation.blockNumber ||
+      !("fetchedAt" in quote) ||
+      typeof quote.fetchedAt !== "string" ||
+      !Number.isFinite(Date.parse(quote.fetchedAt)) ||
+      BigInt(quote.amountOutAtomic) <= BigInt(boundary.minimumReceivedAtomic)
+    ) {
+      return run;
+    }
+  }
+
   return {
     ...run,
     verdict: "PROCEED",
-    summary: `${BASIC_SIMULATION_POLICY}: Basic simulation passed: contract call, gas estimate and exact transaction binding were verified at the recorded block. Full simulation, asset changes and economic output remain unverified.`,
+    summary: `${BASIC_SIMULATION_POLICY}: Basic simulation passed: contract call, gas estimate and exact transaction binding were verified at the recorded block.${boundary.availability === "available" ? " The same-block quote is strictly above the declared minimum received; this is a quote comparison, not a simulated received amount." : ""} Full simulation, asset changes and economic output remain unverified.`,
   };
 }
 
