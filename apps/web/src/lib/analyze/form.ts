@@ -146,20 +146,15 @@ export function planSubmission(
   const validation = validateForm(form);
   if (!validation.valid) return { allowed: false, errors: validation.errors };
 
-  if (previousSubmitted) {
+  if (previousSubmitted && !options.allowUnchanged) {
     const changes = changedLogicalFields(previousSubmitted, form);
-
-    if (
-      (changes.length === 0 && !options.allowUnchanged) ||
-      changes.length > 1 ||
-      changes[0] === "protocol"
-    ) {
+    if (changes.length === 0) {
       return {
         allowed: false,
         errors: {
           form: {
-            en: "Change exactly one backend-supported condition before rerunning. Slippage is not part of the /api/check contract.",
-            zh: "重新检查前请修改一个受支持的条件。",
+            en: "Change at least one condition before rerunning.",
+            zh: "重新检查前请至少修改一个条件。",
           },
         },
       };
@@ -173,7 +168,7 @@ export const INITIAL_FORM: FormState = {
   protocol: DEMO_PROTOCOL,
   tokenIn: "ETH",
   tokenOut: "USDC",
-  amountIn: "0.01",
+  amountIn: "0.02",
   slippage: DEMO_SLIPPAGE,
   minimumReceived: "",
 };

@@ -216,6 +216,138 @@ export const arbitrumSampleUnknown: CheckSwapResult = {
   rawResponse: {},
 };
 
+/** ADJUST verdict: Input balance insufficient */
+export const arbitrumSampleBalanceInsufficient: CheckSwapResult = {
+  runId: "sample-arbitrum-balance-001",
+  systemStatus: "OK",
+  verdict: "ADJUST",
+  adjustReason: "INPUT_BALANCE_INSUFFICIENT",
+  summary: {
+    en: "Your input amount exceeds your available balance.",
+    zh: "你的输入金额超过可用余额。",
+  },
+  intent: {
+    tokenIn: "ETH",
+    tokenOut: "USDC",
+    amountIn: "1.5",
+  },
+  quote: {
+    expectedOutput: "3600",
+    route: { en: "Camelot V3", zh: "Camelot V3" },
+    blockNumber: "92820400",
+  },
+  simulatedOutput: "3600",
+  minimumReceivedSource: "unavailable",
+
+  accountState: {
+    status: "AVAILABLE",
+    snapshotId: "snap-balance-001",
+    context: {
+      chainId: 421614,
+      protocol: "camelot-v3",
+      sender: "0x01bb7b44cc398aaa2b76ac6253f0f5634279db9d",
+      recipient: "0x01bb7b44cc398aaa2b76ac6253f0f5634279db9d",
+      tokenIn: { kind: "native" },
+      tokenOut: {
+        kind: "erc20",
+        address: "0x75faf114eafb1bdbe2f0316df893fd58ce46aa4d",
+      },
+      amountInAtomic: "1500000000000000000",
+    },
+    balances: {
+      inputToken: {
+        status: "AVAILABLE",
+        account: "0x01bb7b44cc398aaa2b76ac6253f0f5634279db9d",
+        asset: { kind: "native" },
+        amountAtomic: "70270868758068858",
+        metadata: {
+          symbol: "ETH",
+          decimals: 18,
+          decimalsSource: "chain_config",
+        },
+        explorerUrls: {
+          account:
+            "https://sepolia.arbiscan.io/address/0x01bb7b44cc398aaa2b76ac6253f0f5634279db9d",
+        },
+      },
+      outputToken: {
+        status: "AVAILABLE",
+        account: "0x01bb7b44cc398aaa2b76ac6253f0f5634279db9d",
+        asset: {
+          kind: "erc20",
+          address: "0x75faf114eafb1bdbe2f0316df893fd58ce46aa4d",
+        },
+        amountAtomic: "87898181000000",
+        metadata: {
+          symbol: "USDC",
+          decimals: 6,
+          decimalsSource: "onchain_verified",
+          verifiedAtBlock: "92820400",
+        },
+        explorerUrls: {
+          account:
+            "https://sepolia.arbiscan.io/address/0x01bb7b44cc398aaa2b76ac6253f0f5634279db9d",
+          asset:
+            "https://sepolia.arbiscan.io/token/0x75faf114eafb1bdbe2f0316df893fd58ce46aa4d",
+        },
+      },
+      native: {
+        status: "AVAILABLE",
+        account: "0x01bb7b44cc398aaa2b76ac6253f0f5634279db9d",
+        asset: { kind: "native" },
+        amountAtomic: "70270868758068858",
+        metadata: {
+          symbol: "ETH",
+          decimals: 18,
+          decimalsSource: "chain_config",
+        },
+        explorerUrls: {
+          account:
+            "https://sepolia.arbiscan.io/address/0x01bb7b44cc398aaa2b76ac6253f0f5634279db9d",
+        },
+      },
+    },
+    allowance: {
+      status: "NOT_APPLICABLE",
+      owner: "0x01bb7b44cc398aaa2b76ac6253f0f5634279db9d",
+      reason: "NATIVE_INPUT",
+      spender: {
+        status: "NOT_APPLICABLE",
+      },
+      blockNumber: "92820400",
+    },
+    block: {
+      status: "VERIFIED",
+      chainId: 421614,
+      blockNumber: "92820400",
+      blockHash:
+        "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+      observedAt: new Date().toISOString(),
+    },
+  },
+
+  recommendedActions: [],
+  irrelevantActions: [],
+
+  checked: [
+    { en: "Account balance", zh: "账户余额" },
+    { en: "Quote fidelity", zh: "报价保真度" },
+  ],
+
+  notChecked: [],
+  unknowns: [],
+  evidence: [],
+  ruleResults: [],
+
+  createdAt: new Date().toISOString(),
+  ruleVersion: "0.2.0",
+  mossVersion: "0.1.0",
+  productRunMode: "LIVE",
+  replayMode: false,
+  simulatorPinnedBlock: "92820400",
+  rawResponse: {},
+};
+
 /** INTEGRATION_ERROR: System-level failure, not user-actionable */
 export const arbitrumSampleIntegrationError: CheckSwapResult = {
   runId: "sample-arbitrum-error-001",

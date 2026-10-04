@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { TokenIcon } from "@/components/analyze/TokenIcon";
 import { ChevronDownIcon, SwapIcon } from "@/components/wallet/WalletIcons";
 import { DEMO_RECIPIENT } from "@/components/wallet/walletData";
@@ -91,6 +91,7 @@ export function WalletSwap({
   errors = {},
   flags = [],
   quote = { status: "idle" },
+  showMinimumReceived = false,
   onChange,
   onSubmit,
 }: {
@@ -101,16 +102,34 @@ export function WalletSwap({
   flags?: FieldFlag[];
   /** Pre-submit `/api/quote` state. Never a locally computed estimate. */
   quote?: QuoteState;
+  showMinimumReceived?: boolean;
   onChange: (form: FormState) => void;
   onSubmit: () => void;
 }) {
-  const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [advancedOpen, setAdvancedOpen] = useState(showMinimumReceived);
 
   const set = <K extends keyof FormState>(key: K, value: FormState[K]) =>
     onChange({ ...form, [key]: value });
 
   const flagFor = (key: FieldFlag["field"]) =>
     flags.find((flag) => flag.field === key);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: form is intentionally partial to avoid infinite loops
+  useEffect(() => {
+    if (
+      quote.status === "available" &&
+      form.slippage &&
+      !Number.isNaN(parseFloat(form.slippage))
+    ) {
+      const calculated =
+        parseFloat(quote.quote.estimatedAmountOut) *
+        (1 - parseFloat(form.slippage) / 100);
+      const referenceMin = (Math.floor(calculated * 100) / 100)
+        .toFixed(2)
+        .replace(/\.?0+$/, "");
+      onChange({ ...form, minimumReceived: referenceMin });
+    }
+  }, [quote, form.slippage]);
 
   const amountFlag = flagFor("amountIn");
   const tokenInLabel = form.tokenIn;
@@ -326,48 +345,71 @@ export function WalletSwap({
             </label>
 
             <label>
-              <span>
-                {say(language, {
-                  en: "Minimum received (optional)",
-                  zh: "最低收到量（选填）",
-                })}
-              </span>
-              <input
-                aria-describedby={[
-                  "swap-minimum-received-help",
-                  minimumReceivedError
-                    ? "swap-minimum-received-error"
-                    : undefined,
-                ]
-                  .filter(Boolean)
-                  .join(" ")}
-                aria-invalid={
-                  minimumReceivedError || flagFor("minimumReceived")
-                    ? true
-                    : undefined
-                }
-                className={
-                  minimumReceivedError || flagFor("minimumReceived")
-                    ? "border-risk-high"
-                    : "border-line-strong"
-                }
-                inputMode="decimal"
-                placeholder={say(language, {
-                  en: "Your accepted boundary",
-                  zh: "你接受的边界",
-                })}
-                value={form.minimumReceived}
-                onChange={(event) => set("minimumReceived", event.target.value)}
-              />
-              <p
-                id="swap-minimum-received-help"
-                className="mt-2 text-[12px] leading-[1.6] text-dim"
-              >
-                {say(language, {
-                  en: "Minimum Received is the lowest output amount accepted for this Intent. It is an acceptance boundary, not an estimate and not a way to improve the transaction.",
-                  zh: "最低收到量是此交易意图可接受的最低输出数量。它是接受边界，不是预估值，也不是改善交易结果的方法。",
-                })}
-              </p>
+              <div className="mb-2 flex items-center justify-between gap-3">
+                <span className="m-0 text-[12px] font-bold uppercase tracking-[0.08em] text-dim">
+                  {say(language, {
+                    en: "Minimum received (optional)",
+                    zh: "最低收到量（选填）",
+                  })}
+                </span>
+              </div>
+              <div className="relative">
+                <input
+                  aria-describedby={[
+                    "swap-minimum-received-help",
+                    minimumReceivedError
+                      ? "swap-minimum-received-error"
+                      : undefined,
+                  ]
+                    .filter(Boolean)
+                    .join(" ")}
+                  aria-invalid={
+                    minimumReceivedError || flagFor("minimumReceived")
+                      ? true
+                      : undefined
+                  }
+                  className={
+                    minimumReceivedError || flagFor("minimumReceived")
+                      ? "border-risk-high"
+                      : showMinimumReceived
+                        ? "!border-risk-low !border-2"
+                        : "border-line-strong"
+                  }
+                  inputMode="decimal"
+                  placeholder={say(language, {
+                    en: "Your accepted boundary",
+                    zh: "你接受的边界",
+                  })}
+                  value={form.minimumReceived}
+                  onChange={(event) =>
+                    set("minimumReceived", event.target.value)
+                  }
+                />
+              </div>
+              {quote.status === "available" &&
+                form.slippage &&
+                !Number.isNaN(parseFloat(form.slippage)) && (
+                  <p className="mt-2 text-[12px] leading-[1.6] text-white/60">
+                    {say(language, {
+                      en: "Reference minimum: ",
+                      zh: "参考最低量：",
+                    })}
+                    <span className="font-mono font-bold text-white/80">
+                      {(() => {
+                        const calculated =
+                          parseFloat(quote.quote.estimatedAmountOut) *
+                          (1 - parseFloat(form.slippage) / 100);
+                        return (Math.floor(calculated * 100) / 100)
+                          .toFixed(2)
+                          .replace(/\.?0+$/, "");
+                      })()} {tokenOutLabel}
+                    </span>
+                    {say(language, {
+                      en: ` (based on ${form.slippage}% slippage)`,
+                      zh: `（基于 ${form.slippage}% 滑点）`,
+                    })}
+                  </p>
+                )}
               {minimumReceivedError ? (
                 <p
                   id="swap-minimum-received-error"

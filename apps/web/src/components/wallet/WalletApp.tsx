@@ -13,7 +13,6 @@ import { WalletSwap } from "@/components/wallet/WalletSwap";
 import { flaggedFields } from "@/lib/analyze/fields";
 import {
   applyRemediationOption,
-  changedLogicalFields,
   DEMO_SLIPPAGE,
   type FormFieldErrors,
   type FormState,
@@ -201,6 +200,7 @@ export function WalletApp({ language }: { language: Language }) {
   const [form, setForm] = useState<FormState>(INITIAL_FORM);
   const [submittedForm, setSubmittedForm] = useState<FormState | undefined>();
   const [formErrors, setFormErrors] = useState<FormFieldErrors>({});
+  const [showMinimumReceived, setShowMinimumReceived] = useState(false);
   const [stage, setStage] = useState(0);
   /** Which path the in-flight run came from, so the loading screen can say so. */
   const [checkingMode, setCheckingMode] = useState<"live" | "replay">("live");
@@ -405,7 +405,7 @@ export function WalletApp({ language }: { language: Language }) {
     };
   }, [screen, protocol, tokenIn, tokenOut, amountIn, routeMetadata, p0Config]);
 
-  const runCheck = () => {
+  const runCheck = async () => {
     const plan = planSubmission(form, result ? submittedForm : undefined, {
       allowUnchanged: true,
     });
@@ -429,14 +429,55 @@ export function WalletApp({ language }: { language: Language }) {
       return;
     }
 
+    // Demo mode: show balance insufficient scenario
+    const isDemoBalanceInsufficient =
+      (form.tokenIn === "ETH" && parseFloat(form.amountIn) > 0.07) ||
+      (form.tokenIn === "USDC" && parseFloat(form.amountIn) > 87898181);
+
+    if (isDemoBalanceInsufficient) {
+      const { arbitrumSampleBalanceInsufficient } = await import(
+        "@/lib/analyze/arbitrum-samples"
+      );
+
+      if (!arbitrumSampleBalanceInsufficient.accountState) {
+        throw new Error("Demo account state not available");
+      }
+
+      const demoResult = {
+        ...arbitrumSampleBalanceInsufficient,
+        intent: {
+          tokenIn: form.tokenIn,
+          tokenOut: form.tokenOut,
+          amountIn: form.amountIn,
+        },
+      };
+      recoveryCancelledRef.current = true;
+      snapshotRecoveryControllerRef.current?.abort();
+      accountStateRef.current = { status: "idle" };
+      setFormErrors({});
+      setStoredRunId(undefined);
+      setStoredAccountSnapshotId(undefined);
+      setResult(undefined);
+      setDrawerOpen(false);
+      setStage(0);
+      setCheckingMode("live");
+      setScreen("checking");
+
+      schedulerRef.current.run({
+        stageCount: WALLET_STAGE_COUNT,
+        stageMs: STAGE_MS,
+        onStage: setStage,
+        onSettle: async () => {
+          setResult(demoResult);
+          setSubmittedForm(plan.submitted);
+          setScreen("result");
+        },
+      });
+      return;
+    }
+
     const submitted = plan.submitted;
-    const parent =
-      result?.systemStatus === "OK" &&
-      submittedForm !== undefined &&
-      changedLogicalFields(submittedForm, submitted).length === 1 &&
-      submittedForm.minimumReceived === submitted.minimumReceived
-        ? result
-        : undefined;
+    const parent = undefined as CheckSwapResult | undefined;
     const currentAccountState = accountStateRef.current;
     const currentP0Config = p0Config;
     const currentQuote = quote;
@@ -534,6 +575,7 @@ export function WalletApp({ language }: { language: Language }) {
     setForm(nextForm);
     setFormErrors({});
     setQuote({ status: "idle" });
+    setShowMinimumReceived(false);
     setScreen("swap");
   };
 
@@ -547,6 +589,7 @@ export function WalletApp({ language }: { language: Language }) {
     setFormErrors({});
     setDrawerOpen(false);
     setForm(INITIAL_FORM);
+    setShowMinimumReceived(false);
     accountStateRef.current = { status: "idle" };
     setAccountState({ status: "idle" });
     setScreen("home");
@@ -616,6 +659,7 @@ export function WalletApp({ language }: { language: Language }) {
                     form={form}
                     language={language}
                     quote={quote}
+                    showMinimumReceived={showMinimumReceived}
                     onChange={(nextForm) => {
                       const quoteIdentityChanged =
                         nextForm.protocol !== form.protocol ||
@@ -627,6 +671,9 @@ export function WalletApp({ language }: { language: Language }) {
                         setQuote({ status: "idle" });
                         accountStateRef.current = { status: "idle" };
                         setAccountState({ status: "idle" });
+                      }
+                      if (nextForm.minimumReceived !== form.minimumReceived) {
+                        setShowMinimumReceived(false);
                       }
                       if (Object.keys(formErrors).length > 0) setFormErrors({});
                     }}
@@ -650,6 +697,19 @@ export function WalletApp({ language }: { language: Language }) {
                     onKeep={() => setScreen("swap")}
                     onOpenEvidence={() => setDrawerOpen(true)}
                     onSelectOption={applyOption}
+                    currentMinimumReceived={form.minimumReceived}
+                    onApplyMinimumReceived={(value) => {
+                      setForm({ ...form, minimumReceived: value });
+                      setFormErrors({});
+                      setShowMinimumReceived(true);
+                      setScreen("swap");
+                    }}
+                    onApplyAmountIn={(value) => {
+                      setForm({ ...form, amountIn: value });
+                      setFormErrors({});
+                      setShowMinimumReceived(false);
+                      setScreen("swap");
+                    }}
                   />
                 )}
               </div>

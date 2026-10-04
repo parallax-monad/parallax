@@ -49,6 +49,9 @@ export function WalletResult({
   onDiscard,
   onOpenEvidence,
   onSelectOption,
+  currentMinimumReceived,
+  onApplyMinimumReceived,
+  onApplyAmountIn,
 }: {
   result: CheckSwapResult;
   tokenMetadata?: TokenMetadataPair;
@@ -58,6 +61,9 @@ export function WalletResult({
   onDiscard: () => void;
   onOpenEvidence: () => void;
   onSelectOption?: (option: RemediationOption) => void;
+  currentMinimumReceived?: string;
+  onApplyMinimumReceived?: (value: string) => void;
+  onApplyAmountIn?: (value: string) => void;
 }) {
   const [currentStep, setCurrentStep] = useState<"result" | "options">(
     "result",
@@ -230,6 +236,9 @@ export function WalletResult({
           language={language}
           result={result}
           onSelectOption={onSelectOption}
+          currentMinimumReceived={currentMinimumReceived}
+          onApplyMinimumReceived={onApplyMinimumReceived}
+          onApplyAmountIn={onApplyAmountIn}
           onBack={() => setCurrentStep("result")}
           onKeep={onKeep}
         />
