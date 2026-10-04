@@ -1,5 +1,17 @@
 # Durable Decision Log
 
+## 2026-10-05 — public product identity and integration boundary
+
+Parallax's product identity is chain-agnostic pre-execution decision infrastructure. Public
+documentation identifies Arbitrum Sepolia × Camelot V3 as the current implemented integration.
+Retained Monad × Kuru × Moss runtime code, tests, and qualification records are historical
+compatibility experiments; they do not establish completed or currently supported multi-chain
+product integration.
+
+Local Arbitrum startup does not require a Moss checkout, although legacy environment validation
+remains and the current Docker deployment image still clones/builds the pinned Moss runtime.
+Runtime decoupling is a proposal only; no runtime behavior is changed by the documentation record.
+
 ## Frozen Product / P0 semantics
 
 - Issue #67: canonical Arbitrum Sepolia × Camelot V3 P0 target accepted; controlled P0 Gate evidence accepted; closed.

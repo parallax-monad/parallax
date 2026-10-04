@@ -10,9 +10,10 @@ A pre-execution decision layer for onchain transactions.
 
 [Live Demo](https://parallax-web-snowy.vercel.app/) ·
 [Pitch Deck](https://parallax-monad.github.io/parallax/parallax-demo-day.html) ·
-[Demo Video](https://youtu.be/klOKwyWgiZU) ·
-[Pitch Video](https://youtu.be/Dp_Ewlud5QU) ·
+[Demo Video](https://youtu.be/Dp_Ewlud5QU) ·
+[Pitch Video](https://youtu.be/klOKwyWgiZU) ·
 [Documentation](docs/README.md) ·
+[Contributing](CONTRIBUTING.md) ·
 [GitHub](https://github.com/parallax-monad/parallax)
 
 <sub>Currently implemented on Arbitrum Sepolia · Camelot V3 · TypeScript</sub>
@@ -135,12 +136,14 @@ For the current Arbitrum Sepolia path, configure `ARBITRUM_RPC_URL` and
 `PARALLAX_TOKEN_REGISTRY_JSON` with trusted Arbitrum token metadata. Keep credentials in
 local environment configuration; never commit them.
 
-The API bootstrap still validates a syntactically valid `MONAD_RPC_URL` and non-empty
-`MOSS_RUNTIME_VERSION` / `MOSS_RUNTIME_REVISION` fields from its legacy shared
-configuration, even when running the Arbitrum path. This configuration requirement does
-not mean the current product path uses Monad, Kuru, or Moss. `MOSS_RUNTIME_PATH` is
-optional and can remain unset; a Moss checkout is not required for Arbitrum. See
-[`.env.example`](.env.example) for the distinction.
+For local `pnpm` startup, the API bootstrap still validates a syntactically valid
+`MONAD_RPC_URL` and non-empty `MOSS_RUNTIME_VERSION` / `MOSS_RUNTIME_REVISION` fields
+from its legacy shared configuration. This does not make Monad, Kuru, or Moss part of the
+current product path. `MOSS_RUNTIME_PATH` is optional locally, so an Arbitrum developer
+does not need a Moss checkout. Deployment packaging is still coupled: the current
+Dockerfile clones and builds its pinned Moss runtime and sets `MOSS_RUNTIME_PATH`, even
+though the current public integration is Arbitrum Sepolia × Camelot V3. See
+[`.env.example`](.env.example) and the [Runtime Decoupling proposal](docs/proposals/runtime-decoupling.md).
 
 In separate terminals, start the API and web app:
 

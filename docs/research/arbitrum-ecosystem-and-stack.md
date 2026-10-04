@@ -3,6 +3,8 @@
 > 研究/策略参考，不是已部署能力的声明。
 >
 > 最后复核：2026-09-02；Arbitrum 动态统计证据日期：2026-08-29。提交前必须重新核验数字与网络支持。
+>
+> **历史选择与计划快照：** 本文的 Provider 顺序、P0 target 和 feasibility 状态反映 2026 年 9 月的研究阶段。当前公开集成是 Arbitrum Sepolia × Camelot V3，Native RPC 为主要执行证据路径、Trace 为补充证据；请勿将下文的旧状态视为当前交付事实。
 
 ## Why Arbitrum
 
@@ -39,10 +41,10 @@ GMX、Aave、Pendle 等是未来金融 primitive 方向，不应在当前 Swap-o
 
 | 阶段 | 组合 | 证据边界 |
 | --- | --- | --- |
-| 当前 verified | Monad × Kuru × Moss | 以 `main` 上的 Moss/Kuru runtime 与 fixtures 为准 |
-| P0 目标 | Arbitrum Sepolia × Camelot V3 × TenderlyProvider | Tenderly 文档支持；credentialed probe 未完成时保持 `SUPPORTED_DOC_ONLY` |
-| P0 fallback | NativeRpcProvider | `eth_call`/`estimateGas`/state 等可验证范围；能力不足返回 `UNKNOWN` |
-| Strong/Best 可选 | EnsoProvider | 需验证实际 network/protocol/route、API key、provenance 与 freshness |
+| 研究时的已验证基线 | Monad × Kuru × Moss | 历史兼容路径与 fixtures；不代表当前公开产品支持 |
+| 当时的 P0 目标 | Arbitrum Sepolia × Camelot V3 × TenderlyProvider | 历史计划；当前 Native RPC 路径已实现，Tenderly qualification 另见 live status |
+| 当时的 P0 fallback | NativeRpcProvider | 已成为当前主要执行证据路径；能力不足仍须如实表达 `UNKNOWN` |
+| 当时的 Strong/Best 选项 | EnsoProvider | 历史可选研究方向，不是当前集成声明 |
 
 Tenderly 的 Arbitrum support、simulation、trace、gas、asset changes 与 block provenance 以官方文档为依据；在没有 credentialed probe 前仍只能作为 feasibility 依据。Native RPC 与 Enso 同样不能只凭文档升级为 verified。
 
@@ -70,7 +72,7 @@ Arbitrum Sepolia
 
 `DecisionReceiptRegistry` 只承诺 Receipt commitment/metadata 的可验证锚定；backend attestor 的签名与用户 Swap 分离，anchoring 必须 optional/non-blocking。最终 Contract 字段、事件、权限、批量/Merkle 策略仍未决。
 
-Arbitrum Chain、Camelot Adapter、Tenderly/Native RPC runtime、Receipt deployment 和真实 P0 E2E 都是计划/待验证工作，不得从研究文件写成已部署。当前实现状态请看 [planning index](../planning/arbitrum-open-house/README.md)。
+本节记录的 Arbitrum Chain、Camelot Adapter、Provider runtime、Registry 和真实 P0 E2E 状态已过时，不应从本研究文件推断当前交付情况。当前事实请看 [公开产品概览](../../README.md)、对应的 API/Contract 文档及合并代码；本 planning index 仅作历史参考。
 
 ## 参考资料
 

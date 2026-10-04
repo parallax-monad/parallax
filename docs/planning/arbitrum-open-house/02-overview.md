@@ -1,23 +1,23 @@
 # 02｜Parallax 项目开发计划总览
 
-> 状态：Draft，供团队评审和开发执行；更新时间：2026-09-01。
+> **历史计划资料（2026-09-01）。** 本文记录当时的开发计划，不是当前规范性实施计划。
 >
-> **`02-A`–`02-D` 是当前规范性的实施计划。研究文档提供理由，只有明确纳入本系列后才改变执行计划。**
+> 当前公开集成是 Arbitrum Sepolia × Camelot V3。下文关于 Monad × Kuru × Moss、Provider 顺序、阶段和验收的内容均是历史计划记录；请以合并代码及当前 GitHub Issues/PRs 为准。
 
-## 当前基线与目标
+## 当时记录的基线与目标
 
-当前 `main` 的 verified baseline 是 `Monad × Kuru × Moss`，包含只读 quote/check、证据标准化、确定性规则、Replay、Re-run 和 Action Gate 的现有路径。Parallax 不签名、广播、执行或托管用户的 Swap。
+当时的计划将 `Monad × Kuru × Moss` 描述为 verified baseline，其中的只读 quote/check、证据标准化、确定性规则、Replay、Re-run 和 Action Gate 记录的是历史兼容工作，不代表已完成的公开多链产品集成。Parallax 不签名、广播、执行或托管用户的 Swap。
 
-目标是保留该路径，在同一个 Core 上逐步增加：
+当时的目标是在同一个 Core 上逐步增加：
 
 ```text
 Arbitrum Sepolia × Camelot V3 × TenderlyProvider
                                ↘ NativeRpcProvider（受控 fallback）
 ```
 
-Arbitrum/Camelot/Tenderly 能力仍需以真实 feasibility 和集成 Gate 验证；计划能力不是 `main` 的已部署声明。
+以上组合和完成条件是计划当时的描述，不可作为当前运行状态；Tenderly 也不是当前 Native RPC 主路径的前置依赖。
 
-## 不可改变的产品与架构约束
+## 当时记录的产品与架构约束
 
 1. `Cause → Relevant Action → Re-verification` 是核心产品闭环。
 2. 当前 Monad MVP/兼容路径中的 `economicBoundary.minimumReceived` 是随 Intent 传递的明确接受边界，溯源可为 `original_swap`、`user_declared`、`demo_preset` 或 `unavailable`；它不能被降低来制造 `PROCEED`。

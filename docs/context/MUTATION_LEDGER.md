@@ -437,3 +437,13 @@ Run after persistence; any automatic path would need a distinct post-persistence
   `f6873a9ac00723698b648ccb753e9b83800d98d7`. This entry is followed by a docs-only handoff
   synchronization commit that changes the PR head; refresh PR #163 for current exact-head
   checks. No deployment or anchor transaction was part of this publication step.
+
+## 2026-10-05 — post-submission maintenance audit checkpoint
+
+Fresh main `08b6190e0a6cd92e39196df53517914ab57d8a5e` includes merged PR #163 (Decision Registry)
+and PR #165 (public README cleanup). The live GitHub audit found #74/#96 still open and PR #142
+open with supplementary #107 trace-event qualification evidence; no Issue was mutated and no
+pre-existing PR was edited, merged, or closed. This maintenance PR updates contributor/navigation
+context and records a proposal for runtime decoupling only. It does not change implementation or
+assert Product P0, Asset Coverage, or Verified Remediation acceptance. The #73, #105, and #107
+GitHub state/body mismatches are surfaced for Product Owner reconciliation rather than rewritten.

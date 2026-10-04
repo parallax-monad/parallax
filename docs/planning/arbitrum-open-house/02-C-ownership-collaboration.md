@@ -1,6 +1,6 @@
 # 02-C｜职责、接口与协作
 
-> 状态：当前唯一的语义 Owner 映射。Owner 是责任边界，不要求每个文件只有一个贡献者。
+> **历史协作记录。** 本文保存 2026 年 9 月的职责划分；当前 owner 和审阅边界以 `.github/CODEOWNERS` 与目标 GitHub Issue/PR 为准。
 
 ## 0. 三层审阅边界
 
@@ -8,7 +8,7 @@
 - **02-C**：定义语义责任与最终决定权，不把每个文件强行归给单一 Owner。
 - **PR-specific reviewer request**：根据当前 PR 的实际语义影响，额外邀请相应 Owner；不要求所有 Owner 审阅每个 PR。
 
-## 1. 当前 Owner 映射
+## 1. 当时记录的 Owner 映射
 
 | Role | Owner | GitHub | Primary area |
 | --- | --- | --- | --- |

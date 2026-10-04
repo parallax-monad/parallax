@@ -1,8 +1,37 @@
 # Current Agent Handoff
 
-Checkpoint: 2026-09-29
+## Takeover snapshot — 2026-10-05
 
-## Active local work — 2026-10-04 Decision Registry MVP
+- Fresh-fetch first; current verified `main` checkpoint is `08b6190e0a6cd92e39196df53517914ab57d8a5e`.
+- Issue [#96](https://github.com/parallax-monad/parallax/issues/96) is the Final Sprint tracker;
+  GitHub issues/PRs and merged code are live truth. #74/#96 are still open; ask Product to
+  reconcile or administratively close them rather than treating old rows as current status.
+- Product identity is chain-agnostic; current public implementation is Arbitrum Sepolia ×
+  Camelot V3. Monad/Kuru/Moss code and evidence remain historical, not a completed supported
+  multi-chain product path.
+- **Product P0:** #96 records delivery closed. #73's GitHub state is CLOSED/COMPLETED, but its
+  body and last comment still say OPEN after the PR #126 rollback; do not flatten that conflict
+  into a Product `PASS` without an explicit Product acceptance record.
+- **Asset Coverage:** #103 `QUALIFIED_REAL` + #104 complete; #105 is GitHub-closed but its body
+  still says not PASS and leaves Frontend/Product acceptance unchecked. #96's #144 status is
+  stale; Product Owner reconciliation is needed.
+- **Evidence Federation:** PASS; #106/#110/#91/#92 complete. Native RPC is primary, Trace
+  supplementary.
+- **Verified Remediation:** not complete under frozen semantics. #107 is GitHub-closed but its
+  body says gate incomplete and `VERIFIED_SCENARIO_FOUND = NO`; PR #142 is supplementary,
+  unreviewed acceptance-candidate evidence, not a verified scenario.
+- Optional work is not the active critical path. #72 is closed but not Tenderly-runtime-qualified;
+  #94 is the completed SHOULD; #90/#108/#109 are optional feasibility records.
+
+See [Project State](./PROJECT_STATE.md) for the fuller checkpoint. Detailed notes below are
+historical; always query the target Issue/PR before acting.
+
+## Superseded handoff notes (captured through 2026-10-04)
+
+The following retained handoff history is not a live status dashboard. In particular, PR #163 is
+merged and its former branch instructions are historical, not active work.
+
+## Historical work record — 2026-10-04 Decision Registry MVP
 
 - Worktree: `/Users/johnma/.codex/worktrees/decision-commitment-registry`; branch:
   `feat/decision-commitment-registry`; its base at publication was freshly fetched
