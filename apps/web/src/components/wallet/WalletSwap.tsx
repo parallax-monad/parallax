@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { TokenIcon } from "@/components/analyze/TokenIcon";
 import { ChevronDownIcon, SwapIcon } from "@/components/wallet/WalletIcons";
 import { DEMO_RECIPIENT } from "@/components/wallet/walletData";
@@ -113,6 +113,22 @@ export function WalletSwap({
 
   const flagFor = (key: FieldFlag["field"]) =>
     flags.find((flag) => flag.field === key);
+
+  useEffect(() => {
+    if (
+      quote.status === "available" &&
+      form.slippage &&
+      !isNaN(parseFloat(form.slippage))
+    ) {
+      const calculated =
+        parseFloat(quote.quote.estimatedAmountOut) *
+        (1 - parseFloat(form.slippage) / 100);
+      const referenceMin = (Math.floor(calculated * 100) / 100)
+        .toFixed(2)
+        .replace(/\.?0+$/, "");
+      set("minimumReceived", referenceMin);
+    }
+  }, [quote, form.slippage]);
 
   const amountFlag = flagFor("amountIn");
   const tokenInLabel = form.tokenIn;
@@ -327,13 +343,7 @@ export function WalletSwap({
               )}
             </label>
 
-            <label
-              className={
-                showMinimumReceived
-                  ? "rounded-[12px] border border-white/[0.12] bg-white/[0.02] p-3"
-                  : ""
-              }
-            >
+            <label>
               <div className="mb-2 flex items-center justify-between gap-3">
                 <span className="m-0 text-[12px] font-bold uppercase tracking-[0.08em] text-dim">
                   {say(language, {
@@ -341,41 +351,38 @@ export function WalletSwap({
                     zh: "最低收到量（选填）",
                   })}
                 </span>
-                {showMinimumReceived && !minimumReceivedError && (
-                  <span className="shrink-0 rounded-full bg-white/[0.08] px-3 py-1 text-[10px] font-extrabold uppercase tracking-wider text-white/60">
-                    {say(language, { en: "Suggested", zh: "建议" })}
-                  </span>
-                )}
               </div>
-              <input
-                aria-describedby={[
-                  "swap-minimum-received-help",
-                  minimumReceivedError
-                    ? "swap-minimum-received-error"
-                    : undefined,
-                ]
-                  .filter(Boolean)
-                  .join(" ")}
-                aria-invalid={
-                  minimumReceivedError || flagFor("minimumReceived")
-                    ? true
-                    : undefined
-                }
-                className={
-                  minimumReceivedError || flagFor("minimumReceived")
-                    ? "border-risk-high"
-                    : showMinimumReceived
-                      ? "!border-risk-low !border-2"
-                      : "border-line-strong"
-                }
-                inputMode="decimal"
-                placeholder={say(language, {
-                  en: "Your accepted boundary",
-                  zh: "你接受的边界",
-                })}
-                value={form.minimumReceived}
-                onChange={(event) => set("minimumReceived", event.target.value)}
-              />
+              <div className="relative">
+                <input
+                  aria-describedby={[
+                    "swap-minimum-received-help",
+                    minimumReceivedError
+                      ? "swap-minimum-received-error"
+                      : undefined,
+                  ]
+                    .filter(Boolean)
+                    .join(" ")}
+                  aria-invalid={
+                    minimumReceivedError || flagFor("minimumReceived")
+                      ? true
+                      : undefined
+                  }
+                  className={
+                    minimumReceivedError || flagFor("minimumReceived")
+                      ? "border-risk-high"
+                      : showMinimumReceived
+                        ? "!border-risk-low !border-2"
+                        : "border-line-strong"
+                  }
+                  inputMode="decimal"
+                  placeholder={say(language, {
+                    en: "Your accepted boundary",
+                    zh: "你接受的边界",
+                  })}
+                  value={form.minimumReceived}
+                  onChange={(event) => set("minimumReceived", event.target.value)}
+                />
+              </div>
               {quote.status === "available" &&
                 form.slippage &&
                 !isNaN(parseFloat(form.slippage)) && (
@@ -385,12 +392,14 @@ export function WalletSwap({
                       zh: "参考最低量：",
                     })}
                     <span className="font-mono font-bold text-white/80">
-                      {(
-                        parseFloat(quote.quote.estimatedAmountOut) *
-                        (1 - parseFloat(form.slippage) / 100)
-                      )
-                        .toFixed(2)
-                        .replace(/\.?0+$/, "")}{" "}
+                      {(() => {
+                        const calculated =
+                          parseFloat(quote.quote.estimatedAmountOut) *
+                          (1 - parseFloat(form.slippage) / 100);
+                        return (Math.floor(calculated * 100) / 100)
+                          .toFixed(2)
+                          .replace(/\.?0+$/, "");
+                      })()}{" "}
                       {tokenOutLabel}
                     </span>
                     {say(language, {

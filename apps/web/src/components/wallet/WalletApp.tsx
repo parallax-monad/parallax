@@ -588,6 +588,7 @@ export function WalletApp({ language }: { language: Language }) {
     setForm(nextForm);
     setFormErrors({});
     setQuote({ status: "idle" });
+    setShowMinimumReceived(false);
     setScreen("swap");
   };
 
@@ -719,6 +720,7 @@ export function WalletApp({ language }: { language: Language }) {
                     onApplyAmountIn={(value) => {
                       setForm({ ...form, amountIn: value });
                       setFormErrors({});
+                      setShowMinimumReceived(false);
                       setScreen("swap");
                     }}
                   />
