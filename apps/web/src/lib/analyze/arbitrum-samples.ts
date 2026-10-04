@@ -266,7 +266,8 @@ export const arbitrumSampleBalanceInsufficient: CheckSwapResult = {
           decimalsSource: "chain_config",
         },
         explorerUrls: {
-          account: "https://sepolia.arbiscan.io/address/0x01bb7b44cc398aaa2b76ac6253f0f5634279db9d",
+          account:
+            "https://sepolia.arbiscan.io/address/0x01bb7b44cc398aaa2b76ac6253f0f5634279db9d",
         },
       },
       outputToken: {
@@ -284,8 +285,10 @@ export const arbitrumSampleBalanceInsufficient: CheckSwapResult = {
           verifiedAtBlock: "92820400",
         },
         explorerUrls: {
-          account: "https://sepolia.arbiscan.io/address/0x01bb7b44cc398aaa2b76ac6253f0f5634279db9d",
-          asset: "https://sepolia.arbiscan.io/token/0x75faf114eafb1bdbe2f0316df893fd58ce46aa4d",
+          account:
+            "https://sepolia.arbiscan.io/address/0x01bb7b44cc398aaa2b76ac6253f0f5634279db9d",
+          asset:
+            "https://sepolia.arbiscan.io/token/0x75faf114eafb1bdbe2f0316df893fd58ce46aa4d",
         },
       },
       native: {
@@ -299,7 +302,8 @@ export const arbitrumSampleBalanceInsufficient: CheckSwapResult = {
           decimalsSource: "chain_config",
         },
         explorerUrls: {
-          account: "https://sepolia.arbiscan.io/address/0x01bb7b44cc398aaa2b76ac6253f0f5634279db9d",
+          account:
+            "https://sepolia.arbiscan.io/address/0x01bb7b44cc398aaa2b76ac6253f0f5634279db9d",
         },
       },
     },
