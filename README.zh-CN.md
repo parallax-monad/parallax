@@ -1,260 +1,147 @@
 <div align="center">
 
+<img src="docs/assets/parallax-logo.png" alt="Parallax 标志" width="320" />
+
 # Parallax
 
-### 面向链上操作的签名前诊断、修正与再次验证
+### 签名前，先知道下一步该怎么做。
 
-**了解发生了什么。理解原因。明确可以修改什么。在签名前完成验证。**
+面向链上交易的、基于证据的签名前决策层。
 
-[在线演示](https://parallax-web-snowy.vercel.app) ·
-[产品规格](docs/product/p0-economic-diagnosis-remediation.md) ·
-[文档索引](docs/README.md) ·
-[演示视频](https://www.youtube.com/watch?v=j43WqH6TrTE)
+[在线演示](https://parallax-web-snowy.vercel.app/) ·
+[演示文稿](https://parallax-monad.github.io/parallax/parallax-demo-day.html) ·
+[产品演示视频](https://youtu.be/klOKwyWgiZU) ·
+[项目路演视频](https://youtu.be/Dp_Ewlud5QU) ·
+[文档](docs/README.md) ·
+[GitHub 仓库](https://github.com/parallax-monad/parallax)
+
+<sub>Arbitrum Sepolia · Camelot V3 · TypeScript</sub>
 
 <sub><a href="./README.md">English</a> · 简体中文</sub>
 
 </div>
 
-Parallax 是面向链上操作的、与 Provider 无关的签名前修正与再次验证层。当前公开演示使用 Monad × Kuru × Moss 路径。
-
 ## 为什么需要 Parallax？
 
-报价可能在用户签名前发生变化。一笔交易仍可能成功执行，却不再复现用户选择的经济结果。模拟可以展示结果，但用户仍然会问：“发生了什么变化，原因是什么，我应该修改什么？”
+DEX 和聚合器提供报价与路由，钱包和安全产品提供交易预览、警告与交易上下文，模拟工具则展示执行行为。这些信息都很有价值，但用户仍需要自己判断：现有证据是否足以支持自己的交易目标？
 
-Parallax 通过将异构证据转换为范围明确的诊断、量化的候选操作和与状态绑定的再次验证，来补上这段决策缺口。
+一笔交易即使能够成功执行，也可能无法实现用户原本期待的结果。交易检查失败或存在不确定性时，用户也可能不知道哪种调整才相关。Parallax 聚焦这段决策缺口：让证据、检查范围和可能的下一步更容易理解，并由用户明确调整后再次检查。
 
-## 产品流程
+## Parallax 能做什么
 
-> **目标 P0 行为：** 下面的流程是 P0 的目标产品模型，不表示当前公开演示或 API 已支持这里描述的所有约束、候选求解或已验证反事实选项。当前支持范围仍限于文档所述的 Monad × Kuru × Moss 路径。
+- 基于可用的执行证据，检查已报价并准备好的未签名交易。
+- 给出范围明确的结果：`PROCEED`、`ADJUST`、`STOP` 或 `UNKNOWN`。
+- 分开展示观察结果、有证据支持的原因、证据状态和用户明确提出的约束，不会把缺失数据包装成确定结论。
+- 将决定权留给用户：Parallax 不会签名或提交 Swap 交易。
+- 保存 Run，让用户之后可以取回历史结果，并比较明确发起的再次检查。
 
-面向用户的解释流程如下：
+`PROCEED` 只表示在已检查范围内没有发现阻断证据，不保证交易安全或执行成功。`UNKNOWN` 不是通过。只有新的子检查提供充分证据后，候选调整才能被视为已验证的改善。
 
-```mermaid
-flowchart TD
-  A[报价 / 意图] --> B[最新证据]
-  B --> C[执行可行性]
-  C --> D[报价一致性 / 经济诊断]
-  D --> E[观察结果]
-  E --> F[原因]
-  F --> G[量化候选调整]
-  G --> H[再次验证]
-  H --> I[用户决策]
-```
-
-底层 Core 关系保持为：
+## 工作流程
 
 ```text
-意图 → 证据 → 原因 → 决策 → 相关操作 → 再次验证
+Swap 意图
+→ 报价与已准备的未签名交易
+→ 执行证据
+→ 可解释、范围明确的决策
+→ 用户主动调整
+→ 重新检查并比较 Run
 ```
 
-`UNKNOWN` 不是通过。`PROCEED` 只表示在本次已检查范围内没有发现阻断证据；它不构成安全保证或投资建议。
+## 构建于 Arbitrum
 
-## 项目演示
+当前真实测试网路径使用 Arbitrum Sepolia（`421614`）和 Camelot V3，支持真实测试网报价、精确的未签名交易准备，以及以 Native RPC 为主的执行证据路径。Trace RPC 提供补充性的深度证据；它不会取代 Native RPC 基线，也不会单独改变 Risk 结果。
 
-- [体验在线应用](https://parallax-web-snowy.vercel.app)
-- [查看 Demo Day 演示文稿](https://parallax-monad.github.io/parallax/parallax-demo-day.html)
-- [观看产品演示视频](https://www.youtube.com/watch?v=j43WqH6TrTE)
+结果会说明检查了什么、哪些范围仍未知或不可用，以及相关来源和链上状态上下文。Sepolia 上的代币余额和价格属于测试网数据，不能代表 Arbitrum One 的市场价格。本项目不声称支持 Arbitrum One 主网。
 
-落地页位于 `#/`，钱包式 MVP 位于 `#/analyze`。
+## 可选的链上 Decision Registry
 
-1. 输入受支持的 Swap 意图；
-2. 请求报价并执行签名前检查；
-3. 查看证据、溯源、检查范围、原因和决策；
-4. 当结果支持时，修改一个相关条件并再次检查；
-5. 比较上一次运行与新运行。
+Parallax 已在 Arbitrum Sepolia 部署了可选的 Decision Registry：
 
-演示保持只读，不会签名、广播、执行或托管用户的交易。已核验的实时范围仅限文档所述的固定 Kuru MON → USDC 路径与运行环境；这不能证明所有资产、路径、协议、运行环境修订版或未来市场条件都受支持。
+- 合约：[`0xdfc1f61e75fd551b9c309ec0bfae015adf6fe359`](https://sepolia.arbiscan.io/address/0xdfc1f61e75fd551b9c309ec0bfae015adf6fe359)
+- [部署交易](https://sepolia.arbiscan.io/tx/0x46cd3fd97086a40c157be0cdc50baa9a40db9c24417d723cc5dd6f08e6e000f6)
+- [决策证明交易](https://sepolia.arbiscan.io/tx/0x3e40db4fdc33b8bf3b726fa7f8a60049e0518c19e6cbc98eb69c20932f374af0)
 
-## Parallax 做什么
+操作人员可以通过 Backend CLI，为已完成且已持久化的 Run 锚定一项承诺。这是可选、非阻塞的流程，不会在每次 `/api/check` 后自动触发。指定的操作人员控制 attestor 并提交 Registry 交易；用户不需要连接钱包或签署证明交易。Attestor 只签署 Registry 交易，不签署用户的 Swap。
 
-- 接收结构化、未签名的 Swap 意图；
-- 获取并标准化报价、已准备操作、模拟结果和溯源证据；
-- 执行确定性的规则，并将 Integration Error 与交易不确定性分开；
-- 展示 `PROCEED`、`ADJUST`、`STOP` 或 `UNKNOWN`，同时披露已检查、未检查和未知范围；
-- 将有证据支持的相关操作与本次结果不支持的修改分开；
-- 支持记录回放，以及仅修改一个条件的受限再次检查对比。
+Registry 仅保存经过域分隔的 Run key、承诺哈希和必要的事件元数据，不保存完整 Run 或其证据。持有对应链下记录的人可以重新计算并核对承诺，以验证记录完整性；这不能证明底层证据真实、Risk 评估正确或 Swap 安全。操作与验证边界见 [Decision Registry 指南](contracts/decision-registry/README.md)。
 
-## 目标 P0 架构
+## 开发者集成
 
-以下是目标参考模型，不代表整条路径已经实现或部署：
+仓库包含一个类型安全的 TypeScript SDK 和公开 HTTP API。SDK 支持报价、检查、Run 查询、再次检查和账户状态查询；它不会重复实现 Risk 或 Provider 逻辑。SDK 代码位于本仓库中；本文不声称它已发布到 npm。
 
-```mermaid
-flowchart TD
-  A[Arbitrum Sepolia] --> B[Camelot V3]
-  B --> C[已准备的未签名交易]
-  C --> D[Tenderly / 支持的证据提供方]
-  D -. 受控回退 .-> E[Native RPC]
-  D --> F[标准化证据]
-  E --> F
-  F --> G[Parallax Core]
-  G --> H[诊断]
-  H --> I[决策]
-  I --> J[量化修正]
-  J --> K[再次验证]
-```
+- [SDK 指南](packages/sdk/README.md)
+- [API 与前端集成参考](docs/integration/api-frontend-handoff.md)
+- [Decision Registry 指南](contracts/decision-registry/README.md)
 
-目标分解是 `Chain × Protocol × Evidence Provider`。它将 Provider 专属类型留在 Core 之外，并把证据获取与产品/风险决策语义分开。
+API 与 SDK 为未来将签名前决策流程嵌入钱包、DEX、聚合器和 DeFi 应用提供基础。这些属于集成机会，不代表已经建立第三方合作。
 
-## 产品原则
+## 未来方向
 
-- 不猜测用户意图；调用方提供目标和阈值时才使用明确约束；
-- 诊断实际差距，并用易懂的语言解释原因；
-- 展示可控变量，并量化候选修改；
-- 用户未明确表达意图时，展示多个可能的反事实选项及其验证状态，而不是静默替用户选择；
-- 使用新的报价、已准备的未签名交易、模拟和结果证据验证建议；
-- 验证与状态绑定：链上状态变化后必须重新检查；
-- 最终决定权保留在用户手中。
+1. **扩大覆盖范围** — 支持更多资产、协议、交易类型和执行环境。
+2. **嵌入现有工作流** — 通过可复用的 API 与 SDK 接入钱包、DEX、聚合器和开发者应用，探索潜在的 B2B/API 交付模式。
+3. **面向 Agent 的工作流** — 探索未来的 MCP 兼容接口与机器可读、范围受限的决策输出，供 AI Agent 编排流程使用。目前不声称已有 MCP 服务或自主交易执行能力。
 
-在目标 P0 模型中，新手体验不要求提供明确阈值：Parallax 可以展示多个反事实选项，并明确区分已经重新验证的交易调整与仍需在条件满足后重新检查的条件性建议。高级 DeFi 用户、开发者、SDK 和 Agent 可以提供价格影响、有效汇率、Gas、总成本或目标输出等约束，并使用同一套“诊断 → 量化修正 → 再次验证”模型。这些属于目标语义，并不表示公开 API 当前已经支持每一种约束或求解器。
+## 快速开始
 
-## 边界
-
-Parallax 不是：
-
-- 最优价格聚合器或全市场路径优化器；
-- 自主执行引擎；
-- 钱包、托管、签名或广播服务；
-- 完整的协议、代币或智能合约安全审计；
-- 投资建议服务。
-
-当现有证据支持时，可以展示经过明确评估的替代路径。全市场优化不属于 P0 范围。
-
-## 架构与技术栈
-
-| 区域 | 职责 |
-| --- | --- |
-| `apps/web` | React 18 + Vite 前端、落地页、钱包式 MVP、API 适配层与 Three.js 可视化 |
-| `apps/api` | 用于报价/检查和记录回放的 Node.js/Hono HTTP 运行环境 |
-| `packages/contracts` | Intent、Run、Evidence、Replay、序列化与兼容性共享模式 |
-| `packages/moss-bridge` | Moss/Kuru 运行环境加载、实时证据适配、标准化与溯源检查 |
-| `packages/orchestrator` | Agent Flow、Action Gate、再次检查生命周期与应用编排 |
-| `packages/risk` | 确定性的 P0 规则评估与集中式决策策略 |
-| `fixtures` | 已记录的原始/标准化证据与记录回放样例 |
-| `docs` | 产品、研究、计划、集成、方法论与 ADR 文档 |
-| `scripts` | 确定性及实时 Kuru 冒烟/验收工具 |
-
-当前工具链为 Node.js 22、pnpm、TypeScript、React、Vite、Three.js、Hono、Vitest 和 Biome。
-
-## 仓库结构
-
-```text
-apps/                  运行时应用
-packages/              共享 Core 模块
-docs/                  产品、研究、计划、集成、方法论与 ADR
-fixtures/              记录的证据与回放样例
-scripts/               验证与冒烟工具
-```
-
-## 安装与本地开发
-
-环境要求：Node.js 22、兼容 pnpm 11 的工具和 Git。
+环境要求：Node.js 22 和 pnpm。
 
 ```bash
 pnpm install --frozen-lockfile
 cp .env.example .env
-pnpm --filter @parallax/web dev
 ```
 
-使用 `#/` 访问落地页，使用 `#/analyze` 访问 MVP。若要在本地运行报价/检查请求，请配置 `.env`，并在另一个终端启动 API：
+根据要运行的路径配置只读 RPC 和可信代币元数据。凭据仅保存在本地环境配置中，切勿提交。
+
+在两个终端分别启动 API 和 Web 应用：
 
 ```bash
 pnpm --filter @parallax/api start
+pnpm --filter @parallax/web dev
 ```
 
-本地 Vite 服务器会把 `/api/*` 代理到 `http://127.0.0.1:8787`。
+Vite 会将 `/api/*` 请求代理到本地 API。配置和请求说明见 [`.env.example`](.env.example)、[API 集成参考](docs/integration/api-frontend-handoff.md)和 [SDK 指南](packages/sdk/README.md)。
 
-<details>
-<summary>环境配置</summary>
-
-`.env.example` 是环境变量的权威清单。
-
-| 变量 | 用途 |
-| --- | --- |
-| `MONAD_RPC_URL` | 后端实时报价/检查使用的只读 Monad RPC |
-| `MOSS_RPC_URL` | 实时冒烟命令使用的只读 RPC |
-| `MOSS_RUNTIME_VERSION` | 预期的 Moss 运行环境版本 |
-| `MOSS_RUNTIME_REVISION` | 预期的不可变 Moss Git 修订版 |
-| `MOSS_RUNTIME_PATH` | 已构建、固定 Moss 检出目录的绝对路径，用于启用实时 Kuru Agent Flow |
-| `PARALLAX_TOKEN_REGISTRY_JSON` | 后端标准化使用的可信代币元数据 |
-| `CORS_ORIGIN` | 允许调用 API 的浏览器来源 |
-| `RUN_STORE_BACKEND` | 默认 `memory`；完成迁移和验证后才使用 `postgres` |
-| `DATABASE_URL` | `RUN_STORE_BACKEND=postgres` 时所需的 PostgreSQL URL |
-| `HOST` / `PORT` | Node HTTP 监听配置 |
-
-实时 Moss 运行要求 `MOSS_RUNTIME_PATH` 保留 `.git` 元数据，并与配置的版本/修订版匹配。缺少该路径时，实时报价/检查会以 `UNSUPPORTED` 明确关闭；记录回放仍是分开的路径。
-
-请勿提交 RPC 凭据或已经填入真实值的 `.env` 文件。
-
-</details>
-
-## 开发命令
+常用检查命令：
 
 ```bash
 pnpm lint
 pnpm typecheck
 pnpm test
-pnpm test:acceptance
-pnpm test:integration
 pnpm --filter @parallax/web build
-pnpm smoke:kuru
-pnpm smoke:kuru:live
 ```
 
-实时冒烟需要固定 Moss 运行环境与只读 RPC 配置，不属于默认 CI 路径。
+## 架构
 
-## 测试与质量门禁
-
-GitHub Actions 使用 Node.js 22，执行依赖安装、lint、typecheck、确定性测试和 Node 集成测试。实时 RPC/Moss 冒烟测试需要外部运行环境，因此单独运行。
-
-## API 概览
-
-| 路由 | 用途 |
+| 区域 | 职责 |
 | --- | --- |
-| `POST /api/quote` | 精确输入的实时报价边界，返回报价、明确的不可用/无路径结果或范围受限错误。 |
-| `POST /api/check` | 对标准化 Swap 意图执行签名前检查；再次检查通过 `parentRunId` 关联，并且只允许修改一个意图条件。 |
-| `GET /api/runs/:runId` | 按 ID 返回一个已持久化的 Check Run。 |
-| `GET /api/replay/:id` | 返回冻结的记录回放样例，不会用于替代实时 Check。 |
+| `apps/web` | Web 体验与 API 结果展示 |
+| `apps/api` | 报价、检查、账户状态、Run 与编排 API |
+| `packages/contracts` | 请求、证据、Run 与响应的共享 Schema |
+| `packages/risk` | 确定性的 Risk 与 Verdict 评估 |
+| `packages/orchestrator` | Provider 执行以及 Run / 再次检查编排 |
+| `packages/sdk` | 公开 API 的类型安全客户端 |
+| `packages/moss-bridge` | 早期 Monad × Kuru 运行环境的兼容集成 |
+| `contracts/decision-registry` | 可选的链上 Decision Registry |
+| `fixtures` | 确定性测试数据与保留的证据记录 |
+| `docs` | 产品、集成、研究与项目历史参考 |
 
-请求结构、错误映射、CORS 与启动说明请参阅[前端 API 交接文档](docs/integration/api-frontend-handoff.md)。
-
-## 部署
-
-公开前端部署在 Vercel，并通过同源 `/api/*` 重写转发到已部署的 Render 后端。可用性仍取决于外部后端、RPC 和固定 Moss 运行环境；该部署不代表生产就绪，也不扩大已核验的协议范围。
-
-## 文档导航
-
-请从[完整文档索引](docs/README.md)开始。
-
-最重要的产品文档包括：
-
-- [P0 经济诊断与修正](docs/product/p0-economic-diagnosis-remediation.md)
-- [产品需求文档](docs/product/prd.md)
-- [产品交付规范](docs/product/product-delivery.md)
+仓库仍保留早期 Monad × Kuru 实现与研究，作为兼容性和历史背景；当前 Arbitrum 测试网路径以上文说明为准。
 
 ## 团队
 
-| 成员 | GitHub | 角色 |
+| 成员 | GitHub | 负责方向 |
 | --- | --- | --- |
-| Kai | [@chin0312](https://github.com/chin0312) | Product Owner |
-| Rei | [@rainypilgrimage](https://github.com/rainypilgrimage) | Contract Owner |
-| Jie | [@jzhao0](https://github.com/jzhao0) | Provider Owner |
-| Clare | [@brightheartma](https://github.com/brightheartma) | Backend Owner |
-| Antony | [@antony819](https://github.com/antony819) | Frontend Owner |
+| Kai | [@chin0312](https://github.com/chin0312) | 产品策略、研究与产品方向 |
+| Rei | [@rainypilgrimage](https://github.com/rainypilgrimage) | Core Contract 定义、Risk 语义与决策规则 |
+| Jie | [@jzhao0](https://github.com/jzhao0) | Provider 集成与执行证据 |
+| Clare | [@brightheartma](https://github.com/brightheartma) | Backend 基础设施、API 与持久化 |
+| Antony | [@antony819](https://github.com/antony819) | 前端与用户体验 |
 
-## 协作
+## 使用边界
 
-- 从最新 `main` 创建短期分支开始工作；
-- 将实现、Contract 语义、产品语义和证据陈述保留在各自负责的层中；
-- 将研究视为背景依据；实现行为以代码和已合并的产品文档为准；
-- 不得使用记录回放或 mock 数据证明实时用户决策；
-- 创建 PR 前运行相关检查，并邀请变更语义对应的负责人审查。
-
-## 免责声明
-
-Parallax 是用于解释和验证范围受限的签名前决策的实验性软件。证据可能不完整或不可用；用户必须自行核验交易细节。`UNKNOWN` 不是通过，`PROCEED` 只在已检查范围内成立，不构成安全保证。
-
-Parallax 不提供投资建议，也不签名、广播、执行或托管交易。
+Parallax 仍是实验性软件，本文所述 Arbitrum 集成仅限测试网。证据可能不完整或不可用；用户应自行检查交易细节。Parallax 不托管资产、不签名、广播或执行用户的 Swap、不提供投资建议，也不能替代独立安全审计。
 
 ## 许可证
 
-仓库当前没有声明许可证文件。是否采用 OSS 许可证仍由团队决定。
+仓库目前没有声明许可证。代码公开可见不代表可以不受限制地复用；许可证仍需由团队决定。

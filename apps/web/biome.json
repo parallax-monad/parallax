@@ -5,8 +5,7 @@
   "files": {
     "includes": [
       "**",
-      "!dist",
-      "!dummy-non-existing-folder/parallax-demo-day.html"
+      "!dist"
     ]
   },
   "css": {
