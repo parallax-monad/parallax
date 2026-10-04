@@ -224,9 +224,7 @@ export function WalletSwap({
             }`}
           >
             {quote.status === "available"
-              ? // Printed verbatim: the backend already returns human units, and
-                // re-parsing to a number would drop precision.
-                quote.quote.estimatedAmountOut
+              ? parseFloat(quote.quote.estimatedAmountOut).toFixed(3)
               : say(
                   language,
                   quote.status === "loading"
