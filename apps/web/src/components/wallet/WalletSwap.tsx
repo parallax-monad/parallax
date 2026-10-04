@@ -107,12 +107,27 @@ export function WalletSwap({
   onSubmit: () => void;
 }) {
   const [advancedOpen, setAdvancedOpen] = useState(showMinimumReceived);
+  const [previousQuote, setPreviousQuote] = useState<string | null>(null);
+  const [isUpdating, setIsUpdating] = useState(false);
 
   const set = <K extends keyof FormState>(key: K, value: FormState[K]) =>
     onChange({ ...form, [key]: value });
 
   const flagFor = (key: FieldFlag["field"]) =>
     flags.find((flag) => flag.field === key);
+
+  // Track quote changes and trigger highlight animation
+  useEffect(() => {
+    if (quote.status === "available") {
+      const currentQuote = quote.quote.estimatedAmountOut;
+      if (previousQuote !== null && previousQuote !== currentQuote) {
+        setIsUpdating(true);
+        const timer = setTimeout(() => setIsUpdating(false), 600);
+        return () => clearTimeout(timer);
+      }
+      setPreviousQuote(currentQuote);
+    }
+  }, [quote, previousQuote]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: form is intentionally partial to avoid infinite loops
   useEffect(() => {
@@ -219,9 +234,9 @@ export function WalletSwap({
         <div className="mt-3 flex items-center gap-3">
           <strong
             aria-live="polite"
-            className={`min-w-0 flex-1 truncate text-[30px] font-extrabold tracking-[-0.04em] ${
+            className={`min-w-0 flex-1 truncate text-[30px] font-extrabold tracking-[-0.04em] transition-all duration-300 ${
               quote.status === "available" ? "text-white" : "text-faint"
-            }`}
+            } ${isUpdating ? "animate-pulse text-[#22D3EE]" : ""}`}
           >
             {quote.status === "available"
               ? parseFloat(quote.quote.estimatedAmountOut).toFixed(3)
