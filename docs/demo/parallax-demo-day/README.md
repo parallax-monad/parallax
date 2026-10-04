@@ -19,7 +19,7 @@ http://localhost:8000/parallax-demo-day.html
 
 ## 在线访问
 
-正式版由 `main` 发布，地址保持不变：
+GitHub Pages 已配置为 GitHub Actions，但当前尚无成功发布；截至 2026-10-04，正式版和 PR 预览地址均返回 HTTP 404。部署成功前请使用上方本地方式查看。正式版地址（发布成功后）：
 
 <https://parallax-monad.github.io/parallax/parallax-demo-day.html>
 
@@ -29,7 +29,7 @@ PR 预览使用独立目录，不会覆盖正式版：
 https://parallax-monad.github.io/parallax/previews/pr-<PR-number>/parallax-demo-day.html
 ```
 
-同仓库 PR 新建、更新或重新打开时，GitHub Actions 会从 PR 分支发布演示目录的静态文件；关闭 PR 时也会触发重建并移除对应预览。每次 `main` 部署都会从正式版和仍打开的同仓库演示 PR 重建站点。Fork PR 不发布，部署流程不会运行 PR 脚本。首次启用预览触发器时，可通过同一工作流的 `workflow_dispatch` 手动生成预览；部署仍受 GitHub Pages `github-pages` environment 的分支保护和审批规则约束，未获准的 ref 不会发布预览。
+本 PR 分支中的工作流会把生产演示和同仓库 PR 的静态演示分别放入发布目录，不运行 PR 脚本；PR 新建、更新、重新打开或关闭时会重建预览。此预览触发器要等工作流合入默认分支后才会由 `pull_request_target` 生效。当前 `main` 上的工作流尚不包含 PR 预览构建；合入前从 PR 分支手动触发则受 `github-pages` environment 限制，目前仅允许 `main`。如需合入前发布预览，仓库管理员需在 Settings → Environments → `github-pages` → Deployment branches and tags 中明确允许可信分支 `codex/parallax-pitch-narrative`。Fork PR 不发布；当前两个 Pages 地址在成功部署前不可用。
 
 ## 操作方式
 
