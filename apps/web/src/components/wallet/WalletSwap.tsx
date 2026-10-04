@@ -109,32 +109,6 @@ export function WalletSwap({
   const [advancedOpen, setAdvancedOpen] = useState(showMinimumReceived);
   const [previousQuote, setPreviousQuote] = useState<string | null>(null);
   const [isUpdating, setIsUpdating] = useState(false);
-  const [simulatedQuote, setSimulatedQuote] = useState<string | null>(null);
-
-  // Test mode: simulate quote changes every 3 seconds
-  // Remove this after testing
-  useEffect(() => {
-    if (
-      quote.status === "available" &&
-      process.env.NODE_ENV === "development"
-    ) {
-      const testValues = [
-        "0.315",
-        "0.317",
-        "0.319",
-        "0.316",
-        "0.318",
-        "0.320",
-        "0.314",
-      ];
-      let index = 0;
-      const interval = setInterval(() => {
-        index = (index + 1) % testValues.length;
-        setSimulatedQuote(testValues[index]);
-      }, 3000);
-      return () => clearInterval(interval);
-    }
-  }, [quote.status]);
 
   const set = <K extends keyof FormState>(key: K, value: FormState[K]) =>
     onChange({ ...form, [key]: value });
@@ -146,7 +120,7 @@ export function WalletSwap({
   // biome-ignore lint/correctness/useExhaustiveDependencies: previousQuote is intentionally excluded to avoid infinite loop
   useEffect(() => {
     if (quote.status === "available") {
-      const currentQuote = simulatedQuote || quote.quote.estimatedAmountOut;
+      const currentQuote = quote.quote.estimatedAmountOut;
 
       // Only trigger animation if quote actually changed (not first load)
       if (previousQuote !== null && previousQuote !== currentQuote) {
@@ -165,7 +139,7 @@ export function WalletSwap({
       setPreviousQuote(null);
       setIsUpdating(false);
     }
-  }, [quote, simulatedQuote]);
+  }, [quote]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: form is intentionally partial to avoid infinite loops
   useEffect(() => {
@@ -281,8 +255,7 @@ export function WalletSwap({
             }`}
           >
             {quote.status === "available"
-              ? simulatedQuote ||
-                parseFloat(quote.quote.estimatedAmountOut).toFixed(3)
+              ? parseFloat(quote.quote.estimatedAmountOut).toFixed(3)
               : say(
                   language,
                   quote.status === "loading"
