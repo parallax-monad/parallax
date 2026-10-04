@@ -52,7 +52,7 @@ Intent → Evidence → Cause → Decision → Relevant Action → Re-verificati
 ## Demo
 
 - [Try the live application](https://parallax-web-snowy.vercel.app)
-- [View the Demo Day presentation](https://parallax-monad.github.io/parallax/parallax-demo-day.html)
+- [Demo Day presentation (GitHub Pages deployment pending)](https://parallax-monad.github.io/parallax/parallax-demo-day.html)
 - [Watch the product demo video](https://www.youtube.com/watch?v=j43WqH6TrTE)
 
 The landing page is served at `#/`, and the wallet-style MVP is at `#/analyze`.
