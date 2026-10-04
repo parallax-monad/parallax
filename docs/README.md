@@ -57,13 +57,14 @@ shipped.
   and technical-selection research.
 - [Explorer Evidence feasibility](./research/be-108-explorer-evidence-feasibility.md) —
   partial feasibility findings and qualification limits.
-- Provider handoffs and qualification records: [Native RPC](./research/native-rpc-provider-handoff-p0.md),
-  [Tenderly](./research/be-072-tenderly-provider-handoff.md),
-  [Moss/Kuru](./research/be-033-moss-provider-handoff.md), and
-  [GenericEvidence field mapping](./research/be-033-moss-field-mapping.md).
+- Current Provider handoff and qualification records: [Native RPC](./research/native-rpc-provider-handoff-p0.md)
+  and [Tenderly](./research/be-072-tenderly-provider-handoff.md).
 
 ## Historical integration records
 
+- [Monad × Kuru / Moss provider handoff](./research/be-033-moss-provider-handoff.md) and
+  [GenericEvidence field mapping](./research/be-033-moss-field-mapping.md) — retained
+  historical technical context, not prerequisites for the current Arbitrum product path.
 - [Arbitrum UI implementation snapshot](./integration/arbitrum-ui-implementation.md) —
   dated implementation notes; verify current behavior against code and live references.
 - [Monad × Kuru runtime record](./integration/moss-kuru-live-runtime.md) — historical

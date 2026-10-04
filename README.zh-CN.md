@@ -1,12 +1,12 @@
 <div align="center">
 
-<img src="docs/assets/parallax-logo.png" alt="Parallax 标志" width="320" />
+<img src="docs/assets/parallax-logo.png" alt="Parallax 标志" width="200" />
 
 # Parallax
 
 ### 签名前，先知道下一步该怎么做。
 
-面向链上交易的、基于证据的签名前决策层。
+面向链上交易的预执行决策层。
 
 [在线演示](https://parallax-web-snowy.vercel.app/) ·
 [演示文稿](https://parallax-monad.github.io/parallax/parallax-demo-day.html) ·
@@ -15,7 +15,7 @@
 [文档](docs/README.md) ·
 [GitHub 仓库](https://github.com/parallax-monad/parallax)
 
-<sub>Arbitrum Sepolia · Camelot V3 · TypeScript</sub>
+<sub>当前实现：Arbitrum Sepolia · Camelot V3 · TypeScript</sub>
 
 <sub><a href="./README.md">English</a> · 简体中文</sub>
 
@@ -91,7 +91,9 @@ pnpm install --frozen-lockfile
 cp .env.example .env
 ```
 
-根据要运行的路径配置只读 RPC 和可信代币元数据。凭据仅保存在本地环境配置中，切勿提交。
+对于当前 Arbitrum Sepolia 路径，请配置 `ARBITRUM_RPC_URL` 和包含可信 Arbitrum 代币元数据的 `PARALLAX_TOKEN_REGISTRY_JSON`。凭据仅保存在本地环境配置中，切勿提交。
+
+即使运行 Arbitrum 路径，API 启动配置目前仍会校验旧版共享配置中的有效 `MONAD_RPC_URL`，以及非空的 `MOSS_RUNTIME_VERSION` / `MOSS_RUNTIME_REVISION`。这是配置校验要求，不表示当前产品路径使用 Monad、Kuru 或 Moss。`MOSS_RUNTIME_PATH` 为可选项，可以留空；运行 Arbitrum 路径不需要 Moss 代码仓库。各变量的区别请见 [`.env.example`](.env.example)。
 
 在两个终端分别启动 API 和 Web 应用：
 
@@ -111,7 +113,7 @@ pnpm test
 pnpm --filter @parallax/web build
 ```
 
-## 架构
+## 当前架构
 
 | 区域 | 职责 |
 | --- | --- |
@@ -121,12 +123,9 @@ pnpm --filter @parallax/web build
 | `packages/risk` | 确定性的 Risk 与 Verdict 评估 |
 | `packages/orchestrator` | Provider 执行以及 Run / 再次检查编排 |
 | `packages/sdk` | 公开 API 的类型安全客户端 |
-| `packages/moss-bridge` | 早期 Monad × Kuru 运行环境的兼容集成 |
 | `contracts/decision-registry` | 可选的链上 Decision Registry |
 | `fixtures` | 确定性测试数据与保留的证据记录 |
 | `docs` | 产品、集成、研究与项目历史参考 |
-
-仓库仍保留早期 Monad × Kuru 实现与研究，作为兼容性和历史背景；当前 Arbitrum 测试网路径以上文说明为准。
 
 ## 团队
 

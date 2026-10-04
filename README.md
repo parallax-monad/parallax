@@ -1,12 +1,12 @@
 <div align="center">
 
-<img src="docs/assets/parallax-logo.png" alt="Parallax" width="320" />
+<img src="docs/assets/parallax-logo.png" alt="Parallax" width="200" />
 
 # Parallax
 
 ### Before you sign, know what to do next.
 
-An evidence-aware pre-execution decision layer for onchain transactions.
+A pre-execution decision layer for onchain transactions.
 
 [Live Demo](https://parallax-web-snowy.vercel.app/) ·
 [Pitch Deck](https://parallax-monad.github.io/parallax/parallax-demo-day.html) ·
@@ -15,7 +15,7 @@ An evidence-aware pre-execution decision layer for onchain transactions.
 [Documentation](docs/README.md) ·
 [GitHub](https://github.com/parallax-monad/parallax)
 
-<sub>Arbitrum Sepolia · Camelot V3 · TypeScript</sub>
+<sub>Currently implemented on Arbitrum Sepolia · Camelot V3 · TypeScript</sub>
 
 <sub>English · <a href="./README.zh-CN.md">简体中文</a></sub>
 
@@ -125,8 +125,16 @@ pnpm install --frozen-lockfile
 cp .env.example .env
 ```
 
-Configure the read-only RPC and trusted token metadata needed for the path you want to
-run. Keep credentials in local environment configuration; never commit them.
+For the current Arbitrum Sepolia path, configure `ARBITRUM_RPC_URL` and
+`PARALLAX_TOKEN_REGISTRY_JSON` with trusted Arbitrum token metadata. Keep credentials in
+local environment configuration; never commit them.
+
+The API bootstrap still validates a syntactically valid `MONAD_RPC_URL` and non-empty
+`MOSS_RUNTIME_VERSION` / `MOSS_RUNTIME_REVISION` fields from its legacy shared
+configuration, even when running the Arbitrum path. This configuration requirement does
+not mean the current product path uses Monad, Kuru, or Moss. `MOSS_RUNTIME_PATH` is
+optional and can remain unset; a Moss checkout is not required for Arbitrum. See
+[`.env.example`](.env.example) for the distinction.
 
 In separate terminals, start the API and web app:
 
@@ -148,7 +156,7 @@ pnpm test
 pnpm --filter @parallax/web build
 ```
 
-## Architecture
+## Current Architecture
 
 | Area | Responsibility |
 | --- | --- |
@@ -158,13 +166,9 @@ pnpm --filter @parallax/web build
 | `packages/risk` | Deterministic Risk and Verdict evaluation |
 | `packages/orchestrator` | Provider execution and Run / re-check orchestration |
 | `packages/sdk` | Typed client for the public API |
-| `packages/moss-bridge` | Earlier Monad × Kuru runtime compatibility integration |
 | `contracts/decision-registry` | Optional on-chain Decision Registry |
 | `fixtures` | Deterministic test data and retained Evidence captures |
 | `docs` | Product, integration, research, and project-history references |
-
-The repository retains earlier Monad × Kuru work and research as compatibility and
-historical context; the current Arbitrum testnet path is described above.
 
 ## Team
 
