@@ -45,23 +45,25 @@ function formatAvailableBalance(
   if (balance.status !== "AVAILABLE") return undefined;
   const { amountAtomic, metadata } = balance;
   if (!amountAtomic || !/^\d+$/.test(amountAtomic)) return undefined;
-  
+
   const divisor = 10n ** BigInt(metadata.decimals);
   const balanceWei = BigInt(amountAtomic);
-  
-  const gasReserveWei = isNativeToken 
+
+  const gasReserveWei = isNativeToken
     ? BigInt(Math.floor(0.001 * 10 ** metadata.decimals))
     : 0n;
-  
+
   if (balanceWei <= gasReserveWei) return undefined;
-  
+
   const availableWei = balanceWei - gasReserveWei;
   const integerPart = availableWei / divisor;
   const fractionalPart = availableWei % divisor;
-  
-  const fractionalStr = fractionalPart.toString().padStart(metadata.decimals, "0");
+
+  const fractionalStr = fractionalPart
+    .toString()
+    .padStart(metadata.decimals, "0");
   const twoDecimals = fractionalStr.slice(0, 2);
-  
+
   return `${integerPart}.${twoDecimals}`;
 }
 
@@ -93,8 +95,14 @@ export function OptionsStep({
       result.quote.expectedOutput,
       currentMinimumReceived,
     );
-  const isNativeToken = result.intent.tokenIn === "ETH" || result.intent.tokenIn === "MATIC" || result.intent.tokenIn === "BNB";
-  const availableBalance = formatAvailableBalance(result.accountState, isNativeToken);
+  const isNativeToken =
+    result.intent.tokenIn === "ETH" ||
+    result.intent.tokenIn === "MATIC" ||
+    result.intent.tokenIn === "BNB";
+  const availableBalance = formatAvailableBalance(
+    result.accountState,
+    isNativeToken,
+  );
   const [hoveredCard, setHoveredCard] = useState<string | null>(null);
   const [pointer, setPointer] = useState<{ x: number; y: number } | null>(null);
 

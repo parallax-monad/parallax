@@ -10,7 +10,6 @@ import { CloseIcon } from "@/components/wallet/WalletIcons";
 import { WalletIntro } from "@/components/wallet/WalletIntro";
 import { WalletResult } from "@/components/wallet/WalletResult";
 import { WalletSwap } from "@/components/wallet/WalletSwap";
-import { arbitrumSampleBalanceInsufficient } from "@/lib/analyze/arbitrum-samples";
 import { flaggedFields } from "@/lib/analyze/fields";
 import {
   applyRemediationOption,
@@ -434,27 +433,32 @@ export function WalletApp({ language }: { language: Language }) {
     const isDemoBalanceInsufficient =
       (form.tokenIn === "ETH" && parseFloat(form.amountIn) > 0.07) ||
       (form.tokenIn === "USDC" && parseFloat(form.amountIn) > 87898181);
-    
+
     if (isDemoBalanceInsufficient) {
       const { arbitrumSampleBalanceInsufficient } = await import(
         "@/lib/analyze/arbitrum-samples"
       );
-      
+
+      if (!arbitrumSampleBalanceInsufficient.accountState) {
+        throw new Error("Demo account state not available");
+      }
+
       // Adjust the sample data based on input token
-      const accountState = form.tokenIn === "USDC" 
-        ? {
-            ...arbitrumSampleBalanceInsufficient.accountState!,
-            balances: {
-              ...arbitrumSampleBalanceInsufficient.accountState!.balances,
-              inputToken: {
-                status: "AVAILABLE" as const,
-                amountAtomic: "87898181000000",
-                metadata: { symbol: "USDC", decimals: 6 },
+      const accountState =
+        form.tokenIn === "USDC"
+          ? {
+              ...arbitrumSampleBalanceInsufficient.accountState,
+              balances: {
+                ...arbitrumSampleBalanceInsufficient.accountState.balances,
+                inputToken: {
+                  status: "AVAILABLE" as const,
+                  amountAtomic: "87898181000000",
+                  metadata: { symbol: "USDC", decimals: 6 },
+                },
               },
-            },
-          }
-        : arbitrumSampleBalanceInsufficient.accountState;
-      
+            }
+          : arbitrumSampleBalanceInsufficient.accountState;
+
       const demoResult = {
         ...arbitrumSampleBalanceInsufficient,
         accountState,
@@ -513,36 +517,36 @@ export function WalletApp({ language }: { language: Language }) {
       currentQuote.requestIdentity.tokenOut === submitted.tokenOut &&
       currentQuote.requestIdentity.amountIn === submitted.amountIn;
     const checkRequest = Promise.resolve()
-          .then(() =>
-            checkSwap({
-              ...toInput(submitted, parent?.runId),
-              tokenMetadata:
-                currentP0Config?.status === "AVAILABLE"
-                  ? currentP0Config.tokenMetadata
-                  : undefined,
-              ...(matchesQuoteRequest && currentQuote.status === "available"
-                ? {
-                    expectationBaseline: expectationBaseline(
-                      {
-                        protocol: submitted.protocol,
-                        tokenIn: submitted.tokenIn,
-                        tokenOut: submitted.tokenOut,
-                        amountIn: submitted.amountIn,
-                        tokenMetadata:
-                          currentP0Config?.status === "AVAILABLE"
-                            ? currentP0Config.tokenMetadata
-                            : undefined,
-                      },
-                      currentQuote.quote,
-                    ),
-                  }
-                : {}),
-            }),
-          )
-          .then(
-            (value) => ({ ok: true as const, value }),
-            (error: unknown) => ({ ok: false as const, error }),
-          );
+      .then(() =>
+        checkSwap({
+          ...toInput(submitted, parent?.runId),
+          tokenMetadata:
+            currentP0Config?.status === "AVAILABLE"
+              ? currentP0Config.tokenMetadata
+              : undefined,
+          ...(matchesQuoteRequest && currentQuote.status === "available"
+            ? {
+                expectationBaseline: expectationBaseline(
+                  {
+                    protocol: submitted.protocol,
+                    tokenIn: submitted.tokenIn,
+                    tokenOut: submitted.tokenOut,
+                    amountIn: submitted.amountIn,
+                    tokenMetadata:
+                      currentP0Config?.status === "AVAILABLE"
+                        ? currentP0Config.tokenMetadata
+                        : undefined,
+                  },
+                  currentQuote.quote,
+                ),
+              }
+            : {}),
+        }),
+      )
+      .then(
+        (value) => ({ ok: true as const, value }),
+        (error: unknown) => ({ ok: false as const, error }),
+      );
 
     schedulerRef.current.run({
       stageCount: WALLET_STAGE_COUNT,

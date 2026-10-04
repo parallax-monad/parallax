@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { TokenIcon } from "@/components/analyze/TokenIcon";
 import { ChevronDownIcon, SwapIcon } from "@/components/wallet/WalletIcons";
 import { DEMO_RECIPIENT } from "@/components/wallet/walletData";
@@ -114,11 +114,12 @@ export function WalletSwap({
   const flagFor = (key: FieldFlag["field"]) =>
     flags.find((flag) => flag.field === key);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: form is intentionally partial to avoid infinite loops
   useEffect(() => {
     if (
       quote.status === "available" &&
       form.slippage &&
-      !isNaN(parseFloat(form.slippage))
+      !Number.isNaN(parseFloat(form.slippage))
     ) {
       const calculated =
         parseFloat(quote.quote.estimatedAmountOut) *
@@ -126,7 +127,7 @@ export function WalletSwap({
       const referenceMin = (Math.floor(calculated * 100) / 100)
         .toFixed(2)
         .replace(/\.?0+$/, "");
-      set("minimumReceived", referenceMin);
+      onChange({ ...form, minimumReceived: referenceMin });
     }
   }, [quote, form.slippage]);
 
@@ -380,12 +381,14 @@ export function WalletSwap({
                     zh: "你接受的边界",
                   })}
                   value={form.minimumReceived}
-                  onChange={(event) => set("minimumReceived", event.target.value)}
+                  onChange={(event) =>
+                    set("minimumReceived", event.target.value)
+                  }
                 />
               </div>
               {quote.status === "available" &&
                 form.slippage &&
-                !isNaN(parseFloat(form.slippage)) && (
+                !Number.isNaN(parseFloat(form.slippage)) && (
                   <p className="mt-2 text-[12px] leading-[1.6] text-white/60">
                     {say(language, {
                       en: "Reference minimum: ",
@@ -399,8 +402,7 @@ export function WalletSwap({
                         return (Math.floor(calculated * 100) / 100)
                           .toFixed(2)
                           .replace(/\.?0+$/, "");
-                      })()}{" "}
-                      {tokenOutLabel}
+                      })()} {tokenOutLabel}
                     </span>
                     {say(language, {
                       en: ` (based on ${form.slippage}% slippage)`,
