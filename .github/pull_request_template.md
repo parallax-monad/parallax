@@ -20,7 +20,7 @@
 
 ## Risks and Dependencies
 
-<!-- Does this change shared contracts, Moss integration, risk logic, API behavior, or deployment? -->
+<!-- Does this change chain/protocol adapters, Provider evidence, shared contracts, Risk logic, API behavior, persistence, or deployment? -->
 
 ## Checklist
 
@@ -35,8 +35,10 @@
 <!-- Check the primary review context; multiple boxes are fine for cross-cutting changes. -->
 
 - [ ] Provider-specific
+- [ ] Chain / protocol integration
 - [ ] Backend / integration
+- [ ] API / persistence
 - [ ] Contract semantics
 - [ ] Product semantics
 - [ ] Frontend
-- [ ] Receipt Smart Contract
+- [ ] Smart Contract / Registry

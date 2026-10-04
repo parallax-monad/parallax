@@ -13,6 +13,7 @@
 [产品演示视频](https://youtu.be/klOKwyWgiZU) ·
 [项目路演视频](https://youtu.be/Dp_Ewlud5QU) ·
 [文档](docs/README.md) ·
+[贡献指南](CONTRIBUTING.md) ·
 [GitHub 仓库](https://github.com/parallax-monad/parallax)
 
 <sub>当前实现：Arbitrum Sepolia · Camelot V3 · TypeScript</sub>
@@ -99,7 +100,7 @@ cp .env.example .env
 
 对于当前 Arbitrum Sepolia 路径，请配置 `ARBITRUM_RPC_URL` 和包含可信 Arbitrum 代币元数据的 `PARALLAX_TOKEN_REGISTRY_JSON`。凭据仅保存在本地环境配置中，切勿提交。
 
-即使运行 Arbitrum 路径，API 启动配置目前仍会校验旧版共享配置中的有效 `MONAD_RPC_URL`，以及非空的 `MOSS_RUNTIME_VERSION` / `MOSS_RUNTIME_REVISION`。这是配置校验要求，不表示当前产品路径使用 Monad、Kuru 或 Moss。`MOSS_RUNTIME_PATH` 为可选项，可以留空；运行 Arbitrum 路径不需要 Moss 代码仓库。各变量的区别请见 [`.env.example`](.env.example)。
+本地通过 `pnpm` 启动时，API 配置仍会校验旧版共享配置中的有效 `MONAD_RPC_URL`，以及非空的 `MOSS_RUNTIME_VERSION` / `MOSS_RUNTIME_REVISION`。这不表示当前产品路径使用 Monad、Kuru 或 Moss。`MOSS_RUNTIME_PATH` 在本地为可选项，因此 Arbitrum 本地开发不需要 Moss 代码仓库。部署打包仍有耦合：当前 Dockerfile 会克隆并构建固定版本的 Moss runtime，并设置 `MOSS_RUNTIME_PATH`，尽管当前公开集成路径是 Arbitrum Sepolia × Camelot V3。详情请见 [`.env.example`](.env.example) 和 [Runtime Decoupling 提案](docs/proposals/runtime-decoupling.md)。
 
 在两个终端分别启动 API 和 Web 应用：
 

@@ -24,7 +24,7 @@ This research therefore focuses on the user decision before signing or retrying 
 
 ## Related documents
 
-- [Product Requirements Document](../product/prd.md) — converts the research findings into the current P0 product decisions.
+- [Product Requirements Document](../product/prd.md) — records the historical Monad MVP scope; current frozen semantics are linked from Issue #70.
 - [Competitive Analysis](./competitive-analysis.md) — evaluates whether existing products already address the observed user problems.
 
 ---

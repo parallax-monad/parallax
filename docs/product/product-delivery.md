@@ -1,5 +1,10 @@
 # Parallax Product Delivery
 
+> **Historical Product/UI delivery snapshot.** This document preserves an earlier delivery
+> boundary and implementation context, including the Monad/Kuru/Moss-era path. It is not the
+> current integration/status record; use merged code and live GitHub Issues. Frozen Product/Risk
+> semantics are governed by Issue [#70](https://github.com/parallax-monad/parallax/issues/70).
+
 ## 1. Purpose and ownership boundary
 
 This document defines the product behavior that frontend, API, and demo implementations may present from an evaluated Parallax result. It specifies:
@@ -22,7 +27,7 @@ The following remain outside this document:
 
 The Product View Model in Section 12 is a product proposal. It is not the frozen Shared Contract/API shape and does not activate runtime behavior. The merged Evidence implementation, merged PR #3 Rule Methodology, and merged PR #4 Contract remain authoritative for their respective semantics. Future Rule or Contract changes require a Product mapping review.
 
-## 2. Current product boundary
+## 2. Product boundary recorded in this snapshot
 
 The honest P0 capability currently supported by the reviewed repository work is:
 

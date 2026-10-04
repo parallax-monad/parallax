@@ -1,5 +1,7 @@
 # 前端 API 接口整合總結
 
+> **歷史整合記錄，非現行實作規格。** 本文保留較早期的分析介面方案與尚未完成的整合步驟，其中 Monad／Kuru／Moss 內容不代表目前公開產品路徑，也不代表已完成多鏈產品支援。當前公開整合為 Arbitrum Sepolia × Camelot V3；請以[文件索引](../../docs/README.md)、[現行 API handoff](../../docs/integration/api-frontend-handoff.md)及合併程式碼為準。
+
 ## 現狀
 
 前端代碼（`apps/web/src/lib/analyze/service.ts`）已經實現了以下 provider-neutral public API：

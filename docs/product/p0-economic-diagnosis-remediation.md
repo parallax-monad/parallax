@@ -6,6 +6,8 @@
 > **Scope:** P0 Product semantics for economic diagnosis, quantified remediation, and re-verification  
 > **Non-authority notice:** This document defines Product intent, user semantics, Product acceptance rules, and P0 scope. It does **not** freeze the final Shared Contract, Provider field vocabulary, Backend wire shape, protocol-specific implementation, or universal market thresholds.
 
+> **Status note:** implementation-maturity statements and checklists in this proposal are snapshots, not live status. Later frozen Product/Risk semantics are recorded in [Issue #70](https://github.com/parallax-monad/parallax/issues/70); verify current field implementation and acceptance against merged code and live issues.
+
 ---
 
 ## 1. Product thesis
@@ -250,9 +252,9 @@ Parallax must not infer:
 
 unless an explicit applicable economic limit exists.
 
-### Current implementation note
+### Historical implementation note
 
-The repository currently has a pre-check quote and a separate Check Intent, but the selected quote is not yet a canonical Check baseline in the Shared Contract.
+At the time this note was written, the repository had a pre-check quote and separate Check Intent, but the selected quote was not yet a canonical Check baseline in the Shared Contract. That implementation-status statement is historical; consult Issue #70 and current code for the accepted Expectation Baseline representation.
 
 Therefore, **Expectation Baseline is a proposed Product semantic**.
 
