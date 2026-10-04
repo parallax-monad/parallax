@@ -401,7 +401,13 @@ describe("Arbitrum parameter adjustment HTTP contract", () => {
     {
       name: "output one atomic unit above minimum",
       minimum: "0.015882896725531550",
+      verdict: "PROCEED",
+    },
+    {
+      name: "output above minimum with reverted simulation",
+      minimum: "0.01",
       verdict: "UNKNOWN",
+      revert: true,
     },
     {
       name: "insufficient input balance despite a reverted simulation",
@@ -561,6 +567,40 @@ describe("Arbitrum parameter adjustment HTTP contract", () => {
         );
       } else {
         expect(adjustment).toBeUndefined();
+      }
+      if (scenario.minimum !== undefined && scenario.verdict === "PROCEED") {
+        expect(result.summary).toContain("quote is strictly above");
+        expect(result.p0?.evidenceState).toBe("INCOMPLETE");
+        const candidate = structuredClone(result);
+        candidate.verdict = "UNKNOWN";
+        const quote = {
+          source: "quote",
+          amountOutAtomic: "15882896725531551",
+          blockNumber,
+          fetchedAt: result.providerEvidence?.quote.fetchedAt,
+        };
+        expect(applyBasicSimulationRiskPolicy(candidate, quote).verdict).toBe(
+          "PROCEED",
+        );
+        for (const invalidQuote of [
+          undefined,
+          { ...quote, amountOutAtomic: "invalid" },
+          { ...quote, amountOutAtomic: "15882896725531550" },
+          { ...quote, source: "external" },
+          { ...quote, fetchedAt: undefined },
+          { ...quote, fetchedAt: "invalid" },
+          { ...quote, blockNumber: "1" },
+        ]) {
+          expect(applyBasicSimulationRiskPolicy(candidate, invalidQuote)).toBe(
+            candidate,
+          );
+        }
+        const binding = candidate.p0?.basicSimulation?.transactionBinding;
+        if (binding === undefined) throw new Error("Missing binding");
+        binding.amountOutMinimumAtomic = "1";
+        expect(applyBasicSimulationRiskPolicy(candidate, quote)).toBe(
+          candidate,
+        );
       }
       const requestsBeforeRecovery = rpcRequests;
       const historical = await app.fetch(
@@ -2408,7 +2448,7 @@ describe("Arbitrum production composition skeleton", () => {
     expect(response.status).toBe(200);
     expect(body).toMatchObject({
       status: "completed",
-      verdict: "UNKNOWN",
+      verdict: "PROCEED",
       intent: {
         sender,
         recipient,
