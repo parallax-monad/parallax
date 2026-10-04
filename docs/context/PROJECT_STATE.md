@@ -465,7 +465,7 @@ An isolated worktree `feat/decision-commitment-registry` was advanced from its r
 starting point to `origin/main` tip `fafa36f54f36bfc02e1bb8ed06f54d3fdab9caa8` by a safe
 fast-forward from `5f4e500d916c6c392147344e2bcc6f39c49fc4f6`; the intervening commit only
 changed demo/Pages files and all local task edits were preserved.
-The local, uncommitted change adds the optional Arbitrum Sepolia Decision Registry contract,
+The feature branch adds the optional Arbitrum Sepolia Decision Registry contract,
 versioned off-chain Run commitment preparation, and deploy/anchor/verify CLI commands. Before
 an anchor write, the CLI now resolves the selected Foundry account and fails closed unless its
 address matches the Registry's immutable attestor, avoiding a predictable reverted transaction.
@@ -503,5 +503,14 @@ One completed persisted Run was anchored. Independent verification returned `MAT
 `315701961` (receipt status `true`). This proves only that the prepared decision snapshot matches
 the anchored commitment; it does not prove Evidence authenticity, Risk correctness, transaction
 safety, or `VERIFIED` remediation. The Run ID and private bundle are intentionally excluded from
-this public project record. Implementation and documentation remain uncommitted; no push or PR
-has been made.
+this public project record.
+
+Feature commit `f6873a9ac00723698b648ccb753e9b83800d98d7` was pushed on
+`feat/decision-commitment-registry`; PR #163 is OPEN against `main`:
+https://github.com/parallax-monad/parallax/pull/163. The CI `Checks` job and Vercel preview both
+passed for the original feature head. A docs-only handoff synchronization is included in this
+follow-up commit and changes the PR head; refresh the live PR for its exact current head and
+checks.
+Per the user's instruction, the departed Contract Owner approval is treated as granted and its
+automatically generated GitHub review request was removed. This PR does not claim merge or
+Product acceptance.

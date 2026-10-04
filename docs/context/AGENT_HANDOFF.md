@@ -5,11 +5,14 @@ Checkpoint: 2026-09-29
 ## Active local work — 2026-10-04 Decision Registry MVP
 
 - Worktree: `/Users/johnma/.codex/worktrees/decision-commitment-registry`; branch:
-  `feat/decision-commitment-registry`; current HEAD is `fafa36f54f36bfc02e1bb8ed06f54d3fdab9caa8`,
-  matching freshly fetched `origin/main`. The branch was fast-forwarded from
+  `feat/decision-commitment-registry`; its base at publication was freshly fetched
+  `origin/main` `fafa36f54f36bfc02e1bb8ed06f54d3fdab9caa8`. Feature commit
+  `f6873a9ac00723698b648ccb753e9b83800d98d7` is pushed and PR #163 is OPEN at
+  https://github.com/parallax-monad/parallax/pull/163. The branch was fast-forwarded from
   `5f4e500d916c6c392147344e2bcc6f39c49fc4f6`; its intervening main commit touched only demo
   presentation and Pages workflow files, and all local task changes were preserved.
-- The local implementation remains uncommitted. Review fixes verify the selected Foundry signer
+- The implementation adds an optional Registry, versioned commitment preparation, and explicit
+  deploy/anchor/verify CLI commands. Review fixes verify the selected Foundry signer
   matches the Registry's immutable attestor before a write, reject zero addresses, and provide a
   read-only deployment verifier for chain, runtime code, and immutable attestor. The `anchor`
   command now re-fetches the selected Run from the Backend API and refuses to sign unless that
@@ -32,9 +35,12 @@ Checkpoint: 2026-09-29
   re-hashed to the same commitment, and the updated CLI returned its already-anchored/no-write
   result. This proves commitment equality only, not Evidence authenticity, Risk correctness, or
   transaction safety. The RPC secret was not printed or copied into this worktree.
-- Contract Owner approval requests are intentionally omitted per the user's direct instruction;
-  treat that review gate as approved. Local code/docs remain uncommitted; no push or PR has been
-  created. The only Git history movement was the non-destructive fast-forward to current main.
+- GitHub automatically requested Code Owner reviews when PR #163 was opened. Per the user's
+  instruction to treat the departed Contract Owner approval as granted without requesting it,
+  the auto-generated request to `@rainypilgrimage` was removed; the other Code Owner requests
+  remain. For the original feature head, the CI `Checks` job and Vercel preview both completed
+  successfully. This handoff update is a docs-only follow-up on PR #163 and changes its head;
+  query the live PR for exact current head, CI, and review status before any later gate.
 
 ## Takeover
 

@@ -419,3 +419,21 @@ Run after persistence; any automatic path would need a distinct post-persistence
   re-fetched the API Run, verified the chain value, and returned “already anchored” without any
   transaction. The original anchor predates this source guard; no follow-up on-chain transaction
   occurred. No commit, push, PR, or GitHub mutation occurred.
+
+## 2026-10-04 — Decision Registry commit, push, and PR
+
+- Passed the repository write preflight and committed the reviewed implementation and context
+  updates as `f6873a9ac00723698b648ccb753e9b83800d98d7`
+  (`feat(api): add optional decision registry anchoring`). The commit is based on freshly fetched
+  `origin/main` `fafa36f54f36bfc02e1bb8ed06f54d3fdab9caa8` and was pushed to
+  `feat/decision-commitment-registry`.
+- Created PR #163 against `main`:
+  https://github.com/parallax-monad/parallax/pull/163. It is OPEN and not claimed merged.
+- GitHub's automatic Code Owner routing requested `@rainypilgrimage` due to documentation paths.
+  Per the user's instruction that Contract Owner approval is already granted and should not be
+  requested, that auto-generated review request was removed; the other requested reviewers were
+  retained.
+- The CI `Checks` job and Vercel preview completed SUCCESS for original feature head
+  `f6873a9ac00723698b648ccb753e9b83800d98d7`. This entry is followed by a docs-only handoff
+  synchronization commit that changes the PR head; refresh PR #163 for current exact-head
+  checks. No deployment or anchor transaction was part of this publication step.
