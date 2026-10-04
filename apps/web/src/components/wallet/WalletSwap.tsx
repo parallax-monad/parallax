@@ -143,6 +143,7 @@ export function WalletSwap({
     flags.find((flag) => flag.field === key);
 
   // Track quote changes and trigger highlight animation
+  // biome-ignore lint/correctness/useExhaustiveDependencies: previousQuote is intentionally excluded to avoid infinite loop
   useEffect(() => {
     if (quote.status === "available") {
       const currentQuote = simulatedQuote || quote.quote.estimatedAmountOut;
@@ -150,8 +151,8 @@ export function WalletSwap({
       // Only trigger animation if quote actually changed (not first load)
       if (previousQuote !== null && previousQuote !== currentQuote) {
         setIsUpdating(true);
-        const timer = setTimeout(() => setIsUpdating(false), 600);
         setPreviousQuote(currentQuote);
+        const timer = setTimeout(() => setIsUpdating(false), 600);
         return () => clearTimeout(timer);
       }
 
@@ -164,7 +165,7 @@ export function WalletSwap({
       setPreviousQuote(null);
       setIsUpdating(false);
     }
-  }, [quote, previousQuote, simulatedQuote]);
+  }, [quote, simulatedQuote]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: form is intentionally partial to avoid infinite loops
   useEffect(() => {
