@@ -146,12 +146,23 @@ export function WalletSwap({
   useEffect(() => {
     if (quote.status === "available") {
       const currentQuote = simulatedQuote || quote.quote.estimatedAmountOut;
+
+      // Only trigger animation if quote actually changed (not first load)
       if (previousQuote !== null && previousQuote !== currentQuote) {
         setIsUpdating(true);
         const timer = setTimeout(() => setIsUpdating(false), 600);
+        setPreviousQuote(currentQuote);
         return () => clearTimeout(timer);
       }
-      setPreviousQuote(currentQuote);
+
+      // Set initial quote value (no animation)
+      if (previousQuote === null) {
+        setPreviousQuote(currentQuote);
+      }
+    } else {
+      // Reset when quote is not available
+      setPreviousQuote(null);
+      setIsUpdating(false);
     }
   }, [quote, previousQuote, simulatedQuote]);
 
@@ -261,8 +272,12 @@ export function WalletSwap({
           <strong
             aria-live="polite"
             className={`min-w-0 flex-1 truncate text-[30px] font-extrabold tracking-[-0.04em] transition-all duration-300 ${
-              quote.status === "available" ? "text-white" : "text-faint"
-            } ${isUpdating ? "animate-pulse text-monad-bright" : ""}`}
+              isUpdating
+                ? "animate-pulse text-monad-bright"
+                : quote.status === "available"
+                  ? "text-white"
+                  : "text-faint"
+            }`}
           >
             {quote.status === "available"
               ? simulatedQuote ||
