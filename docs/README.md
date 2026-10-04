@@ -33,7 +33,8 @@ shipped.
 - [Basic Simulation and Risk policy](./integration/basic-simulation-risk-policy.md) —
   implementation-boundary reference for execution facts and Risk.
 - [Verified Remediation feasibility record](./integration/verified-remediation-107-blocker.md)
-  — evidence and boundaries for the current uncompleted Verified Remediation gate.
+  — historical evidence for a gate that remains NOT COMPLETE; Issue #107 is closed
+  administratively, and closure is not a gate PASS.
 - [Receipt contract-owner review](./integration/receipt-contract-owner-review.md) —
   historical review record; not a requirement for the current optional Registry.
 
@@ -87,7 +88,10 @@ shipped.
   and [Mutation Ledger](./context/MUTATION_LEDGER.md) — durable internal recovery and
   history snapshots, not the live issue tracker.
 - [Final Sprint GitHub tracker](https://github.com/parallax-monad/parallax/issues/96) —
-  live execution status for contributors.
+  closed historical tracking record. Its closeout records Product P0 implementation delivery
+  without explicit PASS, Asset Coverage acceptance/sign-off not established, Evidence Federation
+  PASS within accepted scope, and Verified Remediation NOT COMPLETE; it is not a Full Best Case
+  PASS.
 
 GitHub Issues and merged PRs carry live execution and acceptance state. These documents
 provide product references, implementation guidance, research, or historical context;

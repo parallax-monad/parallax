@@ -1,47 +1,44 @@
 # Project State
 
-## Current durable snapshot — 2026-10-05
+## Post-submission closeout snapshot — 2026-10-05
 
-Verified main checkpoint: `08b6190e0a6cd92e39196df53517914ab57d8a5e` (includes merged PR #163 and
-#165). This is historical known-good truth, not a requirement that future `main` remain equal;
-fresh-fetch and validate ancestry before acting. GitHub is the live source of truth.
+This is a durable checkpoint, not the live execution tracker. Always fresh-fetch GitHub before
+acting; current merged code and live GitHub state take precedence. The verified `main` at this
+checkpoint was `3380849b13a1d803274a13201d1f33c0020c7bbb`; it is historical known-good truth, not
+a permanent equality requirement.
+
+The Arbitrum Open House / Buildathon submission and its administrative closeout are complete.
+Issues [#74](https://github.com/parallax-monad/parallax/issues/74) and
+[#96](https://github.com/parallax-monad/parallax/issues/96#issuecomment-5983520816) are closed as
+historical tracking records. Issues #105 and #107 also remain closed as historical implementation
+and feasibility records. There is no active Final Sprint tracker; any future development requires
+a new, explicitly scoped, owner-approved task. Historical tracker instructions below must not be
+treated as active execution direction.
+
+Independent gate dispositions at closeout:
+
+- **Product P0:** implementation delivered; explicit Product PASS was not established in the
+  reviewed record.
+- **Asset Coverage:** implementation merged; integrated Product acceptance and sign-off were not
+  established.
+- **Evidence Federation:** PASS within the accepted scope.
+- **Verified Remediation:** NOT COMPLETE. No Full Best Case PASS is claimed.
+
+PR [#142](https://github.com/parallax-monad/parallax/pull/142) remains open, Provider-owned
+supplementary research under `@jzhao0`; it is not accepted production evidence and was not part of
+administrative closeout. Preserve it for its owner.
 
 Parallax's product identity is chain-agnostic. The current public integration is Arbitrum
 Sepolia × Camelot V3. Historical Monad × Kuru × Moss adapters, tests, and evidence are preserved,
 but do not represent completed or currently supported multi-chain product integration.
 
-Issue #96 is the Final Sprint execution tracker; linked issues and PRs hold current acceptance and
-implementation evidence. The trackers #74 and #96 remain open and need Product Owner closeout or
-status reconciliation; do not mutate them from this snapshot.
-
-Current gate reading from live GitHub on 2026-10-05:
-
-- **Product P0:** #96 records delivery closed and #73/#100/#101/#102 are closed. However, #73's
-  GitHub state is `CLOSED / COMPLETED` while its body and last comment still say OPEN after the
-  PR #126 rollback. This state/body conflict is not a separate `PASS` assertion; reconcile the
-  live Product acceptance record before making that claim.
-- **Asset Coverage:** not recorded as PASS. #103 is `QUALIFIED_REAL` (PR #127) and #104 is
-  complete (PR #115). #105 is closed in GitHub, but its body still says `ASSET COVERAGE: NOT YET
-  PASS` and leaves Frontend/Product acceptance unchecked; #96 says #144 is open although live
-  #144 is closed. Product Owner reconciliation is needed.
-- **Evidence Federation:** PASS in #96; #106, #110, #91, and #92 are complete. Native RPC remains
-  primary; Trace RPC is supplementary. No ranking, voting, scoring, consensus, or automatic
-  fallback.
-- **Verified Remediation:** not complete. #107 is closed in GitHub, but its body says
-  `VERIFIED_SCENARIO_FOUND = NO`, `GATE NOT COMPLETE`, and retains unchecked acceptance criteria.
-  Closure is not a gate pass. PR #142 is an open supplementary evidence candidate, not acceptance.
-- **Other lanes:** #94 is a completed SHOULD; #72 is closed and not runtime-qualified; #90, #108,
-  and #109 are optional/feasibility records, not active critical-path claims.
-
-At audit start, PR #142 was the only open PR. It contains supplementary trace-event qualification
-material on a base that has diverged from current `main`; its exact-head CI is green but review is
-required. No pre-existing Issue or PR state was changed during this audit.
-
 ## Historical detailed checkpoint record
 
 The dated status and implementation records below preserve their original checkpoint meaning.
-When they describe a state that differs from the current snapshot above, use fresh GitHub and
-merged code. This file is a durable context snapshot, not a second live tracker.
+They predate the post-submission administrative closeout and are not current execution
+instructions. When they differ from the snapshot above, fresh GitHub state wins.
+
+This file is a durable context snapshot, not a second live tracker.
 
 Last detailed checkpoint: 2026-09-29
 
