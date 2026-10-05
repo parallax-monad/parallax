@@ -241,9 +241,9 @@ export function OptionsStep({
                     {say(language, s.description)}
                   </p>
                 </div>
-                {s.id !== "lower-minimum" && (
-                  <span className="shrink-0 rounded-full border border-risk-low/40 bg-risk-low/8 px-2.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-risk-low/80">
-                    Verified
+                {s.id !== "lower-minimum" && s.id !== "reduce-input" && (
+                  <span className="shrink-0 rounded-full bg-white/[0.08] px-2.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-white/60">
+                    {say(language, { en: "Guidance", zh: "参考" })}
                   </span>
                 )}
               </div>

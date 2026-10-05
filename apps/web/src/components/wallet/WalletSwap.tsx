@@ -437,9 +437,7 @@ export function WalletSwap({
                         const calculated =
                           parseFloat(quote.quote.estimatedAmountOut) *
                           (1 - parseFloat(form.slippage) / 100);
-                        return (Math.floor(calculated * 100) / 100)
-                          .toFixed(2)
-                          .replace(/\.?0+$/, "");
+                        return calculated.toString();
                       })()} {tokenOutLabel}
                     </span>
                     {say(language, {

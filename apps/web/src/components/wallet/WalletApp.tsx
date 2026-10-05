@@ -488,6 +488,7 @@ export function WalletApp({ language }: { language: Language }) {
 
       const demoResult = {
         ...arbitrumSampleBalanceInsufficient,
+        productRunMode: "MOCK" as const,
         intent: {
           tokenIn: form.tokenIn,
           tokenOut: form.tokenOut,

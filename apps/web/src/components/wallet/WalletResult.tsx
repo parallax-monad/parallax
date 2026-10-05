@@ -14,6 +14,7 @@ import { type Copy, type Language, say } from "@/lib/i18n";
 const MODE_LABEL: Record<ProductRunMode, Copy> = {
   LIVE: { en: "Live check", zh: "实时检查" },
   RECORDED_REPLAY: { en: "Recorded replay", zh: "录制回放" },
+  MOCK: { en: "Demo sample", zh: "演示样本" },
 };
 
 const MODE_EXPLANATION: Record<ProductRunMode, Copy> = {
@@ -24,6 +25,10 @@ const MODE_EXPLANATION: Record<ProductRunMode, Copy> = {
   RECORDED_REPLAY: {
     en: "This result reproduces previously recorded real Evidence. It is not a current Live Run.",
     zh: "此结果复现此前录制的真实证据，并非当前实时运行。",
+  },
+  MOCK: {
+    en: "This is a frontend demo sample, not a response from the live Backend.",
+    zh: "这是前端演示样本，不是实时后端返回的数据。",
   },
 };
 

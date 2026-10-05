@@ -34,6 +34,7 @@ const STAGE_LABEL: Record<EvidenceItem["stage"], Copy> = {
 const MODE_LABEL: Record<CheckSwapResult["productRunMode"], Copy> = {
   LIVE: { en: "Live check", zh: "实时检查" },
   RECORDED_REPLAY: { en: "Recorded replay", zh: "录制回放" },
+  MOCK: { en: "Demo sample", zh: "演示样本" },
 };
 
 function sourceLabel(source: EvidenceItem["source"]): Copy {
