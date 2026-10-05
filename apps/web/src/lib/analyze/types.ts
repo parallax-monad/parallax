@@ -8,7 +8,7 @@ export type BoundarySource =
 
 export type Protocol = "kuru" | "pancake" | "camelot-v3";
 export type SystemStatus = "OK" | "INTEGRATION_ERROR";
-export type ProductRunMode = "LIVE" | "RECORDED_REPLAY";
+export type ProductRunMode = "LIVE" | "RECORDED_REPLAY" | "MOCK";
 export type Verdict = "PROCEED" | "ADJUST" | "STOP" | "UNKNOWN";
 
 export type AdjustReason =
