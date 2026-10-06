@@ -33,8 +33,8 @@ const VERDICT_EXPLANATION: Record<Verdict, Copy> = {
     zh: "在已完成的兑换检查范围内未发现阻断证据。",
   },
   ADJUST: {
-    en: "A verified change may improve this swap. Review the available options.",
-    zh: "已验证的变更可能改善此兑换。请查看可用选项。",
+    en: "A change may address this issue. Review the available options and re-check before signing.",
+    zh: "修改条件可能有助于解决此问题。请查看可用选项，并在签名前重新检查。",
   },
   STOP: {
     en: "Blocking evidence applies to this transaction path.",
