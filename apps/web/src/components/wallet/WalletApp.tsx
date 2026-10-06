@@ -203,7 +203,7 @@ export function WalletApp({ language }: { language: Language }) {
   const [showMinimumReceived, setShowMinimumReceived] = useState(false);
   const [stage, setStage] = useState(0);
   /** Which path the in-flight run came from, so the loading screen can say so. */
-  const [checkingMode, setCheckingMode] = useState<"live" | "replay">("live");
+  const [checkingMode, setCheckingMode] = useState<"live" | "replay" | "demo">("live");
   const [result, setResult] = useState<CheckSwapResult | undefined>(undefined);
   const [drawerOpen, setDrawerOpen] = useState(false);
   /** Bumped on every return home, so the background replays its entrance. */
@@ -504,7 +504,7 @@ export function WalletApp({ language }: { language: Language }) {
       setResult(undefined);
       setDrawerOpen(false);
       setStage(0);
-      setCheckingMode("live");
+      setCheckingMode("demo");
       setScreen("checking");
 
       schedulerRef.current.run({

@@ -16,6 +16,37 @@ vi.mock("./WalletIntro", () => ({
   },
 }));
 
+vi.mock("@/lib/analyze/arbitrum-samples", () => ({
+  arbitrumSampleBalanceInsufficient: {
+    runId: "sample-balance-test",
+    systemStatus: "OK",
+    verdict: "ADJUST",
+    summary: { en: "Demo sample", zh: "演示样本" },
+    intent: { tokenIn: "ETH", tokenOut: "USDC", amountIn: "1.5" },
+    quote: {
+      expectedOutput: "3600",
+      route: { en: "Camelot V3", zh: "Camelot V3" },
+      blockNumber: "1",
+    },
+    simulatedOutput: "3600",
+    minimumReceivedSource: "unavailable",
+    accountState: { status: "AVAILABLE" },
+    recommendedActions: [],
+    irrelevantActions: [],
+    checked: [],
+    notChecked: [],
+    unknowns: [],
+    evidence: [],
+    ruleResults: [],
+    createdAt: "2026-08-15T08:00:00.000Z",
+    ruleVersion: "0.2.0",
+    mossVersion: "0.1.0",
+    productRunMode: "LIVE",
+    replayMode: false,
+    rawResponse: {},
+  },
+}));
+
 const RUN_ID = "recovered-run";
 const CREATED_AT = "2026-08-15T08:00:00.000Z";
 
@@ -453,6 +484,52 @@ describe("WalletApp persisted Run recovery", () => {
     expect(checkBody?.amountIn).toBe("0.03");
     expect(checkBody?.minimumReceived).toBeUndefined();
     expect(checkBody?.expectationBaseline).toBeUndefined();
+  });
+
+  test("shows demo provenance while loading the balance-insufficient sample", async () => {
+    vi.useFakeTimers();
+    const request = mockFetch({});
+    vi.stubGlobal("fetch", request);
+
+    const container = document.createElement("div");
+    document.body.append(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(<WalletApp language="en" />);
+      await Promise.resolve();
+    });
+
+    const swapButton = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent?.trim() === "Swap",
+    );
+    await act(async () => swapButton?.click());
+
+    const amountInput = container.querySelector<HTMLInputElement>(
+      'input[aria-label="Amount to pay"]',
+    );
+    expect(amountInput).toBeDefined();
+    await act(async () => {
+      setInputValue(amountInput as HTMLInputElement, "1.5");
+    });
+
+    const submitButton = Array.from(
+      container.querySelectorAll<HTMLButtonElement>('button[type="submit"]'),
+    ).find((button) => button.textContent?.includes("Submit live check"));
+    expect(submitButton).toBeDefined();
+
+    await act(async () => {
+      submitButton?.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(container.textContent).toContain("Parallax · Demo sample");
+    expect(container.textContent).not.toContain("Live backend check");
+    expect(request.mock.calls.some((call) =>
+      typeof call[0] === "string" && call[0].includes("/api/check"),
+    )).toBe(false);
+    vi.useRealTimers();
   });
 
   test("does not expose fixture-only remediation controls in the active P0 path", async () => {
