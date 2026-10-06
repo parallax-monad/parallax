@@ -494,9 +494,11 @@ describe("WalletApp persisted Run recovery", () => {
 
     expect(container.textContent).toContain("Parallax · Demo sample");
     expect(container.textContent).not.toContain("Live backend check");
-    expect(request.mock.calls.some((call) =>
-      typeof call[0] === "string" && call[0].includes("/api/check"),
-    )).toBe(false);
+    expect(
+      request.mock.calls.some(
+        (call) => typeof call[0] === "string" && call[0].includes("/api/check"),
+      ),
+    ).toBe(false);
   });
 
   test("does not expose fixture-only remediation controls in the active P0 path", async () => {

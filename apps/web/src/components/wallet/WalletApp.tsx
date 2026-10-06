@@ -203,7 +203,9 @@ export function WalletApp({ language }: { language: Language }) {
   const [showMinimumReceived, setShowMinimumReceived] = useState(false);
   const [stage, setStage] = useState(0);
   /** Which path the in-flight run came from, so the loading screen can say so. */
-  const [checkingMode, setCheckingMode] = useState<"live" | "replay" | "demo">("live");
+  const [checkingMode, setCheckingMode] = useState<"live" | "replay" | "demo">(
+    "live",
+  );
   const [result, setResult] = useState<CheckSwapResult | undefined>(undefined);
   const [drawerOpen, setDrawerOpen] = useState(false);
   /** Bumped on every return home, so the background replays its entrance. */
