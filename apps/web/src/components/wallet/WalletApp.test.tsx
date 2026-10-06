@@ -451,6 +451,7 @@ describe("WalletApp persisted Run recovery", () => {
 
     expect(checkCalls).toHaveLength(1);
     expect(checkBody?.amountIn).toBe("0.03");
+    expect(checkBody?.minimumReceived).toBeUndefined();
     expect(checkBody?.expectationBaseline).toBeUndefined();
   });
 
