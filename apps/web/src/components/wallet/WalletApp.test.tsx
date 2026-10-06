@@ -456,8 +456,16 @@ describe("WalletApp persisted Run recovery", () => {
     expect(checkBody?.expectationBaseline).toBeUndefined();
   });
 
-  test("shows demo provenance while loading the balance-insufficient sample", async () => {
-    const request = mockFetch({});
+  test("uses the live backend for threshold-triggering amounts", async () => {
+    const request = mockFetch({
+      check: {
+        runId: "live-threshold-run",
+        createdAt: CREATED_AT,
+        intent,
+        status: "completed",
+        result: recoveredRun,
+      },
+    });
     vi.stubGlobal("fetch", request);
 
     const container = document.createElement("div");
@@ -492,13 +500,12 @@ describe("WalletApp persisted Run recovery", () => {
       await new Promise((resolve) => setTimeout(resolve, 50));
     });
 
-    expect(container.textContent).toContain("Parallax · Demo sample");
-    expect(container.textContent).not.toContain("Live backend check");
-    expect(
-      request.mock.calls.some(
-        (call) => typeof call[0] === "string" && call[0].includes("/api/check"),
-      ),
-    ).toBe(false);
+    const checkCalls = request.mock.calls.filter(
+      (call) => typeof call[0] === "string" && call[0].includes("/api/check"),
+    );
+    expect(checkCalls).toHaveLength(1);
+    expect(container.textContent).toContain("Parallax · Live backend check");
+    expect(container.textContent).not.toContain("Demo sample");
   });
 
   test("does not expose fixture-only remediation controls in the active P0 path", async () => {

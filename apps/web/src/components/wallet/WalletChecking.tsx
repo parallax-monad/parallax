@@ -13,7 +13,6 @@ export const WALLET_STAGE_COUNT = STAGES.length;
 const HEADER = {
   live: { en: "Parallax · Live backend check", zh: "Parallax · 实时后端检查" },
   replay: { en: "Parallax · Recorded replay", zh: "Parallax · 录制回放" },
-  demo: { en: "Parallax · Demo sample", zh: "Parallax · 演示样本" },
 };
 
 const TITLE = {
@@ -22,7 +21,6 @@ const TITLE = {
     zh: "正在签名前检查这笔兑换。",
   },
   replay: { en: "Loading a recorded check.", zh: "正在载入一次录制的检查。" },
-  demo: { en: "Loading a demo sample.", zh: "正在载入演示样本。" },
 };
 
 export function WalletChecking({
@@ -32,7 +30,7 @@ export function WalletChecking({
 }: {
   language: Language;
   stage: number;
-  mode?: "live" | "replay" | "demo";
+  mode?: "live" | "replay";
 }) {
   return (
     <div

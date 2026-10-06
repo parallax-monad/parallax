@@ -203,9 +203,7 @@ export function WalletApp({ language }: { language: Language }) {
   const [showMinimumReceived, setShowMinimumReceived] = useState(false);
   const [stage, setStage] = useState(0);
   /** Which path the in-flight run came from, so the loading screen can say so. */
-  const [checkingMode, setCheckingMode] = useState<"live" | "replay" | "demo">(
-    "live",
-  );
+  const [checkingMode, setCheckingMode] = useState<"live" | "replay">("live");
   const [result, setResult] = useState<CheckSwapResult | undefined>(undefined);
   const [drawerOpen, setDrawerOpen] = useState(false);
   /** Bumped on every return home, so the background replays its entrance. */
@@ -469,54 +467,6 @@ export function WalletApp({ language }: { language: Language }) {
         form: {
           en: "The Backend has not made the USDC → WETH route metadata available. No quote or check can be submitted for this pair yet.",
           zh: "后端尚未提供 USDC → WETH 路径元数据，目前无法为此交易对提交报价或检查。",
-        },
-      });
-      return;
-    }
-
-    // Demo mode: show balance insufficient scenario
-    const isDemoBalanceInsufficient =
-      (form.tokenIn === "ETH" && parseFloat(form.amountIn) > 0.07) ||
-      (form.tokenIn === "USDC" && parseFloat(form.amountIn) > 87898181);
-
-    if (isDemoBalanceInsufficient) {
-      const { arbitrumSampleBalanceInsufficient } = await import(
-        "@/lib/analyze/arbitrum-samples"
-      );
-
-      if (!arbitrumSampleBalanceInsufficient.accountState) {
-        throw new Error("Demo account state not available");
-      }
-
-      const demoResult = {
-        ...arbitrumSampleBalanceInsufficient,
-        productRunMode: "MOCK" as const,
-        intent: {
-          tokenIn: form.tokenIn,
-          tokenOut: form.tokenOut,
-          amountIn: form.amountIn,
-        },
-      };
-      recoveryCancelledRef.current = true;
-      snapshotRecoveryControllerRef.current?.abort();
-      accountStateRef.current = { status: "idle" };
-      setFormErrors({});
-      setStoredRunId(undefined);
-      setStoredAccountSnapshotId(undefined);
-      setResult(undefined);
-      setDrawerOpen(false);
-      setStage(0);
-      setCheckingMode("demo");
-      setScreen("checking");
-
-      schedulerRef.current.run({
-        stageCount: WALLET_STAGE_COUNT,
-        stageMs: STAGE_MS,
-        onStage: setStage,
-        onSettle: async () => {
-          setResult(demoResult);
-          setSubmittedForm(plan.submitted);
-          setScreen("result");
         },
       });
       return;
