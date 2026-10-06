@@ -16,37 +16,6 @@ vi.mock("./WalletIntro", () => ({
   },
 }));
 
-vi.mock("@/lib/analyze/arbitrum-samples", () => ({
-  arbitrumSampleBalanceInsufficient: {
-    runId: "sample-balance-test",
-    systemStatus: "OK",
-    verdict: "ADJUST",
-    summary: { en: "Demo sample", zh: "演示样本" },
-    intent: { tokenIn: "ETH", tokenOut: "USDC", amountIn: "1.5" },
-    quote: {
-      expectedOutput: "3600",
-      route: { en: "Camelot V3", zh: "Camelot V3" },
-      blockNumber: "1",
-    },
-    simulatedOutput: "3600",
-    minimumReceivedSource: "unavailable",
-    accountState: { status: "AVAILABLE" },
-    recommendedActions: [],
-    irrelevantActions: [],
-    checked: [],
-    notChecked: [],
-    unknowns: [],
-    evidence: [],
-    ruleResults: [],
-    createdAt: "2026-08-15T08:00:00.000Z",
-    ruleVersion: "0.2.0",
-    mossVersion: "0.1.0",
-    productRunMode: "LIVE",
-    replayMode: false,
-    rawResponse: {},
-  },
-}));
-
 const RUN_ID = "recovered-run";
 const CREATED_AT = "2026-08-15T08:00:00.000Z";
 
@@ -181,6 +150,7 @@ describe("WalletApp persisted Run recovery", () => {
     }
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
+    vi.useRealTimers();
     (
       globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
     ).IS_REACT_ACT_ENVIRONMENT = false;
@@ -487,7 +457,6 @@ describe("WalletApp persisted Run recovery", () => {
   });
 
   test("shows demo provenance while loading the balance-insufficient sample", async () => {
-    vi.useFakeTimers();
     const request = mockFetch({});
     vi.stubGlobal("fetch", request);
 
@@ -520,8 +489,7 @@ describe("WalletApp persisted Run recovery", () => {
 
     await act(async () => {
       submitButton?.click();
-      await Promise.resolve();
-      await Promise.resolve();
+      await new Promise((resolve) => setTimeout(resolve, 50));
     });
 
     expect(container.textContent).toContain("Parallax · Demo sample");
@@ -529,7 +497,6 @@ describe("WalletApp persisted Run recovery", () => {
     expect(request.mock.calls.some((call) =>
       typeof call[0] === "string" && call[0].includes("/api/check"),
     )).toBe(false);
-    vi.useRealTimers();
   });
 
   test("does not expose fixture-only remediation controls in the active P0 path", async () => {
