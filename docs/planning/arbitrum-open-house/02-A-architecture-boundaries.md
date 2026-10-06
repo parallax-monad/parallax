@@ -1,11 +1,11 @@
 # 02-A｜开发决策与架构边界
 
-> 状态：当前规范性架构计划；未将未来 Arbitrum 能力标记为已实现。
+> **历史架构计划。** 本文记录 2026 年 9 月 buildathon 阶段的边界设想，不是当前实现规范。当前公开集成是 Arbitrum Sepolia × Camelot V3；Monad/Kuru/Moss 内容仅为历史兼容工作记录。
 
 ## 1. 产品边界
 
 - Parallax 是 pre-execution decision/remediation layer，不是 DEX、交易执行器、钱包或完整安全扫描器；
-- 当前产品范围是 Swap-only；
+- 当时计划的产品范围是 Swap-only；
 - Parallax **永远不签名、广播或执行用户的金融交易**。独立 backend attestor MAY 为可选 Decision Receipt commitment 签名/广播；
 - `PROCEED` 只表示在本次已检查范围内没有发现阻断证据，不是安全保证或投资建议；
 - Evidence 不完整、过期、不可验证或 Provider 不支持时，必须公开表达 `UNKNOWN`/unsupported 等状态，不能静默通过。
@@ -43,7 +43,7 @@ Registry 只保存 Receipt commitment/metadata（例如 intent/evidence/decision
 ## 3. 当前路径与目标路径
 
 ```text
-当前 verified：Monad × Kuru × Moss
+当时记录的 verified baseline：Monad × Kuru × Moss
     ↓
 现有业务行为、Replay、Re-run、Action Gate 与测试
 

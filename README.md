@@ -1,260 +1,216 @@
 <div align="center">
 
+<img src="docs/assets/parallax-logo.png" alt="Parallax" width="200" />
+
 # Parallax
 
-### Pre-execution diagnosis, remediation, and re-verification for onchain actions
+### Before you sign, know what to do next.
 
-**Know what changed. Understand why. See what you can change. Verify before you sign.**
+A pre-execution decision layer for onchain transactions.
 
-[Live Demo](https://parallax-web-snowy.vercel.app) ·
-[Product Spec](docs/product/p0-economic-diagnosis-remediation.md) ·
+[Live Demo](https://parallax-web-snowy.vercel.app/) ·
+[Pitch Deck](https://parallax-monad.github.io/parallax/parallax-demo-day.html) ·
+[Demo Video](https://youtu.be/klOKwyWgiZU) ·
+[Pitch Video](https://youtu.be/Dp_Ewlud5QU) ·
 [Documentation](docs/README.md) ·
-[Demo Video](https://www.youtube.com/watch?v=j43WqH6TrTE)
+[Contributing](CONTRIBUTING.md) ·
+[GitHub](https://github.com/parallax-monad/parallax)
+
+<sub>Currently implemented on Arbitrum Sepolia · Camelot V3 · TypeScript</sub>
 
 <sub>English · <a href="./README.zh-CN.md">简体中文</a></sub>
 
 </div>
 
-Parallax is a provider-agnostic pre-execution remediation and re-verification layer for onchain actions. The public demo currently uses the Monad × Kuru × Moss path.
-
 ## Why Parallax?
 
-A quote can change before a user signs. A transaction can still execute while no longer reproducing the economic outcome the user selected. A simulation may expose the result but still leave the user asking: “What changed, why, and what should I change?”
+DEXs and aggregators provide quotes and routes. Wallets and security products provide
+previews, warnings, and transaction context. Simulation tools expose execution behavior.
+Those are valuable inputs, but a user can still be left to connect the evidence to their
+own intended outcome.
 
-Parallax closes that decision gap by turning heterogeneous Evidence into a bounded diagnosis, quantified candidate actions, and a state-bound re-verification step.
-
-## Product loop
-
-> **Target P0 behavior:** The loop below is the intended Product model for P0. It is a target reference, not a statement that the current public demo or API supports every constraint, candidate solver, or verified counterfactual described here. Current support remains limited to the documented Monad × Kuru × Moss scope.
-
-The user-facing interpretation is:
-
-```mermaid
-flowchart TD
-  A[Quote / Intent] --> B[Fresh Evidence]
-  B --> C[Execution Viability]
-  C --> D[Quote Fidelity / Economic Diagnosis]
-  D --> E[Observation]
-  E --> F[Cause]
-  F --> G[Quantified Candidate Actions]
-  G --> H[Re-verification]
-  H --> I[User Decision]
-```
-
-The underlying Core relationship remains:
-
-```text
-Intent → Evidence → Cause → Decision → Relevant Action → Re-verification
-```
-
-`UNKNOWN` is not a pass. `PROCEED` means that no blocking evidence was found within the checked scope; it is not a safety guarantee or investment advice.
-
-## Demo
-
-- [Try the live application](https://parallax-web-snowy.vercel.app)
-- [Demo Day presentation (GitHub Pages deployment pending)](https://parallax-monad.github.io/parallax/parallax-demo-day.html)
-- [Watch the product demo video](https://www.youtube.com/watch?v=j43WqH6TrTE)
-
-The landing page is served at `#/`, and the wallet-style MVP is at `#/analyze`.
-
-1. Enter a supported Swap Intent.
-2. Request a quote and run the pre-sign check.
-3. Review Evidence, provenance, scope, Cause, and Decision.
-4. When the result supports it, change one relevant condition and run again.
-5. Compare the Previous Run with the New Run.
-
-The demo is read-only. It does not sign, broadcast, execute, or custody the user's transaction. Its verified live scope is limited to the documented pinned Kuru MON → USDC path and runtime identity; this does not establish support for every asset, route, protocol, runtime revision, or future market condition.
+A transaction may execute successfully while no longer producing the result the user
+expected. When a check fails or is uncertain, it can also be hard to know which change
+is relevant. Parallax focuses on that decision gap: making the available evidence,
+checked scope, and possible next step understandable, then allowing the user to re-check
+after an explicit change.
 
 ## What Parallax does
 
-- accepts a structured, unsigned Swap Intent;
-- obtains and normalizes quote, prepared-action, simulation, and provenance Evidence;
-- evaluates deterministic rules while keeping Integration Error separate from transaction uncertainty;
-- presents `PROCEED`, `ADJUST`, `STOP`, or `UNKNOWN` with checked, not-checked, and unknown scope;
-- separates verified Relevant Actions from changes that the result does not support;
-- supports recorded Replay and a bounded one-condition Re-run comparison.
+- Checks a quoted, prepared unsigned transaction against available execution Evidence.
+- Presents scope-aware outcomes: `PROCEED`, `ADJUST`, `STOP`, or `UNKNOWN`.
+- Separates observed conditions, supported Causes, Evidence State, and explicit user
+  constraints instead of turning missing data into a confident answer.
+- Keeps the decision with the user: Parallax does not sign or submit a swap.
+- Persists Runs so a user can retrieve a prior result and compare an explicit re-check.
 
-## Target P0 Architecture
+`PROCEED` means no blocking Evidence was found within the checked scope. It does not
+guarantee safety or successful execution. `UNKNOWN` is not a pass. A proposed change is
+not a verified improvement until a fresh child check supports that conclusion.
 
-The following is a target reference model, not a claim that the complete path is implemented or deployed:
+## How it works
 
 ```mermaid
 flowchart TD
-  A[Arbitrum Sepolia] --> B[Camelot V3]
-  B --> C[Prepared unsigned transaction]
-  C --> D[Tenderly / supported Evidence Provider]
-  D -. controlled fallback .-> E[Native RPC]
-  D --> F[Normalized Evidence]
-  E --> F
-  F --> G[Parallax Core]
-  G --> H[Diagnosis]
-  H --> I[Decision]
-  I --> J[Quantified remediation]
-  J --> K[Re-verification]
+    I["User Swap Intent"] --> E["Quote + Execution Evidence"]
+    E --> P["Parallax Decision Engine"]
+    P --> D{"Scope-aware Decision"}
+    D -->|PROCEED - within checked scope| C["User decides whether to continue"]
+    D -->|ADJUST - relevant path| A["User reviews and explicitly adjusts"]
+    D -->|STOP| S["User stops"]
+    D -->|UNKNOWN - not a pass| U["User reviews uncertainty"]
+    A --> R["Fresh Re-check"]
+    U -->|if the user requests more Evidence| R
+    R --> V["Re-evaluate with fresh Evidence<br/>not automatically VERIFIED"]
+    V --> E
 ```
 
-The intended decomposition is `Chain × Protocol × Evidence Provider`. It keeps Provider-specific types outside the Core and separates Evidence acquisition from Product/Risk decision semantics.
+## Built on Arbitrum
 
-## Product principles
+The current real testnet path is Arbitrum Sepolia (`421614`) with Camelot V3. It
+supports real testnet quotes, exact unsigned transaction preparation, and a primary
+Native RPC execution-evidence path. Trace RPC supplies supplementary, deeper Evidence;
+it does not replace the Native RPC baseline or upgrade a Risk verdict by itself.
 
-- Do not guess intent; use explicit objectives and thresholds when the caller provides them.
-- Diagnose the observed gap and explain the Cause in plain language.
-- Expose controllable variables and quantify candidate changes.
-- When intent is not explicit, show multiple plausible counterfactual options with explicit verification status rather than silently choosing one.
-- Verify recommendations against fresh quote, prepared unsigned transaction, simulation, and outcome Evidence.
-- Treat verification as state-bound: a changed chain state requires a new check.
-- Keep the final decision with the user.
+Results disclose what was checked, what remains unknown or unavailable, and the
+associated source and chain-state context. Sepolia token balances and prices are testnet
+data and should not be treated as representative of Arbitrum One market prices. This
+project does not claim Arbitrum One production support.
 
-In the target P0 model, the beginner experience does not require explicit thresholds: Parallax can present multiple counterfactual options and clearly distinguish verified transaction adjustments from conditional guidance that requires a future re-check. Advanced DeFi users, developers, SDKs, and agents can supply constraints such as price impact, effective rate, gas, total cost, or target output and use the same diagnosis → quantitative remediation → re-verification model. These are target semantics, not a claim that every constraint or solver is currently supported by the public API.
+## Optional on-chain Decision Registry
 
-## Boundaries
+Parallax has deployed an optional Decision Registry on Arbitrum Sepolia:
 
-Parallax is not:
+- Contract: [`0xdfc1f61e75fd551b9c309ec0bfae015adf6fe359`](https://sepolia.arbiscan.io/address/0xdfc1f61e75fd551b9c309ec0bfae015adf6fe359)
+- [Deployment transaction](https://sepolia.arbiscan.io/tx/0x46cd3fd97086a40c157be0cdc50baa9a40db9c24417d723cc5dd6f08e6e000f6)
+- [Decision attestation transaction](https://sepolia.arbiscan.io/tx/0x3e40db4fdc33b8bf3b726fa7f8a60049e0518c19e6cbc98eb69c20932f374af0)
 
-- a best-price aggregator or whole-market route optimizer;
-- an autonomous execution engine;
-- a wallet, custody system, signing or broadcasting service;
-- a complete protocol, token, or smart-contract security audit;
-- investment advice.
+An operator can use the Backend CLI to anchor a commitment for an already completed,
+persisted Run. This is optional and non-blocking; it is not automatically triggered by
+every `/api/check`. A designated operator-controlled attestor submits the Registry
+transaction, so users do not connect a wallet or sign an attestation. The attestor signs
+Registry transactions only, never user swaps.
 
-An explicitly evaluated alternative path can be shown when the available Evidence supports it. Whole-market optimization is outside P0.
+The Registry stores a domain-separated Run key and commitment with minimal event
+metadata—not the full Run or its Evidence. A matching commitment lets someone with the
+corresponding off-chain record verify record integrity. It does not prove that the
+underlying Evidence is authentic, that the Risk assessment is correct, or that a swap is
+safe. See the [Decision Registry guide](contracts/decision-registry/README.md) for the
+verification and operational boundaries.
 
-## Architecture and technology stack
+## Developer integration
 
-| Area | Responsibility |
-| --- | --- |
-| `apps/web` | React 18 + Vite frontend, landing experience, wallet-style MVP, API adapter, and Three.js visualization |
-| `apps/api` | Node.js/Hono HTTP runtime for quote/check and recorded Replay |
-| `packages/contracts` | Shared Intent, Run, Evidence, Replay, serialization, and compatibility schemas |
-| `packages/moss-bridge` | Moss/Kuru runtime loading, live Evidence adapter, normalization, and provenance checks |
-| `packages/orchestrator` | Agent Flow, Action Gate, Re-run lifecycle, and application orchestration |
-| `packages/risk` | Deterministic P0 rule evaluation and centralized Decision policy |
-| `fixtures` | Recorded raw/normalized Evidence and Replay fixtures |
-| `docs` | Product, research, planning, integration, methodology, and ADR references |
-| `scripts` | Deterministic and live Kuru smoke/acceptance tooling |
+The repository includes a typed TypeScript SDK and a public HTTP API. The SDK wraps
+quote, check, Run retrieval, re-check, and account-state queries; it does not duplicate
+Risk or Provider logic. The SDK is available in this repository; this README does not
+claim an npm release.
 
-The toolchain is Node.js 22, pnpm, TypeScript, React, Vite, Three.js, Hono, Vitest, and Biome.
+- [SDK guide](packages/sdk/README.md)
+- [API and Frontend integration reference](docs/integration/api-frontend-handoff.md)
+- [Decision Registry guide](contracts/decision-registry/README.md)
 
-## Repository structure
+The API and SDK provide a foundation for future embedded pre-sign workflows in wallets,
+DEXs, aggregators, and DeFi applications. These are integration opportunities, not
+existing third-party partnerships.
 
-```text
-apps/                  Runtime applications
-packages/              Shared Core packages
-docs/                  Product, research, planning, integration, methodology, ADRs
-fixtures/              Recorded Evidence and Replay fixtures
-scripts/               Validation and smoke tooling
-```
+## Where Parallax can go next
 
-## Installation and local development
+1. **Broader coverage** — more assets, protocols, transaction types, and execution
+   environments.
+2. **Embedded distribution** — reusable API and SDK workflows for wallets, DEXs,
+   aggregators, and developer applications, including potential B2B/API delivery.
+3. **Agent-native workflows** — future MCP-compatible interfaces and machine-readable,
+   scope-bounded decisions for AI-agent orchestration. No MCP service or autonomous
+   transaction execution is claimed today.
 
-Requirements: Node.js 22, pnpm 11-compatible tooling, and Git.
+## Getting started
+
+Requirements: Node.js 22 and pnpm.
 
 ```bash
 pnpm install --frozen-lockfile
 cp .env.example .env
-pnpm --filter @parallax/web dev
 ```
 
-Use `#/` for the landing page and `#/analyze` for the MVP. To run local quote/check requests, configure `.env` and start the API in another terminal:
+For the current Arbitrum Sepolia path, configure `ARBITRUM_RPC_URL` and
+`PARALLAX_TOKEN_REGISTRY_JSON` with trusted Arbitrum token metadata. Keep credentials in
+local environment configuration; never commit them.
+
+For local `pnpm` startup, the API bootstrap still validates a syntactically valid
+`MONAD_RPC_URL` and non-empty `MOSS_RUNTIME_VERSION` / `MOSS_RUNTIME_REVISION` fields
+from its legacy shared configuration. This does not make Monad, Kuru, or Moss part of the
+current product path. `MOSS_RUNTIME_PATH` is optional locally, so an Arbitrum developer
+does not need a Moss checkout. Deployment packaging is still coupled: the current
+Dockerfile clones and builds its pinned Moss runtime and sets `MOSS_RUNTIME_PATH`, even
+though the current public integration is Arbitrum Sepolia × Camelot V3. See
+[`.env.example`](.env.example) and the [Runtime Decoupling proposal](docs/proposals/runtime-decoupling.md).
+
+In separate terminals, start the API and web app:
 
 ```bash
 pnpm --filter @parallax/api start
+pnpm --filter @parallax/web dev
 ```
 
-The local Vite server proxies `/api/*` to `http://127.0.0.1:8787`.
+The Vite app proxies `/api/*` to the local API. See [`.env.example`](.env.example),
+the [API integration reference](docs/integration/api-frontend-handoff.md), and the
+[SDK guide](packages/sdk/README.md) for configuration and request details.
 
-<details>
-<summary>Environment configuration</summary>
-
-`.env.example` is the authoritative variable list.
-
-| Variable | Purpose |
-| --- | --- |
-| `MONAD_RPC_URL` | Read-only Monad RPC for backend live quote/check requests |
-| `MOSS_RPC_URL` | Read-only RPC for the live smoke command |
-| `MOSS_RUNTIME_VERSION` | Expected Moss runtime version |
-| `MOSS_RUNTIME_REVISION` | Expected immutable Moss Git revision |
-| `MOSS_RUNTIME_PATH` | Absolute path to the built, pinned Moss checkout; enables the live Kuru Agent Flow |
-| `PARALLAX_TOKEN_REGISTRY_JSON` | Trusted token metadata for backend normalization |
-| `CORS_ORIGIN` | Browser origin allowed to call the API |
-| `RUN_STORE_BACKEND` | `memory` by default; use `postgres` only after migration and verification |
-| `DATABASE_URL` | PostgreSQL URL required when `RUN_STORE_BACKEND=postgres` |
-| `HOST` / `PORT` | Node HTTP listener settings |
-
-Live Moss operation requires `MOSS_RUNTIME_PATH` to retain `.git` metadata and match the configured version/revision. Without it, live quote/check requests fail closed as `UNSUPPORTED`; recorded Replay remains separate.
-
-Never commit RPC credentials or populated `.env` files.
-
-</details>
-
-## Development commands
+Useful checks:
 
 ```bash
 pnpm lint
 pnpm typecheck
 pnpm test
-pnpm test:acceptance
-pnpm test:integration
 pnpm --filter @parallax/web build
-pnpm smoke:kuru
-pnpm smoke:kuru:live
 ```
 
-The live smoke requires the pinned Moss runtime and read-only RPC configuration and is not part of the default CI path.
+## Current Architecture
 
-## Testing and quality gates
-
-GitHub Actions uses Node.js 22 and runs dependency installation, lint, typecheck, deterministic tests, and Node integration tests. Live RPC/Moss smoke tests remain separate because they require external runtime configuration.
-
-## API overview
-
-| Route | Purpose |
+| Area | Responsibility |
 | --- | --- |
-| `POST /api/quote` | Exact-input live quote boundary; returns a quote, an explicit unavailable/no-route result, or a scoped error. |
-| `POST /api/check` | Backend pre-sign check for a normalized Swap Intent; Re-run uses `parentRunId` and one allowed Intent change. |
-| `GET /api/runs/:runId` | Retrieves one persisted Check Run by ID. |
-| `GET /api/replay/:id` | Retrieves a frozen recorded Replay fixture, never substituted for a live Check. |
+| `apps/web` | Web experience and presentation of API results |
+| `apps/api` | Quote, check, account-state, Run, and orchestration APIs |
+| `packages/contracts` | Shared request, Evidence, Run, and response schemas |
+| `packages/risk` | Deterministic Risk and Verdict evaluation |
+| `packages/orchestrator` | Provider execution and Run / re-check orchestration |
+| `packages/sdk` | Typed client for the public API |
+| `contracts/decision-registry` | Optional on-chain Decision Registry |
+| `fixtures` | Deterministic test data and retained Evidence captures |
+| `docs` | Product, integration, research, and project-history references |
 
-See the [frontend API handoff](docs/integration/api-frontend-handoff.md) for payloads, errors, CORS, and startup details.
-
-## Deployment
-
-The public frontend is deployed on Vercel with a same-origin `/api/*` rewrite to the deployed Render backend. Availability depends on the external backend, RPC, and pinned Moss runtime; this is not a production-readiness claim and does not expand the verified protocol scope.
-
-## Documentation
-
-Start with the [full documentation index](docs/README.md).
-
-The primary Product references are:
-
-- [P0 Economic Diagnosis & Remediation](docs/product/p0-economic-diagnosis-remediation.md)
-- [Product Requirements Document](docs/product/prd.md)
-- [Product Delivery](docs/product/product-delivery.md)
+```mermaid
+flowchart TD
+    APP["Parallax Web App + TypeScript SDK"] --> API["Parallax Backend API<br/>No user-swap signing, broadcasting, execution, or custody"]
+    API --> ADAPTER["Chain / Protocol Adapter Boundary<br/>Current integration: Arbitrum Sepolia × Camelot V3"]
+    ADAPTER --> TX["Quote + exact unsigned transaction"]
+    TX --> NATIVE["Native RPC<br/>Primary execution Evidence"]
+    TX --> TRACE["Trace RPC<br/>Supplementary Evidence"]
+    NATIVE --> ENGINE["Scope-aware Decision Engine"]
+    TRACE --> ENGINE
+    ENGINE --> RUNS["Persisted Runs / re-check history"]
+    RUNS -. operator-triggered after Run persistence .-> REGISTRY["Optional Decision Registry<br/>Commitment integrity only; not proof of Risk correctness"]
+```
 
 ## Team
 
-| Member | GitHub | Role |
+| Member | GitHub | Focus |
 | --- | --- | --- |
-| Kai | [@chin0312](https://github.com/chin0312) | Product Owner |
-| Rei | [@rainypilgrimage](https://github.com/rainypilgrimage) | Contract Owner |
-| Jie | [@jzhao0](https://github.com/jzhao0) | Provider Owner |
-| Clare | [@brightheartma](https://github.com/brightheartma) | Backend Owner |
-| Antony | [@antony819](https://github.com/antony819) | Frontend Owner |
+| Kai | [@chin0312](https://github.com/chin0312) | Product strategy, research, and product direction |
+| Rei | [@rainypilgrimage](https://github.com/rainypilgrimage) | Core Contract definitions, Risk semantics, and decision rules |
+| Jie | [@jzhao0](https://github.com/jzhao0) | Provider integration and execution Evidence |
+| Clare | [@brightheartma](https://github.com/brightheartma) | Backend infrastructure, APIs, and persistence |
+| Antony | [@antony819](https://github.com/antony819) | Frontend and user experience |
 
-## Collaboration
+## Limitations
 
-- Start from the latest `main` on a short-lived branch.
-- Keep implementation, Contract semantics, Product semantics, and Evidence claims in their owning layers.
-- Treat research as context; implementation behavior is defined by code and merged product documentation.
-- Do not use Replay or mock data as proof of a live user decision.
-- Run relevant checks and request review from owners of the changed semantics.
-
-## Disclaimer
-
-Parallax is experimental software for explaining and testing bounded pre-execution decisions. Evidence may be incomplete or unavailable; users must independently verify transaction details. `UNKNOWN` is not a pass, and `PROCEED` is scope-bounded rather than a guarantee of safety.
-
-Parallax does not provide investment advice and does not sign, broadcast, execute, or custody transactions.
+Parallax is experimental software, and the Arbitrum integration described here is
+testnet-scoped. Evidence may be incomplete or unavailable; users should independently
+review transaction details. Parallax is non-custodial and does not sign, broadcast, or
+execute user swaps, provide investment advice, or replace an independent security
+review.
 
 ## License
 
-No repository license file is currently declared. Licensing remains a team decision.
+The repository has no declared license. Public visibility does not grant unrestricted
+reuse; licensing remains a team decision.

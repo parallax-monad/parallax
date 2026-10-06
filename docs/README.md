@@ -1,73 +1,105 @@
 # Parallax Documentation
 
-This is the canonical index for Product, architecture, implementation planning, research, integration, and historical decision records. It is a navigation layer, not a second copy of each document.
+This index separates the public product overview, current developer references, and
+dated research or project-history records. It is navigation, not a second tracker.
+For current implementation behavior, use merged code and the directly relevant
+integration reference; dated plans and research are not claims that a capability is
+shipped.
 
 ## Start here
 
-If you are new to Parallax:
+- [Public product overview](../README.md) — what Parallax does, current Arbitrum testnet
+  scope, demo links, Registry, SDK, and project boundaries.
+- [Contributing guide](../CONTRIBUTING.md) — current local setup, owner boundaries, and
+  pull request validation.
+- [Pitch presentation](./demo/parallax-demo-day/README.md) — published seven-slide deck
+  and local viewing instructions.
+- [Product decision and remediation model](./product/p0-economic-diagnosis-remediation.md)
+  — Product-side intent; frozen semantics are governed by Issue #70 and implementation
+  maturity should be checked against live code/issues.
+- [Product delivery snapshot](./product/product-delivery.md) — retained Product/UI boundary
+  and historical implementation context; not a current live status record.
 
-1. Read the [root README](../README.md) for the Product loop and boundaries.
-2. Read the [P0 Economic Diagnosis & Remediation specification](./product/p0-economic-diagnosis-remediation.md).
-3. Read the [architecture boundaries](./planning/arbitrum-open-house/02-A-architecture-boundaries.md).
-4. Open the implementation-area document relevant to your change.
+## Developer references
 
-If you are implementing a feature, start from its owning specification and acceptance document rather than searching the entire tree.
+- [Typed TypeScript SDK](../packages/sdk/README.md) — public API client and example.
+- [Decision Registry guide](../contracts/decision-registry/README.md) — optional,
+  operator-triggered Arbitrum Sepolia anchoring and verification.
+- [Frontend/API handoff](./integration/api-frontend-handoff.md) — API payload and
+  presentation details, with a historical Monad/Moss handoff and later Arbitrum addenda;
+  verify current behavior against API contracts and implementation.
+- [Backend P0 acceptance reference](./integration/backend-p0-acceptance.md) — engineering
+  acceptance cases and their limits.
+- [Basic Simulation and Risk policy](./integration/basic-simulation-risk-policy.md) —
+  implementation-boundary reference for execution facts and Risk.
+- [Verified Remediation feasibility record](./integration/verified-remediation-107-blocker.md)
+  — historical evidence for a gate that remains NOT COMPLETE; Issue #107 is closed
+  administratively, and closure is not a gate PASS.
+- [Receipt contract-owner review](./integration/receipt-contract-owner-review.md) —
+  historical review record; not a requirement for the current optional Registry.
 
-## Product
+## Product, Risk, and architecture references
 
-- [P0 Economic Diagnosis & Remediation](./product/p0-economic-diagnosis-remediation.md) — Product-side model for diagnosis, quantified remediation, and state-bound re-verification.
-- [Product Requirements Document](./product/prd.md) — Monad MVP P0 Product specification.
-- [Product Delivery](./product/product-delivery.md) — user-facing state semantics, scope disclosure, and delivery boundaries.
+- [Product Requirements Document](./product/prd.md) — historical Monad MVP requirements;
+  not the current supported integration or product-scope authority.
+- [P0 Rule and Reason-to-Action specification](./risk-methodology/p0-rule-and-reason-action-spec.md)
+  — decision-rule, Cause, and Action semantics.
+- [ADR directory](./adr/) — accepted architecture decisions, including Run/re-check scope.
+- [Arbitrum Open House planning index](./planning/arbitrum-open-house/README.md) — dated
+  planning hierarchy and stage documents. Treat these as planning/history unless a current
+  implementation reference confirms the capability.
 
-## Architecture and implementation planning
+## Research and evidence
 
-- [Arbitrum Open House planning index](./planning/arbitrum-open-house/README.md) — planning hierarchy, normative documents, and reading order.
-- [02 Overview](./planning/arbitrum-open-house/02-overview.md) — baseline, target path, constraints, and stage structure.
-- [02-A Architecture boundaries](./planning/arbitrum-open-house/02-A-architecture-boundaries.md) — Chain × Protocol × Evidence Provider and Core boundaries.
-- [02-B Provider implementation](./planning/arbitrum-open-house/02-B-provider-implementation.md) — Provider order, stages, and portability tests.
-- [02-C Ownership and collaboration](./planning/arbitrum-open-house/02-C-ownership-collaboration.md) — semantic ownership and review boundaries.
-- [02-D Acceptance and timeline](./planning/arbitrum-open-house/02-D-acceptance-timeline.md) — stage gates, failure matrix, deadlines, and unresolved dependencies.
+- [User Research](./research/user-research.md) — interview synthesis, evidence levels,
+  limitations, and hypotheses.
+- [Competitive Analysis](./research/competitive-analysis.md) — dated market comparison;
+  use as research context, not a claim of exclusive capabilities.
+- [Market positioning and evidence](./research/market-positioning-and-evidence.md) —
+  positioning hypotheses and public-claim boundaries.
+- [Arbitrum ecosystem and stack](./research/arbitrum-ecosystem-and-stack.md) — dated
+  ecosystem and technical-selection research; implementation status has since advanced.
+- [Explorer Evidence feasibility](./research/be-108-explorer-evidence-feasibility.md) —
+  partial feasibility findings and qualification limits.
+- Current execution-evidence roles: Native RPC is the primary path and Trace RPC is
+  supplementary. Dated Provider handoff records include [Native RPC](./research/native-rpc-provider-handoff-p0.md)
+  and [Tenderly](./research/be-072-tenderly-provider-handoff.md); the Tenderly record does
+  not establish a runtime-qualified integration.
 
-## Risk and decision semantics
+## Historical integration records
 
-- [P0 Rule and Reason-to-Action specification](./risk-methodology/p0-rule-and-reason-action-spec.md) — deterministic rule, Cause, Decision, and Action semantics.
+- [Monad × Kuru / Moss provider handoff](./research/be-033-moss-provider-handoff.md) and
+  [GenericEvidence field mapping](./research/be-033-moss-field-mapping.md) — retained
+  historical technical context, not prerequisites for the current Arbitrum product path.
+- [Arbitrum UI implementation snapshot](./integration/arbitrum-ui-implementation.md) —
+  dated implementation notes; verify current behavior against code and live references.
+- [Monad × Kuru runtime record](./integration/moss-kuru-live-runtime.md) — historical
+  compatibility-path runtime evidence, not the current Arbitrum route.
+- [Historical frontend API integration summary](../apps/web/API_INTEGRATION_SUMMARY.md) —
+  retained earlier integration notes, not a current implementation specification.
+- [Provider input package](./research/be-011-provider-input-package.md) — dated capability
+  inventory and retained historical captures.
 
-## Integration
+## Project history and operations
 
-- [Frontend API handoff](./integration/api-frontend-handoff.md) — frontend payloads, errors, CORS, and startup details.
-- [Backend P0 acceptance](./integration/backend-p0-acceptance.md) — backend acceptance matrix and boundaries.
-- [Issue #107 verified remediation blocker](./integration/verified-remediation-107-blocker.md) — why no reachable live scenario produces a `VERIFIED` remediation child re-check, with the exact blocker classes and open owner decisions.
-- [Moss/Kuru live runtime](./integration/moss-kuru-live-runtime.md) — pinned runtime, provenance, and live-operation requirements.
+- [Agent contract](../AGENTS.md) and [Runbook](../RUNBOOK.md) — contributor operating rules.
+- [Context recovery](./context/CONTEXT_RECOVERY.md), [Project State](./context/PROJECT_STATE.md),
+  [Decision Log](./context/DECISION_LOG.md), [Agent Handoff](./context/AGENT_HANDOFF.md),
+  and [Mutation Ledger](./context/MUTATION_LEDGER.md) — durable internal recovery and
+  history snapshots, not the live issue tracker.
+- [Final Sprint GitHub tracker](https://github.com/parallax-monad/parallax/issues/96) —
+  closed historical tracking record. Its closeout records Product P0 implementation delivery
+  without explicit PASS, Asset Coverage acceptance/sign-off not established, Evidence Federation
+  PASS within accepted scope, and Verified Remediation NOT COMPLETE; it is not a Full Best Case
+  PASS.
 
-## Research
+GitHub Issues and merged PRs carry live execution and acceptance state. These documents
+provide product references, implementation guidance, research, or historical context;
+when their status text is dated, fresh GitHub state and the current implementation take
+precedence.
 
-- [User Research](./research/user-research.md) — interviews, observed behavior, pain points, and research limits.
-- [Competitive Analysis](./research/competitive-analysis.md) — dated Monad MVP competitive research snapshot.
-- [Market positioning and evidence](./research/market-positioning-and-evidence.md) — market evidence, positioning hypotheses, and claim boundaries.
-- [Arbitrum ecosystem and stack](./research/arbitrum-ecosystem-and-stack.md) — ecosystem rationale and Provider/stack selection research.
-- [BE-011 Provider Owner input package](./research/be-011-provider-input-package.md) — Provider capability evidence inventory and machine-readable fixture index for BE-011. The pre-guard Native RPC capture (`arbitrum-sepolia-public-2026-09-08`) is retained as `HISTORICAL_PRE_GUARD_CAPTURE` and is superseded for canonical qualification.
-- [BE-033 MossProvider handoff](./research/be-033-moss-provider-handoff.md) — Moss-specific capability matrix, provenance/freshness separation, prepared-execution binding, control-state mapping, and fixture index for BE-033/#58. Real evidence is limited to the Monad × Kuru compatibility path; revert/timeout/failure coverage remains explicitly unavailable.
-- [BE-033 Moss field mapping](./research/be-033-moss-field-mapping.md) — Provisional, field-by-field Moss mapping with source path, qualification class, missing-value behavior, opaque-boundary, and unresolved Contract Owner decisions. Not final Evidence Contract semantics.
-- [BE-108 Explorer Evidence feasibility](./research/be-108-explorer-evidence-feasibility.md) — Partial keyless Explorer feasibility: historical observations, evidence limits, and blocked credentialed Etherscan V2 qualification; no production support.
+## Maintainer proposals
 
-## Architecture decisions
-
-- [ADR directory](./adr/) — durable architecture decision records, including the Kuru baseline and Re-run lifecycle scope.
-
-## Demo
-
-- [Demo documentation](./demo/) — presentation and local review materials.
-
-## Reading boundaries
-
-Code and merged implementation documentation define current implementation truth. The planning set defines the normative plan and acceptance gates; research provides rationale and evidence. Planned capabilities are not implementation or deployment claims unless the code and merged integration documentation verify them.
-
-## Project continuity and agent operations
-
-- [Agent contract](../AGENTS.md)
-- [Runbook](../RUNBOOK.md)
-- [Context recovery](./context/CONTEXT_RECOVERY.md)
-- [Project state](./context/PROJECT_STATE.md)
-- [Decision log](./context/DECISION_LOG.md)
-- [Agent handoff](./context/AGENT_HANDOFF.md)
-- [Mutation ledger](./context/MUTATION_LEDGER.md)
+- [Runtime Decoupling proposal](./proposals/runtime-decoupling.md) — unapproved technical
+  proposal addressing legacy environment and Docker coupling; it is not an implementation
+  plan or current runtime contract.

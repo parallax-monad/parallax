@@ -109,6 +109,7 @@ export function WalletSwap({
   const [advancedOpen, setAdvancedOpen] = useState(showMinimumReceived);
   const [previousQuote, setPreviousQuote] = useState<string | null>(null);
   const [isUpdating, setIsUpdating] = useState(false);
+  const [userEditedMinimum, setUserEditedMinimum] = useState(false);
 
   const set = <K extends keyof FormState>(key: K, value: FormState[K]) =>
     onChange({ ...form, [key]: value });
@@ -140,6 +141,30 @@ export function WalletSwap({
       setIsUpdating(false);
     }
   }, [quote]);
+
+  // Reset user-edited flag when amount or token changes
+  // biome-ignore lint/correctness/useExhaustiveDependencies: we intentionally watch form.amountIn and form.tokenIn to reset the flag
+  useEffect(() => {
+    setUserEditedMinimum(false);
+  }, [form.amountIn, form.tokenIn]);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: form is intentionally partial to avoid infinite loops
+  useEffect(() => {
+    if (
+      quote.status === "available" &&
+      form.slippage &&
+      !Number.isNaN(parseFloat(form.slippage)) &&
+      !userEditedMinimum
+    ) {
+      const calculated =
+        parseFloat(quote.quote.estimatedAmountOut) *
+        (1 - parseFloat(form.slippage) / 100);
+      const referenceMin = (Math.floor(calculated * 100) / 100)
+        .toFixed(2)
+        .replace(/\.?0+$/, "");
+      onChange({ ...form, minimumReceived: referenceMin });
+    }
+  }, [quote, form.slippage, userEditedMinimum]);
 
   const amountFlag = flagFor("amountIn");
   const tokenInLabel = form.tokenIn;
@@ -393,9 +418,10 @@ export function WalletSwap({
                     zh: "你接受的边界",
                   })}
                   value={form.minimumReceived}
-                  onChange={(event) =>
-                    set("minimumReceived", event.target.value)
-                  }
+                  onChange={(event) => {
+                    set("minimumReceived", event.target.value);
+                    setUserEditedMinimum(true);
+                  }}
                 />
               </div>
               {quote.status === "available" &&

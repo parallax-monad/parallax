@@ -3,11 +3,7 @@
   "root": false,
   "extends": "//",
   "files": {
-    "includes": [
-      "**",
-      "!dist",
-      "!dummy-non-existing-folder/parallax-demo-day.html"
-    ]
+    "includes": ["**", "!dist"]
   },
   "css": {
     "parser": {

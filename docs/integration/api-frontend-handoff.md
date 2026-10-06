@@ -1,6 +1,8 @@
 # Frontend API Handoff (`/api/quote` + `/api/check` + `/api/replay`)
 
-Status: BACKEND HANDOFF FOR ANALYZE 联调 — LIVE SIMULATION SUCCEEDED ON THE TEMPORARY MOSS PIN; FIXTURE REGENERATED ON NODE v22.23.2
+> **Historical handoff snapshot:** this page combines an earlier Monad × Kuru × Moss Analyze integration record with later Arbitrum Sepolia × Camelot addenda. The earlier Monad/Moss path is preserved technical history, not current public product support or proof of completed multi-chain compatibility. The Arbitrum sections are dated implementation references; verify exact current request/response behavior against merged API contracts and source before integrating.
+
+Status at the time of the original handoff: BACKEND HANDOFF FOR ANALYZE 联调 — LIVE SIMULATION SUCCEEDED ON THE TEMPORARY MOSS PIN; FIXTURE REGENERATED ON NODE v22.23.2. This is a historical Moss qualification statement, not a current Arbitrum status.
 
 Owner: Clare (`apps/api`)
 Consumers: Antony (`apps/web`)

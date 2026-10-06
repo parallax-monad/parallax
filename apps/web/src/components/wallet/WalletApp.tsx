@@ -472,6 +472,54 @@ export function WalletApp({ language }: { language: Language }) {
       return;
     }
 
+    // Demo mode: show balance insufficient scenario
+    const isDemoBalanceInsufficient =
+      (form.tokenIn === "ETH" && parseFloat(form.amountIn) > 0.07) ||
+      (form.tokenIn === "USDC" && parseFloat(form.amountIn) > 87898181);
+
+    if (isDemoBalanceInsufficient) {
+      const { arbitrumSampleBalanceInsufficient } = await import(
+        "@/lib/analyze/arbitrum-samples"
+      );
+
+      if (!arbitrumSampleBalanceInsufficient.accountState) {
+        throw new Error("Demo account state not available");
+      }
+
+      const demoResult = {
+        ...arbitrumSampleBalanceInsufficient,
+        productRunMode: "MOCK" as const,
+        intent: {
+          tokenIn: form.tokenIn,
+          tokenOut: form.tokenOut,
+          amountIn: form.amountIn,
+        },
+      };
+      recoveryCancelledRef.current = true;
+      snapshotRecoveryControllerRef.current?.abort();
+      accountStateRef.current = { status: "idle" };
+      setFormErrors({});
+      setStoredRunId(undefined);
+      setStoredAccountSnapshotId(undefined);
+      setResult(undefined);
+      setDrawerOpen(false);
+      setStage(0);
+      setCheckingMode("live");
+      setScreen("checking");
+
+      schedulerRef.current.run({
+        stageCount: WALLET_STAGE_COUNT,
+        stageMs: STAGE_MS,
+        onStage: setStage,
+        onSettle: async () => {
+          setResult(demoResult);
+          setSubmittedForm(plan.submitted);
+          setScreen("result");
+        },
+      });
+      return;
+    }
+
     const submitted = plan.submitted;
     const parent = undefined as CheckSwapResult | undefined;
     const currentAccountState = accountStateRef.current;

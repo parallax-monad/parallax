@@ -1,8 +1,48 @@
 # Project State
 
-Last checkpoint: 2026-09-29
+## Post-submission closeout snapshot — 2026-10-05
 
-## Main checkpoint
+This is a durable checkpoint, not the live execution tracker. Always fresh-fetch GitHub before
+acting; current merged code and live GitHub state take precedence. The verified `main` at this
+checkpoint was `3380849b13a1d803274a13201d1f33c0020c7bbb`; it is historical known-good truth, not
+a permanent equality requirement.
+
+The Arbitrum Open House / Buildathon submission and its administrative closeout are complete.
+Issues [#74](https://github.com/parallax-monad/parallax/issues/74) and
+[#96](https://github.com/parallax-monad/parallax/issues/96#issuecomment-5983520816) are closed as
+historical tracking records. Issues #105 and #107 also remain closed as historical implementation
+and feasibility records. There is no active Final Sprint tracker; any future development requires
+a new, explicitly scoped, owner-approved task. Historical tracker instructions below must not be
+treated as active execution direction.
+
+Independent gate dispositions at closeout:
+
+- **Product P0:** implementation delivered; explicit Product PASS was not established in the
+  reviewed record.
+- **Asset Coverage:** implementation merged; integrated Product acceptance and sign-off were not
+  established.
+- **Evidence Federation:** PASS within the accepted scope.
+- **Verified Remediation:** NOT COMPLETE. No Full Best Case PASS is claimed.
+
+PR [#142](https://github.com/parallax-monad/parallax/pull/142) remains open, Provider-owned
+supplementary research under `@jzhao0`; it is not accepted production evidence and was not part of
+administrative closeout. Preserve it for its owner.
+
+Parallax's product identity is chain-agnostic. The current public integration is Arbitrum
+Sepolia × Camelot V3. Historical Monad × Kuru × Moss adapters, tests, and evidence are preserved,
+but do not represent completed or currently supported multi-chain product integration.
+
+## Historical detailed checkpoint record
+
+The dated status and implementation records below preserve their original checkpoint meaning.
+They predate the post-submission administrative closeout and are not current execution
+instructions. When they differ from the snapshot above, fresh GitHub state wins.
+
+This file is a durable context snapshot, not a second live tracker.
+
+Last detailed checkpoint: 2026-09-29
+
+## Historical main checkpoint
 
 `checkpoint_head = 811e2b80fd6d6db6ccee5da6f4a518a6b66ba6c7`
 
