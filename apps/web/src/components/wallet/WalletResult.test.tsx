@@ -237,6 +237,19 @@ describe("WalletResult", () => {
     expect(html).toContain("Chain 999 · other-protocol");
   });
 
+  test("uses neutral copy for ADJUST without claiming verification", () => {
+    const html = render(
+      result({
+        verdict: "ADJUST",
+        adjustReason: "QUOTED_OUTPUT_BELOW_MINIMUM",
+      }),
+    );
+    expect(html).toContain(
+      "A change may address this issue. Review the available options and re-check before signing.",
+    );
+    expect(html).not.toContain("A verified change may improve this swap");
+  });
+
   test("renders the Arbitrum diagnosis in Result and keeps options on the next step", () => {
     const html = render(arbitrumSampleSuccess, () => undefined);
     expect(html).toContain("Your quote has changed");

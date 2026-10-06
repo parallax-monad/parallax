@@ -150,6 +150,7 @@ describe("WalletApp persisted Run recovery", () => {
     }
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
+    vi.useRealTimers();
     (
       globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
     ).IS_REACT_ACT_ENVIRONMENT = false;
@@ -451,7 +452,60 @@ describe("WalletApp persisted Run recovery", () => {
 
     expect(checkCalls).toHaveLength(1);
     expect(checkBody?.amountIn).toBe("0.03");
+    expect(checkBody?.minimumReceived).toBeUndefined();
     expect(checkBody?.expectationBaseline).toBeUndefined();
+  });
+
+  test("uses the live backend for threshold-triggering amounts", async () => {
+    const request = mockFetch({
+      check: {
+        runId: "live-threshold-run",
+        createdAt: CREATED_AT,
+        intent,
+        status: "completed",
+        result: recoveredRun,
+      },
+    });
+    vi.stubGlobal("fetch", request);
+
+    const container = document.createElement("div");
+    document.body.append(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(<WalletApp language="en" />);
+      await Promise.resolve();
+    });
+
+    const swapButton = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent?.trim() === "Swap",
+    );
+    await act(async () => swapButton?.click());
+
+    const amountInput = container.querySelector<HTMLInputElement>(
+      'input[aria-label="Amount to pay"]',
+    );
+    expect(amountInput).toBeDefined();
+    await act(async () => {
+      setInputValue(amountInput as HTMLInputElement, "1.5");
+    });
+
+    const submitButton = Array.from(
+      container.querySelectorAll<HTMLButtonElement>('button[type="submit"]'),
+    ).find((button) => button.textContent?.includes("Submit live check"));
+    expect(submitButton).toBeDefined();
+
+    await act(async () => {
+      submitButton?.click();
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+
+    const checkCalls = request.mock.calls.filter(
+      (call) => typeof call[0] === "string" && call[0].includes("/api/check"),
+    );
+    expect(checkCalls).toHaveLength(1);
+    expect(container.textContent).toContain("Parallax · Live backend check");
+    expect(container.textContent).not.toContain("Demo sample");
   });
 
   test("does not expose fixture-only remediation controls in the active P0 path", async () => {
