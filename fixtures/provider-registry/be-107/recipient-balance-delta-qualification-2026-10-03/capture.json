@@ -1,0 +1,73 @@
+{
+  "schemaVersion": "be-107-recipient-balance-delta-qualification-v1",
+  "classification": "SUPPLEMENTARY_EVENT_DERIVATION_CANDIDATE_NOT_VERIFIED_GATE",
+  "candidateDerivation": "recipient_balance_delta",
+  "real": true,
+  "readOnly": true,
+  "sourceHead": "40d4b5b97a6cc2aa9013b149ed1a691be747ba75",
+  "chainId": 421614,
+  "pinnedBlock": {
+    "number": "310131879",
+    "hash": "0x715bfaca417a25ed4d317748ecf0cfbd0ad38d4e14c2e1c0fb42ac0c8e60feff"
+  },
+  "identity": {
+    "tokenOut": "0xb893e3334d4bd6c5ba8277fd559e99ed683a9fc7",
+    "recipient": "0xeb7c5322f0997ee70f4bbd3ae7e428072c9af396",
+    "preparedUnsignedTransactionFingerprint": "sha256:8992725c48797658fe41d1ddb5ba15dbf7c3fdc392599c6b52351cd870df2219"
+  },
+  "method": {
+    "preBalance": "eth_call balanceOf at pinned pre-state",
+    "balanceOfCallTrace": {
+      "tracer": "callTracer",
+      "nestedCallCount": 0,
+      "resultFingerprint": "sha256:acc5fedc4fdde40eef1539ffe06bd003148b4982dca771c82838cae3bc6f4e25"
+    },
+    "executionDiff": "debug_traceCall prestateTracer(diffMode=true)",
+    "postBalance": "eth_call balanceOf at pinned state with tokenOut-local post storage diff as state override",
+    "stateOverrideScope": "TOKEN_OUT_STORAGE_ONLY"
+  },
+  "expectedQuoteAmountOutAtomic": "15882896725531551",
+  "replays": [
+    {
+      "capturedAt": "2026-10-02T18:04:00.201Z",
+      "prestateDiffFingerprint": "sha256:1f44f10a8920518015488d221e7c22510cdb4a126c7a065719cad219c06d2a6a",
+      "validatedPostDiffFingerprint": "sha256:712ca0182552ed11d17c41b5ff07b06e733f029d02dd98e0ecaac138eed219ee",
+      "tokenLocalOverrideFingerprint": "sha256:82ca532d585935ec2db8a4b51fdf53610fa2cfabb7d72b97b4ecee811664a66b",
+      "changedAddressCount": 7,
+      "tokenOutChangedStorageSlotCount": 2,
+      "preBalanceAtomic": "0",
+      "postBalanceAtomic": "15882896725531551",
+      "deltaAtomic": "15882896725531551"
+    },
+    {
+      "capturedAt": "2026-10-02T18:04:01.006Z",
+      "prestateDiffFingerprint": "sha256:1f44f10a8920518015488d221e7c22510cdb4a126c7a065719cad219c06d2a6a",
+      "validatedPostDiffFingerprint": "sha256:712ca0182552ed11d17c41b5ff07b06e733f029d02dd98e0ecaac138eed219ee",
+      "tokenLocalOverrideFingerprint": "sha256:82ca532d585935ec2db8a4b51fdf53610fa2cfabb7d72b97b4ecee811664a66b",
+      "changedAddressCount": 7,
+      "tokenOutChangedStorageSlotCount": 2,
+      "preBalanceAtomic": "0",
+      "postBalanceAtomic": "15882896725531551",
+      "deltaAtomic": "15882896725531551"
+    }
+  ],
+  "replayComparison": {
+    "prestateDiffFingerprintStable": true,
+    "validatedPostDiffFingerprintStable": true,
+    "tokenLocalOverrideFingerprintStable": true,
+    "postBalanceStable": true,
+    "deltaStable": true
+  },
+  "crossChecks": {
+    "deltaMatchesQuote": true,
+    "secondDeltaMatchesQuote": true
+  },
+  "limitations": [
+    "The balance delta is reconstructed from the same Provider's prestateTracer tokenOut-local post-storage diff; this does not independently establish Provider completeness or Provider SUCCESS.",
+    "The RPC service rejects full post-state override replay for at least one Arbitrum system address, so this capture does not claim full-state replay equivalence.",
+    "The pinned balanceOf call has no nested calls in the observed code path; this narrows but does not eliminate the need for Contract/Provider review before treating this candidate as canonical Evidence.",
+    "This qualification capture is not production Backend integration and does not create canonical Evidence by itself.",
+    "This capture does not establish simulation.complete, receipt completeness, warnings completeness, Risk PROCEED, or VERIFIED remediation.",
+    "Raw Provider payload, RPC URL, and credentials are not persisted."
+  ]
+}

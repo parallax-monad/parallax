@@ -1,0 +1,206 @@
+{
+  "schemaVersion": "be-107-trace-movement-inventory-v1",
+  "classification": "SUPPLEMENTARY_EVENT_DERIVATION_CANDIDATE_NOT_VERIFIED_GATE",
+  "real": true,
+  "sourceHead": "b0c080f4f11964f3441ce24da4a265ee172d66f3",
+  "chainId": 421614,
+  "pinnedBlock": {
+    "number": "310131879",
+    "hash": "0x715bfaca417a25ed4d317748ecf0cfbd0ad38d4e14c2e1c0fb42ac0c8e60feff"
+  },
+  "identity": {
+    "sender": "0xeb7c5322f0997ee70f4bbd3ae7e428072c9af396",
+    "recipient": "0xeb7c5322f0997ee70f4bbd3ae7e428072c9af396",
+    "router": "0x171b925c51565f5d2a7d8c494ba3188d304efd93",
+    "preparedUnsignedTransactionFingerprint": "sha256:8992725c48797658fe41d1ddb5ba15dbf7c3fdc392599c6b52351cd870df2219"
+  },
+  "routeFacts": {
+    "tokenIn": "0x980b62da83eff3d4576c647993b0c1d7faf17c73",
+    "tokenOut": "0xb893e3334d4bd6c5ba8277fd559e99ed683a9fc7",
+    "pool": "0x3965361ea4f9000ae3cf995f553115b2832d0e2d"
+  },
+  "tracer": {
+    "method": "debug_traceCall",
+    "name": "callTracer",
+    "config": {
+      "withLog": true
+    },
+    "stateOverrideUsed": false
+  },
+  "replays": [
+    {
+      "capturedAt": "2026-10-02T17:46:39.817Z",
+      "resultFingerprint": "sha256:7bd5c332c01884ca37c7ea7a22e622b572cddd94c9d3348706c6fa2a7812679f",
+      "tokenOutNet": {
+        "recipient": "0xeb7c5322f0997ee70f4bbd3ae7e428072c9af396",
+        "tokenOut": "0xb893e3334d4bd6c5ba8277fd559e99ed683a9fc7",
+        "incomingAtomic": "15882896725531551",
+        "outgoingAtomic": "0",
+        "netAtomic": "15882896725531551",
+        "relevantTransferCount": 1
+      },
+      "movementInventory": {
+        "nativeValueMovements": [
+          {
+            "path": "0",
+            "from": "0xeb7c5322f0997ee70f4bbd3ae7e428072c9af396",
+            "to": "0x171b925c51565f5d2a7d8c494ba3188d304efd93",
+            "amountAtomic": "1000000000000000",
+            "successfulAncestry": true,
+            "callType": "CALL"
+          },
+          {
+            "path": "0.0.5.0",
+            "from": "0x171b925c51565f5d2a7d8c494ba3188d304efd93",
+            "to": "0x980b62da83eff3d4576c647993b0c1d7faf17c73",
+            "amountAtomic": "1000000000000000",
+            "successfulAncestry": true,
+            "callType": "CALL"
+          },
+          {
+            "path": "0.0.5.0.0",
+            "from": "0x980b62da83eff3d4576c647993b0c1d7faf17c73",
+            "to": "0x3031a6d5d9648ba5f50f656cd4a1672e1167a34a",
+            "amountAtomic": "1000000000000000",
+            "successfulAncestry": true,
+            "callType": "DELEGATECALL"
+          }
+        ],
+        "transferTopicMovements": [
+          {
+            "path": "0.0.3.log0",
+            "token": "0xb893e3334d4bd6c5ba8277fd559e99ed683a9fc7",
+            "from": "0x3965361ea4f9000ae3cf995f553115b2832d0e2d",
+            "to": "0xeb7c5322f0997ee70f4bbd3ae7e428072c9af396",
+            "amountAtomic": "15882896725531551",
+            "successfulAncestry": true,
+            "mint": false,
+            "burn": false,
+            "selfTransfer": false
+          },
+          {
+            "path": "0.0.5.0.0.log0",
+            "token": "0x980b62da83eff3d4576c647993b0c1d7faf17c73",
+            "from": "0x0000000000000000000000000000000000000000",
+            "to": "0x171b925c51565f5d2a7d8c494ba3188d304efd93",
+            "amountAtomic": "1000000000000000",
+            "successfulAncestry": true,
+            "mint": true,
+            "burn": false,
+            "selfTransfer": false
+          },
+          {
+            "path": "0.0.5.1.0.log0",
+            "token": "0x980b62da83eff3d4576c647993b0c1d7faf17c73",
+            "from": "0x171b925c51565f5d2a7d8c494ba3188d304efd93",
+            "to": "0x3965361ea4f9000ae3cf995f553115b2832d0e2d",
+            "amountAtomic": "1000000000000000",
+            "successfulAncestry": true,
+            "mint": false,
+            "burn": false,
+            "selfTransfer": false
+          }
+        ],
+        "observedTransferTokenAddresses": [
+          "0x980b62da83eff3d4576c647993b0c1d7faf17c73",
+          "0xb893e3334d4bd6c5ba8277fd559e99ed683a9fc7"
+        ],
+        "totalTraceLogCount": 5,
+        "fingerprint": "sha256:a5862a0165c4d1b46aaacdb3277441b0d86e3135940d2fe536594ce90bd1d34b"
+      }
+    },
+    {
+      "capturedAt": "2026-10-02T17:46:40.415Z",
+      "resultFingerprint": "sha256:7bd5c332c01884ca37c7ea7a22e622b572cddd94c9d3348706c6fa2a7812679f",
+      "tokenOutNet": {
+        "recipient": "0xeb7c5322f0997ee70f4bbd3ae7e428072c9af396",
+        "tokenOut": "0xb893e3334d4bd6c5ba8277fd559e99ed683a9fc7",
+        "incomingAtomic": "15882896725531551",
+        "outgoingAtomic": "0",
+        "netAtomic": "15882896725531551",
+        "relevantTransferCount": 1
+      },
+      "movementInventory": {
+        "nativeValueMovements": [
+          {
+            "path": "0",
+            "from": "0xeb7c5322f0997ee70f4bbd3ae7e428072c9af396",
+            "to": "0x171b925c51565f5d2a7d8c494ba3188d304efd93",
+            "amountAtomic": "1000000000000000",
+            "successfulAncestry": true,
+            "callType": "CALL"
+          },
+          {
+            "path": "0.0.5.0",
+            "from": "0x171b925c51565f5d2a7d8c494ba3188d304efd93",
+            "to": "0x980b62da83eff3d4576c647993b0c1d7faf17c73",
+            "amountAtomic": "1000000000000000",
+            "successfulAncestry": true,
+            "callType": "CALL"
+          },
+          {
+            "path": "0.0.5.0.0",
+            "from": "0x980b62da83eff3d4576c647993b0c1d7faf17c73",
+            "to": "0x3031a6d5d9648ba5f50f656cd4a1672e1167a34a",
+            "amountAtomic": "1000000000000000",
+            "successfulAncestry": true,
+            "callType": "DELEGATECALL"
+          }
+        ],
+        "transferTopicMovements": [
+          {
+            "path": "0.0.3.log0",
+            "token": "0xb893e3334d4bd6c5ba8277fd559e99ed683a9fc7",
+            "from": "0x3965361ea4f9000ae3cf995f553115b2832d0e2d",
+            "to": "0xeb7c5322f0997ee70f4bbd3ae7e428072c9af396",
+            "amountAtomic": "15882896725531551",
+            "successfulAncestry": true,
+            "mint": false,
+            "burn": false,
+            "selfTransfer": false
+          },
+          {
+            "path": "0.0.5.0.0.log0",
+            "token": "0x980b62da83eff3d4576c647993b0c1d7faf17c73",
+            "from": "0x0000000000000000000000000000000000000000",
+            "to": "0x171b925c51565f5d2a7d8c494ba3188d304efd93",
+            "amountAtomic": "1000000000000000",
+            "successfulAncestry": true,
+            "mint": true,
+            "burn": false,
+            "selfTransfer": false
+          },
+          {
+            "path": "0.0.5.1.0.log0",
+            "token": "0x980b62da83eff3d4576c647993b0c1d7faf17c73",
+            "from": "0x171b925c51565f5d2a7d8c494ba3188d304efd93",
+            "to": "0x3965361ea4f9000ae3cf995f553115b2832d0e2d",
+            "amountAtomic": "1000000000000000",
+            "successfulAncestry": true,
+            "mint": false,
+            "burn": false,
+            "selfTransfer": false
+          }
+        ],
+        "observedTransferTokenAddresses": [
+          "0x980b62da83eff3d4576c647993b0c1d7faf17c73",
+          "0xb893e3334d4bd6c5ba8277fd559e99ed683a9fc7"
+        ],
+        "totalTraceLogCount": 5,
+        "fingerprint": "sha256:a5862a0165c4d1b46aaacdb3277441b0d86e3135940d2fe536594ce90bd1d34b"
+      }
+    }
+  ],
+  "replayComparison": {
+    "resultFingerprintStable": true,
+    "movementInventoryFingerprintStable": true,
+    "tokenOutNetStable": true
+  },
+  "limitations": [
+    "Inventory covers movements returned by callTracer(withLog=true); it is not independent proof that the Provider returned a complete, untruncated log set.",
+    "Transfer-topic movements are supplementary observations, not canonical assetChanges.",
+    "Observed route movements do not establish assetChangeAssessment=EXPLAINED.",
+    "This capture does not establish simulation.complete, receipt completeness, warnings completeness, Provider SUCCESS, Risk PROCEED, or VERIFIED remediation.",
+    "Raw Provider payload, RPC URL, and credentials are not persisted."
+  ]
+}

@@ -1,0 +1,101 @@
+{
+  "schemaVersion": "be-107-trace-event-evidence-qualification-v1",
+  "classification": "SUPPLEMENTARY_EVENT_DERIVATION_CANDIDATE_NOT_VERIFIED_GATE",
+  "real": true,
+  "sourceHead": "25f7cca661de318894f0f5c528bae395dda1ccc8",
+  "chainId": 421614,
+  "pinnedBlock": {
+    "number": "310131879",
+    "hash": "0x715bfaca417a25ed4d317748ecf0cfbd0ad38d4e14c2e1c0fb42ac0c8e60feff"
+  },
+  "identity": {
+    "sender": "0xeb7c5322f0997ee70f4bbd3ae7e428072c9af396",
+    "recipient": "0xeb7c5322f0997ee70f4bbd3ae7e428072c9af396",
+    "tokenOut": "0xb893e3334d4bd6c5ba8277fd559e99ed683a9fc7",
+    "router": "0x171b925c51565f5d2a7d8c494ba3188d304efd93",
+    "preparedUnsignedTransactionFingerprint": "sha256:8992725c48797658fe41d1ddb5ba15dbf7c3fdc392599c6b52351cd870df2219"
+  },
+  "tracer": {
+    "method": "debug_traceCall",
+    "name": "callTracer",
+    "config": {
+      "withLog": true
+    },
+    "stateOverrideUsed": false
+  },
+  "tokenCodeIdentity": {
+    "address": "0xb893e3334d4bd6c5ba8277fd559e99ed683a9fc7",
+    "codeSha256": "sha256:4b3da370051762c986d753859422eea8fc841c1a0c8295862d928ff7abcf8794",
+    "codeBytes": 3456,
+    "eip1967Implementation": null,
+    "implementationCodeSha256": null,
+    "eip1967Beacon": null,
+    "beaconCodeSha256": null,
+    "proxyQualification": "NO_EIP1967_IMPL_OR_BEACON_SLOT_DETECTED"
+  },
+  "quoteAmountOutAtomic": "15882896725531551",
+  "replays": [
+    {
+      "capturedAt": "2026-10-01T16:26:04.816Z",
+      "resultFingerprint": "sha256:7bd5c332c01884ca37c7ea7a22e622b572cddd94c9d3348706c6fa2a7812679f",
+      "topLevelSucceeded": true,
+      "totalTraceLogCount": 5,
+      "relevantTokenOutTransferCount": 1,
+      "relevantTransferFingerprint": "sha256:8b469be3ac25262aaaea94a22beca13870a5522c2487e76c2dd6a9aac1f7fb20",
+      "anyErroredAncestorForRelevantLog": false,
+      "normalized": {
+        "recipient": "0xeb7c5322f0997ee70f4bbd3ae7e428072c9af396",
+        "tokenOut": "0xb893e3334d4bd6c5ba8277fd559e99ed683a9fc7",
+        "incomingAtomic": "15882896725531551",
+        "outgoingAtomic": "0",
+        "netAtomic": "15882896725531551",
+        "events": [
+          {
+            "path": "0.0.3.log0",
+            "from": "0x3965361ea4f9000ae3cf995f553115b2832d0e2d",
+            "to": "0xeb7c5322f0997ee70f4bbd3ae7e428072c9af396",
+            "amount": "15882896725531551",
+            "successfulAncestry": true
+          }
+        ]
+      }
+    },
+    {
+      "capturedAt": "2026-10-01T16:26:05.153Z",
+      "resultFingerprint": "sha256:7bd5c332c01884ca37c7ea7a22e622b572cddd94c9d3348706c6fa2a7812679f",
+      "topLevelSucceeded": true,
+      "totalTraceLogCount": 5,
+      "relevantTokenOutTransferCount": 1,
+      "relevantTransferFingerprint": "sha256:8b469be3ac25262aaaea94a22beca13870a5522c2487e76c2dd6a9aac1f7fb20",
+      "anyErroredAncestorForRelevantLog": false,
+      "normalized": {
+        "recipient": "0xeb7c5322f0997ee70f4bbd3ae7e428072c9af396",
+        "tokenOut": "0xb893e3334d4bd6c5ba8277fd559e99ed683a9fc7",
+        "incomingAtomic": "15882896725531551",
+        "outgoingAtomic": "0",
+        "netAtomic": "15882896725531551",
+        "events": [
+          {
+            "path": "0.0.3.log0",
+            "from": "0x3965361ea4f9000ae3cf995f553115b2832d0e2d",
+            "to": "0xeb7c5322f0997ee70f4bbd3ae7e428072c9af396",
+            "amount": "15882896725531551",
+            "successfulAncestry": true
+          }
+        ]
+      }
+    }
+  ],
+  "replayComparison": {
+    "resultFingerprintStable": true,
+    "relevantTransferFingerprintStable": true,
+    "normalizedStable": true
+  },
+  "limitations": [
+    "Transfer-event evidence is not yet qualified as final balance-delta authority.",
+    "Token-specific event/balance semantic qualification is not completed by this capture.",
+    "This capture does not promote provider.status to SUCCESS.",
+    "This capture does not claim complete simulation/receipt/outcome/assetChanges/warnings evidence.",
+    "Raw provider payload, RPC URL and credentials are not persisted."
+  ]
+}
