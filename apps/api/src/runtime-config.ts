@@ -8,6 +8,11 @@ import {
 import { z } from "zod";
 import { createTrustedTokenRegistry } from "./trusted-token-registry.js";
 
+const arbitrumSepoliaRuntimeConfig = {
+  chainId: ARBITRUM_SEPOLIA_CHAIN_ID,
+  protocolId: CAMELOT_V3_PROTOCOL_ID,
+} as const;
+
 export {
   ARBITRUM_SEPOLIA_CHAIN_ID,
   CAMELOT_V3_PROTOCOL_ID,
@@ -167,8 +172,8 @@ export const mossIntegrationConfigSchema = z
 
 export const arbitrumIntegrationConfigSchema = z
   .object({
-    chainId: z.literal(ARBITRUM_SEPOLIA_CHAIN_ID),
-    protocolId: z.literal(CAMELOT_V3_PROTOCOL_ID),
+    chainId: z.literal(arbitrumSepoliaRuntimeConfig.chainId),
+    protocolId: z.literal(arbitrumSepoliaRuntimeConfig.protocolId),
     rpcUrl: rpcUrlSchema.optional(),
   })
   .strict();
@@ -257,8 +262,7 @@ export function bootstrapBackendRuntime(
       runtimeRevision: environment.MOSS_RUNTIME_REVISION,
     },
     arbitrum: {
-      chainId: ARBITRUM_SEPOLIA_CHAIN_ID,
-      protocolId: CAMELOT_V3_PROTOCOL_ID,
+      ...arbitrumSepoliaRuntimeConfig,
       ...(environment.ARBITRUM_RPC_URL === undefined
         ? {}
         : { rpcUrl: environment.ARBITRUM_RPC_URL }),
