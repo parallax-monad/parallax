@@ -1,6 +1,9 @@
 services:
   rpc-proxy:
     image: ${FORK_RPC_PROXY_IMAGE:?FORK_RPC_PROXY_IMAGE is required}
+    command:
+      - node
+      - /opt/fork/rpc-proxy.mjs
     restart: "no"
     init: true
     read_only: true

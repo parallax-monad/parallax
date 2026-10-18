@@ -38,6 +38,16 @@ describe("Arbitrum One fork container configuration", () => {
     expect(compose).toContain("--no-mining");
   });
 
+  it("starts the RPC proxy module in the rpc-proxy service", () => {
+    const rpcProxyService = compose.match(
+      /^ {2}rpc-proxy:\n([\s\S]*?)(?=^ {2}[\w-]+:\n|^networks:\n)/m,
+    )?.[1];
+
+    expect(rpcProxyService).toContain(
+      "command:\n      - node\n      - /opt/fork/rpc-proxy.mjs",
+    );
+  });
+
   it("mounts the upstream URL as a runtime secret and publishes only configurable local ports", () => {
     expect(compose).toContain(
       "environment: ARBITRUM_ONE_FORK_UPSTREAM_RPC_URL",
