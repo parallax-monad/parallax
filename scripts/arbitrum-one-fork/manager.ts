@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import {
   closeSync,
   existsSync,
+  linkSync,
   openSync,
   readFileSync,
   unlinkSync,
@@ -22,12 +23,14 @@ import {
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(SCRIPT_DIR, "../..");
 const COMPOSE_FILE = join(SCRIPT_DIR, "compose.yaml");
-const PROJECT_NAME = "parallax-arbitrum-one-fork";
 const config = getForkHarnessConfig();
+const CHECKOUT_ID_FILE = gitPath("parallax-arbitrum-one-fork.checkout-id");
 const INSTANCE_FILE = gitPath("parallax-arbitrum-one-fork.instance");
 const CAPTURE_FILE = gitPath("parallax-arbitrum-one-fork-capture.json");
 const LOCK_FILE = gitPath("parallax-arbitrum-one-fork.lock");
 const FORK_SOURCE_ENV = "ARBITRUM_ONE_FORK_UPSTREAM_RPC_URL";
+const CHECKOUT_ID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 class HarnessError extends Error {
   readonly code: string;
@@ -209,18 +212,100 @@ function compose(
   env: NodeJS.ProcessEnv,
 ): DockerResult {
   return runDocker(
-    [
-      "compose",
-      "--project-directory",
-      REPO_ROOT,
-      "--project-name",
-      PROJECT_NAME,
-      "--file",
-      COMPOSE_FILE,
-      ...args,
-    ],
+    buildComposeArgs(getCheckoutComposeProjectName(), args),
     env,
   );
+}
+
+function readCheckoutIdentity(identityPath: string): string | undefined {
+  let identity: string;
+  try {
+    identity = readFileSync(identityPath, "utf8").trim();
+  } catch (error) {
+    if (isNodeError(error) && error.code === "ENOENT") return undefined;
+    throw new HarnessError(
+      "COMPOSE_PROJECT_ID_UNAVAILABLE",
+      "Checkout Compose project identity is unavailable.",
+    );
+  }
+  if (!CHECKOUT_ID_PATTERN.test(identity)) {
+    throw new HarnessError(
+      "COMPOSE_PROJECT_ID_UNAVAILABLE",
+      "Stored checkout Compose project identity is invalid.",
+    );
+  }
+  return identity.toLowerCase();
+}
+
+export function getCheckoutComposeProjectName(
+  identityPath = CHECKOUT_ID_FILE,
+  createIdentity: () => string = randomUUID,
+): string {
+  const existingIdentity = readCheckoutIdentity(identityPath);
+  if (existingIdentity !== undefined) {
+    return `parallax-arbitrum-one-fork-${existingIdentity}`;
+  }
+
+  const identity = createIdentity().toLowerCase();
+  if (!CHECKOUT_ID_PATTERN.test(identity)) {
+    throw new HarnessError(
+      "COMPOSE_PROJECT_ID_UNAVAILABLE",
+      "Could not create a valid checkout Compose project identity.",
+    );
+  }
+  const temporaryPath = `${identityPath}.${process.pid}.${randomUUID()}.tmp`;
+  try {
+    writeFileSync(temporaryPath, `${identity}\n`, {
+      encoding: "utf8",
+      flag: "wx",
+      mode: 0o600,
+    });
+    try {
+      // Publish only a fully written identity; link creation fails atomically if another
+      // process has already created this checkout's identity.
+      linkSync(temporaryPath, identityPath);
+      return `parallax-arbitrum-one-fork-${identity}`;
+    } catch (error) {
+      if (isNodeError(error) && error.code === "EEXIST") {
+        const winningIdentity = readCheckoutIdentity(identityPath);
+        if (winningIdentity !== undefined) {
+          return `parallax-arbitrum-one-fork-${winningIdentity}`;
+        }
+      }
+      throw new HarnessError(
+        "COMPOSE_PROJECT_ID_UNAVAILABLE",
+        "Could not persist the checkout Compose project identity in Git metadata.",
+      );
+    }
+  } catch (error) {
+    if (error instanceof HarnessError) throw error;
+    throw new HarnessError(
+      "COMPOSE_PROJECT_ID_UNAVAILABLE",
+      "Could not create the checkout Compose project identity.",
+    );
+  } finally {
+    try {
+      unlinkSync(temporaryPath);
+    } catch {
+      // The temporary metadata file is never the persisted checkout identity.
+    }
+  }
+}
+
+export function buildComposeArgs(
+  projectName: string,
+  args: readonly string[],
+): string[] {
+  return [
+    "compose",
+    "--project-directory",
+    REPO_ROOT,
+    "--project-name",
+    projectName,
+    "--file",
+    COMPOSE_FILE,
+    ...args,
+  ];
 }
 
 function requireComposeSuccess(result: DockerResult, action: string): string {

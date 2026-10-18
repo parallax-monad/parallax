@@ -1,7 +1,12 @@
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer, type IncomingMessage } from "node:http";
 import type { AddressInfo } from "node:net";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
+  buildComposeArgs,
+  getCheckoutComposeProjectName,
   isAllowedLocalHost,
   isPrivateBindAddress,
   recreateFork,
@@ -12,6 +17,15 @@ import {
 import { getForkHarnessConfig } from "./smoke.js";
 
 const config = getForkHarnessConfig();
+
+function withCheckoutMetadata<T>(run: (metadataDir: string) => T): T {
+  const metadataDir = mkdtempSync(join(tmpdir(), "parallax-fork-project-"));
+  try {
+    return run(metadataDir);
+  } finally {
+    rmSync(metadataDir, { recursive: true, force: true });
+  }
+}
 
 type HttpHandler = (
   request: IncomingMessage,
@@ -72,6 +86,76 @@ function rpcResponse(method: string, chainId: string) {
 }
 
 describe("Arbitrum One fork manager lifecycle", () => {
+  it("reuses one persisted Compose identity for the same checkout", () => {
+    withCheckoutMetadata((metadataDir) => {
+      const identityPath = join(metadataDir, "checkout-id");
+      const identity = "00000000-0000-4000-8000-000000000010";
+
+      const firstName = getCheckoutComposeProjectName(
+        identityPath,
+        () => identity,
+      );
+      const secondName = getCheckoutComposeProjectName(identityPath, () => {
+        throw new Error("A persisted checkout identity must be reused.");
+      });
+
+      expect(firstName).toBe(
+        "parallax-arbitrum-one-fork-00000000-0000-4000-8000-000000000010",
+      );
+      expect(secondName).toBe(firstName);
+      expect(readFileSync(identityPath, "utf8")).toBe(`${identity}\n`);
+    });
+  });
+
+  it("isolates Compose project names for distinct checkout metadata", () => {
+    withCheckoutMetadata((metadataDir) => {
+      const firstName = getCheckoutComposeProjectName(
+        join(metadataDir, "first-checkout"),
+        () => "00000000-0000-4000-8000-000000000011",
+      );
+      const secondName = getCheckoutComposeProjectName(
+        join(metadataDir, "second-checkout"),
+        () => "00000000-0000-4000-8000-000000000012",
+      );
+
+      expect(firstName).not.toBe(secondName);
+      expect(firstName).toMatch(/^parallax-arbitrum-one-fork-[0-9a-f-]+$/);
+      expect(secondName).toMatch(/^parallax-arbitrum-one-fork-[0-9a-f-]+$/);
+    });
+  });
+
+  it.each([
+    ["ps", "--status", "running", "--quiet"],
+    ["up", "-d"],
+    ["down", "--volumes", "--remove-orphans"],
+  ])("uses the checkout project name for Compose %s", (...operation) => {
+    const projectName =
+      "parallax-arbitrum-one-fork-00000000-0000-4000-8000-000000000013";
+    const args = buildComposeArgs(projectName, operation);
+    const projectNameIndex = args.indexOf("--project-name");
+
+    expect(args[0]).toBe("compose");
+    expect(args[projectNameIndex + 1]).toBe(projectName);
+    expect(args.slice(-operation.length)).toEqual(operation);
+    expect(args).not.toContain("parallax-arbitrum-one-fork");
+  });
+
+  it("rejects an invalid stored checkout identity instead of replacing it", () => {
+    withCheckoutMetadata((metadataDir) => {
+      const identityPath = join(metadataDir, "checkout-id");
+      writeFileSync(identityPath, "not-a-uuid\n", "utf8");
+
+      let error: unknown;
+      try {
+        getCheckoutComposeProjectName(identityPath);
+      } catch (caught) {
+        error = caught;
+      }
+      expect(error).toMatchObject({ code: "COMPOSE_PROJECT_ID_UNAVAILABLE" });
+      expect(readFileSync(identityPath, "utf8")).toBe("not-a-uuid\n");
+    });
+  });
+
   it("rejects wildcard and all other 0/8 bind addresses", () => {
     for (const address of ["0.0.0.0", "0.1.2.3", "0.255.255.255"]) {
       expect(isPrivateBindAddress(address), address).toBe(false);

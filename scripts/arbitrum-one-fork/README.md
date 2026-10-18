@@ -13,6 +13,17 @@ Identity is reported in separate fields:
 - Anvil: Foundry `1.8.5`, pinned by the multi-architecture OCI digest in `config.json`;
 - read-only proxy: Node `22.23.2`, pinned by its OCI digest in `config.json`.
 
+Compose is scoped to the Git checkout, not its absolute filesystem path. On first use, the host
+runner atomically stores a checkout UUID in Git metadata as
+`parallax-arbitrum-one-fork.checkout-id` and uses it in the Compose project name. The Mac host and
+dev container share this identity when they use the same mounted checkout, even though the mount
+paths differ; separate clones and worktrees get distinct Compose projects. This checkout identity
+is separate from the per-start/reset fork-instance UUID. Do not delete or replace the metadata
+file while this checkout's fork is active.
+
+The manager does not automatically tear down containers left under the former shared Compose
+project name. Confirm which checkout owns any such legacy containers before removing them.
+
 ## Prerequisites
 
 - macOS Docker Desktop with Docker Compose `2.23.1` or newer (environment-sourced Compose secrets are required);
