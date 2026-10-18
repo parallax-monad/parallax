@@ -1,4 +1,5 @@
 import type { Copy } from "@/lib/i18n";
+import type { QuoteProvenance } from "../../../../../packages/contracts/src/quote.js";
 
 export type BoundarySource =
   | "original_swap"
@@ -75,6 +76,7 @@ export type QuotePreview = {
   fetchedAt?: string;
   runtimeVersion: string;
   runtimeRevision: string;
+  provenance?: QuoteProvenance;
 };
 
 export type QuoteState =

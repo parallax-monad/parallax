@@ -26,6 +26,10 @@ export type BackendApplicationRoute = {
     readonly runStore: RunStore;
     normalize(input: unknown): BackendOperationResult<unknown>;
   };
+  /** Optional quote-specific normalizer for routes that do not enable Check. */
+  readonly quoteNormalization?: (
+    input: unknown,
+  ) => BackendOperationResult<unknown>;
   readonly agentFlow: AgentFlowPort;
   readonly quoteFlow: QuoteAgentFlowPort;
 };

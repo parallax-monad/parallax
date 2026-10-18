@@ -1,0 +1,150 @@
+{
+  "schemaVersion": "parallax-pr1b-live-quote-capture-v1",
+  "evidenceStatus": "READ_ONLY_LIVE_OBSERVATION_NOT_PRODUCT_ACCEPTANCE",
+  "capturedAt": "2026-10-18T05:20:08.281Z",
+  "verification": {
+    "repository": "parallax-monad/parallax",
+    "ref": "feat/pr1b-arbitrum-one-camelot-quote",
+    "commit": "6d940a991a5e65cef08c68c80d8be3566029d15d",
+    "worktreeCleanAtCapture": false,
+    "workingTreeSourceSha256": "d5d26e034f276f0568340888e59dde3bf290ffdb9075a68e4afb1fa18c6234a5",
+    "workingTreeSourceHashMethod": "SHA-256 of canonical JSON records (path, file SHA-256, byte length), sorted by path; tracked and untracked non-fixture task files",
+    "workingTreeSourceFiles": [
+      ".env.example",
+      "apps/api/src/backend/application-routing.ts",
+      "apps/api/src/backend/arbitrum-one-quote.test.ts",
+      "apps/api/src/backend/arbitrum-one-quote.ts",
+      "apps/api/src/backend/arbitrum-one-runtime.test.ts",
+      "apps/api/src/backend/arbitrum-one-runtime.ts",
+      "apps/api/src/bootstrap/backend.ts",
+      "apps/api/src/normalization.ts",
+      "apps/api/src/quote-application.ts",
+      "apps/api/src/runtime-config-arbitrum.test.ts",
+      "apps/api/src/runtime-config.ts",
+      "apps/web/src/lib/analyze/service.test.ts",
+      "apps/web/src/lib/analyze/service.ts",
+      "apps/web/src/lib/analyze/types.ts",
+      "packages/contracts/src/quote.test.ts",
+      "packages/contracts/src/quote.ts",
+      "packages/sdk/src/index.ts"
+    ],
+    "note": "No commit was created; the commit identifies HEAD and the source fingerprint binds the uncommitted task implementation."
+  },
+  "endpoint": {
+    "sourceEnvironmentVariable": "ARBITRUM_ONE_RPC_URL",
+    "classification": "runtime-injected endpoint; host redacted and not asserted",
+    "endpointValueRecorded": false,
+    "credentialsRecorded": false
+  },
+  "chain": {
+    "name": "Arbitrum One",
+    "chainId": 42161,
+    "observedHeadNumber": "515881859"
+  },
+  "sourceBlock": {
+    "selectionRule": "eth_blockNumber selected the source block; state reads used that block number; block hash re-read after state-dependent observations",
+    "number": "515881859",
+    "hash": "0x304b694bc77e488eca3af067e45712e71753e2c42ca04881e21039b71da4560e",
+    "timestamp": "1792300807",
+    "observedAt": "2026-10-18T05:20:08.281Z",
+    "hashRecheckedAfterReads": true
+  },
+  "contracts": {
+    "factory": {
+      "address": "0x1a3c9B1d2F0529D97f2afC5136Cc23e58f1FD35B",
+      "runtimeCodePresentAtSourceBlock": true
+    },
+    "quoter": {
+      "address": "0x0Fc73040b26E9bC8514fA028D998E73A254Fa76E",
+      "runtimeCodePresentAtSourceBlock": true
+    },
+    "router": {
+      "address": "0x1F721E2E82F6676FCE4eA07A5958cF098D339e18",
+      "runtimeCodePresentAtSourceBlock": true
+    },
+    "weth": {
+      "address": "0x82aF49447D8a07e3bd95BD0d56f35241523fBab1",
+      "runtimeCodePresentAtSourceBlock": true
+    },
+    "usdc": {
+      "address": "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
+      "runtimeCodePresentAtSourceBlock": true
+    },
+    "directPool": {
+      "address": "0xb1026b8e7276e7ac75410f1fcbbe21796e8f7526",
+      "runtimeCodePresentAtSourceBlock": true,
+      "token0": "0x82af49447d8a07e3bd95bd0d56f35241523fbab1",
+      "token1": "0xaf88d065e77c8cc2239327c5edb3a432268e5831",
+      "activeLiquidityPositiveAtSourceBlock": true
+    }
+  },
+  "assets": {
+    "input": {
+      "kind": "native",
+      "chainId": 42161,
+      "symbol": "ETH",
+      "decimals": 18,
+      "wrappedRouteAddress": "0x82aF49447D8a07e3bd95BD0d56f35241523fBab1"
+    },
+    "wrappedInput": {
+      "kind": "erc20",
+      "address": "0x82aF49447D8a07e3bd95BD0d56f35241523fBab1",
+      "symbol": "WETH",
+      "decimals": 18,
+      "metadataReadAtSourceBlock": true
+    },
+    "output": {
+      "kind": "erc20",
+      "chainId": 42161,
+      "address": "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
+      "symbol": "USDC",
+      "decimals": 6,
+      "metadataReadAtSourceBlock": true,
+      "metadataRegistryVerifiedAtBlock": "515758698"
+    }
+  },
+  "route": {
+    "protocol": "camelot-v3",
+    "kind": "direct",
+    "factoryAddress": "0x1a3c9B1d2F0529D97f2afC5136Cc23e58f1FD35B",
+    "poolAddress": "0xb1026b8e7276e7ac75410f1fcbbe21796e8f7526",
+    "tokenPath": [
+      "0x82aF49447D8a07e3bd95BD0d56f35241523fBab1",
+      "0xaf88d065e77c8cC2239327C5EDb3A432268e5831"
+    ]
+  },
+  "quote": {
+    "status": "available",
+    "source": "Camelot V3 Quoter",
+    "sourceAddress": "0x0Fc73040b26E9bC8514fA028D998E73A254Fa76E",
+    "selector": "0x2d9ebd1d",
+    "amountInHuman": "0.001",
+    "amountInAtomic": "1000000000000000",
+    "amountOutHuman": "2.414272",
+    "amountOutAtomic": "2414272",
+    "sourceBlockNumber": "515881859",
+    "sourceBlockHash": "0x304b694bc77e488eca3af067e45712e71753e2c42ca04881e21039b71da4560e",
+    "profileId": "arbitrum-one-camelot-v3",
+    "runtimeRevision": "native-rpc"
+  },
+  "rpcScope": {
+    "readOnly": true,
+    "methods": [
+      "eth_chainId",
+      "eth_blockNumber",
+      "eth_getBlockByNumber",
+      "eth_getCode",
+      "eth_call"
+    ],
+    "checkOrSimulationInvoked": false,
+    "gasOrExecutionMethodsInvoked": false,
+    "signingOrBroadcastInvoked": false
+  },
+  "limitations": [
+    "This is a read-only live quote observation, not Product acceptance or production-support qualification.",
+    "The capture records a local uncommitted source state: exact HEAD plus a fingerprint of changed non-fixture task files; it does not claim a commit containing those changes.",
+    "Router runtime code was checked at the source block, but no Router call or fresh Router ABI call was made in this quote run.",
+    "Deterministic same-input/same-pinned-block replay is covered by the focused test; this capture itself contains one live quote observation.",
+    "Arbitrum One Check and simulation remain unavailable; no Check, simulation, gas, execution, signing, or broadcast request was made."
+  ]
+}

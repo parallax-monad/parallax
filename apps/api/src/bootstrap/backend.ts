@@ -2,6 +2,7 @@ import { type ServerType, serve as serveNode } from "@hono/node-server";
 import {
   assetIdentity,
   CAMELOT_V3_PROTOCOL_ID,
+  quoteRequestSchema,
   quoteResultSchema,
   serializeJson,
 } from "@parallax/contracts";
@@ -34,6 +35,7 @@ import type {
   ArbitrumProductionComposition,
 } from "../backend/arbitrum-composition.js";
 import { createArbitrumProductionComposition } from "../backend/arbitrum-composition.js";
+import { createArbitrumOneQuoteFlow } from "../backend/arbitrum-one-quote.js";
 import { CAMELOT_V3_WETH_ADDRESS } from "../backend/camelot-v3-binding.js";
 import { CAMELOT_SEPOLIA_USDC } from "../backend/camelot-v3-protocol-adapter.js";
 import { createCamelotV3QualifiedAllowanceSpenderResolver } from "../backend/camelot-v3-qualified-spender.js";
@@ -49,6 +51,7 @@ import {
   type TraceRpcEvidenceSource,
 } from "../backend/trace-rpc-evidence-source.js";
 import { createCheckApp, createQuoteApp } from "../http.js";
+import { normalizeQuoteRequestForChain } from "../normalization.js";
 import {
   type AgentFlowPort,
   type QuoteAgentFlowPort,
@@ -63,6 +66,7 @@ import { createRunQueryApp } from "../routes/runs.js";
 import { RunQueryApplicationService } from "../run-query.js";
 import { createConfiguredRunStore } from "../run-store-factory.js";
 import {
+  ARBITRUM_ONE_CHAIN_ID,
   ARBITRUM_SEPOLIA_CHAIN_ID,
   type BackendRuntime,
   bootstrapBackendRuntime,
@@ -437,6 +441,8 @@ export type BootstrapBackendAppOptions = {
   agentFlow?: AgentFlowPort;
   liveRunner?: KuruLiveRunner;
   quoteFlow?: QuoteAgentFlowPort;
+  /** Optional quote-only Arbitrum One flow for deterministic integration tests. */
+  arbitrumOneQuoteFlow?: QuoteAgentFlowPort;
   quoteRunner?: KuruLiveQuoteRunner;
   store?: RunStore;
   /** Optional dependency probe exposed through `/readyz`. */
@@ -541,58 +547,76 @@ export function bootstrapBackendApp(
   ) {
     throw new Error("Arbitrum composition must use the Backend RunStore");
   }
-  const routes =
-    arbitrumComposition === undefined
-      ? undefined
-      : [
-          {
-            chainId: ARBITRUM_SEPOLIA_CHAIN_ID,
-            ...(arbitrumComposition.chainRegistry.has(
-              ARBITRUM_SEPOLIA_CHAIN_ID,
-            ) &&
-            arbitrumComposition.protocolRegistry.has(
-              ARBITRUM_SEPOLIA_CHAIN_ID,
-              CAMELOT_V3_PROTOCOL_ID,
-            )
-              ? {
-                  p0Route: {
-                    protocol: CAMELOT_V3_PROTOCOL_ID,
-                    tokenIn: { kind: "native" as const },
-                    tokenOut: {
-                      kind: "erc20" as const,
-                      address: CAMELOT_SEPOLIA_USDC,
-                    },
-                  },
-                  assetRoutes: [
-                    {
-                      protocol: CAMELOT_V3_PROTOCOL_ID,
-                      tokenIn: {
-                        kind: "erc20" as const,
-                        address: CAMELOT_SEPOLIA_USDC,
-                      },
-                      tokenOut: {
-                        kind: "erc20" as const,
-                        address: CAMELOT_V3_WETH_ADDRESS,
-                      },
-                    },
-                  ],
-                }
-              : {}),
-            composition: {
-              runStore: arbitrumComposition.runStore,
-              normalize: (input: unknown) =>
-                arbitrumComposition.normalize(
-                  input as ArbitrumNormalizationInput,
-                ),
+  const routes: BackendApplicationRoute[] = [];
+  if (arbitrumComposition !== undefined) {
+    routes.push({
+      chainId: ARBITRUM_SEPOLIA_CHAIN_ID,
+      ...(arbitrumComposition.chainRegistry.has(ARBITRUM_SEPOLIA_CHAIN_ID) &&
+      arbitrumComposition.protocolRegistry.has(
+        ARBITRUM_SEPOLIA_CHAIN_ID,
+        CAMELOT_V3_PROTOCOL_ID,
+      )
+        ? {
+            p0Route: {
+              protocol: CAMELOT_V3_PROTOCOL_ID,
+              tokenIn: { kind: "native" as const },
+              tokenOut: {
+                kind: "erc20" as const,
+                address: CAMELOT_SEPOLIA_USDC,
+              },
             },
-            agentFlow: createCompositionBackedCheckFlow(
-              arbitrumComposition as unknown as BackendCompositionRuntime,
-            ),
-            quoteFlow: createCompositionBackedQuoteFlow(
-              arbitrumComposition as unknown as BackendCompositionRuntime,
-            ),
-          } satisfies BackendApplicationRoute,
-        ];
+            assetRoutes: [
+              {
+                protocol: CAMELOT_V3_PROTOCOL_ID,
+                tokenIn: {
+                  kind: "erc20" as const,
+                  address: CAMELOT_SEPOLIA_USDC,
+                },
+                tokenOut: {
+                  kind: "erc20" as const,
+                  address: CAMELOT_V3_WETH_ADDRESS,
+                },
+              },
+            ],
+          }
+        : {}),
+      composition: {
+        runStore: arbitrumComposition.runStore,
+        normalize: (input: unknown) =>
+          arbitrumComposition.normalize(input as ArbitrumNormalizationInput),
+      },
+      agentFlow: createCompositionBackedCheckFlow(
+        arbitrumComposition as unknown as BackendCompositionRuntime,
+      ),
+      quoteFlow: createCompositionBackedQuoteFlow(
+        arbitrumComposition as unknown as BackendCompositionRuntime,
+      ),
+    });
+  }
+  routes.push({
+    chainId: ARBITRUM_ONE_CHAIN_ID,
+    composition: {
+      runStore: store,
+      normalize: () => ({
+        success: false,
+        error: {
+          code: "UNSUPPORTED_CHAIN",
+          field: "chainId",
+          message: "Arbitrum One Check and simulation are unavailable",
+        },
+      }),
+    },
+    quoteNormalization: (input: unknown) =>
+      normalizeQuoteRequestForChain(
+        quoteRequestSchema.parse(input),
+        runtime.tokenRegistry,
+        ARBITRUM_ONE_CHAIN_ID,
+      ),
+    // Mainnet remains quote-only: this route has no Check composition.
+    agentFlow: new UnavailableAgentFlow(),
+    quoteFlow:
+      options.arbitrumOneQuoteFlow ?? createArbitrumOneQuoteFlow(runtime),
+  });
 
   return createBackendApp({
     runtime,
