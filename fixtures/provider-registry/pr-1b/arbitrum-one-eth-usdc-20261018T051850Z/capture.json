@@ -1,0 +1,112 @@
+{
+  "schemaVersion": "parallax-pr1b-live-quote-capture-v1",
+  "evidenceStatus": "READ_ONLY_LIVE_OBSERVATION_NOT_PRODUCT_ACCEPTANCE",
+  "capturedAt": "2026-10-18T05:18:50.397Z",
+  "verification": {
+    "repository": "parallax-monad/parallax",
+    "ref": "feat/pr1b-arbitrum-one-camelot-quote",
+    "commit": "6d940a991a5e65cef08c68c80d8be3566029d15d",
+    "headTree": "07d8541692331d0839775faeeee2e4ff5e542166",
+    "worktreeCleanAtCapture": false,
+    "reviewedWorkspaceSnapshot": {
+      "algorithm": "sha256 of sorted modified tracked .ts/.tsx/.env.example and untracked .ts/.tsx files, each encoded as path NUL file-bytes NUL",
+      "sha256": "4051f2c10b33e44f751dfff3a8535750202fd73d3f59fc1ec43ae5c28ded8d2c",
+      "paths": [
+        ".env.example",
+        "apps/api/src/backend/application-routing.ts",
+        "apps/api/src/backend/arbitrum-one-quote.test.ts",
+        "apps/api/src/backend/arbitrum-one-quote.ts",
+        "apps/api/src/backend/arbitrum-one-runtime.test.ts",
+        "apps/api/src/backend/arbitrum-one-runtime.ts",
+        "apps/api/src/bootstrap/backend.ts",
+        "apps/api/src/normalization.ts",
+        "apps/api/src/quote-application.ts",
+        "apps/api/src/runtime-config-arbitrum.test.ts",
+        "apps/api/src/runtime-config.ts",
+        "apps/web/src/lib/analyze/service.test.ts",
+        "apps/web/src/lib/analyze/service.ts",
+        "apps/web/src/lib/analyze/types.ts",
+        "packages/contracts/src/quote.test.ts",
+        "packages/contracts/src/quote.ts",
+        "packages/sdk/src/index.ts"
+      ]
+    }
+  },
+  "endpoint": {
+    "sourceEnvironmentVariable": "ARBITRUM_ONE_RPC_URL",
+    "endpointValueRecorded": false,
+    "credentialsRecorded": false,
+    "sepoliaFallbackUsed": false
+  },
+  "chain": {
+    "name": "Arbitrum One",
+    "chainId": 42161,
+    "profileId": "arbitrum-one-camelot-v3",
+    "protocol": "camelot-v3"
+  },
+  "request": {
+    "inputAsset": "native ETH",
+    "outputAsset": {
+      "kind": "erc20",
+      "chainId": 42161,
+      "address": "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
+      "symbol": "USDC",
+      "decimals": 6
+    },
+    "amountIn": "0.001",
+    "amountInAtomic": "1000000000000000"
+  },
+  "sourceBlock": {
+    "selectionRule": "endpoint-observed head selected, then all quote state reads pinned to that block number",
+    "number": "515881599",
+    "hash": "0xc12717478be793efd2dd0413a6ceb77d5119edb0baef5d301bed3480df4ff315",
+    "timestamp": "1792300729",
+    "observedAt": "2026-10-18T05:18:50.397Z",
+    "hashRecheckedAfterReads": true
+  },
+  "quote": {
+    "status": "available",
+    "estimatedAmountOut": "2.414272",
+    "amountOutAtomic": "2414272",
+    "route": {
+      "protocol": "camelot-v3",
+      "kind": "direct",
+      "poolAddress": "0xb1026b8e7276e7ac75410f1fcbbe21796e8f7526",
+      "tokenPath": [
+        "0x82aF49447D8a07e3bd95BD0d56f35241523fBab1",
+        "0xaf88d065e77c8cC2239327C5EDb3A432268e5831"
+      ]
+    },
+    "quoteSource": {
+      "kind": "quoter",
+      "protocol": "camelot-v3",
+      "address": "0x0Fc73040b26E9bC8514fA028D998E73A254Fa76E"
+    },
+    "outputTokenMetadata": {
+      "decimalsSource": "onchain_verified",
+      "verifiedAtBlock": "515758698",
+      "symbolAndDecimalsRecheckedOnchainAtSourceBlock": true
+    }
+  },
+  "rpcScope": {
+    "readOnly": true,
+    "methodsUsed": [
+      "eth_chainId",
+      "eth_blockNumber",
+      "eth_getBlockByNumber",
+      "eth_getCode",
+      "eth_call"
+    ],
+    "checkHttpStatus": 400,
+    "checkErrorCode": "NORMALIZATION_FAILED",
+    "checkSimulationAvailable": false,
+    "writeMethodsUsed": false,
+    "simulationOrGasMethodsUsed": false,
+    "signingOrBroadcastUsed": false
+  },
+  "limitations": [
+    "This capture is a read-only live quote observation, not Product acceptance, production-support qualification, or simulation evidence.",
+    "The implementation is uncommitted during local review; the capture binds the exact HEAD commit and the reviewed source/config/test working-tree snapshot digest.",
+    "The quote runtime validates the chain, pinned source block and hash, deployed route code, onchain token metadata, direct pool identity/liquidity, and Quoter result; no Router execution was performed."
+  ]
+}

@@ -1,5 +1,6 @@
 import type { Copy } from "@/lib/i18n";
 import { accountStateSnapshotSchema } from "../../../../../packages/contracts/src/account-state.js";
+import { quoteProvenanceSchema } from "../../../../../packages/contracts/src/quote.js";
 import {
   assetToSymbol,
   getChainIdForProtocol,
@@ -1201,6 +1202,11 @@ function quotePreview(value: unknown): QuotePreview | undefined {
   const blockNumber = str(quote?.blockNumber);
   const runtimeVersion = str(quote?.runtimeVersion);
   const runtimeRevision = str(quote?.runtimeRevision);
+  const provenanceValue = quote?.provenance;
+  const provenance =
+    provenanceValue === undefined
+      ? undefined
+      : quoteProvenanceSchema.safeParse(provenanceValue);
   // An available Quote is only publishable with its stage block and runtime
   // identity, so a partial payload is treated as an invalid response instead.
   if (
@@ -1208,7 +1214,8 @@ function quotePreview(value: unknown): QuotePreview | undefined {
     !estimatedAmountOut ||
     !blockNumber ||
     !runtimeVersion ||
-    !runtimeRevision
+    !runtimeRevision ||
+    (provenance !== undefined && !provenance.success)
   )
     return;
   return {
@@ -1219,6 +1226,7 @@ function quotePreview(value: unknown): QuotePreview | undefined {
     fetchedAt: str(quote?.fetchedAt),
     runtimeVersion,
     runtimeRevision,
+    ...(provenance?.success ? { provenance: provenance.data } : {}),
   };
 }
 

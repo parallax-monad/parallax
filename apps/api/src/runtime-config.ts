@@ -13,6 +13,45 @@ const arbitrumSepoliaRuntimeConfig = {
   protocolId: CAMELOT_V3_PROTOCOL_ID,
 } as const;
 
+export const ARBITRUM_ONE_CHAIN_ID = 42161 as const;
+export const ARBITRUM_ONE_PROFILE_ID = "arbitrum-one-camelot-v3" as const;
+
+const arbitrumOneDeployments = Object.freeze({
+  factoryAddress: "0x1a3c9B1d2F0529D97f2afC5136Cc23e58f1FD35B",
+  quoterAddress: "0x0Fc73040b26E9bC8514fA028D998E73A254Fa76E",
+  routerAddress: "0x1F721E2E82F6676FCE4eA07A5958cF098D339e18",
+  wrappedNativeAddress: "0x82aF49447D8a07e3bd95BD0d56f35241523fBab1",
+  usdcAddress: "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
+});
+
+export const ARBITRUM_ONE_RUNTIME_PROFILE = Object.freeze({
+  profileId: ARBITRUM_ONE_PROFILE_ID,
+  chainId: ARBITRUM_ONE_CHAIN_ID,
+  protocolId: CAMELOT_V3_PROTOCOL_ID,
+  deployments: arbitrumOneDeployments,
+  route: Object.freeze({
+    poolAddress: "0xb1026b8e7276e7ac75410f1fcbbe21796e8f7526",
+    tokenIn: Object.freeze({
+      kind: "native" as const,
+      symbol: "ETH",
+      decimals: 18,
+      wrappedAddress: arbitrumOneDeployments.wrappedNativeAddress,
+    }),
+    tokenOut: Object.freeze({
+      kind: "erc20" as const,
+      chainId: ARBITRUM_ONE_CHAIN_ID,
+      address: arbitrumOneDeployments.usdcAddress,
+      symbol: "USDC",
+      decimals: 6,
+    }),
+  }),
+  capabilities: Object.freeze({
+    quote: true,
+    check: false,
+    simulation: false,
+  }),
+});
+
 export {
   ARBITRUM_SEPOLIA_CHAIN_ID,
   CAMELOT_V3_PROTOCOL_ID,
@@ -42,6 +81,11 @@ export const backendEnvironmentSchema = z
   .object({
     MONAD_RPC_URL: rpcUrlSchema,
     ARBITRUM_RPC_URL: z.preprocess(
+      (value) =>
+        typeof value === "string" && value.trim() === "" ? undefined : value,
+      rpcUrlSchema.optional(),
+    ),
+    ARBITRUM_ONE_RPC_URL: z.preprocess(
       (value) =>
         typeof value === "string" && value.trim() === "" ? undefined : value,
       rpcUrlSchema.optional(),
@@ -178,6 +222,71 @@ export const arbitrumIntegrationConfigSchema = z
   })
   .strict();
 
+const arbitrumOneRuntimeProfileSchema = z
+  .object({
+    profileId: z.literal(ARBITRUM_ONE_RUNTIME_PROFILE.profileId),
+    chainId: z.literal(ARBITRUM_ONE_RUNTIME_PROFILE.chainId),
+    protocolId: z.literal(ARBITRUM_ONE_RUNTIME_PROFILE.protocolId),
+    deployments: z
+      .object({
+        factoryAddress: z.literal(
+          ARBITRUM_ONE_RUNTIME_PROFILE.deployments.factoryAddress,
+        ),
+        quoterAddress: z.literal(
+          ARBITRUM_ONE_RUNTIME_PROFILE.deployments.quoterAddress,
+        ),
+        routerAddress: z.literal(
+          ARBITRUM_ONE_RUNTIME_PROFILE.deployments.routerAddress,
+        ),
+        wrappedNativeAddress: z.literal(
+          ARBITRUM_ONE_RUNTIME_PROFILE.deployments.wrappedNativeAddress,
+        ),
+        usdcAddress: z.literal(
+          ARBITRUM_ONE_RUNTIME_PROFILE.deployments.usdcAddress,
+        ),
+      })
+      .strict(),
+    route: z
+      .object({
+        poolAddress: z.literal(ARBITRUM_ONE_RUNTIME_PROFILE.route.poolAddress),
+        tokenIn: z
+          .object({
+            kind: z.literal("native"),
+            symbol: z.literal("ETH"),
+            decimals: z.literal(18),
+            wrappedAddress: z.literal(
+              ARBITRUM_ONE_RUNTIME_PROFILE.route.tokenIn.wrappedAddress,
+            ),
+          })
+          .strict(),
+        tokenOut: z
+          .object({
+            kind: z.literal("erc20"),
+            chainId: z.literal(ARBITRUM_ONE_CHAIN_ID),
+            address: z.literal(
+              ARBITRUM_ONE_RUNTIME_PROFILE.route.tokenOut.address,
+            ),
+            symbol: z.literal("USDC"),
+            decimals: z.literal(6),
+          })
+          .strict(),
+      })
+      .strict(),
+    capabilities: z
+      .object({
+        quote: z.literal(true),
+        check: z.literal(false),
+        simulation: z.literal(false),
+      })
+      .strict(),
+  })
+  .strict();
+
+export const arbitrumOneIntegrationConfigSchema =
+  arbitrumOneRuntimeProfileSchema
+    .extend({ rpcUrl: rpcUrlSchema.optional() })
+    .strict();
+
 export const tenderlyIntegrationConfigSchema = z
   .object({
     accountSlug: z.string().trim().min(1),
@@ -194,6 +303,8 @@ export const backendRuntimeConfigSchema = z
     // Optional for backward-compatible Monad-only schema consumers. The
     // bootstrap function always includes the explicit Arbitrum descriptor.
     arbitrum: arbitrumIntegrationConfigSchema.optional(),
+    // The profile is server-owned; only its isolated RPC endpoint is injected.
+    arbitrumOne: arbitrumOneIntegrationConfigSchema.optional(),
     tenderly: tenderlyIntegrationConfigSchema.optional(),
   })
   .strict();
@@ -201,6 +312,9 @@ export const backendRuntimeConfigSchema = z
 export type MossIntegrationConfig = z.infer<typeof mossIntegrationConfigSchema>;
 export type ArbitrumIntegrationConfig = z.infer<
   typeof arbitrumIntegrationConfigSchema
+>;
+export type ArbitrumOneIntegrationConfig = z.infer<
+  typeof arbitrumOneIntegrationConfigSchema
 >;
 export type TenderlyIntegrationConfig = z.infer<
   typeof tenderlyIntegrationConfigSchema
@@ -216,6 +330,20 @@ export type BackendRuntime = {
   config: BackendRuntimeConfig;
   tokenRegistry: TrustedTokenRegistry;
 };
+
+export type ArbitrumRuntimeProfile =
+  | ArbitrumIntegrationConfig
+  | ArbitrumOneIntegrationConfig;
+
+/** Selects a backend-owned profile using only the requested source chain ID. */
+export function resolveArbitrumRuntimeProfile(
+  runtime: BackendRuntime,
+  chainId: number,
+): ArbitrumRuntimeProfile | undefined {
+  if (chainId === ARBITRUM_SEPOLIA_CHAIN_ID) return runtime.config.arbitrum;
+  if (chainId === ARBITRUM_ONE_CHAIN_ID) return runtime.config.arbitrumOne;
+  return undefined;
+}
 
 /** Reads the verified token metadata required by the executable Node launcher. */
 export function parseTokenRegistryEnvironment(
@@ -266,6 +394,12 @@ export function bootstrapBackendRuntime(
       ...(environment.ARBITRUM_RPC_URL === undefined
         ? {}
         : { rpcUrl: environment.ARBITRUM_RPC_URL }),
+    },
+    arbitrumOne: {
+      ...ARBITRUM_ONE_RUNTIME_PROFILE,
+      ...(environment.ARBITRUM_ONE_RPC_URL === undefined
+        ? {}
+        : { rpcUrl: environment.ARBITRUM_ONE_RPC_URL }),
     },
     ...(tenderlyConfigured
       ? {

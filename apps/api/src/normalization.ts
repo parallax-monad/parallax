@@ -157,7 +157,16 @@ export function normalizeQuoteRequest(
   request: QuoteRequest,
   registry: TrustedTokenRegistry,
 ): IntentNormalizationResult {
-  return normalizeCheckSwapRequest(
+  return normalizeQuoteRequestForChain(request, registry, BACKEND_CHAIN_ID);
+}
+
+/** Exact-input quote normalization for a backend-selected chain profile. */
+export function normalizeQuoteRequestForChain(
+  request: QuoteRequest,
+  registry: TrustedTokenRegistry,
+  expectedChainId: number,
+): IntentNormalizationResult {
+  return normalizeSwapRequest(
     {
       ...request,
       economicBoundary: {
@@ -166,6 +175,7 @@ export function normalizeQuoteRequest(
       },
     },
     registry,
+    expectedChainId,
   );
 }
 

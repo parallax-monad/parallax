@@ -8,6 +8,7 @@ import {
   type BackendApplicationRoute,
   findBackendApplicationRoute,
 } from "./backend/application-routing.js";
+import { isValidArbitrumOneQuoteProvenance } from "./backend/arbitrum-one-quote.js";
 import type { BackendCompositionRuntime } from "./backend/composition.js";
 import { isBackendControlError } from "./backend/control-boundary.js";
 import {
@@ -18,7 +19,10 @@ import {
   isUnsupportedAgentFlowError,
   type QuoteAgentFlowPort,
 } from "./ports.js";
-import type { BackendRuntime } from "./runtime-config.js";
+import {
+  ARBITRUM_ONE_CHAIN_ID,
+  type BackendRuntime,
+} from "./runtime-config.js";
 import { resolveTokenMetadata } from "./token-metadata.js";
 
 export type QuoteApiErrorCode =
@@ -75,12 +79,14 @@ export class QuoteApplicationService {
     let normalized: ReturnType<typeof normalizeQuoteRequest>;
     try {
       const candidate =
-        composition === undefined
-          ? normalizeQuoteRequest(
-              parsedRequest.data,
-              this.dependencies.runtime.tokenRegistry,
-            )
-          : await composition.normalize(parsedRequest.data);
+        route?.quoteNormalization !== undefined
+          ? await route.quoteNormalization(parsedRequest.data)
+          : composition === undefined
+            ? normalizeQuoteRequest(
+                parsedRequest.data,
+                this.dependencies.runtime.tokenRegistry,
+              )
+            : await composition.normalize(parsedRequest.data);
       const normalizationResult = coerceIntentNormalizationResult(candidate);
       if (normalizationResult === undefined) {
         return errorResponse(400, {
@@ -133,6 +139,21 @@ export class QuoteApplicationService {
       return errorResponse(502, {
         code: "QUOTE_ERROR",
         message: "The quote flow returned an invalid response",
+      });
+    }
+
+    if (
+      parsedRequest.data.chainId === ARBITRUM_ONE_CHAIN_ID &&
+      result.data.status === "available" &&
+      !isValidArbitrumOneQuoteProvenance({
+        quote: result.data.quote,
+        intent: normalized.intent,
+        tokenMetadata,
+      })
+    ) {
+      return errorResponse(502, {
+        code: "QUOTE_ERROR",
+        message: "The quote flow returned incomplete Arbitrum One provenance",
       });
     }
 

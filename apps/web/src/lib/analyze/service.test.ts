@@ -8,6 +8,7 @@ import {
 } from "./form";
 import {
   checkSwap,
+  expectationBaseline,
   fetchP0Config,
   fetchQuote,
   formFromRunResult,
@@ -58,6 +59,52 @@ const tokenMetadata = {
     decimals: 6,
     decimalsSource: "onchain_verified",
     verifiedAtBlock: "92820000",
+  },
+};
+
+const quoteProvenance = {
+  version: 1,
+  profileId: "arbitrum-one-camelot-v3",
+  sourceChainId: 42161,
+  sourceBlock: {
+    number: "515758698",
+    hash: `0x${"ab".repeat(32)}`,
+    timestamp: "1792264607",
+    observedAt: "2026-10-17T19:17:33.990Z",
+  },
+  inputAsset: {
+    chainId: 42161,
+    asset: { kind: "native" },
+    symbol: "ETH",
+    decimals: 18,
+    decimalsSource: "chain_config",
+  },
+  outputAsset: {
+    chainId: 42161,
+    asset: {
+      kind: "erc20",
+      address: "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
+    },
+    symbol: "USDC",
+    decimals: 6,
+    decimalsSource: "onchain_verified",
+    verifiedAtBlock: "515758698",
+  },
+  amountInAtomic: "1000000000000000",
+  amountOutAtomic: "2413423",
+  route: {
+    protocol: "camelot-v3",
+    kind: "direct",
+    poolAddress: "0xb1026b8e7276e7ac75410f1fcbbe21796e8f7526",
+    tokenPath: [
+      "0x82aF49447D8a07e3bd95BD0d56f35241523fBab1",
+      "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
+    ],
+  },
+  quoteSource: {
+    kind: "quoter",
+    protocol: "camelot-v3",
+    address: "0x0Fc73040b26E9bC8514fA028D998E73A254Fa76E",
   },
 };
 
@@ -1152,6 +1199,49 @@ describe("fetchQuote", () => {
         amountIn: "0.01",
       },
     });
+  });
+
+  test("preserves typed provenance through QuotePreview and ExpectationBaseline", async () => {
+    const request = vi.fn<typeof fetch>().mockResolvedValue(
+      jsonResponse({
+        status: "available",
+        quote: {
+          estimatedAmountOut: "2.413423",
+          source: "quote",
+          blockNumber: quoteProvenance.sourceBlock.number,
+          fetchedAt: quoteProvenance.sourceBlock.observedAt,
+          runtimeVersion: "arbitrum-one-camelot-v3",
+          runtimeRevision: "native-rpc",
+          provenance: quoteProvenance,
+        },
+      }),
+    );
+    const state = await fetchQuote(
+      {
+        protocol: "camelot-v3",
+        tokenIn: "ETH",
+        tokenOut: "USDC",
+        amountIn: "0.001",
+      },
+      { fetch: request },
+    );
+
+    expect(state).toMatchObject({
+      status: "available",
+      quote: { provenance: quoteProvenance },
+    });
+    if (state.status !== "available") throw new Error("Quote not available");
+    expect(
+      expectationBaseline(
+        {
+          protocol: "camelot-v3",
+          tokenIn: "ETH",
+          tokenOut: "USDC",
+          amountIn: "0.001",
+        },
+        state.quote,
+      ).quote.provenance,
+    ).toEqual(quoteProvenance);
   });
 
   test("treats a 200 unavailable payload as a product state, not an error", async () => {

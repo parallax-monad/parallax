@@ -1,0 +1,137 @@
+{
+  "schemaVersion": "parallax-pr1b-live-quote-capture-v1",
+  "evidenceStatus": "READ_ONLY_LIVE_OBSERVATION_NOT_PRODUCT_ACCEPTANCE",
+  "capturedAt": "2026-10-17T19:17:33.990460+00:00",
+  "verification": {
+    "repository": "parallax-monad/parallax",
+    "ref": "feat/pr1b-arbitrum-one-camelot-quote",
+    "commit": "6d940a991a5e65cef08c68c80d8be3566029d15d",
+    "worktreeCleanAtCapture": true
+  },
+  "endpoint": {
+    "sourceEnvironmentVariable": "ARBITRUM_ONE_RPC_URL",
+    "providerClass": "QuickNode",
+    "transport": "HTTPS",
+    "endpointValueRecorded": false,
+    "credentialsRecorded": false
+  },
+  "chain": {
+    "name": "Arbitrum One",
+    "chainId": 42161,
+    "observedHeadNumber": "515758798"
+  },
+  "sourceBlock": {
+    "selectionRule": "observedHeadMinus100",
+    "number": "515758698",
+    "hash": "0x7d2029e4e7f5ed02fa0ce65b20bc7b726d78d294bc084a705d2634f372b71ad9",
+    "timestamp": "1792264607",
+    "observedAt": "2026-10-17T19:17:33.990460+00:00",
+    "hashRecheckedAfterReads": true
+  },
+  "contracts": {
+    "factory": {
+      "address": "0x1a3c9B1d2F0529D97f2afC5136Cc23e58f1FD35B",
+      "runtimeCodePresentAtSourceBlock": true,
+      "runtimeCodeSha256OfLowercaseHexText": "628548adfe04aff3d028330af7c44f65082e24795922acb247cacc2a57f6738b"
+    },
+    "quoter": {
+      "address": "0x0Fc73040b26E9bC8514fA028D998E73A254Fa76E",
+      "runtimeCodePresentAtSourceBlock": true,
+      "runtimeCodeSha256OfLowercaseHexText": "d162d6e623b243e6a2e6579dbb1fdfa324e6f5fa1a27703425a9fb41a7881b1f"
+    },
+    "router": {
+      "address": "0x1F721E2E82F6676FCE4eA07A5958cF098D339e18",
+      "runtimeCodePresentAtSourceBlock": true,
+      "runtimeCodeSha256OfLowercaseHexText": "6c499c4b0ff9dc9aded80698db763716762e63e6febaebcc96b8278e43d3fac2"
+    },
+    "weth": {
+      "address": "0x82aF49447D8a07e3bd95BD0d56f35241523fBab1",
+      "runtimeCodePresentAtSourceBlock": true,
+      "runtimeCodeSha256OfLowercaseHexText": "d058f7f80f1da876d8230d412a4dd7d3ce80ace48078cdb799c586cde8cab791"
+    },
+    "usdc": {
+      "address": "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
+      "runtimeCodePresentAtSourceBlock": true,
+      "runtimeCodeSha256OfLowercaseHexText": "2806ceef5f6fb4b4dd8630deb055a197dcab2ec729936d35845627faed23a5a3"
+    }
+  },
+  "historicalRouterAbiEvidence": {
+    "capture": "fixtures/provider-registry/be-090/one-eth-usdc-2026-09-29T14-26-10-520Z/capture.json",
+    "sourceCommit": "f4bacf2d509e2b9f9de0365a7ee8ecedd799e609",
+    "sourceBlockNumber": "510054964",
+    "recordedPinnedRouterEthCallAbiVerification": true,
+    "routerCodeFingerprintMatchesCurrentObservation": true,
+    "runtimeCodeSha256OfLowercaseHexText": "6c499c4b0ff9dc9aded80698db763716762e63e6febaebcc96b8278e43d3fac2"
+  },
+  "assets": {
+    "input": {
+      "kind": "native",
+      "symbol": "ETH",
+      "decimals": 18,
+      "wrappedRouteAddress": "0x82aF49447D8a07e3bd95BD0d56f35241523fBab1"
+    },
+    "wrappedInput": {
+      "kind": "erc20",
+      "address": "0x82aF49447D8a07e3bd95BD0d56f35241523fBab1",
+      "symbol": "WETH",
+      "decimals": 18,
+      "metadataReadAtSourceBlock": true
+    },
+    "output": {
+      "kind": "erc20",
+      "chainId": 42161,
+      "address": "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
+      "symbol": "USDC",
+      "decimals": 6,
+      "metadataReadAtSourceBlock": true
+    }
+  },
+  "route": {
+    "protocol": "camelot-v3",
+    "factoryAddress": "0x1a3c9B1d2F0529D97f2afC5136Cc23e58f1FD35B",
+    "poolAddress": "0xb1026b8e7276e7ac75410f1fcbbe21796e8f7526",
+    "token0": "0x82af49447d8a07e3bd95bd0d56f35241523fbab1",
+    "token1": "0xaf88d065e77c8cc2239327c5edb3a432268e5831",
+    "activeLiquidityPositiveAtSourceBlock": true
+  },
+  "quote": {
+    "source": "Camelot AMMv3 Quoter",
+    "sourceAddress": "0x0Fc73040b26E9bC8514fA028D998E73A254Fa76E",
+    "selector": "0x2d9ebd1d",
+    "argumentOrder": [
+      "tokenIn",
+      "tokenOut",
+      "amountInAtomic",
+      "sqrtPriceLimitX96"
+    ],
+    "inputAsset": "native ETH (wrapped as the verified Arbitrum One WETH route asset)",
+    "outputAsset": "42161:erc20:0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
+    "amountInAtomic": "1000000000000000",
+    "amountOutAtomic": "2413423",
+    "responseWords": 2,
+    "sameInputAndPinnedBlockReproducedIdentically": true,
+    "sourceBlockNumber": "515758698"
+  },
+  "rpcScope": {
+    "readOnly": true,
+    "methods": [
+      "eth_chainId",
+      "eth_blockNumber",
+      "eth_getBlockByNumber",
+      "eth_getCode",
+      "eth_call"
+    ],
+    "writeMethodsUsed": false,
+    "simulationOrGasMethodsUsed": false,
+    "signingOrBroadcastUsed": false
+  },
+  "authoritativeSources": {
+    "camelotDeployments": "https://docs.camelot.exchange/contracts/arbitrum/one-mainnet/",
+    "arbitrumChainReference": "https://docs.arbitrum.io/arbitrum-bridge/quickstart"
+  },
+  "limitations": [
+    "This is a read-only live observation, not Product acceptance or production-support qualification.",
+    "The current run did not execute a Router call; Router ABI verification relies on the historical pinned eth_call capture above and the matching current runtime-code fingerprint.",
+    "Quoter ABI evidence is limited to the successful pinned eth_call using selector 0x2d9ebd1d, its static argument layout, the observed two-word response, and deterministic replay."
+  ]
+}

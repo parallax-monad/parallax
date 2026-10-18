@@ -11,6 +11,8 @@ export type {
   FailedRunResult,
   NormalizedSwapIntent,
   ProtocolId,
+  Quote,
+  QuoteProvenance,
   QuoteRequest,
   QuoteResult,
   RunResult,
