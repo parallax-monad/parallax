@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   buildComposeArgs,
+  buildSmokeEndpoints,
   getCheckoutComposeProjectName,
   isAllowedLocalHost,
   isPrivateBindAddress,
@@ -84,6 +85,57 @@ function rpcResponse(method: string, chainId: string) {
   };
   return { jsonrpc: "2.0", id: 1, result: results[method] };
 }
+
+describe("Arbitrum One fork smoke endpoints", () => {
+  it("uses configured published host ports for default RPC URLs", () => {
+    expect(
+      buildSmokeEndpoints({
+        FORK_BIND_ADDRESS: "192.168.1.10",
+        FORK_PROXY_HOST_PORT: "18546",
+        FORK_LOCAL_HOST_PORT: "9545",
+      }),
+    ).toEqual({
+      sourceUrl: "http://192.168.1.10:18546",
+      localUrl: "http://192.168.1.10:9545",
+    });
+  });
+
+  it("prefers explicit RPC URL overrides", () => {
+    expect(
+      buildSmokeEndpoints({
+        FORK_PROXY_HOST_PORT: "18546",
+        FORK_LOCAL_HOST_PORT: "9545",
+        ARBITRUM_ONE_FORK_SOURCE_RPC_URL: "http://localhost:28546",
+        ARBITRUM_ONE_FORK_LOCAL_RPC_URL: "http://host.docker.internal:8545",
+      }),
+    ).toEqual({
+      sourceUrl: "http://localhost:28546",
+      localUrl: "http://host.docker.internal:8545",
+    });
+  });
+
+  it.each(["FORK_PROXY_HOST_PORT", "FORK_LOCAL_HOST_PORT"])(
+    "rejects an invalid %s",
+    (name) => {
+      expect(() => buildSmokeEndpoints({ [name]: "65536" })).toThrow(
+        `${name} must be between 1 and 65535.`,
+      );
+    },
+  );
+
+  it("continues to reject unsafe bind addresses and endpoint overrides", () => {
+    expect(() => buildSmokeEndpoints({ FORK_BIND_ADDRESS: "0.0.0.0" })).toThrow(
+      "FORK_BIND_ADDRESS must be a local or RFC1918 IPv4 interface address.",
+    );
+    expect(() =>
+      buildSmokeEndpoints({
+        ARBITRUM_ONE_FORK_SOURCE_RPC_URL: "http://8.8.8.8:8545",
+      }),
+    ).toThrow(
+      "read-only source proxy must use a credential-free HTTP endpoint",
+    );
+  });
+});
 
 describe("Arbitrum One fork manager lifecycle", () => {
   it("reuses one persisted Compose identity for the same checkout", () => {

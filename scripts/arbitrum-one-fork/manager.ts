@@ -149,8 +149,8 @@ function composeEnvironment(
   return env;
 }
 
-function configuredBindAddress(): string {
-  const address = process.env.FORK_BIND_ADDRESS?.trim() || "127.0.0.1";
+function configuredBindAddress(env: NodeJS.ProcessEnv = process.env): string {
+  const address = env.FORK_BIND_ADDRESS?.trim() || "127.0.0.1";
   if (!isPrivateBindAddress(address)) {
     throw new HarnessError(
       "UNSAFE_BIND_ADDRESS",
@@ -169,8 +169,12 @@ export function isPrivateBindAddress(address: string): boolean {
   return octets[0] === 169 && octets[1] === 254;
 }
 
-function configuredPort(name: string, fallback: number): string {
-  const raw = process.env[name]?.trim() || String(fallback);
+function configuredPort(
+  name: string,
+  fallback: number,
+  env: NodeJS.ProcessEnv = process.env,
+): string {
+  const raw = env[name]?.trim() || String(fallback);
   if (!/^\d+$/.test(raw)) {
     throw new HarnessError(
       "INVALID_PORT",
@@ -185,6 +189,32 @@ function configuredPort(name: string, fallback: number): string {
     );
   }
   return String(port);
+}
+
+export function buildSmokeEndpoints(env: NodeJS.ProcessEnv = process.env): {
+  sourceUrl: string;
+  localUrl: string;
+} {
+  const bindAddress = configuredBindAddress(env);
+  const proxyHostPort = configuredPort(
+    "FORK_PROXY_HOST_PORT",
+    config.rpcProxy.port,
+    env,
+  );
+  const localHostPort = configuredPort(
+    "FORK_LOCAL_HOST_PORT",
+    config.localRpcPort,
+    env,
+  );
+  const sourceUrl =
+    env.ARBITRUM_ONE_FORK_SOURCE_RPC_URL ??
+    dockerEndpoint(bindAddress, proxyHostPort);
+  const localUrl =
+    env.ARBITRUM_ONE_FORK_LOCAL_RPC_URL ??
+    dockerEndpoint(bindAddress, localHostPort);
+  validateLocalEndpoint(sourceUrl, "read-only source proxy");
+  validateLocalEndpoint(localUrl, "local fork RPC");
+  return { sourceUrl, localUrl };
 }
 
 function runDocker(
@@ -720,15 +750,7 @@ async function smokeCommand(): Promise<void> {
       "Start the pinned fork on the Mac host before running the read-only smoke.",
     );
   }
-  const bindAddress = configuredBindAddress();
-  const sourceUrl =
-    process.env.ARBITRUM_ONE_FORK_SOURCE_RPC_URL ??
-    dockerEndpoint(bindAddress, config.rpcProxy.port);
-  const localUrl =
-    process.env.ARBITRUM_ONE_FORK_LOCAL_RPC_URL ??
-    dockerEndpoint(bindAddress, config.localRpcPort);
-  validateLocalEndpoint(sourceUrl, "read-only source proxy");
-  validateLocalEndpoint(localUrl, "local fork RPC");
+  const { sourceUrl, localUrl } = buildSmokeEndpoints();
   const sourceRpc = createArbitrumRpcClient(sourceUrl) as RpcClient;
   const localRpc = createArbitrumRpcClient(localUrl) as RpcClient;
 
