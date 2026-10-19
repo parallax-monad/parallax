@@ -1,0 +1,22 @@
+{
+  "source": {
+    "chainId": 42161,
+    "blockNumber": "515881859",
+    "blockHash": "0x304b694bc77e488eca3af067e45712e71753e2c42ca04881e21039b71da4560e"
+  },
+  "localExecutionChainId": 31337,
+  "quote": {
+    "amountIn": "0.001",
+    "verifiedTokenMetadataBlock": "515758698"
+  },
+  "senderNativeBalanceAtomic": "1000000000000000000",
+  "anvil": {
+    "version": "1.8.5",
+    "image": "ghcr.io/foundry-rs/foundry:v1.8.5@sha256:32c8ea9ef052a440cb1620175987a3f49eff8b068a0c6a3d09ebf7f5f9a0e043"
+  },
+  "rpcProxy": {
+    "image": "node:22.23.2-alpine3.23@sha256:72c5815a06aed9a2273aea5628d74d348af57843a7b547af2fe53dd3e4b95261",
+    "port": 18546
+  },
+  "localRpcPort": 8545
+}

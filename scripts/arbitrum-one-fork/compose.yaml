@@ -1,0 +1,107 @@
+services:
+  rpc-proxy:
+    image: ${FORK_RPC_PROXY_IMAGE:?FORK_RPC_PROXY_IMAGE is required}
+    command:
+      - node
+      - /opt/fork/rpc-proxy.mjs
+    restart: "no"
+    init: true
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m
+    environment:
+      FORK_INSTANCE_ID: ${FORK_INSTANCE_ID:?FORK_INSTANCE_ID is required}
+      SOURCE_CHAIN_ID: ${SOURCE_CHAIN_ID:?SOURCE_CHAIN_ID is required}
+      SOURCE_BLOCK_NUMBER: ${SOURCE_BLOCK_NUMBER:?SOURCE_BLOCK_NUMBER is required}
+      SOURCE_BLOCK_HASH: ${SOURCE_BLOCK_HASH:?SOURCE_BLOCK_HASH is required}
+      RPC_PROXY_PORT: "18546"
+    secrets:
+      - upstream_rpc_url
+    volumes:
+      - ${FORK_PROXY_SCRIPT_PATH:?FORK_PROXY_SCRIPT_PATH is required}:/opt/fork/rpc-proxy.mjs:ro
+    networks:
+      - fork
+      - egress
+    ports:
+      - target: 18546
+        published: "${FORK_PROXY_HOST_PORT:-18546}"
+        host_ip: "${FORK_BIND_ADDRESS:-127.0.0.1}"
+        protocol: tcp
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:18546/healthz').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 2s
+
+  anvil:
+    image: ${FORK_ANVIL_IMAGE:?FORK_ANVIL_IMAGE is required}
+    entrypoint:
+      - anvil
+    command:
+      - --silent
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8545"
+      - --chain-id
+      - ${LOCAL_EXECUTION_CHAIN_ID:?LOCAL_EXECUTION_CHAIN_ID is required}
+      - --accounts
+      - "0"
+      - --no-mining
+      - --fork-url
+      - http://rpc-proxy:18546
+      - --fork-block-number
+      - ${SOURCE_BLOCK_NUMBER:?SOURCE_BLOCK_NUMBER is required}
+    restart: "no"
+    init: true
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
+    environment:
+      HOME: /tmp
+      FORK_INSTANCE_ID: ${FORK_INSTANCE_ID:?FORK_INSTANCE_ID is required}
+    depends_on:
+      rpc-proxy:
+        condition: service_healthy
+    networks:
+      - fork
+    ports:
+      - target: 8545
+        published: "${FORK_LOCAL_HOST_PORT:-8545}"
+        host_ip: "${FORK_BIND_ADDRESS:-127.0.0.1}"
+        protocol: tcp
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - cast rpc eth_chainId --rpc-url http://127.0.0.1:8545 | grep -qx '0x7a69'
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
+    labels:
+      com.parallax.fork.instance: ${FORK_INSTANCE_ID:?FORK_INSTANCE_ID is required}
+      com.parallax.fork.source-chain-id: ${SOURCE_CHAIN_ID:?SOURCE_CHAIN_ID is required}
+      com.parallax.fork.source-block-number: ${SOURCE_BLOCK_NUMBER:?SOURCE_BLOCK_NUMBER is required}
+      com.parallax.fork.local-chain-id: ${LOCAL_EXECUTION_CHAIN_ID:?LOCAL_EXECUTION_CHAIN_ID is required}
+
+networks:
+  fork:
+    internal: true
+  egress: {}
+
+secrets:
+  upstream_rpc_url:
+    environment: ARBITRUM_ONE_FORK_UPSTREAM_RPC_URL
