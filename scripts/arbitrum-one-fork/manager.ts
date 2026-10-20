@@ -1593,6 +1593,17 @@ function validateLocalEndpoint(value: string, label: string): void {
       `${label} must use a credential-free HTTP endpoint on loopback, host.docker.internal, or a private IPv4 address.`,
     );
   }
+  const queryIndex = url.href.indexOf("?");
+  const hashIndex = url.href.indexOf("#");
+  if (
+    url.pathname !== "/" ||
+    (queryIndex !== -1 && (hashIndex === -1 || queryIndex < hashIndex))
+  ) {
+    throw new HarnessError(
+      "UNSUPPORTED_LOCAL_ENDPOINT_TARGET",
+      `${label} must use the root path without a query string.`,
+    );
+  }
 }
 
 export function isAllowedLocalHost(host: string): boolean {

@@ -128,6 +128,43 @@ describe("Arbitrum One fork smoke endpoints", () => {
     });
   });
 
+  it.each([
+    {
+      name: "source proxy path",
+      variable: "ARBITRUM_ONE_FORK_SOURCE_RPC_URL",
+      target: "/rpc",
+      label: "read-only source proxy",
+    },
+    {
+      name: "source proxy query",
+      variable: "ARBITRUM_ONE_FORK_SOURCE_RPC_URL",
+      target: "/?query",
+      label: "read-only source proxy",
+    },
+    {
+      name: "local fork RPC path",
+      variable: "ARBITRUM_ONE_FORK_LOCAL_RPC_URL",
+      target: "/rpc",
+      label: "local fork RPC",
+    },
+    {
+      name: "local fork RPC query",
+      variable: "ARBITRUM_ONE_FORK_LOCAL_RPC_URL",
+      target: "/?query",
+      label: "local fork RPC",
+    },
+    {
+      name: "empty source proxy query",
+      variable: "ARBITRUM_ONE_FORK_SOURCE_RPC_URL",
+      target: "/?",
+      label: "read-only source proxy",
+    },
+  ])("rejects unsupported $name override", ({ variable, target, label }) => {
+    expect(() =>
+      buildSmokeEndpoints({ [variable]: `http://localhost:28546${target}` }),
+    ).toThrow(`${label} must use the root path without a query string.`);
+  });
+
   it.each(["FORK_PROXY_HOST_PORT", "FORK_LOCAL_HOST_PORT"])(
     "rejects an invalid %s",
     (name) => {
