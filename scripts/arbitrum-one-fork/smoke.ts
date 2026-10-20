@@ -194,6 +194,7 @@ export async function runForkQuoteSmoke(
   const sourceRpc = readonlyClient(input.sourceRpc, "upstream");
   const localRpc = input.localRpc;
 
+  await assertForkInstanceIdentity(localRpc, input.forkInstanceId);
   await assertChainId(sourceRpc, FORK_CONFIG.source.chainId, "upstream");
   await assertChainId(
     localRpc,
@@ -430,6 +431,27 @@ export async function runForkQuoteSmoke(
       "Upstream and local quote calls use the merged Arbitrum One profile, direct Camelot V3 route, exact input, and the same explicitly pinned source block.",
     ],
   };
+}
+
+async function assertForkInstanceIdentity(
+  localRpc: RpcClient,
+  expectedInstanceId: string,
+): Promise<void> {
+  let observedInstanceId: unknown;
+  try {
+    observedInstanceId = await localRpc.request("parallax_forkInstanceId", []);
+  } catch {
+    throw new ForkSmokeError(
+      "FORK_INSTANCE_IDENTITY_UNAVAILABLE",
+      "Local RPC endpoint did not prove the expected fork instance identity.",
+    );
+  }
+  if (observedInstanceId !== expectedInstanceId) {
+    throw new ForkSmokeError(
+      "FORK_INSTANCE_IDENTITY_MISMATCH",
+      "Local RPC endpoint is not served by the expected fork instance.",
+    );
+  }
 }
 
 async function readQuote(
