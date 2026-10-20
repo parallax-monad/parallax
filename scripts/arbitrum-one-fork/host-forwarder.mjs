@@ -113,10 +113,11 @@ export function createForwarderServer(
     let routed = false;
     let identityTimeout;
 
-    const routeToAnvil = (sourceEnded = false) => {
+    function routeToAnvil(sourceEnded = false) {
       if (routed) return;
       routed = true;
       if (identityTimeout !== undefined) clearTimeout(identityTimeout);
+      downstream.off("data", inspect);
       const upstream = connectUpstream();
       downstream.on("error", () => upstream.destroy());
       upstream.on("error", () => downstream.destroy());
@@ -129,9 +130,10 @@ export function createForwarderServer(
         downstream.pipe(upstream);
       }
       upstream.pipe(downstream);
-    };
+    }
 
-    const inspect = (chunk) => {
+    function inspect(chunk) {
+      if (routed) return;
       buffered = Buffer.concat([buffered, chunk]);
       const result =
         identity === undefined
@@ -147,11 +149,12 @@ export function createForwarderServer(
       if (result.kind === "identity") {
         routed = true;
         if (identityTimeout !== undefined) clearTimeout(identityTimeout);
+        downstream.off("data", inspect);
         sendIdentityResponse(downstream, result.requestId, identity);
         return;
       }
       routeToAnvil();
-    };
+    }
 
     downstream.on("data", inspect);
     downstream.on("end", () => routeToAnvil(true));
