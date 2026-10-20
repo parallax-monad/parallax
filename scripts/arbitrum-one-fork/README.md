@@ -41,6 +41,8 @@ printf '\n' >&2
 
 The URL is mounted into the proxy as a runtime secret. The proxy is the only container that receives it; Anvil sees only the internal read-only proxy URL. The proxy rejects transaction/write RPC methods and strips upstream error text. Do not print the variable, run `docker compose config`, or expose process/container inspection output.
 
+The local fork RPC host port is published by `anvil-host-forwarder`, not by Anvil. This minimal TCP service listens on container port `8546` and forwards only to `anvil:8545` on the internal `fork` network. It has no upstream secret and does not join `egress`. To support host-port publishing, only the forwarder also joins a dedicated non-internal `host-publish` bridge. That bridge disables Docker bridge IP masquerading as a best-effort reduction in outbound access; it is not a verified guarantee that all egress is blocked, particularly on Docker Desktop. Published-port forwarding is a separate Docker mechanism, and the configured host bind remains private/loopback. The only intercepted request is the fixed-purpose, secret-free `parallax_forkInstanceId` JSON-RPC handshake; its response is the Compose instance UUID, while all other traffic is forwarded unchanged. Anvil remains read-only, is attached only to `fork`, and has no published host port. The forwarder uses the existing pinned Node image and configured host bind address/port.
+
 ## Start and stop on the Mac host
 
 Run from the repository root:
@@ -90,6 +92,8 @@ ARBITRUM_ONE_FORK_SOURCE_RPC_URL=http://127.0.0.1:18546 \
 ARBITRUM_ONE_FORK_LOCAL_RPC_URL=http://127.0.0.1:8545 \
 node --disable-warning=ExperimentalWarning --experimental-strip-types --experimental-transform-types scripts/arbitrum-one-fork/run-host.mjs smoke
 ```
+
+Before reading chain/block/version or changing local test state, smoke calls `parallax_forkInstanceId` through the exact configured local RPC URL and requires its result to match the current fork UUID. A second fork therefore fails closed even if its chain, pinned block, and Anvil version match; this handshake works through the same host-published endpoint from both the Mac host and dev container.
 
 Each smoke takes an Anvil snapshot, assigns exactly `1 ETH` to one random local address with `anvil_setBalance`, verifies its USDC balance remains zero, executes only the exact Quoter read, reverts the snapshot, repeats the quote, and reverts again. Anvil starts with `--accounts 0`; no private key or unlocked signer is created. No transaction is submitted or mined. Local balance preparation is the only state override; the pool, USDC balance, and upstream chain are not changed.
 

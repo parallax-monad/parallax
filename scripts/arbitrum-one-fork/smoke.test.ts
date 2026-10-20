@@ -20,6 +20,7 @@ class FakeRpc implements RpcClient {
   readonly snapshots = new Map<string, Map<string, string>>();
   chainId: string;
   blockHash: string;
+  forkInstanceId: string;
   code = "0x6000";
   version = `anvil/v${config.anvil.version}`;
   quoteAmount = quoterAmount;
@@ -35,6 +36,7 @@ class FakeRpc implements RpcClient {
       quoteAmount?: bigint;
       version?: string;
       failRevert?: boolean;
+      forkInstanceId?: string;
     } = {},
   ) {
     this.chainId = options.chainId ?? (kind === "source" ? "0xa4b1" : "0x7a69");
@@ -43,6 +45,7 @@ class FakeRpc implements RpcClient {
     this.quoteAmount = options.quoteAmount ?? quoterAmount;
     this.version = options.version ?? `anvil/v${config.anvil.version}`;
     this.failRevert = options.failRevert ?? false;
+    this.forkInstanceId = options.forkInstanceId ?? instanceId;
   }
 
   async request(
@@ -50,6 +53,7 @@ class FakeRpc implements RpcClient {
     params: readonly unknown[] = [],
   ): Promise<unknown> {
     this.calls.push({ method, params });
+    if (method === "parallax_forkInstanceId") return this.forkInstanceId;
     if (method === "eth_chainId") return this.chainId;
     if (method === "eth_blockNumber") {
       return this.kind === "source"
@@ -266,6 +270,22 @@ describe("Arbitrum One local fork quote harness", () => {
         }
       }
     }
+  });
+
+  it("rejects a second fork with matching chain, block, and Anvil version", async () => {
+    const source = new FakeRpc("source");
+    const secondFork = new FakeRpc("local", {
+      forkInstanceId: "00000000-0000-4000-8000-000000000002",
+    });
+
+    await expect(run(source, secondFork)).rejects.toMatchObject({
+      code: "FORK_INSTANCE_IDENTITY_MISMATCH",
+    });
+    expect(secondFork.calls).toEqual([
+      { method: "parallax_forkInstanceId", params: [] },
+    ]);
+    expect(source.calls).toEqual([]);
+    expect(secondFork.balances.size).toBe(0);
   });
 
   it("fails closed on a source chain mismatch", async () => {

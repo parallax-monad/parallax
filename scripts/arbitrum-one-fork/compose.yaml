@@ -6,7 +6,6 @@ services:
       - /opt/fork/rpc-proxy.mjs
     restart: "no"
     init: true
-    read_only: true
     cap_drop:
       - ALL
     security_opt:
@@ -78,15 +77,10 @@ services:
         condition: service_healthy
     networks:
       - fork
-    ports:
-      - target: 8545
-        published: "${FORK_LOCAL_HOST_PORT:-8545}"
-        host_ip: "${FORK_BIND_ADDRESS:-127.0.0.1}"
-        protocol: tcp
     healthcheck:
       test:
         - CMD-SHELL
-        - cast rpc eth_chainId --rpc-url http://127.0.0.1:8545 | grep -qx '0x7a69'
+        - cast rpc eth_chainId --rpc-url http://127.0.0.1:8545 | grep -qx '"0x7a69"'
       interval: 5s
       timeout: 3s
       retries: 12
@@ -97,10 +91,42 @@ services:
       com.parallax.fork.source-block-number: ${SOURCE_BLOCK_NUMBER:?SOURCE_BLOCK_NUMBER is required}
       com.parallax.fork.local-chain-id: ${LOCAL_EXECUTION_CHAIN_ID:?LOCAL_EXECUTION_CHAIN_ID is required}
 
+  anvil-host-forwarder:
+    image: ${FORK_RPC_PROXY_IMAGE:?FORK_RPC_PROXY_IMAGE is required}
+    command:
+      - node
+      - /opt/fork/host-forwarder.mjs
+    restart: "no"
+    init: true
+    read_only: true
+    environment:
+      FORK_INSTANCE_ID: ${FORK_INSTANCE_ID:?FORK_INSTANCE_ID is required}
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      - ./scripts/arbitrum-one-fork/host-forwarder.mjs:/opt/fork/host-forwarder.mjs:ro
+    depends_on:
+      anvil:
+        condition: service_healthy
+    networks:
+      - fork
+      - host-publish
+    ports:
+      - target: 8546
+        published: "${FORK_LOCAL_HOST_PORT:-8545}"
+        host_ip: "${FORK_BIND_ADDRESS:-127.0.0.1}"
+        protocol: tcp
+
 networks:
   fork:
     internal: true
   egress: {}
+  host-publish:
+    driver: bridge
+    driver_opts:
+      com.docker.network.bridge.enable_ip_masquerade: "false"
 
 secrets:
   upstream_rpc_url:

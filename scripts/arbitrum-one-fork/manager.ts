@@ -32,19 +32,130 @@ const FORK_SOURCE_ENV = "ARBITRUM_ONE_FORK_UPSTREAM_RPC_URL";
 const CHECKOUT_ID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-class HarnessError extends Error {
+export class HarnessError extends Error {
   readonly code: string;
+  readonly rpcProbeFailure: LocalRpcProbeFailure | undefined;
 
-  constructor(code: string, message: string) {
+  constructor(
+    code: string,
+    message: string,
+    rpcProbeFailure?: LocalRpcProbeFailure,
+  ) {
     super(message);
     this.name = "HarnessError";
     this.code = code;
+    this.rpcProbeFailure = rpcProbeFailure;
   }
 }
 
 interface DockerResult {
   readonly status: number | null;
   readonly stdout: string;
+}
+
+type LocalRpcProbePhase =
+  | "eth_chainId"
+  | "eth_blockNumber"
+  | "eth_getBlockByNumber"
+  | "web3_clientVersion"
+  | "response_validation"
+  | "unknown";
+
+type LocalRpcErrorClass =
+  | "CONNECTION_REFUSED"
+  | "CONNECTION_ERROR"
+  | "TIMEOUT"
+  | "HTTP_ERROR"
+  | "INVALID_RESPONSE"
+  | "TRANSPORT_ERROR"
+  | "UNKNOWN";
+
+export interface LocalRpcProbeFailure {
+  readonly phase: LocalRpcProbePhase;
+  readonly errorClass: LocalRpcErrorClass;
+}
+
+type ForkComposeServiceName = "rpc-proxy" | "anvil" | "anvil-host-forwarder";
+
+type ComposeServiceState =
+  | "created"
+  | "restarting"
+  | "running"
+  | "removing"
+  | "paused"
+  | "exited"
+  | "dead"
+  | "unknown";
+
+type ComposeServiceHealth =
+  | "healthy"
+  | "unhealthy"
+  | "starting"
+  | "not_configured"
+  | "unknown";
+
+interface PublishedPortMapping {
+  readonly targetPort: number;
+  readonly publishedPort: number | null;
+  readonly protocol: "tcp" | "udp";
+}
+
+export interface StartFailureService {
+  readonly service: ForkComposeServiceName;
+  readonly state: ComposeServiceState;
+  readonly health: ComposeServiceHealth;
+  readonly publishedPorts: readonly PublishedPortMapping[];
+  readonly healthcheckExitCodes: readonly number[] | null;
+  readonly forwarderInspection?: ForwarderContainerInspection | null;
+}
+
+type HostAddressClass =
+  | "loopback"
+  | "private"
+  | "unspecified"
+  | "other"
+  | "unknown";
+
+interface SanitizedHostPortBinding {
+  readonly publishedPort: number | null;
+  readonly hostAddressClass: HostAddressClass;
+  readonly hostAddressMatchesExpected: boolean | null;
+}
+
+interface ForwarderComposeLabels {
+  readonly project: string | null;
+  readonly service: string | null;
+  readonly configHash: string | null;
+}
+
+interface ForwarderNetwork {
+  readonly name: string;
+  readonly internal: boolean | null;
+}
+
+export interface ForwarderContainerInspection {
+  readonly hostConfigPortBindings: readonly SanitizedHostPortBinding[] | null;
+  readonly networkSettingsPorts: readonly SanitizedHostPortBinding[] | null;
+  readonly composeLabels: ForwarderComposeLabels;
+  readonly networks: readonly ForwarderNetwork[] | null;
+}
+
+interface ExpectedForwarderBinding {
+  readonly targetPort: 8546;
+  readonly publishedPort: number | null;
+  readonly hostAddressClass: HostAddressClass;
+}
+
+export interface StartFailureDiagnostics {
+  readonly code: "ANVIL_UNAVAILABLE";
+  readonly findings: readonly string[];
+  readonly rpcProbe: LocalRpcProbeFailure;
+  readonly composeStatus: "available" | "unavailable";
+  readonly services: readonly StartFailureService[];
+  readonly forwarder: {
+    readonly expected: ExpectedForwarderBinding;
+    readonly actual: ForwarderContainerInspection | null;
+  };
 }
 
 function gitPath(name: string): string {
@@ -167,6 +278,39 @@ export function isPrivateBindAddress(address: string): boolean {
   if (octets[0] === 172 && octets[1] >= 16 && octets[1] <= 31) return true;
   if (octets[0] === 192 && octets[1] === 168) return true;
   return octets[0] === 169 && octets[1] === 254;
+}
+
+function sanitizedHostAddressClass(value: unknown): HostAddressClass {
+  if (typeof value !== "string") return "unknown";
+  const address = value.trim();
+  if (address === "" || address === "0.0.0.0" || address === "::") {
+    return "unspecified";
+  }
+  const ipVersion = isIP(address);
+  if (ipVersion === 0) return "unknown";
+  if (ipVersion === 6) return address === "::1" ? "loopback" : "other";
+  if (address.startsWith("127.")) return "loopback";
+  return isPrivateBindAddress(address) ? "private" : "other";
+}
+
+function expectedForwarderBinding(
+  env: NodeJS.ProcessEnv = process.env,
+): ExpectedForwarderBinding {
+  let publishedPort: number | null = null;
+  try {
+    publishedPort =
+      positivePort(
+        configuredPort("FORK_LOCAL_HOST_PORT", config.localRpcPort, env),
+      ) ?? null;
+  } catch {
+    // Keep diagnostics usable without exposing an invalid raw environment value.
+  }
+  const hostAddress = env.FORK_BIND_ADDRESS?.trim() || "127.0.0.1";
+  return {
+    targetPort: 8546,
+    publishedPort,
+    hostAddressClass: sanitizedHostAddressClass(hostAddress),
+  };
 }
 
 function configuredPort(
@@ -536,16 +680,25 @@ export async function waitForAnvil(env: NodeJS.ProcessEnv): Promise<void> {
   const port = env.FORK_LOCAL_HOST_PORT ?? String(config.localRpcPort);
   const endpoint = dockerEndpoint(host, port);
   const deadline = Date.now() + 60_000;
+  let lastFailure: LocalRpcProbeFailure = {
+    phase: "eth_chainId",
+    errorClass: "UNKNOWN",
+  };
   while (Date.now() < deadline) {
+    let phase: LocalRpcProbePhase = "eth_chainId";
     try {
       const chainId = await requestJsonRpc(endpoint, "eth_chainId", []);
+      phase = "eth_blockNumber";
       const blockNumber = await requestJsonRpc(endpoint, "eth_blockNumber", []);
       const blockTag = `0x${BigInt(config.source.blockNumber).toString(16)}`;
+      phase = "eth_getBlockByNumber";
       const block = await requestJsonRpc(endpoint, "eth_getBlockByNumber", [
         blockTag,
         false,
       ]);
+      phase = "web3_clientVersion";
       const version = await requestJsonRpc(endpoint, "web3_clientVersion", []);
+      phase = "response_validation";
       if (
         BigInt(String(chainId)) !== BigInt(config.localExecutionChainId) ||
         BigInt(String(blockNumber)) !== BigInt(config.source.blockNumber) ||
@@ -564,13 +717,54 @@ export async function waitForAnvil(env: NodeJS.ProcessEnv): Promise<void> {
       return;
     } catch (error) {
       if (error instanceof HarnessError) throw error;
+      lastFailure = {
+        phase,
+        errorClass: classifyLocalRpcError(error),
+      };
     }
     await delay(1_000);
   }
   throw new HarnessError(
     "ANVIL_UNAVAILABLE",
     "Pinned Anvil did not become ready; raw container output is suppressed.",
+    lastFailure,
   );
+}
+
+export function classifyLocalRpcError(error: unknown): LocalRpcErrorClass {
+  let current: unknown = error;
+  for (let depth = 0; depth < 4 && current !== null; depth += 1) {
+    if (current instanceof Error) {
+      if (current.name === "TimeoutError" || current.name === "AbortError") {
+        return "TIMEOUT";
+      }
+      if (current.message === "LOCAL_RPC_INVALID_RESPONSE") {
+        return "INVALID_RESPONSE";
+      }
+      if (current.message === "LOCAL_RPC_UNAVAILABLE") return "HTTP_ERROR";
+      if (current instanceof SyntaxError) return "INVALID_RESPONSE";
+    }
+    if (!isRecord(current)) break;
+    const code = typeof current.code === "string" ? current.code : "";
+    if (code === "ECONNREFUSED") return "CONNECTION_REFUSED";
+    if (
+      code === "ETIMEDOUT" ||
+      code === "UND_ERR_CONNECT_TIMEOUT" ||
+      code === "UND_ERR_HEADERS_TIMEOUT" ||
+      code === "ABORT_ERR"
+    ) {
+      return "TIMEOUT";
+    }
+    if (
+      code === "ECONNRESET" ||
+      code === "EHOSTUNREACH" ||
+      code === "ENETUNREACH"
+    ) {
+      return "CONNECTION_ERROR";
+    }
+    current = current.cause;
+  }
+  return error instanceof Error ? "TRANSPORT_ERROR" : "UNKNOWN";
 }
 
 async function requestJsonRpc(
@@ -635,6 +829,541 @@ export async function tryRecoverFork(
   }
 }
 
+const FORK_COMPOSE_SERVICE_NAMES = new Set<ForkComposeServiceName>([
+  "rpc-proxy",
+  "anvil",
+  "anvil-host-forwarder",
+]);
+
+function parseComposePsRows(
+  stdout: string,
+): readonly Record<string, unknown>[] | undefined {
+  const trimmed = stdout.trim();
+  if (trimmed === "") return [];
+  try {
+    const parsed: unknown = JSON.parse(trimmed);
+    if (Array.isArray(parsed)) return parsed.filter(isRecord);
+    if (isRecord(parsed)) return [parsed];
+    return undefined;
+  } catch {
+    const rows: Record<string, unknown>[] = [];
+    for (const line of trimmed.split(/\r?\n/)) {
+      if (line.trim() === "") continue;
+      try {
+        const parsed: unknown = JSON.parse(line);
+        if (!isRecord(parsed)) return undefined;
+        rows.push(parsed);
+      } catch {
+        return undefined;
+      }
+    }
+    return rows;
+  }
+}
+
+function composeContainerId(row: Record<string, unknown>): string | undefined {
+  const id = row.ID ?? row.Id ?? row.id;
+  return typeof id === "string" && /^[a-f0-9]{12,64}$/i.test(id)
+    ? id
+    : undefined;
+}
+
+function composeServiceName(
+  row: Record<string, unknown>,
+): ForkComposeServiceName | undefined {
+  const service = row.Service ?? row.service;
+  return typeof service === "string" &&
+    FORK_COMPOSE_SERVICE_NAMES.has(service as ForkComposeServiceName)
+    ? (service as ForkComposeServiceName)
+    : undefined;
+}
+
+function positivePort(value: unknown): number | undefined {
+  const port =
+    typeof value === "number"
+      ? value
+      : typeof value === "string" && /^\d+$/.test(value)
+        ? Number(value)
+        : Number.NaN;
+  return Number.isSafeInteger(port) && port >= 1 && port <= 65_535
+    ? port
+    : undefined;
+}
+
+function composeServiceState(value: unknown): ComposeServiceState {
+  const state = typeof value === "string" ? value.toLowerCase() : "";
+  switch (state) {
+    case "created":
+    case "restarting":
+    case "running":
+    case "removing":
+    case "paused":
+    case "exited":
+    case "dead":
+      return state;
+    default:
+      return "unknown";
+  }
+}
+
+function composeServiceHealth(value: unknown): ComposeServiceHealth {
+  const health = typeof value === "string" ? value.toLowerCase() : "";
+  switch (health) {
+    case "healthy":
+    case "unhealthy":
+    case "starting":
+      return health;
+    case "":
+      return "not_configured";
+    default:
+      return "unknown";
+  }
+}
+
+function publishedPortMappings(
+  value: unknown,
+): readonly PublishedPortMapping[] {
+  if (!Array.isArray(value)) return [];
+  const mappings: PublishedPortMapping[] = [];
+  for (const publisher of value) {
+    if (!isRecord(publisher)) continue;
+    const targetPort = positivePort(
+      publisher.TargetPort ?? publisher.targetPort,
+    );
+    const protocol = publisher.Protocol ?? publisher.protocol;
+    if (
+      targetPort === undefined ||
+      (protocol !== "tcp" && protocol !== "udp")
+    ) {
+      continue;
+    }
+    mappings.push({
+      targetPort,
+      publishedPort:
+        positivePort(publisher.PublishedPort ?? publisher.publishedPort) ??
+        null,
+      protocol,
+    });
+  }
+  return mappings;
+}
+
+function sanitizedHostPortBindings(
+  value: unknown,
+  expectedHostAddress: string,
+): readonly SanitizedHostPortBinding[] | null {
+  if (value === null) return [];
+  if (!Array.isArray(value)) return null;
+  return value.map((binding) => {
+    if (!isRecord(binding)) {
+      return {
+        publishedPort: null,
+        hostAddressClass: "unknown",
+        hostAddressMatchesExpected: null,
+      };
+    }
+    const hostIp = binding.HostIp;
+    return {
+      publishedPort: positivePort(binding.HostPort) ?? null,
+      hostAddressClass: sanitizedHostAddressClass(hostIp),
+      hostAddressMatchesExpected:
+        typeof hostIp === "string"
+          ? hostIp.trim() === expectedHostAddress
+          : null,
+    };
+  });
+}
+
+function sanitizedComposeProjectLabel(value: unknown): string | null {
+  return typeof value === "string" &&
+    value.length <= 128 &&
+    /^[a-z0-9][a-z0-9_-]*$/.test(value)
+    ? value
+    : null;
+}
+
+function sanitizedComposeServiceLabel(value: unknown): string | null {
+  return value === "anvil-host-forwarder" ? value : null;
+}
+
+function sanitizedComposeConfigHash(value: unknown): string | null {
+  return typeof value === "string" && /^[a-f0-9]{64}$/i.test(value)
+    ? value.toLowerCase()
+    : null;
+}
+
+export function sanitizeForwarderInspectOutput(
+  stdout: string,
+  expectedHostAddress = "127.0.0.1",
+  readNetworkInternal: (networkName: string) => boolean | null = () => null,
+): ForwarderContainerInspection | undefined {
+  const lines = stdout.split(/\r?\n/);
+  if (lines.length < 5) return undefined;
+  const selected: unknown[] = [];
+  for (const line of lines.slice(0, 5)) {
+    try {
+      selected.push(JSON.parse(line) as unknown);
+    } catch {
+      return undefined;
+    }
+  }
+
+  const rawNetworkNames = lines
+    .slice(5)
+    .join(" ")
+    .split(/\s+/)
+    .filter((name) => name !== "");
+  const validNetworkNames = rawNetworkNames.every((name) =>
+    /^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}$/.test(name),
+  );
+  let networks: readonly ForwarderNetwork[] | null = null;
+  if (validNetworkNames) {
+    networks = [...new Set(rawNetworkNames)].map((name) => {
+      let internal: boolean | null;
+      try {
+        internal = readNetworkInternal(name);
+      } catch {
+        internal = null;
+      }
+      return {
+        name,
+        internal: typeof internal === "boolean" ? internal : null,
+      };
+    });
+  }
+
+  return {
+    hostConfigPortBindings: sanitizedHostPortBindings(
+      selected[0],
+      expectedHostAddress,
+    ),
+    networkSettingsPorts: sanitizedHostPortBindings(
+      selected[1],
+      expectedHostAddress,
+    ),
+    composeLabels: {
+      project: sanitizedComposeProjectLabel(selected[2]),
+      service: sanitizedComposeServiceLabel(selected[3]),
+      configHash: sanitizedComposeConfigHash(selected[4]),
+    },
+    networks,
+  };
+}
+
+function sanitizedHealthcheckExitCodes(
+  value: readonly number[] | null,
+): readonly number[] | null {
+  if (value === null) return null;
+  return value.filter(
+    (code) => Number.isSafeInteger(code) && code >= 0 && code <= 255,
+  );
+}
+
+export function sanitizeComposePsOutput(
+  stdout: string,
+  readHealthcheckExitCodes: (
+    containerId: string,
+  ) => readonly number[] | null = () => null,
+  readForwarderInspection?: (
+    containerId: string,
+  ) => ForwarderContainerInspection | undefined,
+): readonly StartFailureService[] | undefined {
+  const rows = parseComposePsRows(stdout);
+  if (rows === undefined) return undefined;
+  const services: StartFailureService[] = [];
+  for (const row of rows) {
+    const service = composeServiceName(row);
+    if (service === undefined) continue;
+    const id = composeContainerId(row);
+    let healthcheckExitCodes: readonly number[] | null = null;
+    if (id !== undefined) {
+      try {
+        healthcheckExitCodes = sanitizedHealthcheckExitCodes(
+          readHealthcheckExitCodes(id),
+        );
+      } catch {
+        healthcheckExitCodes = null;
+      }
+    }
+    let forwarderInspection: ForwarderContainerInspection | null | undefined;
+    if (
+      service === "anvil-host-forwarder" &&
+      readForwarderInspection !== undefined
+    ) {
+      if (id === undefined) {
+        forwarderInspection = null;
+      } else {
+        try {
+          forwarderInspection = readForwarderInspection(id) ?? null;
+        } catch {
+          forwarderInspection = null;
+        }
+      }
+    }
+    const sanitizedService: StartFailureService = {
+      service,
+      state: composeServiceState(row.State ?? row.state),
+      health: composeServiceHealth(row.Health ?? row.health),
+      publishedPorts: publishedPortMappings(row.Publishers ?? row.publishers),
+      healthcheckExitCodes,
+      ...(forwarderInspection === undefined ? {} : { forwarderInspection }),
+    };
+    services.push(sanitizedService);
+  }
+  return services;
+}
+
+type ExpectedBindingStatus = "matches" | "absent" | "mismatch" | "unavailable";
+
+function expectedBindingStatus(
+  bindings: readonly SanitizedHostPortBinding[] | null,
+  expected: ExpectedForwarderBinding,
+): ExpectedBindingStatus {
+  if (bindings === null || expected.publishedPort === null)
+    return "unavailable";
+  if (bindings.length === 0) return "absent";
+  if (
+    bindings.some(
+      (binding) =>
+        binding.publishedPort === expected.publishedPort &&
+        binding.hostAddressClass === expected.hostAddressClass &&
+        binding.hostAddressMatchesExpected === true,
+    )
+  ) {
+    return "matches";
+  }
+  if (
+    bindings.some(
+      (binding) =>
+        binding.publishedPort === null ||
+        binding.hostAddressClass === "unknown" ||
+        binding.hostAddressMatchesExpected === null,
+    )
+  ) {
+    return "unavailable";
+  }
+  return "mismatch";
+}
+
+export function buildStartFailureDiagnostics(
+  rpcProbe: LocalRpcProbeFailure,
+  services: readonly StartFailureService[] | undefined,
+  expected: ExpectedForwarderBinding = expectedForwarderBinding(),
+): StartFailureDiagnostics {
+  const findings = ["HOST_FORWARDER_RPC_PROBE_FAILED"];
+  if (services === undefined) {
+    findings.push("COMPOSE_STATUS_UNAVAILABLE");
+  } else {
+    const forwarder = services.filter(
+      (service) => service.service === "anvil-host-forwarder",
+    );
+    const hasPublishedLocalRpcPort = forwarder.some((service) =>
+      service.publishedPorts.some(
+        (port) =>
+          port.targetPort === 8546 &&
+          port.protocol === "tcp" &&
+          port.publishedPort !== null,
+      ),
+    );
+    if (!hasPublishedLocalRpcPort) findings.push("HOST_PORT_UNPUBLISHED");
+
+    for (const expectedService of FORK_COMPOSE_SERVICE_NAMES) {
+      const matching = services.filter(
+        (service) => service.service === expectedService,
+      );
+      if (matching.length === 0) {
+        findings.push("SERVICE_MISSING");
+        continue;
+      }
+      if (
+        matching.some(
+          (service) => service.state === "exited" || service.state === "dead",
+        )
+      ) {
+        findings.push("SERVICE_STOPPED");
+      } else if (matching.some((service) => service.state !== "running")) {
+        findings.push("SERVICE_NOT_RUNNING");
+      }
+      if (matching.some((service) => service.health === "unhealthy")) {
+        findings.push("SERVICE_UNHEALTHY");
+      }
+      if (matching.some((service) => service.health === "starting")) {
+        findings.push("SERVICE_HEALTHCHECK_PENDING");
+      }
+    }
+  }
+  const forwarderService = services?.find(
+    (service) => service.service === "anvil-host-forwarder",
+  );
+  const inspection = forwarderService?.forwarderInspection;
+  if (inspection === null) {
+    findings.push("FORWARDER_INSPECT_UNAVAILABLE");
+  } else if (inspection !== undefined) {
+    const hostConfigStatus = expectedBindingStatus(
+      inspection.hostConfigPortBindings,
+      expected,
+    );
+    const networkSettingsStatus = expectedBindingStatus(
+      inspection.networkSettingsPorts,
+      expected,
+    );
+    if (hostConfigStatus === "absent") {
+      findings.push("FORWARDER_HOSTCONFIG_BINDING_ABSENT");
+    } else if (hostConfigStatus === "mismatch") {
+      findings.push("FORWARDER_HOSTCONFIG_BINDING_MISMATCH");
+    } else if (hostConfigStatus === "unavailable") {
+      findings.push("FORWARDER_HOSTCONFIG_BINDING_UNAVAILABLE");
+    }
+    if (networkSettingsStatus === "absent") {
+      findings.push("FORWARDER_NETWORKSETTINGS_BINDING_ABSENT");
+    } else if (networkSettingsStatus === "mismatch") {
+      findings.push("FORWARDER_NETWORKSETTINGS_BINDING_MISMATCH");
+    } else if (networkSettingsStatus === "unavailable") {
+      findings.push("FORWARDER_NETWORKSETTINGS_BINDING_UNAVAILABLE");
+    }
+    if (hostConfigStatus === "matches" && networkSettingsStatus === "absent") {
+      findings.push("FORWARDER_BINDING_NOT_APPLIED_TO_NETWORKSETTINGS");
+    } else if (
+      hostConfigStatus === "matches" &&
+      networkSettingsStatus === "matches" &&
+      rpcProbe.errorClass === "CONNECTION_REFUSED"
+    ) {
+      findings.push("HOST_PORT_BINDING_PRESENT_CONNECTION_REFUSED");
+    }
+  }
+  return {
+    code: "ANVIL_UNAVAILABLE",
+    findings: [...new Set(findings)],
+    rpcProbe,
+    composeStatus: services === undefined ? "unavailable" : "available",
+    services: services ?? [],
+    forwarder: {
+      expected,
+      actual: inspection ?? null,
+    },
+  };
+}
+
+const FORWARDER_INSPECT_TEMPLATE = [
+  '{{json (index .HostConfig.PortBindings "8546/tcp")}}',
+  '{{json (index .NetworkSettings.Ports "8546/tcp")}}',
+  '{{json (index .Config.Labels "com.docker.compose.project")}}',
+  '{{json (index .Config.Labels "com.docker.compose.service")}}',
+  '{{json (index .Config.Labels "com.docker.compose.config-hash")}}',
+  "{{range $name, $_ := .NetworkSettings.Networks}}{{$name}} {{end}}",
+].join("\n");
+
+const HEALTHCHECK_EXIT_CODE_TEMPLATE =
+  "{{if .State.Health}}{{range .State.Health.Log}}{{.ExitCode}} {{end}}{{else}}NO_HEALTHCHECK{{end}}";
+
+function healthcheckExitCodes(
+  containerId: string,
+  env: NodeJS.ProcessEnv,
+): readonly number[] | null {
+  const result = runDocker(
+    ["inspect", "--format", HEALTHCHECK_EXIT_CODE_TEMPLATE, containerId],
+    env,
+  );
+  if (result.status !== 0) return null;
+  const output = result.stdout.trim();
+  if (output === "NO_HEALTHCHECK" || output === "") return [];
+  const values = output.split(/\s+/);
+  if (!values.every((value) => /^\d+$/.test(value))) return null;
+  return values.map(Number).filter((value) => value >= 0 && value <= 255);
+}
+
+function networkInternal(
+  networkName: string,
+  env: NodeJS.ProcessEnv,
+): boolean | null {
+  const result = runDocker(
+    ["network", "inspect", "--format", "{{.Internal}}", networkName],
+    env,
+  );
+  if (result.status !== 0) return null;
+  const output = result.stdout.trim().toLowerCase();
+  if (output === "true") return true;
+  if (output === "false") return false;
+  return null;
+}
+
+function forwarderInspection(
+  containerId: string,
+  env: NodeJS.ProcessEnv,
+): ForwarderContainerInspection | undefined {
+  const result = runDocker(
+    ["inspect", "--format", FORWARDER_INSPECT_TEMPLATE, containerId],
+    env,
+  );
+  if (result.status !== 0) return undefined;
+  const expectedHostAddress = env.FORK_BIND_ADDRESS?.trim() || "127.0.0.1";
+  return sanitizeForwarderInspectOutput(
+    result.stdout,
+    expectedHostAddress,
+    (networkName) => networkInternal(networkName, env),
+  );
+}
+
+function collectStartFailureDiagnostics(
+  env: NodeJS.ProcessEnv,
+  error: HarnessError,
+): StartFailureDiagnostics {
+  let services: readonly StartFailureService[] | undefined;
+  try {
+    const status = compose(["ps", "--all", "--format", "json"], env);
+    if (status.status === 0) {
+      services = sanitizeComposePsOutput(
+        status.stdout,
+        (containerId) => healthcheckExitCodes(containerId, env),
+        (containerId) => forwarderInspection(containerId, env),
+      );
+    }
+  } catch {
+    services = undefined;
+  }
+  return buildStartFailureDiagnostics(
+    error.rpcProbeFailure ?? { phase: "unknown", errorClass: "UNKNOWN" },
+    services,
+    expectedForwarderBinding(env),
+  );
+}
+
+export interface FailedStartActions {
+  readonly collectDiagnostics: () => StartFailureDiagnostics;
+  readonly reportDiagnostics: (diagnostics: StartFailureDiagnostics) => void;
+  readonly teardown: () => void;
+  readonly clearMetadata: () => void;
+}
+
+export function cleanUpFailedStart(
+  error: unknown,
+  actions: FailedStartActions,
+): never {
+  if (error instanceof HarnessError && error.code === "ANVIL_UNAVAILABLE") {
+    let diagnostics: StartFailureDiagnostics;
+    try {
+      diagnostics = actions.collectDiagnostics();
+    } catch {
+      diagnostics = buildStartFailureDiagnostics(
+        error.rpcProbeFailure ?? { phase: "unknown", errorClass: "UNKNOWN" },
+        undefined,
+      );
+    }
+    try {
+      actions.reportDiagnostics(diagnostics);
+    } catch {
+      // Diagnostics must never prevent fork cleanup or replace the startup error.
+    }
+  }
+  actions.teardown();
+  actions.clearMetadata();
+  if (error instanceof HarnessError) throw error;
+  throw new HarnessError(
+    "FORK_START_FAILED",
+    "Local fork startup failed; service output is suppressed to protect the upstream endpoint.",
+  );
+}
+
 function runningServiceId(
   instanceId: string,
   includeUpstream: boolean,
@@ -669,13 +1398,22 @@ async function startFresh(instanceId: string): Promise<void> {
     await waitForProxyHealth(env);
     await waitForAnvil(env);
   } catch (error) {
-    compose(["down", "--volumes", "--remove-orphans"], env);
-    removeLocalMetadata();
-    if (error instanceof HarnessError) throw error;
-    throw new HarnessError(
-      "FORK_START_FAILED",
-      "Local fork startup failed; service output is suppressed to protect the upstream endpoint.",
-    );
+    return cleanUpFailedStart(error, {
+      collectDiagnostics: () =>
+        error instanceof HarnessError
+          ? collectStartFailureDiagnostics(env, error)
+          : buildStartFailureDiagnostics(
+              { phase: "unknown", errorClass: "UNKNOWN" },
+              undefined,
+              expectedForwarderBinding(env),
+            ),
+      reportDiagnostics: (diagnostics) =>
+        console.error(
+          `START_FAILURE_DIAGNOSTICS ${JSON.stringify(diagnostics)}`,
+        ),
+      teardown: () => compose(["down", "--volumes", "--remove-orphans"], env),
+      clearMetadata: removeLocalMetadata,
+    });
   }
 }
 
@@ -756,11 +1494,13 @@ async function smokeCommand(): Promise<void> {
 
   let evidence: Awaited<ReturnType<typeof runForkQuoteSmoke>>;
   try {
-    evidence = await runForkQuoteSmoke({
-      sourceRpc,
-      localRpc,
-      forkInstanceId: instanceId,
-    });
+    evidence = await writeCaptureAfterSmoke(CAPTURE_FILE, () =>
+      runForkQuoteSmoke({
+        sourceRpc,
+        localRpc,
+        forkInstanceId: instanceId,
+      }),
+    );
   } catch (error) {
     if (error instanceof ForkSmokeError && error.code === "RESET_FAILED") {
       await recoverAfterResetFailure(instanceId);
@@ -768,11 +1508,19 @@ async function smokeCommand(): Promise<void> {
     throw error;
   }
 
-  writeFileSync(CAPTURE_FILE, `${JSON.stringify(evidence, null, 2)}\n`, {
+  console.log(JSON.stringify({ status: "passed", capture: evidence }, null, 2));
+}
+
+export async function writeCaptureAfterSmoke(
+  capturePath: string,
+  runSmoke: () => Promise<Awaited<ReturnType<typeof runForkQuoteSmoke>>>,
+): Promise<Awaited<ReturnType<typeof runForkQuoteSmoke>>> {
+  const evidence = await runSmoke();
+  writeFileSync(capturePath, `${JSON.stringify(evidence, null, 2)}\n`, {
     encoding: "utf8",
     mode: 0o600,
   });
-  console.log(JSON.stringify({ status: "passed", capture: evidence }, null, 2));
+  return evidence;
 }
 
 function validateLocalEndpoint(value: string, label: string): void {

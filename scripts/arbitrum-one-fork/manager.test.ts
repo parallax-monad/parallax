@@ -1,4 +1,10 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { createServer, type IncomingMessage } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
@@ -7,15 +13,22 @@ import { describe, expect, it } from "vitest";
 import {
   buildComposeArgs,
   buildSmokeEndpoints,
+  buildStartFailureDiagnostics,
+  classifyLocalRpcError,
+  cleanUpFailedStart,
   getCheckoutComposeProjectName,
+  HarnessError,
   isAllowedLocalHost,
   isPrivateBindAddress,
   recreateFork,
+  sanitizeComposePsOutput,
+  sanitizeForwarderInspectOutput,
   tryRecoverFork,
   waitForAnvil,
   waitForProxyHealth,
+  writeCaptureAfterSmoke,
 } from "./manager.js";
-import { getForkHarnessConfig } from "./smoke.js";
+import { getForkHarnessConfig, runForkQuoteSmoke } from "./smoke.js";
 
 const config = getForkHarnessConfig();
 
@@ -137,7 +150,469 @@ describe("Arbitrum One fork smoke endpoints", () => {
   });
 });
 
+describe("Arbitrum One fork smoke capture", () => {
+  it("does not write a capture when the local endpoint reports another fork instance", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "parallax-fork-capture-"));
+    const capturePath = join(directory, "capture.json");
+    const expectedInstanceId = "00000000-0000-4000-8000-000000000001";
+    try {
+      await expect(
+        writeCaptureAfterSmoke(capturePath, () =>
+          runForkQuoteSmoke({
+            sourceRpc: {
+              async request() {
+                throw new Error(
+                  "Source RPC must not be queried before identity.",
+                );
+              },
+            },
+            localRpc: {
+              async request(method) {
+                if (method === "parallax_forkInstanceId") {
+                  return "00000000-0000-4000-8000-000000000002";
+                }
+                throw new Error("Unexpected local RPC method.");
+              },
+            },
+            forkInstanceId: expectedInstanceId,
+          }),
+        ),
+      ).rejects.toMatchObject({ code: "FORK_INSTANCE_IDENTITY_MISMATCH" });
+      expect(existsSync(capturePath)).toBe(false);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+});
+
 describe("Arbitrum One fork manager lifecycle", () => {
+  const expectedForwarder = {
+    targetPort: 8546,
+    publishedPort: 9545,
+    hostAddressClass: "loopback",
+  } as const;
+
+  function inspectForwarderBindings(
+    hostConfig: unknown,
+    networkSettings: unknown,
+  ) {
+    return sanitizeForwarderInspectOutput(
+      [
+        JSON.stringify(hostConfig),
+        JSON.stringify(networkSettings),
+        JSON.stringify(
+          "parallax-arbitrum-one-fork-00000000-0000-4000-8000-000000000001",
+        ),
+        JSON.stringify("anvil-host-forwarder"),
+        JSON.stringify("a".repeat(64)),
+        "fork",
+      ].join("\n"),
+      "127.0.0.1",
+      () => true,
+    );
+  }
+
+  function servicesWithInspection(
+    inspection: ReturnType<typeof inspectForwarderBindings>,
+  ) {
+    const services = sanitizeComposePsOutput(
+      JSON.stringify([
+        {
+          ID: "abcdef0123456789abcdef0123456789",
+          Service: "anvil-host-forwarder",
+          State: "running",
+          Health: "healthy",
+          Publishers: [
+            { TargetPort: 8546, PublishedPort: 9545, Protocol: "tcp" },
+          ],
+        },
+      ]),
+      () => [],
+      () => inspection,
+    );
+    if (services === undefined) {
+      throw new Error("Expected valid forwarder Compose status.");
+    }
+    return services;
+  }
+
+  it("sanitizes Compose status and keeps only allowlisted health and port facts", () => {
+    const containerId = "abcdef0123456789abcdef0123456789";
+    const rawStatus = JSON.stringify([
+      {
+        ID: containerId,
+        Name: "fork-container-secret-name",
+        Service: "anvil-host-forwarder",
+        Command: "--upstream https://user:rpc-secret@example.invalid/key",
+        State: "running",
+        Health: "healthy",
+        HealthOutput: "health-output-secret",
+        Publishers: [
+          {
+            URL: "private-host-address",
+            TargetPort: 8546,
+            PublishedPort: 9545,
+            Protocol: "tcp",
+          },
+        ],
+      },
+    ]);
+
+    const sanitized = sanitizeComposePsOutput(rawStatus, (id) => {
+      expect(id).toBe(containerId);
+      return [0, 1];
+    });
+
+    expect(sanitized).toEqual([
+      {
+        service: "anvil-host-forwarder",
+        state: "running",
+        health: "healthy",
+        publishedPorts: [
+          { targetPort: 8546, publishedPort: 9545, protocol: "tcp" },
+        ],
+        healthcheckExitCodes: [0, 1],
+      },
+    ]);
+    const output = JSON.stringify(sanitized);
+    expect(output).not.toContain("rpc-secret");
+    expect(output).not.toContain("fork-container-secret-name");
+    expect(output).not.toContain("health-output-secret");
+    expect(output).not.toContain("private-host-address");
+  });
+
+  it("sanitizes forwarder inspect fields and never emits raw addresses or secret values", () => {
+    const rawInspect = [
+      JSON.stringify([
+        {
+          HostIp: "127.0.0.1",
+          HostPort: "9545",
+          Secret: "not-an-allowlisted-field",
+        },
+      ]),
+      JSON.stringify([{ HostIp: "192.168.1.10", HostPort: "9545" }]),
+      JSON.stringify(
+        "parallax-arbitrum-one-fork-00000000-0000-4000-8000-000000000001",
+      ),
+      JSON.stringify("anvil-host-forwarder"),
+      JSON.stringify("b".repeat(64)),
+      "fork egress",
+    ].join("\n");
+    const sanitized = sanitizeForwarderInspectOutput(
+      rawInspect,
+      "127.0.0.1",
+      (networkName) => {
+        expect(["fork", "egress"]).toContain(networkName);
+        return networkName === "fork";
+      },
+    );
+
+    expect(sanitized).toEqual({
+      hostConfigPortBindings: [
+        {
+          publishedPort: 9545,
+          hostAddressClass: "loopback",
+          hostAddressMatchesExpected: true,
+        },
+      ],
+      networkSettingsPorts: [
+        {
+          publishedPort: 9545,
+          hostAddressClass: "private",
+          hostAddressMatchesExpected: false,
+        },
+      ],
+      composeLabels: {
+        project:
+          "parallax-arbitrum-one-fork-00000000-0000-4000-8000-000000000001",
+        service: "anvil-host-forwarder",
+        configHash: "b".repeat(64),
+      },
+      networks: [
+        { name: "fork", internal: true },
+        { name: "egress", internal: false },
+      ],
+    });
+    const output = JSON.stringify(sanitized);
+    expect(output).not.toContain("127.0.0.1");
+    expect(output).not.toContain("192.168.1.10");
+    expect(output).not.toContain("not-an-allowlisted-field");
+  });
+
+  it.each([
+    {
+      label: "missing expected HostConfig binding",
+      hostConfig: [],
+      networkSettings: [],
+      finding: "FORWARDER_HOSTCONFIG_BINDING_ABSENT",
+    },
+    {
+      label: "mismatched expected HostConfig port",
+      hostConfig: [{ HostIp: "127.0.0.1", HostPort: "9546" }],
+      networkSettings: [],
+      finding: "FORWARDER_HOSTCONFIG_BINDING_MISMATCH",
+    },
+    {
+      label: "mismatched expected HostConfig address",
+      hostConfig: [{ HostIp: "192.168.1.10", HostPort: "9545" }],
+      networkSettings: [],
+      finding: "FORWARDER_HOSTCONFIG_BINDING_MISMATCH",
+    },
+    {
+      label: "unavailable HostConfig binding field",
+      hostConfig: "invalid-binding-shape",
+      networkSettings: [],
+      finding: "FORWARDER_HOSTCONFIG_BINDING_UNAVAILABLE",
+    },
+    {
+      label: "missing NetworkSettings binding after HostConfig match",
+      hostConfig: [{ HostIp: "127.0.0.1", HostPort: "9545" }],
+      networkSettings: [],
+      finding: "FORWARDER_BINDING_NOT_APPLIED_TO_NETWORKSETTINGS",
+    },
+    {
+      label: "mismatched NetworkSettings binding",
+      hostConfig: [{ HostIp: "127.0.0.1", HostPort: "9545" }],
+      networkSettings: [{ HostIp: "127.0.0.1", HostPort: "9546" }],
+      finding: "FORWARDER_NETWORKSETTINGS_BINDING_MISMATCH",
+    },
+    {
+      label: "unavailable NetworkSettings binding field",
+      hostConfig: [{ HostIp: "127.0.0.1", HostPort: "9545" }],
+      networkSettings: "invalid-binding-shape",
+      finding: "FORWARDER_NETWORKSETTINGS_BINDING_UNAVAILABLE",
+    },
+  ])(
+    "classifies $label without exposing an IP address",
+    ({ hostConfig, networkSettings, finding }) => {
+      const diagnostics = buildStartFailureDiagnostics(
+        { phase: "eth_chainId", errorClass: "CONNECTION_REFUSED" },
+        servicesWithInspection(
+          inspectForwarderBindings(hostConfig, networkSettings),
+        ),
+        expectedForwarder,
+      );
+
+      expect(diagnostics.findings).toContain(finding);
+      expect(diagnostics.forwarder.expected).toEqual(expectedForwarder);
+      expect(JSON.stringify(diagnostics)).not.toContain("127.0.0.1");
+    },
+  );
+
+  it("distinguishes a present binding from a refused host RPC connection", () => {
+    const diagnostics = buildStartFailureDiagnostics(
+      { phase: "eth_chainId", errorClass: "CONNECTION_REFUSED" },
+      servicesWithInspection(
+        inspectForwarderBindings(
+          [{ HostIp: "127.0.0.1", HostPort: "9545" }],
+          [{ HostIp: "127.0.0.1", HostPort: "9545" }],
+        ),
+      ),
+      expectedForwarder,
+    );
+
+    expect(diagnostics.findings).toContain(
+      "HOST_PORT_BINDING_PRESENT_CONNECTION_REFUSED",
+    );
+    expect(diagnostics.findings).not.toContain(
+      "FORWARDER_BINDING_NOT_APPLIED_TO_NETWORKSETTINGS",
+    );
+  });
+
+  it("reports an unavailable forwarder inspect without claiming a binding mismatch", () => {
+    const diagnostics = buildStartFailureDiagnostics(
+      { phase: "eth_chainId", errorClass: "CONNECTION_REFUSED" },
+      servicesWithInspection(undefined),
+      expectedForwarder,
+    );
+
+    expect(diagnostics.findings).toContain("FORWARDER_INSPECT_UNAVAILABLE");
+    expect(diagnostics.findings).not.toContain(
+      "FORWARDER_HOSTCONFIG_BINDING_ABSENT",
+    );
+  });
+
+  it("drops malformed Compose label values instead of emitting their contents", () => {
+    const sanitized = sanitizeForwarderInspectOutput(
+      [
+        "null",
+        "null",
+        JSON.stringify("https://user:compose-secret@example.invalid/path"),
+        JSON.stringify("service-secret-command"),
+        JSON.stringify("config-secret-value"),
+      ].join("\n"),
+    );
+
+    expect(sanitized?.composeLabels).toEqual({
+      project: null,
+      service: null,
+      configHash: null,
+    });
+    expect(JSON.stringify(sanitized)).not.toContain("compose-secret");
+    expect(JSON.stringify(sanitized)).not.toContain("service-secret-command");
+    expect(JSON.stringify(sanitized)).not.toContain("config-secret-value");
+  });
+
+  it("distinguishes an unpublished host port from unhealthy and stopped services", () => {
+    const rows = [
+      {
+        ID: "111111111111",
+        Service: "rpc-proxy",
+        State: "running",
+        Health: "healthy",
+        Publishers: [],
+      },
+      {
+        ID: "222222222222",
+        Service: "anvil",
+        State: "running",
+        Health: "unhealthy",
+        Publishers: [],
+      },
+      {
+        ID: "333333333333",
+        Service: "anvil-host-forwarder",
+        State: "exited",
+        Health: "",
+        Publishers: [],
+      },
+    ];
+    const services = sanitizeComposePsOutput(JSON.stringify(rows), () => [1]);
+    if (services === undefined)
+      throw new Error("Expected valid Compose status.");
+
+    const diagnostics = buildStartFailureDiagnostics(
+      { phase: "eth_chainId", errorClass: "CONNECTION_REFUSED" },
+      services,
+    );
+
+    expect(diagnostics.findings).toEqual(
+      expect.arrayContaining([
+        "HOST_PORT_UNPUBLISHED",
+        "SERVICE_UNHEALTHY",
+        "SERVICE_STOPPED",
+        "HOST_FORWARDER_RPC_PROBE_FAILED",
+      ]),
+    );
+    expect(
+      diagnostics.services.map((service) => service.healthcheckExitCodes),
+    ).toEqual([[1], [1], [1]]);
+  });
+
+  it("reports only a failed local RPC probe when services and the host port are healthy", () => {
+    const rows = [
+      {
+        ID: "111111111111",
+        Service: "rpc-proxy",
+        State: "running",
+        Health: "healthy",
+        Publishers: [],
+      },
+      {
+        ID: "222222222222",
+        Service: "anvil",
+        State: "running",
+        Health: "healthy",
+        Publishers: [],
+      },
+      {
+        ID: "333333333333",
+        Service: "anvil-host-forwarder",
+        State: "running",
+        Health: "",
+        Publishers: [
+          {
+            TargetPort: 8546,
+            PublishedPort: 9545,
+            Protocol: "tcp",
+          },
+        ],
+      },
+    ];
+    const services = sanitizeComposePsOutput(JSON.stringify(rows), () => []);
+    if (services === undefined)
+      throw new Error("Expected valid Compose status.");
+
+    const diagnostics = buildStartFailureDiagnostics(
+      { phase: "eth_chainId", errorClass: "TIMEOUT" },
+      services,
+    );
+
+    expect(diagnostics.findings).toEqual(["HOST_FORWARDER_RPC_PROBE_FAILED"]);
+    expect(diagnostics.rpcProbe).toEqual({
+      phase: "eth_chainId",
+      errorClass: "TIMEOUT",
+    });
+  });
+
+  it("classifies local RPC errors without retaining their messages", () => {
+    const refused = new Error(
+      "https://user:rpc-secret@example.invalid/private-path",
+      { cause: { code: "ECONNREFUSED" } },
+    );
+    const timeout = new Error("private endpoint timeout");
+    timeout.name = "TimeoutError";
+
+    expect(classifyLocalRpcError(refused)).toBe("CONNECTION_REFUSED");
+    expect(classifyLocalRpcError(timeout)).toBe("TIMEOUT");
+    expect(classifyLocalRpcError(new Error("LOCAL_RPC_INVALID_RESPONSE"))).toBe(
+      "INVALID_RESPONSE",
+    );
+    expect(
+      JSON.stringify(
+        buildStartFailureDiagnostics(
+          {
+            phase: "eth_chainId",
+            errorClass: classifyLocalRpcError(refused),
+          },
+          undefined,
+        ),
+      ),
+    ).not.toContain("rpc-secret");
+  });
+
+  it("captures diagnostics before cleanup and still propagates the original startup error", () => {
+    const events: string[] = [];
+    const error = new HarnessError(
+      "ANVIL_UNAVAILABLE",
+      "Pinned Anvil did not become ready.",
+      { phase: "eth_chainId", errorClass: "CONNECTION_REFUSED" },
+    );
+
+    let thrown: unknown;
+    try {
+      cleanUpFailedStart(error, {
+        collectDiagnostics: () => {
+          events.push("diagnostics");
+          const rpcProbe = error.rpcProbeFailure;
+          if (rpcProbe === undefined) {
+            throw new Error("Expected a recorded local RPC probe failure.");
+          }
+          return buildStartFailureDiagnostics(rpcProbe, []);
+        },
+        reportDiagnostics: () => {
+          events.push("report");
+        },
+        teardown: () => {
+          events.push("teardown");
+        },
+        clearMetadata: () => {
+          events.push("clear-metadata");
+        },
+      });
+    } catch (caught) {
+      thrown = caught;
+    }
+
+    expect(thrown).toBe(error);
+    expect(events).toEqual([
+      "diagnostics",
+      "report",
+      "teardown",
+      "clear-metadata",
+    ]);
+  });
+
   it("reuses one persisted Compose identity for the same checkout", () => {
     withCheckoutMetadata((metadataDir) => {
       const identityPath = join(metadataDir, "checkout-id");
