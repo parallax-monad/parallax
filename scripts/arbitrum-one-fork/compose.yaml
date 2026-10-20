@@ -5,6 +5,7 @@ services:
       - node
       - /opt/fork/rpc-proxy.mjs
     restart: "no"
+    read_only: true
     init: true
     cap_drop:
       - ALL

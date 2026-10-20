@@ -87,7 +87,7 @@ describe("Arbitrum One fork container configuration", () => {
     );
   });
 
-  it("allows the rpc-proxy environment secret while keeping Anvil read-only", () => {
+  it("keeps the rpc-proxy and Anvil root filesystems read-only", () => {
     const rpcProxyService = compose.match(
       /^ {2}rpc-proxy:\n([\s\S]*?)(?=^ {2}[\w-]+:\n|^networks:\n)/m,
     )?.[1];
@@ -102,7 +102,10 @@ describe("Arbitrum One fork container configuration", () => {
     expect(compose).toContain(
       "upstream_rpc_url:\n    environment: ARBITRUM_ONE_FORK_UPSTREAM_RPC_URL",
     );
-    expect(rpcProxyService).not.toMatch(/^ {4}read_only: true$/m);
+    expect(rpcProxyService).toMatch(/^ {4}read_only: true$/m);
+    expect(rpcProxyService).toContain(
+      "tmpfs:\n      - /tmp:rw,noexec,nosuid,size=16m",
+    );
     expect(anvilService).toMatch(/^ {4}read_only: true$/m);
   });
 
