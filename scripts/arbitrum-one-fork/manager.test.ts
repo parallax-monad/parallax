@@ -16,6 +16,7 @@ import {
   buildStartFailureDiagnostics,
   classifyLocalRpcError,
   cleanUpFailedStart,
+  collectStartFailureDiagnostics,
   getCheckoutComposeProjectName,
   HarnessError,
   isAllowedLocalHost,
@@ -234,6 +235,48 @@ describe("Arbitrum One fork manager lifecycle", () => {
       throw new Error("Expected valid forwarder Compose status.");
     }
     return services;
+  }
+
+  function diagnosticComposePsOutput(): string {
+    return JSON.stringify([
+      {
+        ID: "111111111111",
+        Service: "rpc-proxy",
+        State: "running",
+        Health: "healthy",
+        Publishers: [],
+      },
+      {
+        ID: "222222222222",
+        Service: "anvil",
+        State: "running",
+        Health: "healthy",
+        Publishers: [],
+      },
+      {
+        ID: "333333333333",
+        Service: "anvil-host-forwarder",
+        State: "running",
+        Health: "healthy",
+        Publishers: [
+          { TargetPort: 8546, PublishedPort: 9545, Protocol: "tcp" },
+        ],
+      },
+    ]);
+  }
+
+  function diagnosticForwarderInspectOutput(): string {
+    const bindings = [{ HostIp: "127.0.0.1", HostPort: "9545" }];
+    return [
+      JSON.stringify(bindings),
+      JSON.stringify(bindings),
+      JSON.stringify(
+        "parallax-arbitrum-one-fork-00000000-0000-4000-8000-000000000001",
+      ),
+      JSON.stringify("anvil-host-forwarder"),
+      JSON.stringify("a".repeat(64)),
+      "fork host-publish",
+    ].join("\n");
   }
 
   it("sanitizes Compose status and keeps only allowlisted health and port facts", () => {
@@ -605,6 +648,152 @@ describe("Arbitrum One fork manager lifecycle", () => {
     }
 
     expect(thrown).toBe(error);
+    expect(events).toEqual([
+      "diagnostics",
+      "report",
+      "teardown",
+      "clear-metadata",
+    ]);
+  });
+
+  it("shares one decreasing diagnostic timeout across sequential Docker probes", () => {
+    let now = 1_000;
+    const seenArgs: string[][] = [];
+    const timeouts: number[] = [];
+    const diagnostics = collectStartFailureDiagnostics(
+      { FORK_LOCAL_HOST_PORT: "9545" },
+      new HarnessError("ANVIL_UNAVAILABLE", "startup failed", {
+        phase: "eth_chainId",
+        errorClass: "CONNECTION_REFUSED",
+      }),
+      {
+        now: () => now,
+        runDocker: (args, _env, timeoutMs) => {
+          seenArgs.push([...args]);
+          timeouts.push(timeoutMs);
+          now += 2_000;
+          if (args[0] === "compose") {
+            return { status: 0, stdout: diagnosticComposePsOutput() };
+          }
+          if (args[0] === "network") {
+            return {
+              status: 0,
+              stdout: args.at(-1) === "fork" ? "true" : "false",
+            };
+          }
+          if (
+            args[0] === "inspect" &&
+            args[2]?.includes("HostConfig.PortBindings")
+          ) {
+            return {
+              status: 0,
+              stdout: diagnosticForwarderInspectOutput(),
+            };
+          }
+          return { status: 0, stdout: "0" };
+        },
+      },
+    );
+
+    expect(timeouts).toEqual([
+      15_000, 13_000, 11_000, 9_000, 7_000, 5_000, 3_000,
+    ]);
+    expect(seenArgs.map((args) => args[0])).toEqual([
+      "compose",
+      "inspect",
+      "inspect",
+      "inspect",
+      "inspect",
+      "network",
+      "network",
+    ]);
+    expect(
+      diagnostics.services.map((service) => service.healthcheckExitCodes),
+    ).toEqual([[0], [0], [0]]);
+    expect(diagnostics.forwarder.actual?.networks).toEqual([
+      { name: "fork", internal: true },
+      { name: "host-publish", internal: false },
+    ]);
+  });
+
+  it("skips remaining diagnostic subprocesses after the shared deadline expires", () => {
+    let now = 0;
+    const seenArgs: string[][] = [];
+    const diagnostics = collectStartFailureDiagnostics(
+      { FORK_LOCAL_HOST_PORT: "9545" },
+      new HarnessError("ANVIL_UNAVAILABLE", "startup failed"),
+      {
+        now: () => now,
+        runDocker: (args, _env, timeoutMs) => {
+          seenArgs.push([...args]);
+          expect(timeoutMs).toBe(15_000);
+          now = 15_000;
+          return { status: 0, stdout: diagnosticComposePsOutput() };
+        },
+      },
+    );
+
+    expect(seenArgs).toHaveLength(1);
+    expect(seenArgs[0]?.[0]).toBe("compose");
+    expect(diagnostics.composeStatus).toBe("available");
+    expect(
+      diagnostics.services.map((service) => service.healthcheckExitCodes),
+    ).toEqual([null, null, null]);
+    expect(diagnostics.services.map((service) => service.state)).toEqual([
+      "running",
+      "running",
+      "running",
+    ]);
+    expect(diagnostics.forwarder.actual).toBeNull();
+  });
+
+  it("continues failed-start cleanup after the diagnostic deadline expires", () => {
+    let now = 0;
+    const seenTimeouts: number[] = [];
+    const events: string[] = [];
+    let reportedCode: string | undefined;
+    const error = new HarnessError(
+      "ANVIL_UNAVAILABLE",
+      "Pinned Anvil did not become ready.",
+      { phase: "eth_chainId", errorClass: "CONNECTION_REFUSED" },
+    );
+
+    let thrown: unknown;
+    try {
+      cleanUpFailedStart(error, {
+        collectDiagnostics: () => {
+          events.push("diagnostics");
+          return collectStartFailureDiagnostics(
+            { FORK_LOCAL_HOST_PORT: "9545" },
+            error,
+            {
+              now: () => now,
+              runDocker: (_args, _env, timeoutMs) => {
+                seenTimeouts.push(timeoutMs);
+                now = 15_000;
+                return { status: 0, stdout: diagnosticComposePsOutput() };
+              },
+            },
+          );
+        },
+        reportDiagnostics: (diagnostics) => {
+          events.push("report");
+          reportedCode = diagnostics.code;
+        },
+        teardown: () => {
+          events.push("teardown");
+        },
+        clearMetadata: () => {
+          events.push("clear-metadata");
+        },
+      });
+    } catch (caught) {
+      thrown = caught;
+    }
+
+    expect(thrown).toBe(error);
+    expect(reportedCode).toBe("ANVIL_UNAVAILABLE");
+    expect(seenTimeouts).toEqual([15_000]);
     expect(events).toEqual([
       "diagnostics",
       "report",

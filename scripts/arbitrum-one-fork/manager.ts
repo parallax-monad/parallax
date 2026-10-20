@@ -11,6 +11,7 @@ import {
 } from "node:fs";
 import { createServer, isIP } from "node:net";
 import { dirname, join, resolve } from "node:path";
+import { performance } from "node:perf_hooks";
 import { fileURLToPath } from "node:url";
 import { createArbitrumRpcClient } from "../../apps/api/src/backend/arbitrum-chain-adapter.js";
 import {
@@ -29,6 +30,8 @@ const INSTANCE_FILE = gitPath("parallax-arbitrum-one-fork.instance");
 const CAPTURE_FILE = gitPath("parallax-arbitrum-one-fork-capture.json");
 const LOCK_FILE = gitPath("parallax-arbitrum-one-fork.lock");
 const FORK_SOURCE_ENV = "ARBITRUM_ONE_FORK_UPSTREAM_RPC_URL";
+const DOCKER_COMMAND_TIMEOUT_MS = 120_000;
+const START_FAILURE_DIAGNOSTIC_BUDGET_MS = 15_000;
 const CHECKOUT_ID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -364,13 +367,14 @@ export function buildSmokeEndpoints(env: NodeJS.ProcessEnv = process.env): {
 function runDocker(
   args: readonly string[],
   env: NodeJS.ProcessEnv,
+  timeoutMs = DOCKER_COMMAND_TIMEOUT_MS,
 ): DockerResult {
   const result = spawnSync("docker", [...args], {
     cwd: REPO_ROOT,
     env,
     encoding: "utf8",
     stdio: ["ignore", "pipe", "pipe"],
-    timeout: 120_000,
+    timeout: timeoutMs,
   });
   if (result.error !== undefined) {
     throw new HarnessError(
@@ -1256,15 +1260,40 @@ const FORWARDER_INSPECT_TEMPLATE = [
 const HEALTHCHECK_EXIT_CODE_TEMPLATE =
   "{{if .State.Health}}{{range .State.Health.Log}}{{.ExitCode}} {{end}}{{else}}NO_HEALTHCHECK{{end}}";
 
+type DiagnosticDockerRunner = (
+  args: readonly string[],
+  env: NodeJS.ProcessEnv,
+  timeoutMs: number,
+) => DockerResult;
+
+interface DiagnosticDockerBudget {
+  readonly deadline: number;
+  readonly env: NodeJS.ProcessEnv;
+  readonly now: () => number;
+  readonly runDocker: DiagnosticDockerRunner;
+}
+
+function runDockerWithinDiagnosticBudget(
+  args: readonly string[],
+  budget: DiagnosticDockerBudget,
+): DockerResult | undefined {
+  const remainingMs = Math.min(
+    DOCKER_COMMAND_TIMEOUT_MS,
+    Math.floor(budget.deadline - budget.now()),
+  );
+  if (remainingMs <= 0) return undefined;
+  return budget.runDocker(args, budget.env, remainingMs);
+}
+
 function healthcheckExitCodes(
   containerId: string,
-  env: NodeJS.ProcessEnv,
+  budget: DiagnosticDockerBudget,
 ): readonly number[] | null {
-  const result = runDocker(
+  const result = runDockerWithinDiagnosticBudget(
     ["inspect", "--format", HEALTHCHECK_EXIT_CODE_TEMPLATE, containerId],
-    env,
+    budget,
   );
-  if (result.status !== 0) return null;
+  if (result === undefined || result.status !== 0) return null;
   const output = result.stdout.trim();
   if (output === "NO_HEALTHCHECK" || output === "") return [];
   const values = output.split(/\s+/);
@@ -1274,13 +1303,13 @@ function healthcheckExitCodes(
 
 function networkInternal(
   networkName: string,
-  env: NodeJS.ProcessEnv,
+  budget: DiagnosticDockerBudget,
 ): boolean | null {
-  const result = runDocker(
+  const result = runDockerWithinDiagnosticBudget(
     ["network", "inspect", "--format", "{{.Internal}}", networkName],
-    env,
+    budget,
   );
-  if (result.status !== 0) return null;
+  if (result === undefined || result.status !== 0) return null;
   const output = result.stdout.trim().toLowerCase();
   if (output === "true") return true;
   if (output === "false") return false;
@@ -1289,33 +1318,53 @@ function networkInternal(
 
 function forwarderInspection(
   containerId: string,
-  env: NodeJS.ProcessEnv,
+  budget: DiagnosticDockerBudget,
 ): ForwarderContainerInspection | undefined {
-  const result = runDocker(
+  const result = runDockerWithinDiagnosticBudget(
     ["inspect", "--format", FORWARDER_INSPECT_TEMPLATE, containerId],
-    env,
+    budget,
   );
-  if (result.status !== 0) return undefined;
-  const expectedHostAddress = env.FORK_BIND_ADDRESS?.trim() || "127.0.0.1";
+  if (result === undefined || result.status !== 0) return undefined;
+  const expectedHostAddress =
+    budget.env.FORK_BIND_ADDRESS?.trim() || "127.0.0.1";
   return sanitizeForwarderInspectOutput(
     result.stdout,
     expectedHostAddress,
-    (networkName) => networkInternal(networkName, env),
+    (networkName) => networkInternal(networkName, budget),
   );
 }
 
-function collectStartFailureDiagnostics(
+export function collectStartFailureDiagnostics(
   env: NodeJS.ProcessEnv,
   error: HarnessError,
+  dependencies: {
+    readonly now?: () => number;
+    readonly runDocker?: DiagnosticDockerRunner;
+  } = {},
 ): StartFailureDiagnostics {
+  const now = dependencies.now ?? (() => performance.now());
+  const budget: DiagnosticDockerBudget = {
+    deadline: now() + START_FAILURE_DIAGNOSTIC_BUDGET_MS,
+    env,
+    now,
+    runDocker: dependencies.runDocker ?? runDocker,
+  };
   let services: readonly StartFailureService[] | undefined;
   try {
-    const status = compose(["ps", "--all", "--format", "json"], env);
-    if (status.status === 0) {
+    const status = runDockerWithinDiagnosticBudget(
+      buildComposeArgs(getCheckoutComposeProjectName(), [
+        "ps",
+        "--all",
+        "--format",
+        "json",
+      ]),
+      budget,
+    );
+    if (status?.status === 0) {
       services = sanitizeComposePsOutput(
         status.stdout,
-        (containerId) => healthcheckExitCodes(containerId, env),
-        (containerId) => forwarderInspection(containerId, env),
+        (containerId) => healthcheckExitCodes(containerId, budget),
+        (containerId) => forwarderInspection(containerId, budget),
       );
     }
   } catch {
