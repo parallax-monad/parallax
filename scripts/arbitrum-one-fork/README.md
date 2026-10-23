@@ -1,6 +1,6 @@
 # Local Arbitrum One Anvil fork
 
-This is a developer-only, read-only quote-parity harness. It does not establish production Arbitrum One Check/simulation support, enable transaction execution, or produce transaction-execution evidence.
+This is a developer-only local Anvil harness. `smoke` compares read-only quote parity; the separate opt-in `simulate` command records local-fork `eth_call` and gas-estimate evidence for the exact backend-prepared unsigned transaction. Neither command establishes production Arbitrum One Check/simulation support or enables transaction execution.
 
 The smoke reuses the merged `ARBITRUM_ONE_RUNTIME_PROFILE` and `createArbitrumOneQuoteFlow` directly. It does not copy the Camelot route or Quoter ABI. It compares the exact `0.001 ETH → USDC` quote from the upstream read-only proxy and the local fork at source block `515881859` (`0x304b694bc77e488eca3af067e45712e71753e2c42ca04881e21039b71da4560e`), using the PR 1B capture's verified profile and route.
 
@@ -98,6 +98,20 @@ Before reading chain/block/version or changing local test state, smoke calls `pa
 Each smoke takes an Anvil snapshot, assigns exactly `1 ETH` to one random local address with `anvil_setBalance`, verifies its USDC balance remains zero, executes only the exact Quoter read, reverts the snapshot, repeats the quote, and reverts again. Anvil starts with `--accounts 0`; no private key or unlocked signer is created. No transaction is submitted or mined. Local balance preparation is the only state override; the pool, USDC balance, and upstream chain are not changed.
 
 A successful sanitized capture is written to `.git/parallax-arbitrum-one-fork-capture.json` and printed as JSON. It records the source block/hash, local chain identity, Anvil version, instance UUID, sender preparation, exact atomic quote comparison, and reset result. It contains no RPC endpoint or credential and is not a Product acceptance or simulation capture.
+
+## Exact unsigned-transaction simulation
+
+After the pinned fork is running, invoke `simulate` from the Mac host using the same loopback endpoints as the quote smoke:
+
+```sh
+ARBITRUM_ONE_FORK_SOURCE_RPC_URL=http://127.0.0.1:18546 \
+ARBITRUM_ONE_FORK_LOCAL_RPC_URL=http://127.0.0.1:8545 \
+node --disable-warning=ExperimentalWarning --experimental-strip-types --experimental-transform-types scripts/arbitrum-one-fork/run-host.mjs simulate
+```
+
+The runner obtains the existing backend-owned ETH → exact-USDC quote at the configured source block, prepares one unsigned transaction from that quote and the verified Intent, then validates the exact payload before using it. The local fork instance, chain ID, block number/hash, Anvil version, and quote provenance must match the pinned configuration. It funds only the ephemeral sender with native ETH inside an Anvil snapshot, performs `eth_call` and `eth_estimateGas` against the current local state (the head remains the pinned source block), then reverts the snapshot. It does not submit, sign, broadcast, or mine a transaction and does not write to the upstream chain.
+
+The sanitized capture is written to `.git/parallax-arbitrum-one-fork-transaction-capture.json` and printed as JSON. It binds the prepared-transaction fingerprint and normalized transaction fields to the fork/source block and observation time. Call success/revert/unavailable and gas-estimate available/unavailable are independent fields; `gasUnits` is an estimate, not gas used. The exact `eth_call` return bytes are fingerprinted but not decoded without a verified router return ABI. When local Anvil supports the bounded `debug_traceCall`/`callTracer` request, the capture summarizes the matching USDC `Transfer` event amount to the exact recipient and compares it with the quote and encoded minimum-output protection; unsupported tracing is reported as unavailable. A simulated transfer event is not a committed state diff, recipient balance delta, or mined receipt. Raw transaction payloads, return bytes, trace logs, RPC errors, and endpoints are not included. This remains developer-only Backend evidence: it does not establish Product acceptance or enable production Check/simulation support.
 
 ## Required Mac-host ↔ Hermes dev-container connectivity smoke
 

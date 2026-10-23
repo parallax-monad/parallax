@@ -13,6 +13,8 @@ import {
   bootstrapBackendRuntime,
 } from "../../apps/api/src/runtime-config.js";
 import {
+  type NormalizedSwapIntent,
+  type Quote,
   type QuoteRequest,
   quoteResultSchema,
 } from "../../packages/contracts/src/index.js";
@@ -147,7 +149,9 @@ export interface RunForkQuoteSmokeInput {
   readonly senderAddress?: string;
 }
 
-interface QuoteObservation {
+export interface QuoteObservation {
+  readonly intent: NormalizedSwapIntent;
+  readonly quote: Quote;
   readonly amountInAtomic: string;
   readonly amountOutAtomic: string;
   readonly sourceBlockNumber: string;
@@ -191,7 +195,7 @@ export async function runForkQuoteSmoke(
     );
   }
   const observedAt = observedAtDate.toISOString();
-  const sourceRpc = readonlyClient(input.sourceRpc, "upstream");
+  const sourceRpc = createReadOnlyForkRpcClient(input.sourceRpc, "upstream");
   const localRpc = input.localRpc;
 
   await assertForkInstanceIdentity(localRpc, input.forkInstanceId);
@@ -454,6 +458,14 @@ async function assertForkInstanceIdentity(
   }
 }
 
+export async function readArbitrumOnePinnedQuote(input: {
+  readonly rpc: RpcClient;
+  readonly senderAddress: string;
+  readonly observedAt: string;
+}): Promise<QuoteObservation> {
+  return readQuote(input.rpc, input.senderAddress, input.observedAt);
+}
+
 async function readQuote(
   delegateRpc: RpcClient,
   senderAddress: string,
@@ -541,6 +553,8 @@ async function readQuote(
     );
   }
   return {
+    intent: normalized.intent,
+    quote: result.quote,
     amountInAtomic: provenance.amountInAtomic,
     amountOutAtomic: provenance.amountOutAtomic,
     sourceBlockNumber: provenance.sourceBlock.number,
@@ -551,7 +565,10 @@ async function readQuote(
   };
 }
 
-function readonlyClient(client: RpcClient, label: string): RpcClient {
+export function createReadOnlyForkRpcClient(
+  client: RpcClient,
+  label: string,
+): RpcClient {
   return {
     request(method, params = [], options) {
       if (!READ_ONLY_METHODS.has(method)) {
