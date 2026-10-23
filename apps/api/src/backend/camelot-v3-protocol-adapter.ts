@@ -70,7 +70,7 @@ export const CAMELOT_SEPOLIA_QUOTER =
 export const CAMELOT_SEPOLIA_ROUTER = CAMELOT_V3_ROUTER_ADDRESS;
 
 const QUOTE_EXACT_INPUT_SINGLE_SELECTOR = "2d9ebd1d";
-const ROUTER_EXACT_INPUT_SINGLE_SELECTOR = "bc651188";
+export const CAMELOT_V3_ROUTER_EXACT_INPUT_SINGLE_SELECTOR = "bc651188";
 const UINT160_ZERO = 0n;
 const ADDRESS_PATTERN = /^0x[0-9a-fA-F]{40}$/;
 const DECIMAL_UINT_PATTERN = /^(?:0|[1-9][0-9]*)$/;
@@ -244,9 +244,12 @@ export class CamelotV3ProtocolAdapter
     }
     const amountOut = quote.amountOut;
     const amountIn = parseAtomic(intent.amountInAtomic, "amountInAtomic");
-    const amountOutMinimum = transactionProtection(intent, amountOut);
+    const amountOutMinimum = resolveCamelotV3TransactionProtection(
+      intent,
+      amountOut,
+    );
     const deadline = BigInt(Math.floor(Date.now() / 1000) + 300);
-    const data = encodeWords(ROUTER_EXACT_INPUT_SINGLE_SELECTOR, [
+    const data = encodeWords(CAMELOT_V3_ROUTER_EXACT_INPUT_SINGLE_SELECTOR, [
       protocolToken(intent.tokenIn),
       protocolToken(intent.tokenOut),
       intent.recipient,
@@ -325,7 +328,7 @@ function parseAtomic(value: string, label: string): bigint {
   return amount;
 }
 
-function encodeWords(
+export function encodeWords(
   selector: string,
   values: readonly (string | bigint)[],
 ): string {
@@ -425,7 +428,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
  * reinterpretation. Only when no boundary was supplied does the adapter fall
  * back to a protocol-side derived floor of the quote output.
  */
-function transactionProtection(
+export function resolveCamelotV3TransactionProtection(
   intent: NormalizedSwapIntent,
   quoteAmountOut: bigint,
 ): bigint {

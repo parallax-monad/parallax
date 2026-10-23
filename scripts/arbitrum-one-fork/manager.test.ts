@@ -14,6 +14,7 @@ import {
   buildComposeArgs,
   buildSmokeEndpoints,
   buildStartFailureDiagnostics,
+  classifyComposeStartFailure,
   classifyLocalRpcError,
   cleanUpFailedStart,
   collectStartFailureDiagnostics,
@@ -22,6 +23,8 @@ import {
   isAllowedLocalHost,
   isPrivateBindAddress,
   recreateFork,
+  requireComposeSuccess,
+  runDocker,
   sanitizeComposePsOutput,
   sanitizeForwarderInspectOutput,
   tryRecoverFork,
@@ -691,6 +694,408 @@ describe("Arbitrum One fork manager lifecycle", () => {
       "teardown",
       "clear-metadata",
     ]);
+  });
+
+  it.each([
+    {
+      stdout: "",
+      stderr: "Ports are not available: address already in use",
+      classification: "HOST_PORT_BIND_FAILED",
+    },
+    {
+      stdout: "",
+      stderr: "pull access denied; repository does not exist",
+      classification: "IMAGE_PULL_FAILED",
+    },
+    {
+      stdout: "dependency failed to start: service is unhealthy",
+      stderr: "",
+      classification: "DEPENDENCY_HEALTHCHECK_FAILED",
+    },
+    {
+      stdout: "",
+      stderr: "Mounts denied: bind source path does not exist",
+      classification: "BIND_MOUNT_FAILED",
+    },
+    {
+      stdout: "",
+      stderr: "unrecognized daemon failure with private endpoint text",
+      classification: "UNCLASSIFIED_COMPOSE_FAILURE",
+    },
+  ] as const)(
+    "classifies Compose startup output as $classification",
+    ({ stdout, stderr, classification }) => {
+      expect(classifyComposeStartFailure(stdout, stderr)).toBe(classification);
+    },
+  );
+
+  it("captures sanitized Compose start diagnostics before cleanup and preserves the startup error", () => {
+    const events: string[] = [];
+    const rawEndpoint =
+      "https://user:diagnostic-secret@example.invalid/private-path";
+    const rawOutput = "COMPOSE_STDERR_SENTINEL";
+    const rawComposeOutput = `Ports are not available: exposing port TCP 127.0.0.1:9545: address already in use ${rawEndpoint} ${rawOutput}`;
+    const diagnosticTimeouts: number[] = [];
+    const fakeDockerSpawn = ((
+      command: string,
+      args: string[],
+      options: { maxBuffer?: number },
+    ) => {
+      expect(command).toBe("docker");
+      expect(args.slice(-2)).toEqual(["up", "-d"]);
+      expect(options.maxBuffer).toBe(1024 * 1024);
+      return { status: 1, stdout: "", stderr: rawComposeOutput };
+    }) as unknown as typeof import("node:child_process").spawnSync;
+    const composeResult = runDocker(
+      [
+        "compose",
+        "--project-name",
+        "test",
+        "--file",
+        "compose.yaml",
+        "up",
+        "-d",
+      ],
+      {},
+      15_000,
+      fakeDockerSpawn,
+    );
+    expect(composeResult).toMatchObject({
+      status: 1,
+      stdout: "",
+      composeFailureClass: "HOST_PORT_BIND_FAILED",
+    });
+    expect(JSON.stringify(composeResult)).not.toContain(rawComposeOutput);
+    expect(JSON.stringify(composeResult)).not.toContain(rawEndpoint);
+
+    let startupError: HarnessError | undefined;
+    try {
+      requireComposeSuccess(composeResult, "start");
+    } catch (caught) {
+      if (caught instanceof HarnessError) startupError = caught;
+    }
+    if (startupError === undefined) {
+      throw new Error("Expected Docker Compose start to fail.");
+    }
+    const error = startupError;
+    events.push("compose-classification");
+    expect(error.code).toBe("COMPOSE_OPERATION_FAILED");
+    expect(error.composeFailureClass).toBe("HOST_PORT_BIND_FAILED");
+    expect(error.message).not.toContain(rawComposeOutput);
+    expect(error.message).not.toContain(rawEndpoint);
+    expect(error.message).not.toContain(rawOutput);
+
+    const rows = [
+      {
+        ID: "111111111111",
+        Service: "rpc-proxy",
+        State: "running",
+        Health: "healthy",
+        Publishers: [],
+        Name: "container-name-SENTINEL",
+        Command: `--endpoint ${rawEndpoint}`,
+        Environment: [`FORK_RPC=${rawEndpoint}`],
+        Output: rawOutput,
+      },
+      {
+        ID: "222222222222",
+        Service: "anvil",
+        State: "exited",
+        Health: "unhealthy",
+        Publishers: [],
+        Name: "container-name-SENTINEL",
+        Command: `--endpoint ${rawEndpoint}`,
+        Environment: [`FORK_RPC=${rawEndpoint}`],
+        Output: rawOutput,
+      },
+      {
+        ID: "333333333333",
+        Service: "anvil-host-forwarder",
+        State: "exited",
+        Health: "unhealthy",
+        Publishers: [
+          { TargetPort: 8546, PublishedPort: 9545, Protocol: "tcp" },
+        ],
+        Name: "container-name-SENTINEL",
+        Command: `--endpoint ${rawEndpoint}`,
+        Environment: [`FORK_RPC=${rawEndpoint}`],
+        Output: rawOutput,
+      },
+    ];
+    let reported: ReturnType<typeof buildStartFailureDiagnostics> | undefined;
+    let thrown: unknown;
+
+    try {
+      cleanUpFailedStart(error, {
+        collectDiagnostics: () => {
+          events.push("diagnostics");
+          const diagnostics = collectStartFailureDiagnostics(
+            { FORK_LOCAL_HOST_PORT: "9545" },
+            error,
+            {
+              runDocker: (args, _env, timeoutMs) => {
+                diagnosticTimeouts.push(timeoutMs);
+                if (args[0] === "compose") {
+                  events.push("compose-status");
+                  return { status: 0, stdout: JSON.stringify(rows) };
+                }
+                if (
+                  args[0] === "inspect" &&
+                  args[2]?.includes(".State.Health.Log")
+                ) {
+                  events.push("healthcheck-status");
+                  const containerId = args.at(-1);
+                  return {
+                    status: 0,
+                    stdout:
+                      containerId === "222222222222"
+                        ? "7"
+                        : containerId === "333333333333"
+                          ? "1"
+                          : "0",
+                  };
+                }
+                if (args[0] === "inspect") {
+                  events.push("forwarder-inspect");
+                  return {
+                    status: 0,
+                    stdout: diagnosticForwarderInspectOutput(),
+                  };
+                }
+                if (args[0] === "network") {
+                  events.push("network-inspect");
+                  return {
+                    status: 0,
+                    stdout: args.at(-1) === "fork" ? "true" : "false",
+                  };
+                }
+                throw new Error("Unexpected diagnostic Docker command.");
+              },
+            },
+          );
+          events.push("diagnostics-complete");
+          return diagnostics;
+        },
+        reportDiagnostics: (diagnostics) => {
+          events.push("report");
+          reported = diagnostics;
+        },
+        teardown: () => {
+          events.push("teardown");
+        },
+        clearMetadata: () => {
+          events.push("clear-metadata");
+        },
+      });
+    } catch (caught) {
+      thrown = caught;
+    }
+
+    expect(thrown).toBe(error);
+    expect(reported).toMatchObject({
+      code: "COMPOSE_OPERATION_FAILED",
+      failureClassification: "COMPOSE_START_FAILED",
+      composeFailureClass: "HOST_PORT_BIND_FAILED",
+      findings: expect.arrayContaining([
+        "COMPOSE_START_FAILED",
+        "SERVICE_STOPPED",
+        "SERVICE_UNHEALTHY",
+      ]),
+      composeStatus: "available",
+    });
+    expect(reported?.rpcProbe).toBeUndefined();
+    expect(
+      reported?.services.map(
+        ({ service, state, health, healthcheckExitCodes }) => ({
+          service,
+          state,
+          health,
+          healthcheckExitCodes,
+        }),
+      ),
+    ).toEqual([
+      {
+        service: "rpc-proxy",
+        state: "running",
+        health: "healthy",
+        healthcheckExitCodes: [0],
+      },
+      {
+        service: "anvil",
+        state: "exited",
+        health: "unhealthy",
+        healthcheckExitCodes: [7],
+      },
+      {
+        service: "anvil-host-forwarder",
+        state: "exited",
+        health: "unhealthy",
+        healthcheckExitCodes: [1],
+      },
+    ]);
+
+    const serializedDiagnostics = JSON.stringify(reported);
+    expect(serializedDiagnostics).not.toContain(rawComposeOutput);
+    expect(serializedDiagnostics).not.toContain(rawOutput);
+    expect(serializedDiagnostics).not.toContain(rawEndpoint);
+    expect(serializedDiagnostics).not.toContain("diagnostic-secret");
+    expect(serializedDiagnostics).not.toContain("container-name-SENTINEL");
+    expect(serializedDiagnostics).not.toContain("FORK_RPC");
+    expect(events.indexOf("compose-classification")).toBeLessThan(
+      events.indexOf("diagnostics"),
+    );
+    expect(events.indexOf("compose-status")).toBeGreaterThanOrEqual(0);
+    expect(events.indexOf("compose-status")).toBeLessThan(
+      events.indexOf("diagnostics-complete"),
+    );
+    expect(diagnosticTimeouts.length).toBeGreaterThan(0);
+    expect(
+      diagnosticTimeouts.every(
+        (timeoutMs) => timeoutMs > 0 && timeoutMs <= 15_000,
+      ),
+    ).toBe(true);
+    expect(events.indexOf("diagnostics-complete")).toBeLessThan(
+      events.indexOf("report"),
+    );
+    expect(events.indexOf("report")).toBeLessThan(events.indexOf("teardown"));
+    expect(events.indexOf("teardown")).toBeLessThan(
+      events.indexOf("clear-metadata"),
+    );
+    expect(events.slice(-3)).toEqual(["report", "teardown", "clear-metadata"]);
+  });
+
+  it("classifies captured Compose output after a spawn error before cleanup without leaking it", () => {
+    const events: string[] = [];
+    const rawEndpoint =
+      "https://user:spawn-secret@example.invalid/private-path";
+    const rawComposeOutput = `Ports are not available: address already in use ${rawEndpoint} PRIVATE_STDERR_SENTINEL`;
+    const rawSpawnError = `ENOBUFS diagnostic ${rawEndpoint}`;
+    const fakeDockerSpawn = ((
+      command: string,
+      args: string[],
+      options: { maxBuffer?: number },
+    ) => {
+      events.push("compose-spawn");
+      expect(command).toBe("docker");
+      expect(args.slice(-2)).toEqual(["up", "-d"]);
+      expect(options.maxBuffer).toBe(1024 * 1024);
+      return {
+        error: Object.assign(new Error(rawSpawnError), { code: "ENOBUFS" }),
+        status: 0,
+        stdout: "",
+        stderr: rawComposeOutput,
+      };
+    }) as unknown as typeof import("node:child_process").spawnSync;
+
+    let startupError: HarnessError | undefined;
+    try {
+      runDocker(
+        [
+          "compose",
+          "--project-name",
+          "test",
+          "--file",
+          "compose.yaml",
+          "up",
+          "-d",
+        ],
+        {},
+        15_000,
+        fakeDockerSpawn,
+      );
+    } catch (caught) {
+      if (caught instanceof HarnessError) startupError = caught;
+    }
+    if (startupError === undefined) {
+      throw new Error("Expected Docker Compose spawn failure.");
+    }
+    const error = startupError;
+    expect(error.code).toBe("DOCKER_UNAVAILABLE");
+    expect(error.composeFailureClass).toBe("HOST_PORT_BIND_FAILED");
+    expect(error.message).not.toContain(rawComposeOutput);
+    expect(error.message).not.toContain(rawSpawnError);
+    expect(JSON.stringify(error)).not.toContain(rawComposeOutput);
+    expect(JSON.stringify(error)).not.toContain(rawSpawnError);
+    events.push("compose-classification");
+
+    let reported: ReturnType<typeof buildStartFailureDiagnostics> | undefined;
+    let thrown: unknown;
+    try {
+      cleanUpFailedStart(error, {
+        collectDiagnostics: () => {
+          events.push("diagnostics");
+          const diagnostics = collectStartFailureDiagnostics({}, error, {
+            runDocker: (args) => {
+              expect(args[0]).toBe("compose");
+              events.push("compose-status");
+              return { status: 0, stdout: JSON.stringify([]) };
+            },
+          });
+          events.push("diagnostics-complete");
+          return diagnostics;
+        },
+        reportDiagnostics: (diagnostics) => {
+          events.push("report");
+          reported = diagnostics;
+        },
+        teardown: () => {
+          events.push("teardown");
+        },
+        clearMetadata: () => {
+          events.push("clear-metadata");
+        },
+      });
+    } catch (caught) {
+      thrown = caught;
+    }
+
+    expect(thrown).toBe(error);
+    expect(reported).toMatchObject({
+      code: "COMPOSE_OPERATION_FAILED",
+      failureClassification: "COMPOSE_START_FAILED",
+      composeFailureClass: "HOST_PORT_BIND_FAILED",
+      composeStatus: "available",
+      findings: expect.arrayContaining(["COMPOSE_START_FAILED"]),
+    });
+    const safeOutput = JSON.stringify({
+      error: error.message,
+      diagnostics: reported,
+    });
+    expect(safeOutput).not.toContain(rawComposeOutput);
+    expect(safeOutput).not.toContain(rawSpawnError);
+    expect(safeOutput).not.toContain(rawEndpoint);
+    expect(safeOutput).not.toContain("PRIVATE_STDERR_SENTINEL");
+    expect(events).toEqual([
+      "compose-spawn",
+      "compose-classification",
+      "diagnostics",
+      "compose-status",
+      "diagnostics-complete",
+      "report",
+      "teardown",
+      "clear-metadata",
+    ]);
+  });
+
+  it("keeps non-start Docker spawn errors classified as DOCKER_UNAVAILABLE", () => {
+    const rawError = new Error("spawn error details are suppressed");
+    const fakeDockerSpawn = (() => ({
+      error: rawError,
+      status: null,
+      stdout: "",
+      stderr: "",
+    })) as unknown as typeof import("node:child_process").spawnSync;
+
+    let thrown: unknown;
+    try {
+      runDocker(["compose", "ps"], {}, 15_000, fakeDockerSpawn);
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toBeInstanceOf(HarnessError);
+    expect(thrown).toMatchObject({ code: "DOCKER_UNAVAILABLE" });
+    expect((thrown as Error).message).not.toContain(rawError.message);
   });
 
   it("shares one decreasing diagnostic timeout across sequential Docker probes", () => {

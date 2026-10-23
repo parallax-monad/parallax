@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import {
   closeSync,
   existsSync,
@@ -14,12 +14,16 @@ import { dirname, join, resolve } from "node:path";
 import { performance } from "node:perf_hooks";
 import { fileURLToPath } from "node:url";
 import { createArbitrumRpcClient } from "../../apps/api/src/backend/arbitrum-chain-adapter.js";
+import { prepareArbitrumOneTransaction } from "../../apps/api/src/backend/arbitrum-one-transaction.js";
 import {
+  createReadOnlyForkRpcClient,
   ForkSmokeError,
   getForkHarnessConfig,
   type RpcClient,
+  readArbitrumOnePinnedQuote,
   runForkQuoteSmoke,
 } from "./smoke.js";
+import { runForkTransactionSimulation } from "./transaction-smoke.js";
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(SCRIPT_DIR, "../..");
@@ -28,32 +32,41 @@ const config = getForkHarnessConfig();
 const CHECKOUT_ID_FILE = gitPath("parallax-arbitrum-one-fork.checkout-id");
 const INSTANCE_FILE = gitPath("parallax-arbitrum-one-fork.instance");
 const CAPTURE_FILE = gitPath("parallax-arbitrum-one-fork-capture.json");
+const TRANSACTION_CAPTURE_FILE = gitPath(
+  "parallax-arbitrum-one-fork-transaction-capture.json",
+);
 const LOCK_FILE = gitPath("parallax-arbitrum-one-fork.lock");
 const FORK_SOURCE_ENV = "ARBITRUM_ONE_FORK_UPSTREAM_RPC_URL";
 const DOCKER_COMMAND_TIMEOUT_MS = 120_000;
+const DOCKER_OUTPUT_MAX_BUFFER_BYTES = 1024 * 1024;
 const START_FAILURE_DIAGNOSTIC_BUDGET_MS = 15_000;
+const COMPOSE_FAILURE_CLASSIFY_MAX_CHARS = 8_192;
 const CHECKOUT_ID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export class HarnessError extends Error {
   readonly code: string;
   readonly rpcProbeFailure: LocalRpcProbeFailure | undefined;
+  readonly composeFailureClass: ComposeStartFailureClass | undefined;
 
   constructor(
     code: string,
     message: string,
     rpcProbeFailure?: LocalRpcProbeFailure,
+    composeFailureClass?: ComposeStartFailureClass,
   ) {
     super(message);
     this.name = "HarnessError";
     this.code = code;
     this.rpcProbeFailure = rpcProbeFailure;
+    this.composeFailureClass = composeFailureClass;
   }
 }
 
 interface DockerResult {
   readonly status: number | null;
   readonly stdout: string;
+  readonly composeFailureClass?: ComposeStartFailureClass;
 }
 
 type LocalRpcProbePhase =
@@ -149,10 +162,98 @@ interface ExpectedForwarderBinding {
   readonly hostAddressClass: HostAddressClass;
 }
 
+type StartFailureCode = "ANVIL_UNAVAILABLE" | "COMPOSE_OPERATION_FAILED";
+
+export type ComposeStartFailureClass =
+  | "HOST_PORT_BIND_FAILED"
+  | "IMAGE_PULL_FAILED"
+  | "BIND_MOUNT_FAILED"
+  | "NETWORK_SETUP_FAILED"
+  | "DEPENDENCY_HEALTHCHECK_FAILED"
+  | "CONTAINER_RUNTIME_START_FAILED"
+  | "RESOURCE_EXHAUSTED"
+  | "DOCKER_DAEMON_UNAVAILABLE"
+  | "COMPOSE_CONFIGURATION_INVALID"
+  | "UNCLASSIFIED_COMPOSE_FAILURE";
+
+const COMPOSE_START_FAILURE_PATTERNS: readonly {
+  readonly classification: ComposeStartFailureClass;
+  readonly pattern: RegExp;
+}[] = [
+  {
+    classification: "HOST_PORT_BIND_FAILED",
+    pattern:
+      /failed to bind host port|ports? are not available|address already in use|port is already allocated|cannot assign requested address/i,
+  },
+  {
+    classification: "IMAGE_PULL_FAILED",
+    pattern:
+      /pull access denied|manifest unknown|no matching manifest|failed to pull|failed to resolve (?:source metadata|reference)|could not resolve reference|repository does not exist/i,
+  },
+  {
+    classification: "BIND_MOUNT_FAILED",
+    pattern:
+      /mounts denied|bind source path does not exist|invalid mount config for type ["']bind|not shared from the host|failed to mount/i,
+  },
+  {
+    classification: "DEPENDENCY_HEALTHCHECK_FAILED",
+    pattern:
+      /dependency failed to start|depends on service .* which is unhealthy|dependency .* is unhealthy/i,
+  },
+  {
+    classification: "NETWORK_SETUP_FAILED",
+    pattern:
+      /failed to create (?:network|endpoint)|network .* not found|could not find an available, non-overlapping ipv4 address pool|driver failed programming external connectivity/i,
+  },
+  {
+    classification: "CONTAINER_RUNTIME_START_FAILED",
+    pattern:
+      /failed to create shim task|failed to create task for container|oci runtime create failed|failed to start container|error creating container/i,
+  },
+  {
+    classification: "RESOURCE_EXHAUSTED",
+    pattern:
+      /no space left on device|out of memory|cannot allocate memory|resource temporarily unavailable|too many open files/i,
+  },
+  {
+    classification: "DOCKER_DAEMON_UNAVAILABLE",
+    pattern:
+      /cannot connect to the docker daemon|error during connect|is the docker daemon running|daemon is not running/i,
+  },
+  {
+    classification: "COMPOSE_CONFIGURATION_INVALID",
+    pattern:
+      /yaml: line \d+|invalid compose file|additional properties (?:are )?not allowed|unsupported config option|unknown flag:|no configuration file provided|failed to parse/i,
+  },
+];
+
+export function classifyComposeStartFailure(
+  stdout: string,
+  stderr: string,
+): ComposeStartFailureClass {
+  const boundedOutput = [stdout, stderr]
+    .map((output) => {
+      if (output.length <= COMPOSE_FAILURE_CLASSIFY_MAX_CHARS) return output;
+      const halfLength = Math.floor(COMPOSE_FAILURE_CLASSIFY_MAX_CHARS / 2);
+      return `${output.slice(0, halfLength)}\n${output.slice(-halfLength)}`;
+    })
+    .join("\n")
+    .toLowerCase();
+  return (
+    COMPOSE_START_FAILURE_PATTERNS.find(({ pattern }) =>
+      pattern.test(boundedOutput),
+    )?.classification ?? "UNCLASSIFIED_COMPOSE_FAILURE"
+  );
+}
+
 export interface StartFailureDiagnostics {
-  readonly code: "ANVIL_UNAVAILABLE";
+  readonly code: StartFailureCode;
+  readonly failureClassification:
+    | "LOCAL_RPC_UNAVAILABLE"
+    | "COMPOSE_START_FAILED";
   readonly findings: readonly string[];
-  readonly rpcProbe: LocalRpcProbeFailure;
+  readonly composeFailureClass?: ComposeStartFailureClass;
+  readonly rpcProbe?: LocalRpcProbeFailure;
   readonly composeStatus: "available" | "unavailable";
   readonly services: readonly StartFailureService[];
   readonly forwarder: {
@@ -364,25 +465,46 @@ export function buildSmokeEndpoints(env: NodeJS.ProcessEnv = process.env): {
   return { sourceUrl, localUrl };
 }
 
-function runDocker(
+export function runDocker(
   args: readonly string[],
   env: NodeJS.ProcessEnv,
   timeoutMs = DOCKER_COMMAND_TIMEOUT_MS,
+  execute: typeof spawnSync = spawnSync,
 ): DockerResult {
-  const result = spawnSync("docker", [...args], {
+  const result = execute("docker", [...args], {
     cwd: REPO_ROOT,
     env,
     encoding: "utf8",
     stdio: ["ignore", "pipe", "pipe"],
     timeout: timeoutMs,
+    maxBuffer: DOCKER_OUTPUT_MAX_BUFFER_BYTES,
   });
+  const capturesComposeStartOutput =
+    args[0] === "compose" && args.at(-2) === "up" && args.at(-1) === "-d";
+  const stdout = result.stdout ?? "";
+  const stderr = result.stderr ?? "";
   if (result.error !== undefined) {
+    const composeFailureClass = capturesComposeStartOutput
+      ? classifyComposeStartFailure(stdout, stderr)
+      : undefined;
     throw new HarnessError(
       "DOCKER_UNAVAILABLE",
       "Docker CLI/daemon is unavailable in this environment.",
+      undefined,
+      composeFailureClass,
     );
   }
-  return { status: result.status, stdout: result.stdout ?? "" };
+  const composeFailureClass =
+    capturesComposeStartOutput && result.status !== 0
+      ? classifyComposeStartFailure(stdout, stderr)
+      : undefined;
+  return {
+    status: result.status,
+    // Compose's raw startup output is classified in-memory and never leaves this
+    // function; downstream diagnostics receive only the allowlisted enum.
+    stdout: capturesComposeStartOutput ? "" : stdout,
+    ...(composeFailureClass === undefined ? {} : { composeFailureClass }),
+  };
 }
 
 function compose(
@@ -486,11 +608,21 @@ export function buildComposeArgs(
   ];
 }
 
-function requireComposeSuccess(result: DockerResult, action: string): string {
+export function requireComposeSuccess(
+  result: DockerResult,
+  action: string,
+): string {
   if (result.status !== 0) {
+    const composeFailureClass =
+      action === "start"
+        ? (result.composeFailureClass ??
+          classifyComposeStartFailure(result.stdout, ""))
+        : undefined;
     throw new HarnessError(
       "COMPOSE_OPERATION_FAILED",
       `Docker Compose ${action} failed. Raw output is suppressed to avoid endpoint leakage; check Docker Desktop, ports, and Compose availability.`,
+      undefined,
+      composeFailureClass,
     );
   }
   return result.stdout.trim();
@@ -1150,11 +1282,16 @@ function expectedBindingStatus(
 }
 
 export function buildStartFailureDiagnostics(
-  rpcProbe: LocalRpcProbeFailure,
+  rpcProbe: LocalRpcProbeFailure | undefined,
   services: readonly StartFailureService[] | undefined,
   expected: ExpectedForwarderBinding = expectedForwarderBinding(),
+  code: StartFailureCode = "ANVIL_UNAVAILABLE",
+  composeFailureClass?: ComposeStartFailureClass,
 ): StartFailureDiagnostics {
-  const findings = ["HOST_FORWARDER_RPC_PROBE_FAILED"];
+  const findings =
+    code === "COMPOSE_OPERATION_FAILED"
+      ? ["COMPOSE_START_FAILED"]
+      : ["HOST_FORWARDER_RPC_PROBE_FAILED"];
   if (services === undefined) {
     findings.push("COMPOSE_STATUS_UNAVAILABLE");
   } else {
@@ -1230,15 +1367,25 @@ export function buildStartFailureDiagnostics(
     } else if (
       hostConfigStatus === "matches" &&
       networkSettingsStatus === "matches" &&
-      rpcProbe.errorClass === "CONNECTION_REFUSED"
+      rpcProbe?.errorClass === "CONNECTION_REFUSED"
     ) {
       findings.push("HOST_PORT_BINDING_PRESENT_CONNECTION_REFUSED");
     }
   }
   return {
-    code: "ANVIL_UNAVAILABLE",
+    code,
+    failureClassification:
+      code === "COMPOSE_OPERATION_FAILED"
+        ? "COMPOSE_START_FAILED"
+        : "LOCAL_RPC_UNAVAILABLE",
     findings: [...new Set(findings)],
-    rpcProbe,
+    ...(code === "COMPOSE_OPERATION_FAILED"
+      ? {
+          composeFailureClass:
+            composeFailureClass ?? "UNCLASSIFIED_COMPOSE_FAILURE",
+        }
+      : {}),
+    ...(rpcProbe === undefined ? {} : { rpcProbe }),
     composeStatus: services === undefined ? "unavailable" : "available",
     services: services ?? [],
     forwarder: {
@@ -1370,10 +1517,21 @@ export function collectStartFailureDiagnostics(
   } catch {
     services = undefined;
   }
+  const isComposeStartFailure =
+    error.code === "COMPOSE_OPERATION_FAILED" ||
+    (error.code === "DOCKER_UNAVAILABLE" &&
+      error.composeFailureClass !== undefined);
+  const code: StartFailureCode = isComposeStartFailure
+    ? "COMPOSE_OPERATION_FAILED"
+    : "ANVIL_UNAVAILABLE";
   return buildStartFailureDiagnostics(
-    error.rpcProbeFailure ?? { phase: "unknown", errorClass: "UNKNOWN" },
+    code === "ANVIL_UNAVAILABLE"
+      ? (error.rpcProbeFailure ?? { phase: "unknown", errorClass: "UNKNOWN" })
+      : undefined,
     services,
     expectedForwarderBinding(env),
+    code,
+    error.composeFailureClass,
   );
 }
 
@@ -1388,14 +1546,34 @@ export function cleanUpFailedStart(
   error: unknown,
   actions: FailedStartActions,
 ): never {
-  if (error instanceof HarnessError && error.code === "ANVIL_UNAVAILABLE") {
+  const composeStartFailure =
+    error instanceof HarnessError &&
+    (error.code === "COMPOSE_OPERATION_FAILED" ||
+      (error.code === "DOCKER_UNAVAILABLE" &&
+        error.composeFailureClass !== undefined));
+  if (
+    error instanceof HarnessError &&
+    (error.code === "ANVIL_UNAVAILABLE" || composeStartFailure)
+  ) {
+    const code: StartFailureCode =
+      error.code === "ANVIL_UNAVAILABLE"
+        ? "ANVIL_UNAVAILABLE"
+        : "COMPOSE_OPERATION_FAILED";
     let diagnostics: StartFailureDiagnostics;
     try {
       diagnostics = actions.collectDiagnostics();
     } catch {
       diagnostics = buildStartFailureDiagnostics(
-        error.rpcProbeFailure ?? { phase: "unknown", errorClass: "UNKNOWN" },
+        code === "ANVIL_UNAVAILABLE"
+          ? (error.rpcProbeFailure ?? {
+              phase: "unknown",
+              errorClass: "UNKNOWN",
+            })
+          : undefined,
         undefined,
+        undefined,
+        code,
+        error.composeFailureClass,
       );
     }
     try {
@@ -1560,11 +1738,70 @@ async function smokeCommand(): Promise<void> {
   console.log(JSON.stringify({ status: "passed", capture: evidence }, null, 2));
 }
 
+async function simulateCommand(): Promise<void> {
+  const instanceId = readInstanceId();
+  if (instanceId === undefined) {
+    throw new HarnessError(
+      "FORK_INSTANCE_ID_UNAVAILABLE",
+      "Start the pinned fork on the Mac host before running the local transaction simulation.",
+    );
+  }
+  const { sourceUrl, localUrl } = buildSmokeEndpoints();
+  const sourceRpc = createArbitrumRpcClient(sourceUrl) as RpcClient;
+  const localRpc = createArbitrumRpcClient(localUrl) as RpcClient;
+  const senderAddress = `0x${randomBytes(20).toString("hex")}`;
+  const quoteObservedAt = new Date().toISOString();
+  const quote = await readArbitrumOnePinnedQuote({
+    rpc: createReadOnlyForkRpcClient(sourceRpc, "upstream"),
+    senderAddress,
+    observedAt: quoteObservedAt,
+  });
+  const preparedTransaction = prepareArbitrumOneTransaction({
+    intent: quote.intent,
+    quote: quote.quote,
+  });
+
+  let evidence: Awaited<ReturnType<typeof runForkTransactionSimulation>>;
+  try {
+    evidence = await writeCaptureAfterSimulation(TRANSACTION_CAPTURE_FILE, () =>
+      runForkTransactionSimulation({
+        sourceRpc,
+        localRpc,
+        forkInstanceId: instanceId,
+        intent: quote.intent,
+        quote: quote.quote,
+        preparedTransaction,
+      }),
+    );
+  } catch (error) {
+    if (error instanceof ForkSmokeError && error.code === "RESET_FAILED") {
+      await recoverAfterResetFailure(instanceId);
+    }
+    throw error;
+  }
+
+  console.log(
+    JSON.stringify({ status: "captured", capture: evidence }, null, 2),
+  );
+}
+
 export async function writeCaptureAfterSmoke(
   capturePath: string,
   runSmoke: () => Promise<Awaited<ReturnType<typeof runForkQuoteSmoke>>>,
 ): Promise<Awaited<ReturnType<typeof runForkQuoteSmoke>>> {
   const evidence = await runSmoke();
+  writeFileSync(capturePath, `${JSON.stringify(evidence, null, 2)}\n`, {
+    encoding: "utf8",
+    mode: 0o600,
+  });
+  return evidence;
+}
+
+export async function writeCaptureAfterSimulation<T>(
+  capturePath: string,
+  runSimulation: () => Promise<T>,
+): Promise<T> {
+  const evidence = await runSimulation();
   writeFileSync(capturePath, `${JSON.stringify(evidence, null, 2)}\n`, {
     encoding: "utf8",
     mode: 0o600,
@@ -1652,17 +1889,18 @@ async function main(): Promise<void> {
   const action = process.argv[2];
   if (
     !action ||
-    !["start", "smoke", "reset", "stop", "destroy"].includes(action)
+    !["start", "smoke", "simulate", "reset", "stop", "destroy"].includes(action)
   ) {
     throw new HarnessError(
       "INVALID_COMMAND",
-      "Usage: manager.ts start|smoke|reset|stop|destroy",
+      "Usage: manager.ts start|smoke|simulate|reset|stop|destroy",
     );
   }
   const releaseLock = acquireLock();
   try {
     if (action === "start") await startCommand();
     else if (action === "smoke") await smokeCommand();
+    else if (action === "simulate") await simulateCommand();
     else if (action === "reset") await resetCommand();
     else stopCommand(action === "destroy");
   } finally {
