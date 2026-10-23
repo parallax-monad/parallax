@@ -791,15 +791,29 @@ async function observeCall(
     }
     return { status: "available", value: result };
   } catch (error) {
-    if (
-      error instanceof NativeRpcClientError &&
-      error.kind === "RPC_ERROR" &&
-      error.message === "execution reverted"
-    ) {
+    if (isEvmRevertError(error)) {
       return { status: "unavailable", reason: "EVM_REVERT" };
     }
     return { status: "unavailable", reason: "RPC_UNAVAILABLE" };
   }
+}
+
+function isEvmRevertError(error: unknown): boolean {
+  if (error instanceof NativeRpcClientError) {
+    return error.kind === "RPC_ERROR" && error.message === "execution reverted";
+  }
+  if (
+    !(error instanceof Error) ||
+    !isRecord(error) ||
+    !Object.hasOwn(error, "rpcCode") ||
+    typeof error.rpcCode !== "number" ||
+    !Number.isInteger(error.rpcCode)
+  ) {
+    return false;
+  }
+  // The JSON-RPC client attaches rpcCode only to error envelopes. The provider
+  // message is inspected only for classification and never enters evidence.
+  return /\b(?:execution reverted|revert(?:ed)?)\b/i.test(error.message);
 }
 
 async function observeGasEstimate(

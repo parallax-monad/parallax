@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { createArbitrumRpcClient } from "../../apps/api/src/backend/arbitrum-chain-adapter.js";
 import { prepareArbitrumOneTransaction } from "../../apps/api/src/backend/arbitrum-one-transaction.js";
 import { NativeRpcClientError } from "../../apps/api/src/backend/native-rpc-client.js";
 import { ARBITRUM_ONE_RUNTIME_PROFILE } from "../../apps/api/src/runtime-config.js";
@@ -297,7 +298,7 @@ function run(
 
 async function runTransactionSimulation(
   sourceRpc = new FakeRpc("source"),
-  localRpc = new FakeRpc("local"),
+  localRpc: RpcClient = new FakeRpc("local"),
 ) {
   const now = new Date("2026-10-18T06:00:00.000Z");
   const quote = await readArbitrumOnePinnedQuote({
@@ -320,6 +321,60 @@ async function runTransactionSimulation(
     now: () => now,
   });
   return { evidence, localRpc, preparedTransaction, quote, sourceRpc };
+}
+
+type ClientGeneratedFailure =
+  | {
+      readonly kind: "json-rpc";
+      readonly method: "eth_call" | "eth_estimateGas";
+      readonly code: number;
+      readonly message: string;
+    }
+  | {
+      readonly kind: "transport";
+      readonly method: "eth_call" | "eth_estimateGas";
+      readonly message: string;
+    };
+
+function createClientWithFailure(
+  delegate: RpcClient,
+  failure: ClientGeneratedFailure,
+): RpcClient {
+  const fetchImplementation: typeof fetch = async (_input, init) => {
+    const request = JSON.parse(String(init?.body)) as {
+      readonly id: number;
+      readonly method: string;
+      readonly params: readonly unknown[];
+    };
+    const transaction = request.params[0];
+    const isPreparedTransaction =
+      typeof transaction === "object" &&
+      transaction !== null &&
+      !Array.isArray(transaction) &&
+      "to" in transaction &&
+      typeof transaction.to === "string" &&
+      transaction.to.toLowerCase() ===
+        ARBITRUM_ONE_RUNTIME_PROFILE.deployments.routerAddress.toLowerCase();
+    if (request.method === failure.method && isPreparedTransaction) {
+      if (failure.kind === "transport") {
+        throw new TypeError(failure.message);
+      }
+      return {
+        ok: true,
+        json: async () => ({
+          jsonrpc: "2.0",
+          id: request.id,
+          error: { code: failure.code, message: failure.message },
+        }),
+      } as Response;
+    }
+    const result = await delegate.request(request.method, request.params);
+    return {
+      ok: true,
+      json: async () => ({ jsonrpc: "2.0", id: request.id, result }),
+    } as Response;
+  };
+  return createArbitrumRpcClient("https://rpc.invalid", fetchImplementation);
 }
 
 describe("Arbitrum One local fork quote harness", () => {
@@ -606,6 +661,100 @@ describe("Arbitrum One local fork transaction simulation", () => {
 
     expect(evidence.localExecution.anvilVersion).toBe(config.anvil.version);
     expect(JSON.stringify(evidence)).not.toContain(sentinel);
+  });
+
+  it("classifies the RPC client's JSON-RPC eth_call revert without persisting provider text", async () => {
+    const failure: ClientGeneratedFailure = {
+      kind: "json-rpc",
+      method: "eth_call",
+      code: -32000,
+      message: "execution reverted: RPC_ERROR_MESSAGE_SENTINEL",
+    };
+    const localRpc = createClientWithFailure(new FakeRpc("local"), failure);
+    let clientError: unknown;
+    try {
+      await localRpc.request("eth_call", [
+        {
+          to: ARBITRUM_ONE_RUNTIME_PROFILE.deployments.routerAddress,
+          data: "0x",
+        },
+        "latest",
+      ]);
+    } catch (error) {
+      clientError = error;
+    }
+    expect(clientError).toBeInstanceOf(Error);
+    expect(clientError).not.toBeInstanceOf(NativeRpcClientError);
+    expect(clientError).toHaveProperty("rpcCode", -32000);
+
+    const { evidence } = await runTransactionSimulation(
+      new FakeRpc("source"),
+      localRpc,
+    );
+    expect(evidence.backendEvidence).toMatchObject({
+      call: { status: "REVERTED" },
+      gasEstimate: { status: "AVAILABLE", gasUnits: "21000" },
+      validityAtExecution: "INVALID",
+      failureStage: "CALL",
+      reason: "LOCAL_FORK_EVM_REVERT",
+    });
+    expect(JSON.stringify(evidence)).not.toContain(
+      "RPC_ERROR_MESSAGE_SENTINEL",
+    );
+  });
+
+  it("keeps transport and non-revert JSON-RPC errors unavailable", async () => {
+    const unavailableClients = [
+      createClientWithFailure(new FakeRpc("local"), {
+        kind: "json-rpc",
+        method: "eth_call",
+        code: -32000,
+        message: "upstream temporarily unavailable: RPC_RESPONSE_SENTINEL",
+      }),
+      createClientWithFailure(new FakeRpc("local"), {
+        kind: "transport",
+        method: "eth_call",
+        message: "fetch failed: RPC_TRANSPORT_SENTINEL",
+      }),
+    ];
+
+    for (const localRpc of unavailableClients) {
+      const { evidence } = await runTransactionSimulation(
+        new FakeRpc("source"),
+        localRpc,
+      );
+      expect(evidence.backendEvidence).toMatchObject({
+        call: { status: "UNAVAILABLE" },
+        gasEstimate: { status: "AVAILABLE" },
+        validityAtExecution: "UNKNOWN",
+        failureStage: "CALL",
+        reason: "LOCAL_FORK_CALL_UNAVAILABLE",
+      });
+      expect(JSON.stringify(evidence)).not.toContain("RPC_RESPONSE_SENTINEL");
+      expect(JSON.stringify(evidence)).not.toContain("RPC_TRANSPORT_SENTINEL");
+    }
+  });
+
+  it("keeps eth_estimateGas revert evidence independent from eth_call", async () => {
+    const localRpc = createClientWithFailure(new FakeRpc("local"), {
+      kind: "json-rpc",
+      method: "eth_estimateGas",
+      code: 3,
+      message: "execution reverted: GAS_REVERT_SENTINEL",
+    });
+    const { evidence } = await runTransactionSimulation(
+      new FakeRpc("source"),
+      localRpc,
+    );
+
+    expect(evidence.backendEvidence).toMatchObject({
+      call: { status: "SUCCEEDED" },
+      gasEstimate: { status: "UNAVAILABLE" },
+      validityAtExecution: "UNKNOWN",
+      failureStage: "GAS_ESTIMATE",
+      reason: "LOCAL_FORK_GAS_ESTIMATE_UNAVAILABLE",
+    });
+    expect(JSON.stringify(evidence)).not.toContain("GAS_REVERT_SENTINEL");
   });
 
   it("distinguishes reverts, RPC failures, and unavailable gas estimates", async () => {
