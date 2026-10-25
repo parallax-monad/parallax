@@ -11,7 +11,18 @@ export type NativeRpcClientFailure =
   | "TIMEOUT"
   | "ABORTED";
 
-export type NativeRpcClientSemanticReason = "INSUFFICIENT_NATIVE_BALANCE";
+export type NativeRpcClientSemanticReason =
+  | "INSUFFICIENT_NATIVE_BALANCE"
+  | "SLIPPAGE_GUARD";
+
+const MAX_REVERT_REASON_BYTES = 128;
+const MAX_REVERT_DATA_HEX_LENGTH =
+  2 + 8 + 64 + 64 + MAX_REVERT_REASON_BYTES * 2;
+const SLIPPAGE_REVERT_REASONS = new Set([
+  "too little received",
+  "minimum output",
+  "amountoutminimum",
+]);
 
 /** Only controlled error text crosses the Provider boundary. */
 export class NativeRpcClientError extends Error {
@@ -138,7 +149,10 @@ export function createNativeRpcClient(
               rpcError.message,
             )
               ? "INSUFFICIENT_NATIVE_BALANCE"
-              : undefined;
+              : rpcError.code === 3 &&
+                  hasStructuredSlippageRevertData(rpcError.data)
+                ? "SLIPPAGE_GUARD"
+                : undefined;
           const semantic = /execution reverted|revert/i.test(rpcError.message)
             ? "execution reverted"
             : rpcError.code === -32601
@@ -188,4 +202,61 @@ export function createNativeRpcClient(
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/**
+ * Recognize only a small allowlist of canonical Solidity Error(string)
+ * payloads. The decoded reason is deliberately discarded; only the bounded
+ * semantic enum crosses the Native RPC boundary.
+ */
+function hasStructuredSlippageRevertData(data: unknown): boolean {
+  if (
+    typeof data !== "string" ||
+    data.length > MAX_REVERT_DATA_HEX_LENGTH ||
+    !/^0x(?:[0-9a-fA-F]{2})+$/.test(data)
+  ) {
+    return false;
+  }
+
+  const encoded = data.slice(2);
+  if (
+    encoded.length < 136 ||
+    encoded.slice(0, 8).toLowerCase() !== "08c379a0" ||
+    BigInt(`0x${encoded.slice(8, 72)}`) !== 32n
+  ) {
+    return false;
+  }
+
+  const reasonLength = BigInt(`0x${encoded.slice(72, 136)}`);
+  if (reasonLength === 0n || reasonLength > BigInt(MAX_REVERT_REASON_BYTES)) {
+    return false;
+  }
+  const byteLength = Number(reasonLength);
+  const paddedByteLength = Math.ceil(byteLength / 32) * 32;
+  const reasonHexStart = 136;
+  if (encoded.length !== reasonHexStart + paddedByteLength * 2) return false;
+
+  const reasonHex = encoded.slice(
+    reasonHexStart,
+    reasonHexStart + byteLength * 2,
+  );
+  const padding = encoded.slice(reasonHexStart + byteLength * 2);
+  if (!/^0*$/.test(padding)) return false;
+
+  const reasonBytes = new Uint8Array(byteLength);
+  for (let index = 0; index < byteLength; index += 1) {
+    reasonBytes[index] = Number.parseInt(
+      reasonHex.slice(index * 2, index * 2 + 2),
+      16,
+    );
+  }
+  try {
+    const reason = new TextDecoder("utf-8", { fatal: true })
+      .decode(reasonBytes)
+      .trim()
+      .toLowerCase();
+    return SLIPPAGE_REVERT_REASONS.has(reason);
+  } catch {
+    return false;
+  }
 }

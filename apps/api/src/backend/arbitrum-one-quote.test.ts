@@ -612,6 +612,97 @@ function createLocalCheckFixture(
   };
 }
 
+type NativeRpcErrorPayload = {
+  readonly code: number;
+  readonly message: string;
+  readonly data?: unknown;
+};
+
+function encodeErrorString(reason: string): string {
+  const reasonBytes = new TextEncoder().encode(reason);
+  const reasonHex = Array.from(reasonBytes, (byte) =>
+    byte.toString(16).padStart(2, "0"),
+  ).join("");
+  const paddedLength = Math.ceil(reasonBytes.length / 32) * 64;
+  return `0x08c379a0${32n.toString(16).padStart(64, "0")}${BigInt(reasonBytes.length).toString(16).padStart(64, "0")}${reasonHex.padEnd(paddedLength, "0")}`;
+}
+
+function createNativeLocalForkFetch(
+  options: {
+    readonly callError?: NativeRpcErrorPayload;
+    readonly gasEstimateError?: NativeRpcErrorPayload;
+  } = {},
+) {
+  const methods: string[] = [];
+  let nativeBalance = "0x0";
+  const fetchImplementation: typeof fetch = async (_input, init) => {
+    const request = JSON.parse(String(init?.body)) as {
+      id: number;
+      method: string;
+      params: readonly unknown[];
+    };
+    methods.push(request.method);
+    if (request.method === "anvil_setBalance") {
+      nativeBalance = String(request.params[1]);
+    }
+    if (request.method === "evm_revert") nativeBalance = "0x0";
+
+    const resultByMethod: Record<string, unknown> = {
+      parallax_forkInstanceId: localForkInstanceId,
+      web3_clientVersion: "anvil/v1.8.5 (test build)",
+      eth_chainId: "0x7a69",
+      eth_accounts: [],
+      eth_blockNumber: sourceBlockTag,
+      eth_getBlockByNumber: {
+        number: sourceBlockTag,
+        hash: blockHash,
+        timestamp: "0x6ad3c5b0",
+      },
+      eth_getCode: "0x6000",
+      eth_getBalance: request.params[1] === "latest" ? nativeBalance : "0x0",
+      evm_snapshot: "0x1",
+      anvil_setBalance: null,
+      eth_estimateGas: "0x5208",
+      evm_revert: true,
+    };
+    const call = request.params[0] as
+      | { to?: unknown; data?: unknown }
+      | undefined;
+    const isBalanceOfCall =
+      typeof call?.to === "string" &&
+      call.to.toLowerCase() ===
+        ARBITRUM_ONE_RUNTIME_PROFILE.deployments.usdcAddress.toLowerCase() &&
+      typeof call.data === "string" &&
+      call.data.slice(0, 10).toLowerCase() === "0x70a08231";
+    const rpcError =
+      request.method === "eth_call" && !isBalanceOfCall
+        ? options.callError
+        : request.method === "eth_estimateGas"
+          ? options.gasEstimateError
+          : undefined;
+    const responseBody =
+      request.method === "eth_call" && isBalanceOfCall
+        ? {
+            jsonrpc: "2.0",
+            id: request.id,
+            result: storageWord(0n),
+          }
+        : rpcError === undefined
+          ? {
+              jsonrpc: "2.0",
+              id: request.id,
+              result: resultByMethod[request.method],
+            }
+          : {
+              jsonrpc: "2.0",
+              id: request.id,
+              error: rpcError,
+            };
+    return new Response(JSON.stringify(responseBody), { status: 200 });
+  };
+  return { methods, fetchImplementation };
+}
+
 function findSenderUsdcBalanceReadIndexes(calls: readonly RpcCall[]): number[] {
   const usdcAddress =
     ARBITRUM_ONE_RUNTIME_PROFILE.deployments.usdcAddress.toLowerCase();
@@ -1370,10 +1461,17 @@ describe("Arbitrum One local-fork Check/Run provenance", () => {
     {
       name: "minimum-output protection revert",
       rpcOptions: {
-        callError: createRpcError(3, "execution reverted: minimum output"),
-        gasEstimateError: createRpcError(
+        callError: new NativeRpcClientError(
+          "RPC_ERROR",
+          "execution reverted",
           3,
-          "execution reverted: minimum output",
+          "SLIPPAGE_GUARD",
+        ),
+        gasEstimateError: new NativeRpcClientError(
+          "RPC_ERROR",
+          "execution reverted",
+          3,
+          "SLIPPAGE_GUARD",
         ),
       },
       checkOptions: { minimumReceived: "3" },
@@ -1843,6 +1941,98 @@ describe("Arbitrum One local-fork Check/Run provenance", () => {
     expect(publicResult).not.toContain("want 100000000000000000000");
     expect(publicResult).not.toContain(rawInsufficientBalanceMessage);
   });
+
+  it.each([
+    {
+      name: "valid structured minimum-output revert",
+      rpcError: {
+        code: 3,
+        message: "execution reverted: Too little received",
+        data: encodeErrorString("Too little received"),
+      },
+      expected: "SLIPPAGE_GUARD",
+    },
+    {
+      name: "ordinary structured revert",
+      rpcError: {
+        code: 3,
+        message: "execution reverted: pool is locked",
+        data: encodeErrorString("pool is locked"),
+      },
+      expected: "EVM_REVERT",
+    },
+    {
+      name: "oversized structured reason is rejected",
+      rpcError: {
+        code: 3,
+        message: "execution reverted: Too little received",
+        data: encodeErrorString(`Too little received${"x".repeat(200)}`),
+      },
+      expected: "EVM_REVERT",
+    },
+    {
+      name: "attacker-controlled slippage text without structured revert data",
+      rpcError: {
+        code: 3,
+        message:
+          "execution reverted: slippage; amountOutMinimum; untrusted-marker-9f12 https://user:secret@example.test/rpc?key=private",
+      },
+      expected: "EVM_REVERT",
+    },
+    {
+      name: "nested attacker-controlled text is not parsed as revert data",
+      rpcError: {
+        code: 3,
+        message: "execution reverted: slippage",
+        data: { message: encodeErrorString("Too little received") },
+      },
+      expected: "EVM_REVERT",
+    },
+  ] as const)(
+    "classifies $name through the actual NativeRpcClient path",
+    async ({ rpcError, expected }) => {
+      const runtime = createLocalRuntime();
+      const source = createRpc();
+      const nativeFetch = createNativeLocalForkFetch({
+        callError: rpcError,
+        gasEstimateError: rpcError,
+      });
+      const localRpcClient = createNativeRpcClient({
+        rpcUrl: localForkEnvironment.ARBITRUM_ONE_FORK_LOCAL_RPC_URL,
+        fetchImplementation: nativeFetch.fetchImplementation,
+      });
+      const flow = createArbitrumOneLocalForkCheckFlow(runtime, {
+        sourceRpcClient: source.rpcClient,
+        localRpcClient,
+        now: () => new Date("2026-10-17T19:17:33.990Z"),
+      });
+      const result = runResultSchema.parse(
+        await flow.check(
+          createLocalCheckInput(runtime, { minimumReceived: "3" }),
+        ),
+      );
+      const provenance = result.arbitrumOneForkProvenance;
+      if (provenance?.status !== "AVAILABLE") {
+        throw new Error("Expected available local-fork provenance");
+      }
+
+      expect(provenance.simulation.call).toEqual({
+        status: "REVERTED",
+        failureReason: expected,
+      });
+      expect(provenance.simulation.gasEstimate).toEqual({
+        status: "UNAVAILABLE",
+        failureReason: expected,
+      });
+      expect(nativeFetch.methods).toContain("eth_call");
+      expect(nativeFetch.methods).toContain("eth_estimateGas");
+      expect(nativeFetch.methods).toContain("evm_revert");
+      const publicResult = JSON.stringify(result);
+      expect(publicResult).not.toContain(rpcError.message);
+      expect(publicResult).not.toContain("user:secret@example.test");
+      expect(publicResult).not.toContain("untrusted-marker-9f12");
+    },
+  );
 
   it("rejects a fork/source identity mismatch before transaction simulation", async () => {
     const fixture = createLocalCheckFixture({

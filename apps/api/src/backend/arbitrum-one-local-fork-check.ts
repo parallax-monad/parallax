@@ -1048,6 +1048,7 @@ function classifyRpcFailure(error: unknown): LocalForkFailureReason {
     if (error.semanticReason === "INSUFFICIENT_NATIVE_BALANCE") {
       return "INSUFFICIENT_NATIVE_BALANCE";
     }
+    if (error.semanticReason === "SLIPPAGE_GUARD") return "SLIPPAGE_GUARD";
     if (error.kind === "TIMEOUT") return "RPC_TIMEOUT";
     if (
       error.kind === "NETWORK_FAILURE" ||
@@ -1067,11 +1068,7 @@ function classifyRpcFailure(error: unknown): LocalForkFailureReason {
       return "INSUFFICIENT_NATIVE_BALANCE";
     }
     if (rpcCode === 3 || /execution reverted|revert/i.test(message)) {
-      return /too little received|amount.?out.?minimum|minimum output|slippage/i.test(
-        message,
-      )
-        ? "SLIPPAGE_GUARD"
-        : "EVM_REVERT";
+      return "EVM_REVERT";
     }
   }
   return "RPC_UNAVAILABLE";
