@@ -464,3 +464,17 @@ GitHub state/body mismatches are surfaced for Product Owner reconciliation rathe
 - Verification passed: full suite 131 files / 1,915 tests / 2 skipped; typecheck, focused Backend
   and shared-contract tests, 11-file scoped Biome, `pnpm lint` (exit 0), and `git diff --check`.
   Lint's 27 informational diagnostics are only in unchanged `scripts/provider-probes/` files.
+
+## 2026-10-26 — PR #179 provenance validation follow-up
+
+- Code commit `9fead2514f687f544b2d8b1061bbd530acf16e5d` (parent
+  `bba62930953e792c46b862a152e928759c178a8f`) was pushed normally, without force, to the existing
+  `task/t_4b0f39b2-pr3-contract-evidence` branch. At readback, both the branch and
+  `refs/pull/179/head` matched the commit; PR #179 remained OPEN.
+- The four-file code/test delta binds quote input asset to Intent via canonical identity and
+  requires same-chain LIVE provenance while preserving LOCAL_FORK chain separation. Regressions
+  cover tampered route/intent mismatch, native input, same/mismatched LIVE, and LOCAL_FORK.
+- Full tests passed (131 files / 1,921 passed / 2 skipped), workspace typecheck and lint passed;
+  scoped Biome passed and `git diff --check` was clean. Lint reported only 27 informational
+  diagnostics in untouched provider-probe scripts. Exact-head Actions run `40217146813` / job
+  `121240648760` succeeded. No new PR, merge, or GitHub review/comment submission occurred.

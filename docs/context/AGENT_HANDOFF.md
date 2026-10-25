@@ -1,5 +1,23 @@
 # Current Agent Handoff
 
+## 2026-10-26 — PR #179 reviewer-finding follow-up
+
+The existing PR #179 branch received code commit
+`9fead2514f687f544b2d8b1061bbd530acf16e5d` after
+`bba62930953e792c46b862a152e928759c178a8f`. It closes the requested Run cross-binding gap by
+comparing quote provenance input metadata with the Intent through canonical asset identity, and
+requires LIVE simulation execution and source chain IDs to match. Native ETH→wrapped-native
+routing and LOCAL_FORK 42161→31337 remain valid; tests reject a tampered quote/simulation route and
+reject mismatched LIVE IDs.
+
+At the code-commit readback, PR #179 was OPEN and both the remote branch and `refs/pull/179/head`
+matched `9fead2514f687f544b2d8b1061bbd530acf16e5d`. GitHub Actions run `40217146813`, job
+`121240648760`, succeeded. Local full tests passed (131 files / 1,921 passed / 2 skipped), workspace
+typecheck passed, lint exited 0 with 27 informational diagnostics confined to unchanged
+`scripts/provider-probes/`, scoped Biome and whitespace checks passed. This task is awaiting user
+review/acceptance; do not merge or submit a GitHub review/comment. Refresh live PR head/checks before
+any later mutation.
+
 ## PR3 provenance task — exact-head capture complete, publication pending — 2026-10-25
 
 Kanban task `t_4b0f39b2` is on `task/t_4b0f39b2-pr3-contract-evidence`, based on

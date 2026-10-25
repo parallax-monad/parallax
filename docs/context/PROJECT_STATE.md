@@ -1,5 +1,23 @@
 # Project State
 
+## 2026-10-26 — PR #179 provenance validation follow-up
+
+PR #179 remains OPEN on `task/t_4b0f39b2-pr3-contract-evidence`. Code commit
+`9fead2514f687f544b2d8b1061bbd530acf16e5d` (parent
+`bba62930953e792c46b862a152e928759c178a8f`) fixes two review findings: Run validation now binds
+quote provenance `inputAsset` to the Intent with canonical chain/asset identity, and LIVE
+simulation provenance requires `executionChainId === sourceChainId`. The native ETH input remains
+valid when its direct pool route starts with wrapped native; LOCAL_FORK may still use execution
+chain 31337 against source chain 42161.
+
+Regressions cover the native path, a tampered Run whose Intent/transaction bind native while the
+quote and simulation route are changed together to an ERC-20, a mismatched LIVE chain, valid
+same-chain LIVE evidence, and the existing LOCAL_FORK case. Full tests passed (131 files; 1,921
+passed, 2 skipped), workspace typecheck passed, lint exited 0 with 27 informational diagnostics in
+unchanged provider-probe scripts, and scoped Biome plus `git diff --check` passed. Exact-head
+GitHub Actions run `40217146813` / job `121240648760` succeeded on the code commit. No new PR,
+merge, or GitHub review/comment submission occurred; user acceptance remains pending.
+
 ## PR3 simulation provenance task — implementation and exact-head capture complete — 2026-10-25
 
 Kanban task `t_4b0f39b2` is implemented on branch
