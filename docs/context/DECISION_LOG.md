@@ -263,3 +263,27 @@ API recomputation returned the same record hash and commitment; the updated CLI'
 anchor path also re-fetched the Run, confirmed the existing chain value, and reported that no
 transaction was sent. The original anchor transaction predates this guard; no new transaction was
 submitted after the code change.
+
+## 2026-10-25 — additive provider-neutral simulation provenance
+
+For the explicitly scoped PR3 completion work, add an optional versioned provider-neutral
+`simulationProvenance` projection to Run rather than changing legacy Run/Risk semantics. The
+projection binds source chain/block/hash, execution environment and block context, fork/state
+revision, account override flag, transaction fingerprint and complete binding, quote route and
+amounts, and normalized call/gas/amount-received capabilities. Run validation cross-checks the
+projection against Intent, Quote, and the existing local-fork projection; older Runs without the
+field remain valid.
+
+Quote-to-simulation reconciliation is exact integer equality in atomic units. A mismatch preserves
+the signed integer delta; no percentage tolerance or rounding is applied. `amountReceivedAtomic`
+is emitted only from a qualified recipient state diff, never from the quote, `eth_call` return, or
+Transfer logs. Timeout, revert, insufficient balance, slippage guard, source mismatch, and
+unavailable evidence stay separate execution/integration facts; they do not promote Risk, and
+production remains quote-only with local fork Check explicitly opt-in.
+
+The successful redacted local-fork capture is pinned to code commit
+`eb2e304457e36820b4700dfa34d372194f9ec78b` at
+`docs/context/evidence/pr3-local-fork-capture.json`. It proves source block `515881859` equals the
+local fork base, exact quote/simulation equality at `2414272` USDC atomic units, snapshot
+restoration, and no signing/broadcast/submission/mining. Shared `/packages/` and `/docs/`
+ownership is preserved for the authorized PR review; no merge approval is inferred.

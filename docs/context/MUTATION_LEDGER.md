@@ -447,3 +447,20 @@ pre-existing PR was edited, merged, or closed. This maintenance PR updates contr
 context and records a proposal for runtime decoupling only. It does not change implementation or
 assert Product P0, Asset Coverage, or Verified Remediation acceptance. The #73, #105, and #107
 GitHub state/body mismatches are surfaced for Product Owner reconciliation rather than rewritten.
+
+## 2026-10-25 — PR3 simulation provenance implementation and local capture
+
+- On `task/t_4b0f39b2-pr3-contract-evidence`, based on freshly verified `origin/main`
+  `08fda1d886138ef30cad68d3cf0655a1e14380aa`, committed only the task's 11 implementation/test
+  files as `eb2e304457e36820b4700dfa34d372194f9ec78b` (`feat(api): add provider-neutral simulation
+  provenance`). The change is local at this checkpoint; no force-push, merge, or PR creation is
+  recorded here.
+- Exact-code-head read-only Anvil capture at
+  `docs/context/evidence/pr3-local-fork-capture.json` verifies the configured task instance, source
+  and local base block/hash, Anvil version, no unlocked accounts, available state revision, exact
+  transaction binding, recipient validated-state-diff, and successful snapshot restoration.
+  Quote `2414272` and simulated recipient delta `2414272` match exactly in atomic units; no
+  signing, broadcast, submission, upstream write, or local mining occurred.
+- Verification passed: full suite 131 files / 1,915 tests / 2 skipped; typecheck, focused Backend
+  and shared-contract tests, 11-file scoped Biome, `pnpm lint` (exit 0), and `git diff --check`.
+  Lint's 27 informational diagnostics are only in unchanged `scripts/provider-probes/` files.

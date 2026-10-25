@@ -1,5 +1,40 @@
 # Project State
 
+## PR3 simulation provenance task — implementation and exact-head capture complete — 2026-10-25
+
+Kanban task `t_4b0f39b2` is implemented on branch
+`task/t_4b0f39b2-pr3-contract-evidence`, based on freshly verified `origin/main`
+`08fda1d886138ef30cad68d3cf0655a1e14380aa`. Code/tests are committed locally as
+`eb2e304457e36820b4700dfa34d372194f9ec78b`; the task has not yet been pushed or opened as a PR,
+and is not merged or user-accepted. The user explicitly authorized the forthcoming normal push and
+PR; no merge is authorized.
+
+The implementation adds an optional versioned provider-neutral `simulationProvenance` Run
+projection while preserving legacy Runs, exact atomic quote-to-read-only-simulation reconciliation,
+full transaction/source/state-revision cross-validation, and distinct simulation/integration
+failure states. Tested failures remain `UNKNOWN`; production remains quote-only and local Check
+remains explicit opt-in. The shared contract is under `/packages/` CODEOWNERS; the forthcoming PR
+must preserve automatic Code Owner routing and does not claim their approval.
+
+Exact-code-head live capture is recorded at
+`docs/context/evidence/pr3-local-fork-capture.json` and references code HEAD
+`eb2e304457e36820b4700dfa34d372194f9ec78b`. The task UUID handshake matched; the pinned source
+block `515881859` and hash matched the local chain `31337` base; Anvil `1.8.5`, zero unlocked
+accounts, available state revision, successful read-only call/gas/validated state diff, and snapshot
+restoration were verified. Quote output and recipient state-diff output both equal `2414272`
+atomic USDC units (`differenceAtomic=0`, exact integer comparison, no rounding tolerance). Verdict
+remains `UNKNOWN`; no upstream write, signing, broadcast, submission, or local mining occurred.
+Docker container-label inspection was unavailable, so only the documented forwarded endpoint's
+runtime identity and state checks are claimed.
+
+Formal verification: `CI=true pnpm test` passed (131 files; 1,915 passed, 2 skipped),
+`pnpm typecheck` passed, focused Backend and shared-contract tests passed, 11-file scoped Biome and
+`git diff --check` passed. `pnpm lint` exited 0; it emitted 27 informational `useTemplate`
+diagnostics in unchanged `scripts/provider-probes/` files. The earlier checkpoint's description
+of seven lint errors was incorrect; there were no lint errors. Current GitHub readback confirms
+PRs #177/#178 merged and `main` still at the task base. No Notion item is to be marked unless its
+evidence remains exact and readback is verified.
+
 ## Post-submission closeout snapshot — 2026-10-05
 
 This is a durable checkpoint, not the live execution tracker. Always fresh-fetch GitHub before

@@ -1,5 +1,31 @@
 # Current Agent Handoff
 
+## PR3 provenance task — exact-head capture complete, publication pending — 2026-10-25
+
+Kanban task `t_4b0f39b2` is on `task/t_4b0f39b2-pr3-contract-evidence`, based on
+`origin/main` `08fda1d886138ef30cad68d3cf0655a1e14380aa`. Implementation/test commit
+`eb2e304457e36820b4700dfa34d372194f9ec78b` adds an optional backward-compatible provider-neutral
+provenance schema, exact atomic reconciliation, full source/transaction/revision binding checks,
+and normalized non-Risk simulation failures. Production is still quote-only; local Check remains
+explicitly enabled only for development.
+
+The redacted exact-code-head live capture is `docs/context/evidence/pr3-local-fork-capture.json`.
+It verifies task instance identity, source/local block number+hash, Anvil 1.8.5, empty unlocked
+accounts, available state revision, successful read-only call/gas/validated recipient state diff,
+and snapshot restoration. Quote and recipient delta both equal 2,414,272 atomic USDC with zero
+integer difference; Run verdict remains UNKNOWN. No signing, broadcasting, submission, upstream
+write, or mining occurred. Docker metadata inspection is unavailable in the worker, but the
+documented forwarded RPC returned the expected task identity and all runtime gates passed.
+
+Verification: full suite 131 files / 1,915 passed / 2 skipped; workspace typecheck; focused
+Backend/shared contract suites; scoped Biome (11 source/test files); `git diff --check` all passed.
+`pnpm lint` exited 0 with 27 informational suggestions in unchanged `scripts/provider-probes/`;
+the earlier “7 errors” note was incorrect. The user authorized normal push and PR creation, not
+merge. Current GitHub main is still `08fda1d...`; PRs #177/#178 are merged. Shared `/packages/`
+and `/docs/` CODEOWNERS must be left for automatic PR review routing. Before reporting delivery,
+push the task branch without force, create a PR against `main`, read back its exact head/link and
+checks, and only then update this handoff/state with the final publication facts.
+
 ## Takeover snapshot — 2026-10-05
 
 - Fresh-fetch `main` and the target GitHub record before acting. The verified checkpoint for this

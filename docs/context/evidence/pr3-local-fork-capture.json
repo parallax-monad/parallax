@@ -1,0 +1,62 @@
+{
+  "captureSchemaVersion": 1,
+  "capturedAt": "2026-10-25T13:23:10.026Z",
+  "exactCodeHead": "eb2e304457e36820b4700dfa34d372194f9ec78b",
+  "execution": {
+    "sourceChainId": 42161,
+    "sourceBlockNumber": "515881859",
+    "sourceBlockHash": "0x304b694bc77e488eca3af067e45712e71753e2c42ca04881e21039b71da4560e",
+    "forkInstanceIdentity": "MATCHED_REDACTED",
+    "localAnvilVersion": "1.8.5",
+    "localExecutionChainId": 31337,
+    "localBaseBlockNumber": "515881859",
+    "localBaseBlockHash": "0x304b694bc77e488eca3af067e45712e71753e2c42ca04881e21039b71da4560e",
+    "observedHeadNumberAfterRestore": "515881859",
+    "unlockedAccounts": "EMPTY",
+    "sameApprovedPoolAndTokenPath": true,
+    "stateRevision": {
+      "status": "AVAILABLE",
+      "method": "ANVIL_DUMP_STATE",
+      "fingerprint": "PRESENT_REDACTED"
+    }
+  },
+  "quote": {
+    "amountInAtomic": "1000000000000000",
+    "amountOutAtomic": "2414272",
+    "poolAndPathRedacted": true
+  },
+  "readOnlySimulation": {
+    "callStatus": "SUCCEEDED",
+    "gasEstimateStatus": "AVAILABLE",
+    "gasUnits": "332495",
+    "amountReceivedStatus": "AVAILABLE",
+    "amountReceivedSource": "VALIDATED_STATE_DIFF",
+    "amountReceivedAtomic": "2414272",
+    "riskVerdict": "UNKNOWN",
+    "snapshotRestored": true
+  },
+  "quoteReconciliation": {
+    "status": "MATCHED",
+    "comparisonMethod": "ATOMIC_INTEGER_EQUALITY",
+    "quoteAmountOutAtomic": "2414272",
+    "simulatedAmountReceivedAtomic": "2414272",
+    "differenceAtomic": "0"
+  },
+  "safety": {
+    "recipientMatchesIntent": true,
+    "transactionBindingMatchesQuoteAndIntent": true,
+    "upstreamWritesAllowed": false,
+    "signingOrBroadcastingPerformed": false,
+    "transactionSubmissionPerformed": false,
+    "localTransactionsMined": false
+  },
+  "redactions": {
+    "rpcEndpoints": true,
+    "credentials": true,
+    "forkInstanceId": true,
+    "walletAddresses": true,
+    "poolAndRouterAddresses": true,
+    "calldataAndRawRpcPayloads": true,
+    "stateDumpAndTracePayloads": true
+  }
+}
