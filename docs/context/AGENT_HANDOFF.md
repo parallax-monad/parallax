@@ -1,5 +1,24 @@
 # Current Agent Handoff
 
+## 2026-10-26 — PR #179 quote-only binding and post-simulation failure follow-up
+
+Code commit `fd27b105185f73a75daec29907fb8a279fc888af` on
+`task/t_4b0f39b2-pr3-contract-evidence` validates quote provenance against Intent/top-level Route
+even when simulation provenance is absent, and preserves a completed quote in a schema-valid
+UNKNOWN partial Run when local-fork post-simulation source/head verification fails. Formal
+regressions include native/ERC-20 quote-only acceptance, mismatched input/amount/route rejection,
+and an API POST→GET persistence check proving the quote survives while simulation-success fields
+remain absent.
+
+Full tests passed (131 files / 1,934 passed / 2 skipped), all seven workspace typechecks, scoped
+Biome/format, `git diff --check`, and lint (27 informational diagnostics only in unchanged
+provider-probe scripts). Exact code-head Actions run `40228853955` / job `121276048423` passed
+Lint, Typecheck, Test, and PostgreSQL-backed Integration test. Local PostgreSQL integration was
+not run against an unverified database that the suite truncates. The code commit was normally
+pushed to the existing PR #179 branch and the task branch plus PR ref read back at this SHA. PR
+#179 remains OPEN; no new PR, merge, or GitHub review/comment was submitted. Keep this task in
+review pending explicit user acceptance.
+
 ## 2026-10-26 — PR #179 Run provenance identity follow-up
 
 Code commit `806cc13aeddda676340e8af3d25cabd459c71dd6` on

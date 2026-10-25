@@ -1,5 +1,28 @@
 # Project State
 
+## 2026-10-26 — PR #179 quote-only binding and post-simulation failure follow-up
+
+Code commit `fd27b105185f73a75daec29907fb8a279fc888af` (parent
+`aa623df4a74acb64b34d81dde0650749eb57b9f6`) closes two further review findings on the existing
+PR #179 branch. Quote provenance bindings now run even when `simulationProvenance` is absent,
+reconciling the quote's input/output assets, exact input amount, protocol, displayed output amount,
+and applicable direct route/token path with Intent and the top-level Route. When a local-fork source
+or head check fails after simulation, the error carries a schema-validated partial Run retaining
+the completed quote, with verdict/execution UNKNOWN and no successful simulation provenance.
+
+Regression coverage accepts quote-only native/ERC-20 Runs, rejects nested input/amount and
+top-level route mismatches, and exercises the API POST→GET persistence path after a simulated
+local-fork head advance. Focused contract tests passed (10 files / 158 tests); the Backend quote
+test file passed (43 tests); full tests passed (131 files / 1,934 passed / 2 skipped); all seven
+workspace typechecks, scoped Biome/format, `git diff --check`, and lint passed. Lint exited 0 with
+27 informational diagnostics confined to unchanged provider-probe scripts. Exact code-head Actions
+run `40228853955` / job `121276048423` passed Lint, Typecheck, Test, and PostgreSQL-backed
+Integration test. Local integration was deliberately not run because the configured database was
+not verified as isolated and the suite truncates tables. The code commit was normally pushed to the
+existing PR #179 branch; at code-head readback, the task branch and PR head ref matched this SHA.
+PR #179 remains OPEN; no new PR, merge, or GitHub review/comment submission occurred. User
+acceptance remains pending.
+
 ## 2026-10-26 — PR #179 Run provenance identity follow-up
 
 Code commit `806cc13aeddda676340e8af3d25cabd459c71dd6` (parent

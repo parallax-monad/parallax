@@ -1,5 +1,17 @@
 # Mutation / Incident Ledger
 
+## 2026-10-26 — PR #179 quote-only binding and post-simulation failure follow-up
+
+Code commit `fd27b105185f73a75daec29907fb8a279fc888af` was normally pushed to the existing
+`task/t_4b0f39b2-pr3-contract-evidence` branch for PR #179. It adds unconditional quote-provenance
+bindings for quote-only Runs and preserves the completed quote in schema-validated UNKNOWN partial
+results when local-fork post-simulation source/head checks fail. Fresh readback confirmed the
+remote task branch and `refs/pull/179/head` at this code SHA; exact-head Actions run `40228853955` /
+job `121276048423` passed Lint, Typecheck, Test, and PostgreSQL-backed Integration test. Local
+integration was not run because the configured destructive test database was not verified isolated.
+PR #179 remains open; no new PR, merge, or GitHub review/comment submission occurred. Explicit user
+acceptance remains pending.
+
 ## 2026-10-26 — PR #179 Run provenance identity follow-up
 
 Code commit `806cc13aeddda676340e8af3d25cabd459c71dd6` was normally pushed to the existing
