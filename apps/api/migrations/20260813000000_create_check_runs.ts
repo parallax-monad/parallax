@@ -20,8 +20,8 @@ export function up(pgm: MigrationBuilder): void {
     },
     failure_code: {
       type: "text",
-      // Keep this historical migration snapshot aligned with
-      // CHECK_RUN_FAILURE_CODES; the PostgreSQL integration test checks it.
+      // This is the original persisted set. Add later failure codes through
+      // forward migrations; integration tests check the latest schema.
       check:
         "failure_code IS NULL OR failure_code IN ('UNSUPPORTED', 'AGENT_FLOW_ERROR', 'INVALID_AGENT_FLOW_RESPONSE')",
     },

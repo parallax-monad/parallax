@@ -1,3 +1,6 @@
+import { randomUUID } from "node:crypto";
+import { fileURLToPath } from "node:url";
+import { runner } from "node-pg-migrate";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { accountStateSnapshotSchema } from "./account-state-model.js";
 import { CAMELOT_V3_ROUTER_ADDRESS } from "./backend/camelot-v3-binding.js";
@@ -13,6 +16,86 @@ import { CHECK_RUN_FAILURE_CODES } from "./store.js";
 
 const databaseUrl = process.env.DATABASE_URL?.trim();
 const integration = describe.skipIf(databaseUrl === undefined);
+const migrationsDirectory = fileURLToPath(
+  new URL("../migrations", import.meta.url),
+);
+const legacyFailureCodes = [
+  "UNSUPPORTED",
+  "AGENT_FLOW_ERROR",
+  "INVALID_AGENT_FLOW_RESPONSE",
+] as const;
+
+async function runMigrationsInSchema(
+  schema: string,
+  direction: "up" | "down",
+  count?: number,
+): Promise<void> {
+  if (databaseUrl === undefined) {
+    throw new Error(
+      "DATABASE_URL is required for PostgreSQL integration tests",
+    );
+  }
+
+  await runner({
+    databaseUrl: {
+      connectionString: databaseUrl,
+      options: `-c search_path=${schema}`,
+    },
+    dir: migrationsDirectory,
+    direction,
+    ...(count === undefined ? {} : { count }),
+    migrationsTable: "pgmigrations",
+    migrationsSchema: schema,
+    schema,
+    createSchema: true,
+    createMigrationsSchema: true,
+    advisoryLockMode: "wait",
+    singleTransaction: true,
+    verbose: false,
+    log: () => undefined,
+  });
+}
+
+async function getDatabaseFailureCodes(
+  targetPool: ReturnType<typeof createPostgresPool>,
+): Promise<string[]> {
+  const constraints = await targetPool.query<{ definition: string }>(
+    `
+      SELECT pg_get_constraintdef(oid) AS definition
+      FROM pg_constraint
+      WHERE conrelid = 'check_runs'::regclass
+        AND conname = 'check_runs_failure_code_check'
+    `,
+  );
+  if (constraints.rows.length !== 1) {
+    throw new Error("expected exactly one check-run failure-code constraint");
+  }
+  const definition = constraints.rows[0]?.definition;
+  if (definition === undefined) {
+    throw new Error("missing failure-code constraint definition");
+  }
+  return [...definition.matchAll(/'([^']+)'/g)].map((match) => match[1]);
+}
+
+async function insertFailureCodeRow(
+  targetPool: ReturnType<typeof createPostgresPool>,
+  runId: string,
+  failureCode: string,
+): Promise<void> {
+  await targetPool.query(
+    `
+      INSERT INTO check_runs (
+        run_id,
+        lifecycle_state,
+        failure_code,
+        intent,
+        result
+      )
+      VALUES ($1, 'failed', $2, '{}'::jsonb, '{}'::jsonb)
+    `,
+    [runId, failureCode],
+  );
+}
 
 integration("PostgresRunStore", () => {
   let pool: ReturnType<typeof createPostgresPool>;
@@ -318,24 +401,130 @@ integration("PostgresRunStore", () => {
 
   it("keeps the database failure-code constraint aligned with the code tuple", async () => {
     if (pool === undefined) return;
-
-    const constraints = await pool.query<{ definition: string }>(
-      `
-        SELECT pg_get_constraintdef(oid) AS definition
-        FROM pg_constraint
-        WHERE conrelid = 'check_runs'::regclass
-          AND conname = 'check_runs_failure_code_check'
-      `,
-    );
-
-    expect(constraints.rows).toHaveLength(1);
-    const definition = constraints.rows[0]?.definition;
-    if (definition === undefined)
-      throw new Error("missing failure-code constraint");
-
-    const databaseCodes = [...definition.matchAll(/'([^']+)'/g)].map(
-      (match) => match[1],
-    );
+    const databaseCodes = await getDatabaseFailureCodes(pool);
     expect(databaseCodes).toEqual([...CHECK_RUN_FAILURE_CODES]);
+  });
+
+  it("keeps fresh and upgraded schemas aligned without losing existing rows", async () => {
+    if (pool === undefined || databaseUrl === undefined) return;
+
+    const freshSchema = `failure_code_fresh_${randomUUID().replaceAll("-", "")}`;
+    const upgradedSchema = `failure_code_upgrade_${randomUUID().replaceAll("-", "")}`;
+    let freshPool: ReturnType<typeof createPostgresPool> | undefined;
+    let upgradedPool: ReturnType<typeof createPostgresPool> | undefined;
+
+    try {
+      await runMigrationsInSchema(freshSchema, "up");
+      freshPool = createPostgresPool(databaseUrl, {
+        options: `-c search_path=${freshSchema}`,
+      });
+      expect(await getDatabaseFailureCodes(freshPool)).toEqual([
+        ...CHECK_RUN_FAILURE_CODES,
+      ]);
+      for (const [index, code] of CHECK_RUN_FAILURE_CODES.entries()) {
+        await insertFailureCodeRow(freshPool, `fresh-valid-${index}`, code);
+      }
+      await expect(
+        insertFailureCodeRow(freshPool, "fresh-unknown", "UNKNOWN_FAILURE"),
+      ).rejects.toMatchObject({ code: "23514" });
+
+      await runMigrationsInSchema(upgradedSchema, "up", 1);
+      upgradedPool = createPostgresPool(databaseUrl, {
+        options: `-c search_path=${upgradedSchema}`,
+      });
+      await insertFailureCodeRow(
+        upgradedPool,
+        "preserved-before-upgrade",
+        "AGENT_FLOW_ERROR",
+      );
+
+      await runMigrationsInSchema(upgradedSchema, "up");
+      expect(await getDatabaseFailureCodes(upgradedPool)).toEqual([
+        ...CHECK_RUN_FAILURE_CODES,
+      ]);
+      await expect(
+        upgradedPool.query(
+          `
+            SELECT run_id, failure_code
+            FROM check_runs
+            WHERE run_id = 'preserved-before-upgrade'
+          `,
+        ),
+      ).resolves.toMatchObject({
+        rows: [
+          {
+            run_id: "preserved-before-upgrade",
+            failure_code: "AGENT_FLOW_ERROR",
+          },
+        ],
+      });
+      for (const [index, code] of CHECK_RUN_FAILURE_CODES.entries()) {
+        await insertFailureCodeRow(
+          upgradedPool,
+          `upgrade-valid-${index}`,
+          code,
+        );
+      }
+      await expect(
+        insertFailureCodeRow(
+          upgradedPool,
+          "upgrade-unknown",
+          "UNKNOWN_FAILURE",
+        ),
+      ).rejects.toMatchObject({ code: "23514" });
+
+      await expect(
+        runMigrationsInSchema(upgradedSchema, "down", 1),
+      ).rejects.toThrow(
+        "Cannot roll back failure-code constraint while newer failure codes are present",
+      );
+      expect(await getDatabaseFailureCodes(upgradedPool)).toEqual([
+        ...CHECK_RUN_FAILURE_CODES,
+      ]);
+
+      await upgradedPool.query(
+        `
+          DELETE FROM check_runs
+          WHERE failure_code IN ('SOURCE_MISMATCH', 'FORK_STATE_CHANGED')
+        `,
+      );
+      await runMigrationsInSchema(upgradedSchema, "down", 1);
+      expect(await getDatabaseFailureCodes(upgradedPool)).toEqual([
+        ...legacyFailureCodes,
+      ]);
+      await expect(
+        insertFailureCodeRow(
+          upgradedPool,
+          "rejected-after-down",
+          "SOURCE_MISMATCH",
+        ),
+      ).rejects.toMatchObject({ code: "23514" });
+      await expect(
+        upgradedPool.query(
+          `
+            SELECT run_id, failure_code
+            FROM check_runs
+            WHERE run_id = 'preserved-before-upgrade'
+          `,
+        ),
+      ).resolves.toMatchObject({
+        rows: [
+          {
+            run_id: "preserved-before-upgrade",
+            failure_code: "AGENT_FLOW_ERROR",
+          },
+        ],
+      });
+
+      await runMigrationsInSchema(upgradedSchema, "up", 1);
+      expect(await getDatabaseFailureCodes(upgradedPool)).toEqual([
+        ...CHECK_RUN_FAILURE_CODES,
+      ]);
+    } finally {
+      await freshPool?.end();
+      await upgradedPool?.end();
+      await pool.query(`DROP SCHEMA IF EXISTS ${freshSchema} CASCADE`);
+      await pool.query(`DROP SCHEMA IF EXISTS ${upgradedSchema} CASCADE`);
+    }
   });
 });
