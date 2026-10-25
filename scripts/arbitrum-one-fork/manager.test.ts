@@ -1,14 +1,18 @@
+import { spawnSync } from "node:child_process";
 import {
   existsSync,
+  mkdirSync,
   mkdtempSync,
   readFileSync,
   rmSync,
+  statSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { createServer, type IncomingMessage } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   buildComposeArgs,
@@ -24,7 +28,9 @@ import {
   isPrivateBindAddress,
   recreateFork,
   requireComposeSuccess,
+  resolveGitMetadataPath,
   runDocker,
+  sameGitDirectoryIdentity,
   sanitizeComposePsOutput,
   sanitizeForwarderInspectOutput,
   tryRecoverFork,
@@ -44,6 +50,438 @@ function withCheckoutMetadata<T>(run: (metadataDir: string) => T): T {
     rmSync(metadataDir, { recursive: true, force: true });
   }
 }
+
+describe("Arbitrum One fork Git metadata path resolution", () => {
+  it("accepts the same Git admin directory through distinct mount path aliases", () => {
+    const temporaryDirectory = mkdtempSync(
+      join(tmpdir(), "parallax-fork-git-alias-"),
+    );
+    try {
+      const gitDirectory = join(temporaryDirectory, "git-admin");
+      const aliasDirectory = join(temporaryDirectory, "host-path-alias");
+      mkdirSync(gitDirectory);
+      symlinkSync(gitDirectory, aliasDirectory, "dir");
+
+      const gitDirectoryStats = statSync(gitDirectory, { bigint: true });
+      const aliasDirectoryStats = statSync(aliasDirectory, { bigint: true });
+      expect(gitDirectoryStats.dev).toBe(aliasDirectoryStats.dev);
+      expect(gitDirectoryStats.ino).toBe(aliasDirectoryStats.ino);
+
+      const mountNamespaceRealpath = (path: string) =>
+        `${path === aliasDirectory ? "/host" : "/container"}${resolve(path)}`;
+      expect(mountNamespaceRealpath(aliasDirectory)).not.toBe(
+        mountNamespaceRealpath(gitDirectory),
+      );
+      expect(
+        sameGitDirectoryIdentity(
+          aliasDirectory,
+          gitDirectory,
+          mountNamespaceRealpath,
+        ),
+      ).toBe(true);
+
+      const foreignGitDirectory = join(temporaryDirectory, "foreign-git-admin");
+      mkdirSync(foreignGitDirectory);
+      expect(
+        sameGitDirectoryIdentity(
+          aliasDirectory,
+          foreignGitDirectory,
+          mountNamespaceRealpath,
+        ),
+      ).toBe(false);
+    } finally {
+      rmSync(temporaryDirectory, { recursive: true, force: true });
+    }
+  });
+
+  it("recovers only the matching worktree metadata when .git contains a container path", () => {
+    const temporaryDirectory = mkdtempSync(
+      join(tmpdir(), "parallax-fork-git-path-"),
+    );
+    try {
+      const repositoryRoot = join(temporaryDirectory, "checkout");
+      const worktreeRoot = join(repositoryRoot, ".worktrees", "fork");
+      mkdirSync(dirname(worktreeRoot), { recursive: true });
+
+      const gitInit = spawnSync("git", ["init", repositoryRoot], {
+        encoding: "utf8",
+        stdio: "ignore",
+      });
+      expect(gitInit.error).toBeUndefined();
+      expect(gitInit.status).toBe(0);
+      const gitCommit = spawnSync(
+        "git",
+        [
+          "-C",
+          repositoryRoot,
+          "-c",
+          "user.name=Parallax Test",
+          "-c",
+          "user.email=parallax-test@example.invalid",
+          "commit",
+          "--allow-empty",
+          "--message",
+          "test fixture",
+        ],
+        { encoding: "utf8", stdio: "ignore" },
+      );
+      expect(gitCommit.error).toBeUndefined();
+      expect(gitCommit.status).toBe(0);
+      const gitWorktree = spawnSync(
+        "git",
+        [
+          "-C",
+          repositoryRoot,
+          "worktree",
+          "add",
+          "-b",
+          "fork-fixture",
+          worktreeRoot,
+        ],
+        { encoding: "utf8", stdio: "ignore" },
+      );
+      expect(gitWorktree.error).toBeUndefined();
+      expect(gitWorktree.status).toBe(0);
+
+      const worktreeGitDirectory = join(
+        repositoryRoot,
+        ".git",
+        "worktrees",
+        "fork",
+      );
+      const containerOnlyRoot = join(temporaryDirectory, "container-checkout");
+      const containerOnlyGitDirectory = join(
+        containerOnlyRoot,
+        ".git",
+        "worktrees",
+        "fork",
+      );
+      expect(existsSync(containerOnlyGitDirectory)).toBe(false);
+      writeFileSync(
+        join(worktreeRoot, ".git"),
+        `gitdir: ${containerOnlyGitDirectory}\n`,
+      );
+      writeFileSync(
+        join(worktreeGitDirectory, "gitdir"),
+        `${join(containerOnlyRoot, ".worktrees", "fork", ".git")}\n`,
+      );
+
+      expect(
+        resolveGitMetadataPath("parallax-test-metadata", worktreeRoot),
+      ).toBe(join(worktreeGitDirectory, "parallax-test-metadata"));
+    } finally {
+      rmSync(temporaryDirectory, { recursive: true, force: true });
+    }
+  });
+
+  it("resolves external linked-worktree metadata and rejects invalid pointers", () => {
+    const temporaryDirectory = mkdtempSync(
+      join(tmpdir(), "parallax-fork-external-worktree-"),
+    );
+    try {
+      const repositoryRoot = join(temporaryDirectory, "repository");
+      const worktreeRoot = join(temporaryDirectory, "external-checkout");
+      mkdirSync(repositoryRoot, { recursive: true });
+
+      const gitInit = spawnSync("git", ["init", repositoryRoot], {
+        encoding: "utf8",
+        stdio: "ignore",
+      });
+      expect(gitInit.error).toBeUndefined();
+      expect(gitInit.status).toBe(0);
+      const gitCommit = spawnSync(
+        "git",
+        [
+          "-C",
+          repositoryRoot,
+          "-c",
+          "user.name=Parallax Test",
+          "-c",
+          "user.email=parallax-test@example.invalid",
+          "commit",
+          "--allow-empty",
+          "--message",
+          "external worktree fixture",
+        ],
+        { encoding: "utf8", stdio: "ignore" },
+      );
+      expect(gitCommit.error).toBeUndefined();
+      expect(gitCommit.status).toBe(0);
+      const gitWorktree = spawnSync(
+        "git",
+        [
+          "-C",
+          repositoryRoot,
+          "worktree",
+          "add",
+          "-b",
+          "external-fixture",
+          worktreeRoot,
+        ],
+        { encoding: "utf8", stdio: "ignore" },
+      );
+      expect(gitWorktree.error).toBeUndefined();
+      expect(gitWorktree.status).toBe(0);
+      expect(existsSync(join(temporaryDirectory, ".git"))).toBe(false);
+
+      const worktreeGitFile = join(worktreeRoot, ".git");
+      const originalPointer = readFileSync(worktreeGitFile, "utf8");
+      const declaredGitDirectory = /^gitdir:\s*(.+)$/m.exec(
+        originalPointer,
+      )?.[1];
+      expect(declaredGitDirectory).toBeDefined();
+      const worktreeGitDirectory = declaredGitDirectory ?? "";
+      const expectedMetadataPath = join(
+        worktreeGitDirectory,
+        "parallax-test-metadata",
+      );
+      const backlinkPath = join(worktreeGitDirectory, "gitdir");
+      const commonDirectoryPath = join(worktreeGitDirectory, "commondir");
+      const originalBacklink = readFileSync(backlinkPath, "utf8");
+      const originalCommonDirectory = readFileSync(commonDirectoryPath, "utf8");
+
+      expect(
+        resolveGitMetadataPath("parallax-test-metadata", worktreeRoot),
+      ).toBe(expectedMetadataPath);
+
+      writeFileSync(
+        worktreeGitFile,
+        "gitdir: relative/.git/worktrees/external-fixture\n",
+      );
+      expect(() =>
+        resolveGitMetadataPath("parallax-test-metadata", worktreeRoot),
+      ).toThrowError(
+        expect.objectContaining({ code: "GIT_METADATA_UNAVAILABLE" }),
+      );
+      writeFileSync(worktreeGitFile, originalPointer);
+
+      writeFileSync(
+        backlinkPath,
+        `${join(temporaryDirectory, "foreign", ".git")}\n`,
+      );
+      expect(() =>
+        resolveGitMetadataPath("parallax-test-metadata", worktreeRoot),
+      ).toThrowError(
+        expect.objectContaining({ code: "GIT_METADATA_UNAVAILABLE" }),
+      );
+      writeFileSync(backlinkPath, originalBacklink);
+
+      writeFileSync(
+        commonDirectoryPath,
+        `${join(temporaryDirectory, "foreign-git-admin")}\n`,
+      );
+      expect(() =>
+        resolveGitMetadataPath("parallax-test-metadata", worktreeRoot),
+      ).toThrowError(
+        expect.objectContaining({ code: "GIT_METADATA_UNAVAILABLE" }),
+      );
+      writeFileSync(commonDirectoryPath, originalCommonDirectory);
+
+      expect(
+        resolveGitMetadataPath("parallax-test-metadata", worktreeRoot),
+      ).toBe(expectedMetadataPath);
+    } finally {
+      rmSync(temporaryDirectory, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects a stale pointer to another worktree with the same path suffix", () => {
+    const temporaryDirectory = mkdtempSync(
+      join(tmpdir(), "parallax-fork-foreign-worktree-"),
+    );
+    try {
+      const repositoryRoot = join(temporaryDirectory, "main");
+      const currentWorktreeRoot = join(repositoryRoot, ".worktrees", "fork");
+      const foreignWorktreeRoot = join(
+        temporaryDirectory,
+        "other",
+        ".worktrees",
+        "fork",
+      );
+      mkdirSync(dirname(currentWorktreeRoot), { recursive: true });
+      mkdirSync(dirname(foreignWorktreeRoot), { recursive: true });
+
+      const gitInit = spawnSync("git", ["init", repositoryRoot], {
+        encoding: "utf8",
+        stdio: "ignore",
+      });
+      expect(gitInit.error).toBeUndefined();
+      expect(gitInit.status).toBe(0);
+      const gitCommit = spawnSync(
+        "git",
+        [
+          "-C",
+          repositoryRoot,
+          "-c",
+          "user.name=Parallax Test",
+          "-c",
+          "user.email=parallax-test@example.invalid",
+          "commit",
+          "--allow-empty",
+          "--message",
+          "test fixture",
+        ],
+        { encoding: "utf8", stdio: "ignore" },
+      );
+      expect(gitCommit.error).toBeUndefined();
+      expect(gitCommit.status).toBe(0);
+
+      for (const [branch, worktreeRoot] of [
+        ["fork-current", currentWorktreeRoot],
+        ["fork-foreign", foreignWorktreeRoot],
+      ]) {
+        const gitWorktree = spawnSync(
+          "git",
+          ["-C", repositoryRoot, "worktree", "add", "-b", branch, worktreeRoot],
+          { encoding: "utf8", stdio: "ignore" },
+        );
+        expect(gitWorktree.error).toBeUndefined();
+        expect(gitWorktree.status).toBe(0);
+      }
+
+      const foreignGitDirectory = /^gitdir:\s*(.+)$/m.exec(
+        readFileSync(join(foreignWorktreeRoot, ".git"), "utf8"),
+      )?.[1];
+      expect(foreignGitDirectory).toBeDefined();
+      const foreignWorktreeId = basename(foreignGitDirectory ?? "");
+      const containerOnlyRoot = join(temporaryDirectory, "container-checkout");
+      const containerOnlyForeignGitDirectory = join(
+        containerOnlyRoot,
+        ".git",
+        "worktrees",
+        foreignWorktreeId,
+      );
+      const containerOnlyForeignWorktreeRoot = join(
+        containerOnlyRoot,
+        "other",
+        ".worktrees",
+        "fork",
+      );
+      expect(existsSync(containerOnlyForeignGitDirectory)).toBe(false);
+      writeFileSync(
+        join(currentWorktreeRoot, ".git"),
+        `gitdir: ${containerOnlyForeignGitDirectory}\n`,
+      );
+      writeFileSync(
+        join(foreignGitDirectory ?? "", "gitdir"),
+        `${join(containerOnlyForeignWorktreeRoot, ".git")}\n`,
+      );
+
+      expect(() =>
+        resolveGitMetadataPath("parallax-test-metadata", currentWorktreeRoot),
+      ).toThrowError(
+        expect.objectContaining({
+          code: "GIT_METADATA_UNAVAILABLE",
+          message: expect.stringContaining(
+            "Could not resolve metadata for this worktree",
+          ),
+        }),
+      );
+    } finally {
+      rmSync(temporaryDirectory, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects an existing pointer to another worktree's admin directory", () => {
+    const temporaryDirectory = mkdtempSync(
+      join(tmpdir(), "parallax-fork-existing-foreign-worktree-"),
+    );
+    try {
+      const repositoryRoot = join(temporaryDirectory, "main");
+      const currentWorktreeRoot = join(repositoryRoot, ".worktrees", "fork");
+      const foreignWorktreeRoot = join(
+        temporaryDirectory,
+        "other",
+        ".worktrees",
+        "fork",
+      );
+      mkdirSync(dirname(currentWorktreeRoot), { recursive: true });
+      mkdirSync(dirname(foreignWorktreeRoot), { recursive: true });
+
+      const gitInit = spawnSync("git", ["init", repositoryRoot], {
+        encoding: "utf8",
+        stdio: "ignore",
+      });
+      expect(gitInit.error).toBeUndefined();
+      expect(gitInit.status).toBe(0);
+      const gitCommit = spawnSync(
+        "git",
+        [
+          "-C",
+          repositoryRoot,
+          "-c",
+          "user.name=Parallax Test",
+          "-c",
+          "user.email=parallax-test@example.invalid",
+          "commit",
+          "--allow-empty",
+          "--message",
+          "test fixture",
+        ],
+        { encoding: "utf8", stdio: "ignore" },
+      );
+      expect(gitCommit.error).toBeUndefined();
+      expect(gitCommit.status).toBe(0);
+
+      for (const [branch, worktreeRoot] of [
+        ["fork-current", currentWorktreeRoot],
+        ["fork-foreign", foreignWorktreeRoot],
+      ]) {
+        const gitWorktree = spawnSync(
+          "git",
+          ["-C", repositoryRoot, "worktree", "add", "-b", branch, worktreeRoot],
+          { encoding: "utf8", stdio: "ignore" },
+        );
+        expect(gitWorktree.error).toBeUndefined();
+        expect(gitWorktree.status).toBe(0);
+      }
+
+      const foreignGitPointer = readFileSync(
+        join(foreignWorktreeRoot, ".git"),
+        "utf8",
+      );
+      const foreignGitDirectory = /^gitdir:\s*(.+)$/m.exec(
+        foreignGitPointer,
+      )?.[1];
+      expect(foreignGitDirectory).toBeDefined();
+      expect(existsSync(foreignGitDirectory ?? "")).toBe(true);
+      writeFileSync(join(currentWorktreeRoot, ".git"), foreignGitPointer);
+
+      const initialGitLookup = spawnSync(
+        "git",
+        [
+          "-C",
+          currentWorktreeRoot,
+          "rev-parse",
+          "--path-format=absolute",
+          "--absolute-git-dir",
+          "--show-toplevel",
+          "--git-path",
+          "parallax-test-metadata",
+        ],
+        { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] },
+      );
+      expect(initialGitLookup.error).toBeUndefined();
+      expect(initialGitLookup.status).toBe(0);
+      const initialGitPaths = initialGitLookup.stdout.trimEnd().split(/\r?\n/);
+      expect(initialGitPaths[0]).toBe(foreignGitDirectory);
+      expect(initialGitPaths[1]).toBe(currentWorktreeRoot);
+
+      expect(() =>
+        resolveGitMetadataPath("parallax-test-metadata", currentWorktreeRoot),
+      ).toThrowError(
+        expect.objectContaining({
+          code: "GIT_METADATA_UNAVAILABLE",
+          message: expect.stringContaining(
+            "Could not resolve metadata for this worktree",
+          ),
+        }),
+      );
+    } finally {
+      rmSync(temporaryDirectory, { recursive: true, force: true });
+    }
+  });
+});
 
 type HttpHandler = (
   request: IncomingMessage,

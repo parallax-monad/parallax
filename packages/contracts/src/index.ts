@@ -6,6 +6,7 @@ export * from "./evidence.js";
 export * from "./evidence-presentation.js";
 export * from "./evidence-provider.js";
 export * from "./expectation-baseline.js";
+export * from "./fork-provenance.js";
 export * from "./generic-evidence.js";
 export * from "./intent.js";
 export * from "./normalization.js";

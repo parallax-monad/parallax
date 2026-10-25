@@ -34,8 +34,28 @@ if (major !== 22 || minor < 15 || typeof registerHooks !== "function") {
     },
   });
 
-  const { runForkManager } = await import(
-    new URL("./manager.ts", import.meta.url).href
-  );
-  await runForkManager();
+  try {
+    const { runForkManager } = await import(
+      new URL("./manager.ts", import.meta.url).href
+    );
+    await runForkManager();
+  } catch (error) {
+    const gitMetadataFailureCodes = new Set([
+      "GIT_EXECUTION_FAILED",
+      "GIT_METADATA_UNAVAILABLE",
+      "GIT_NOT_FOUND",
+    ]);
+    if (
+      error instanceof Error &&
+      error.name === "HarnessError" &&
+      gitMetadataFailureCodes.has(error.code)
+    ) {
+      console.error(`${error.code}: ${error.message}`);
+    } else {
+      console.error(
+        "FORK_HARNESS_FAILED: manager could not be loaded; details suppressed.",
+      );
+    }
+    process.exitCode = 1;
+  }
 }

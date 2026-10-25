@@ -15,6 +15,7 @@ const arbitrumSepoliaRuntimeConfig = {
 
 export const ARBITRUM_ONE_CHAIN_ID = 42161 as const;
 export const ARBITRUM_ONE_PROFILE_ID = "arbitrum-one-camelot-v3" as const;
+export const ARBITRUM_ONE_FORK_ANVIL_VERSION = "1.8.5" as const;
 
 const arbitrumOneDeployments = Object.freeze({
   factoryAddress: "0x1a3c9B1d2F0529D97f2afC5136Cc23e58f1FD35B",
@@ -65,6 +66,38 @@ const rpcUrlSchema = z
     "Moss RPC URL must use HTTP or HTTPS",
   );
 
+function isLocalForkRpcUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    const hostname = url.hostname.replace(/^\[|\]$/g, "").toLowerCase();
+    const isLoopbackV4 =
+      /^127(?:\.(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}$/.test(hostname);
+    return (
+      url.protocol === "http:" &&
+      url.username === "" &&
+      url.password === "" &&
+      url.search === "" &&
+      url.hash === "" &&
+      (hostname === "localhost" ||
+        hostname.endsWith(".localhost") ||
+        hostname === "host.docker.internal" ||
+        hostname === "anvil" ||
+        hostname === "::1" ||
+        isLoopbackV4)
+    );
+  } catch {
+    return false;
+  }
+}
+
+const localForkRpcUrlSchema = z
+  .string()
+  .url()
+  .refine(
+    isLocalForkRpcUrl,
+    "Local fork RPC URL must use an unauthenticated local HTTP endpoint",
+  );
+
 const optionalEnvironmentString = z.preprocess(
   (value) =>
     typeof value === "string" && value.trim() === "" ? undefined : value,
@@ -90,6 +123,25 @@ export const backendEnvironmentSchema = z
         typeof value === "string" && value.trim() === "" ? undefined : value,
       rpcUrlSchema.optional(),
     ),
+    NODE_ENV: optionalEnvironmentString,
+    ARBITRUM_ONE_LOCAL_FORK_CHECK_ENABLED: z.preprocess(
+      (value) => value ?? "false",
+      z.enum(["true", "false"]),
+    ),
+    ARBITRUM_ONE_FORK_LOCAL_RPC_URL: z.preprocess(
+      (value) =>
+        typeof value === "string" && value.trim() === "" ? undefined : value,
+      localForkRpcUrlSchema.optional(),
+    ),
+    ARBITRUM_ONE_FORK_INSTANCE_ID: z.preprocess(
+      (value) =>
+        typeof value === "string" && value.trim() === "" ? undefined : value,
+      z
+        .string()
+        .uuid()
+        .refine((value) => value[14]?.toLowerCase() === "4")
+        .optional(),
+    ),
     MOSS_RUNTIME_PATH: optionalEnvironmentString,
     MOSS_RUNTIME_VERSION: z.string().trim().min(1),
     MOSS_RUNTIME_REVISION: z.string().trim().min(1),
@@ -107,29 +159,60 @@ export const backendEnvironmentSchema = z
     const tenderlyConfigured = tenderlyValues.some(
       (value) => value !== undefined,
     );
-    if (!tenderlyConfigured) return;
-
-    const tenderlyFields = [
-      ["TENDERLY_ACCOUNT_SLUG", environment.TENDERLY_ACCOUNT_SLUG],
-      ["TENDERLY_PROJECT_SLUG", environment.TENDERLY_PROJECT_SLUG],
-      ["TENDERLY_ACCESS_KEY", environment.TENDERLY_ACCESS_KEY],
-    ] as const;
-    for (const [field, value] of tenderlyFields) {
-      if (value === undefined) {
+    if (tenderlyConfigured) {
+      const tenderlyFields = [
+        ["TENDERLY_ACCOUNT_SLUG", environment.TENDERLY_ACCOUNT_SLUG],
+        ["TENDERLY_PROJECT_SLUG", environment.TENDERLY_PROJECT_SLUG],
+        ["TENDERLY_ACCESS_KEY", environment.TENDERLY_ACCESS_KEY],
+      ] as const;
+      for (const [field, value] of tenderlyFields) {
+        if (value === undefined) {
+          context.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: [field],
+            message: `${field} is required when Tenderly integration is configured`,
+          });
+        }
+      }
+      if (environment.ARBITRUM_RPC_URL === undefined) {
         context.addIssue({
           code: z.ZodIssueCode.custom,
-          path: [field],
-          message: `${field} is required when Tenderly integration is configured`,
+          path: ["ARBITRUM_RPC_URL"],
+          message:
+            "ARBITRUM_RPC_URL is required when Tenderly integration is configured",
         });
       }
     }
-    if (environment.ARBITRUM_RPC_URL === undefined) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["ARBITRUM_RPC_URL"],
-        message:
-          "ARBITRUM_RPC_URL is required when Tenderly integration is configured",
-      });
+
+    if (environment.ARBITRUM_ONE_LOCAL_FORK_CHECK_ENABLED === "true") {
+      if (environment.NODE_ENV !== "development") {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["ARBITRUM_ONE_LOCAL_FORK_CHECK_ENABLED"],
+          message: "Local fork Check is only available in development mode",
+        });
+      }
+      if (environment.ARBITRUM_ONE_RPC_URL === undefined) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["ARBITRUM_ONE_RPC_URL"],
+          message: "A source RPC is required for local fork Check",
+        });
+      }
+      if (environment.ARBITRUM_ONE_FORK_LOCAL_RPC_URL === undefined) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["ARBITRUM_ONE_FORK_LOCAL_RPC_URL"],
+          message: "A local Anvil RPC URL is required for local fork Check",
+        });
+      }
+      if (environment.ARBITRUM_ONE_FORK_INSTANCE_ID === undefined) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["ARBITRUM_ONE_FORK_INSTANCE_ID"],
+          message: "A fork instance identity is required for local fork Check",
+        });
+      }
     }
   });
 
@@ -287,6 +370,17 @@ export const arbitrumOneIntegrationConfigSchema =
     .extend({ rpcUrl: rpcUrlSchema.optional() })
     .strict();
 
+export const arbitrumOneLocalForkCheckConfigSchema = z
+  .object({
+    rpcUrl: localForkRpcUrlSchema,
+    forkInstanceId: z
+      .string()
+      .uuid()
+      .refine((value) => value[14]?.toLowerCase() === "4"),
+    anvilVersion: z.literal(ARBITRUM_ONE_FORK_ANVIL_VERSION),
+  })
+  .strict();
+
 export const tenderlyIntegrationConfigSchema = z
   .object({
     accountSlug: z.string().trim().min(1),
@@ -305,6 +399,8 @@ export const backendRuntimeConfigSchema = z
     arbitrum: arbitrumIntegrationConfigSchema.optional(),
     // The profile is server-owned; only its isolated RPC endpoint is injected.
     arbitrumOne: arbitrumOneIntegrationConfigSchema.optional(),
+    // This distinct development-only descriptor never changes profile capabilities.
+    arbitrumOneLocalForkCheck: arbitrumOneLocalForkCheckConfigSchema.optional(),
     tenderly: tenderlyIntegrationConfigSchema.optional(),
   })
   .strict();
@@ -315,6 +411,9 @@ export type ArbitrumIntegrationConfig = z.infer<
 >;
 export type ArbitrumOneIntegrationConfig = z.infer<
   typeof arbitrumOneIntegrationConfigSchema
+>;
+export type ArbitrumOneLocalForkCheckConfig = z.infer<
+  typeof arbitrumOneLocalForkCheckConfigSchema
 >;
 export type TenderlyIntegrationConfig = z.infer<
   typeof tenderlyIntegrationConfigSchema
@@ -401,6 +500,16 @@ export function bootstrapBackendRuntime(
         ? {}
         : { rpcUrl: environment.ARBITRUM_ONE_RPC_URL }),
     },
+    ...(environment.ARBITRUM_ONE_LOCAL_FORK_CHECK_ENABLED === "true"
+      ? {
+          arbitrumOneLocalForkCheck:
+            arbitrumOneLocalForkCheckConfigSchema.parse({
+              rpcUrl: environment.ARBITRUM_ONE_FORK_LOCAL_RPC_URL,
+              forkInstanceId: environment.ARBITRUM_ONE_FORK_INSTANCE_ID,
+              anvilVersion: ARBITRUM_ONE_FORK_ANVIL_VERSION,
+            }),
+        }
+      : {}),
     ...(tenderlyConfigured
       ? {
           tenderly: {

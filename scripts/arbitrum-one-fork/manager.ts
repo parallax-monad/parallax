@@ -6,11 +6,13 @@ import {
   linkSync,
   openSync,
   readFileSync,
+  realpathSync,
+  statSync,
   unlinkSync,
   writeFileSync,
 } from "node:fs";
 import { createServer, isIP } from "node:net";
-import { dirname, join, resolve } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { performance } from "node:perf_hooks";
 import { fileURLToPath } from "node:url";
 import { createArbitrumRpcClient } from "../../apps/api/src/backend/arbitrum-chain-adapter.js";
@@ -24,25 +26,6 @@ import {
   runForkQuoteSmoke,
 } from "./smoke.js";
 import { runForkTransactionSimulation } from "./transaction-smoke.js";
-
-const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
-const REPO_ROOT = resolve(SCRIPT_DIR, "../..");
-const COMPOSE_FILE = join(SCRIPT_DIR, "compose.yaml");
-const config = getForkHarnessConfig();
-const CHECKOUT_ID_FILE = gitPath("parallax-arbitrum-one-fork.checkout-id");
-const INSTANCE_FILE = gitPath("parallax-arbitrum-one-fork.instance");
-const CAPTURE_FILE = gitPath("parallax-arbitrum-one-fork-capture.json");
-const TRANSACTION_CAPTURE_FILE = gitPath(
-  "parallax-arbitrum-one-fork-transaction-capture.json",
-);
-const LOCK_FILE = gitPath("parallax-arbitrum-one-fork.lock");
-const FORK_SOURCE_ENV = "ARBITRUM_ONE_FORK_UPSTREAM_RPC_URL";
-const DOCKER_COMMAND_TIMEOUT_MS = 120_000;
-const DOCKER_OUTPUT_MAX_BUFFER_BYTES = 1024 * 1024;
-const START_FAILURE_DIAGNOSTIC_BUDGET_MS = 15_000;
-const COMPOSE_FAILURE_CLASSIFY_MAX_CHARS = 8_192;
-const CHECKOUT_ID_PATTERN =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export class HarnessError extends Error {
   readonly code: string;
@@ -62,6 +45,33 @@ export class HarnessError extends Error {
     this.composeFailureClass = composeFailureClass;
   }
 }
+
+const GIT_REPOSITORY_OVERRIDE_ENV = [
+  "GIT_DIR",
+  "GIT_WORK_TREE",
+  "GIT_COMMON_DIR",
+  "GIT_CEILING_DIRECTORIES",
+  "GIT_DISCOVERY_ACROSS_FILESYSTEM",
+] as const;
+
+const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = resolve(SCRIPT_DIR, "../..");
+const COMPOSE_FILE = join(SCRIPT_DIR, "compose.yaml");
+const config = getForkHarnessConfig();
+const CHECKOUT_ID_FILE = gitPath("parallax-arbitrum-one-fork.checkout-id");
+const INSTANCE_FILE = gitPath("parallax-arbitrum-one-fork.instance");
+const CAPTURE_FILE = gitPath("parallax-arbitrum-one-fork-capture.json");
+const TRANSACTION_CAPTURE_FILE = gitPath(
+  "parallax-arbitrum-one-fork-transaction-capture.json",
+);
+const LOCK_FILE = gitPath("parallax-arbitrum-one-fork.lock");
+const FORK_SOURCE_ENV = "ARBITRUM_ONE_FORK_UPSTREAM_RPC_URL";
+const DOCKER_COMMAND_TIMEOUT_MS = 120_000;
+const DOCKER_OUTPUT_MAX_BUFFER_BYTES = 1024 * 1024;
+const START_FAILURE_DIAGNOSTIC_BUDGET_MS = 15_000;
+const COMPOSE_FAILURE_CLASSIFY_MAX_CHARS = 8_192;
+const CHECKOUT_ID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 interface DockerResult {
   readonly status: number | null;
@@ -262,19 +272,358 @@ export interface StartFailureDiagnostics {
   };
 }
 
-function gitPath(name: string): string {
-  const output = spawnSync("git", ["rev-parse", "--git-path", name], {
-    cwd: REPO_ROOT,
-    encoding: "utf8",
-    stdio: ["ignore", "pipe", "ignore"],
-  });
-  if (output.status !== 0 || output.stdout.trim() === "") {
+function gitEnvironment(
+  repositoryRoot: string,
+  gitDirectory?: string,
+): NodeJS.ProcessEnv {
+  const env = { ...process.env };
+  for (const key of GIT_REPOSITORY_OVERRIDE_ENV) delete env[key];
+  if (gitDirectory !== undefined) {
+    env.GIT_DIR = gitDirectory;
+    env.GIT_WORK_TREE = repositoryRoot;
+  }
+  return env;
+}
+
+function isDirectory(path: string): boolean {
+  try {
+    return statSync(path).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
+export function sameGitDirectoryIdentity(
+  firstPath: string,
+  secondPath: string,
+  resolvePath: (path: string) => string = realpathSync,
+): boolean {
+  let firstRealPath: string;
+  let secondRealPath: string;
+  try {
+    firstRealPath = resolvePath(firstPath);
+    secondRealPath = resolvePath(secondPath);
+  } catch {
+    return false;
+  }
+  if (firstRealPath === secondRealPath) return true;
+
+  try {
+    const firstStats = statSync(firstPath, { bigint: true });
+    const secondStats = statSync(secondPath, { bigint: true });
+    return (
+      firstStats.isDirectory() &&
+      secondStats.isDirectory() &&
+      firstStats.ino !== 0n &&
+      firstStats.dev === secondStats.dev &&
+      firstStats.ino === secondStats.ino
+    );
+  } catch {
+    return false;
+  }
+}
+
+function readMetadataText(path: string): string | undefined {
+  try {
+    return readFileSync(path, "utf8").trim();
+  } catch {
+    return undefined;
+  }
+}
+
+function nearestCommonGitDirectory(repositoryRoot: string): string | undefined {
+  let ancestor = resolve(repositoryRoot);
+  while (true) {
+    const candidate = join(ancestor, ".git");
+    if (isDirectory(candidate)) {
+      try {
+        return realpathSync(candidate);
+      } catch {
+        return undefined;
+      }
+    }
+    const parent = dirname(ancestor);
+    if (parent === ancestor) return undefined;
+    ancestor = parent;
+  }
+}
+
+function reportedCommonGitDirectory(
+  worktreeGitDirectory: string,
+): string | undefined {
+  const commonDirectoryText = readMetadataText(
+    join(worktreeGitDirectory, "commondir"),
+  );
+  if (commonDirectoryText === undefined) return undefined;
+  const reportedCommonDirectory = isAbsolute(commonDirectoryText)
+    ? resolve(commonDirectoryText)
+    : resolve(worktreeGitDirectory, commonDirectoryText);
+  try {
+    return realpathSync(reportedCommonDirectory);
+  } catch {
+    return undefined;
+  }
+}
+
+function portableWorktreeGitDirectory(
+  repositoryRoot: string,
+): string | undefined {
+  const worktreeGitFile = join(repositoryRoot, ".git");
+  let isGitFile = false;
+  try {
+    isGitFile = statSync(worktreeGitFile).isFile();
+  } catch {
+    return undefined;
+  }
+  if (!isGitFile) return undefined;
+
+  const gitFileContents = readMetadataText(worktreeGitFile);
+  const gitFileMatch = /^gitdir:\s*(.+)$/i.exec(gitFileContents ?? "");
+  if (gitFileMatch === null) return undefined;
+  const declaredGitDirectory = gitFileMatch[1]?.trim();
+  if (declaredGitDirectory === undefined || !isAbsolute(declaredGitDirectory)) {
+    return undefined;
+  }
+
+  const declaredSegments = declaredGitDirectory
+    .replace(/\\/g, "/")
+    .split("/")
+    .filter((segment) => segment !== "");
+  const gitDirectoryMarker = declaredSegments.lastIndexOf(".git");
+  if (
+    gitDirectoryMarker < 0 ||
+    declaredSegments.length !== gitDirectoryMarker + 3 ||
+    declaredSegments[gitDirectoryMarker + 1] !== "worktrees"
+  ) {
+    return undefined;
+  }
+  const worktreeId = declaredSegments[gitDirectoryMarker + 2];
+  if (
+    worktreeId === undefined ||
+    !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(worktreeId)
+  ) {
+    return undefined;
+  }
+  const declaredCommonGitDirectory = resolve(declaredGitDirectory, "..", "..");
+  if (
+    resolve(declaredCommonGitDirectory, "worktrees", worktreeId) !==
+    resolve(declaredGitDirectory)
+  ) {
+    return undefined;
+  }
+
+  if (existsSync(declaredGitDirectory) && !isDirectory(declaredGitDirectory)) {
+    return undefined;
+  }
+  const declaredGitDirectoryExists = isDirectory(declaredGitDirectory);
+  const commonGitDirectories = [
+    nearestCommonGitDirectory(repositoryRoot),
+    declaredGitDirectoryExists
+      ? reportedCommonGitDirectory(declaredGitDirectory)
+      : undefined,
+  ].filter(
+    (path, index, paths): path is string =>
+      path !== undefined && paths.indexOf(path) === index,
+  );
+  for (const commonGitDirectory of commonGitDirectories) {
+    const candidate = join(commonGitDirectory, "worktrees", worktreeId);
+    if (!isDirectory(candidate)) continue;
+
+    let canonicalCandidate: string;
+    try {
+      canonicalCandidate = realpathSync(candidate);
+    } catch {
+      continue;
+    }
+    if (
+      relative(commonGitDirectory, canonicalCandidate) !==
+      join("worktrees", worktreeId)
+    ) {
+      continue;
+    }
+    if (
+      declaredGitDirectoryExists &&
+      !sameGitDirectoryIdentity(declaredGitDirectory, canonicalCandidate)
+    ) {
+      continue;
+    }
+
+    if (reportedCommonGitDirectory(canonicalCandidate) !== commonGitDirectory) {
+      continue;
+    }
+
+    const repositoryRelativePath = relative(
+      dirname(commonGitDirectory),
+      resolve(repositoryRoot),
+    );
+    if (repositoryRelativePath === "" || isAbsolute(repositoryRelativePath)) {
+      continue;
+    }
+    const gitDirectoryBacklink = readMetadataText(
+      join(canonicalCandidate, "gitdir"),
+    );
+    if (
+      gitDirectoryBacklink === undefined ||
+      !isAbsolute(gitDirectoryBacklink) ||
+      resolve(gitDirectoryBacklink) !==
+        resolve(
+          dirname(declaredCommonGitDirectory),
+          repositoryRelativePath,
+          ".git",
+        )
+    ) {
+      continue;
+    }
+
+    return canonicalCandidate;
+  }
+  return undefined;
+}
+
+function checkoutGitDirectory(repositoryRoot: string): string | undefined {
+  const dotGitPath = join(resolve(repositoryRoot), ".git");
+  try {
+    if (statSync(dotGitPath).isDirectory()) return realpathSync(dotGitPath);
+  } catch {
+    return undefined;
+  }
+  return portableWorktreeGitDirectory(repositoryRoot);
+}
+
+function runGitMetadataLookup(
+  name: string,
+  repositoryRoot: string,
+  gitDirectory?: string,
+) {
+  return spawnSync(
+    "git",
+    [
+      "rev-parse",
+      "--path-format=absolute",
+      "--absolute-git-dir",
+      "--show-toplevel",
+      "--git-path",
+      name,
+    ],
+    {
+      cwd: repositoryRoot,
+      env: gitEnvironment(repositoryRoot, gitDirectory),
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    },
+  );
+}
+
+function validatedGitMetadataPath(
+  output: ReturnType<typeof runGitMetadataLookup>,
+  name: string,
+  repositoryRoot: string,
+  expectedGitDirectory: string,
+): string | undefined {
+  if (output.error !== undefined || output.status !== 0) return undefined;
+  const lines = output.stdout.split(/\r?\n/);
+  if (lines.at(-1) === "") lines.pop();
+  if (lines.length !== 3) return undefined;
+  const [gitDirectoryText, worktreeRootText, metadataPathText] = lines;
+  if (
+    gitDirectoryText === undefined ||
+    worktreeRootText === undefined ||
+    metadataPathText === undefined ||
+    !isAbsolute(gitDirectoryText) ||
+    !isAbsolute(worktreeRootText) ||
+    !isAbsolute(metadataPathText)
+  ) {
+    return undefined;
+  }
+
+  const gitDirectory = resolve(gitDirectoryText);
+  const worktreeRoot = resolve(worktreeRootText);
+  const metadataPath = resolve(metadataPathText);
+  if (
+    worktreeRoot !== resolve(repositoryRoot) ||
+    gitDirectory !== resolve(expectedGitDirectory) ||
+    relative(gitDirectory, metadataPath) !== name
+  ) {
+    return undefined;
+  }
+  return metadataPath;
+}
+
+function throwGitMetadataFailure(output: {
+  readonly error?: Error | null;
+  readonly status: number | null;
+}): never {
+  if (output.error !== undefined && output.error !== null) {
+    const errorCode = "code" in output.error ? output.error.code : undefined;
+    if (errorCode === "ENOENT") {
+      throw new HarnessError(
+        "GIT_NOT_FOUND",
+        "Git could not be started while resolving this checkout's metadata. Install Git and ensure it is available in PATH.",
+      );
+    }
     throw new HarnessError(
-      "GIT_METADATA_UNAVAILABLE",
-      "Git metadata path is unavailable.",
+      "GIT_EXECUTION_FAILED",
+      "Git could not inspect this checkout's metadata. Verify that Git can run from the selected worktree.",
     );
   }
-  return resolve(REPO_ROOT, output.stdout.trim());
+
+  const status =
+    output.status === null
+      ? ""
+      : ` (git rev-parse exited with status ${output.status})`;
+  throw new HarnessError(
+    "GIT_METADATA_UNAVAILABLE",
+    `Could not resolve metadata for this worktree${status}. Verify that its .git pointer and matching worktree metadata are accessible from this host.`,
+  );
+}
+
+export function resolveGitMetadataPath(
+  name: string,
+  repositoryRoot = REPO_ROOT,
+): string {
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(name)) {
+    throw new HarnessError(
+      "GIT_METADATA_UNAVAILABLE",
+      "The requested Git metadata filename is invalid.",
+    );
+  }
+
+  const initialLookup = runGitMetadataLookup(name, repositoryRoot);
+  const expectedGitDirectory = checkoutGitDirectory(repositoryRoot);
+  if (expectedGitDirectory === undefined) {
+    if (initialLookup.error !== undefined || initialLookup.status !== 0) {
+      throwGitMetadataFailure(initialLookup);
+    }
+    throw new HarnessError(
+      "GIT_METADATA_UNAVAILABLE",
+      "Could not resolve metadata for this worktree: its .git pointer and worktree backlink do not identify the current checkout.",
+    );
+  }
+  const initialPath = validatedGitMetadataPath(
+    initialLookup,
+    name,
+    repositoryRoot,
+    expectedGitDirectory,
+  );
+  if (initialPath !== undefined) return initialPath;
+
+  const recoveredLookup = runGitMetadataLookup(
+    name,
+    repositoryRoot,
+    expectedGitDirectory,
+  );
+  const recoveredPath = validatedGitMetadataPath(
+    recoveredLookup,
+    name,
+    repositoryRoot,
+    expectedGitDirectory,
+  );
+  if (recoveredPath !== undefined) return recoveredPath;
+  throwGitMetadataFailure(recoveredLookup);
+}
+
+function gitPath(name: string): string {
+  return resolveGitMetadataPath(name);
 }
 
 function acquireLock(): () => void {

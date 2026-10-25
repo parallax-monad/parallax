@@ -2,6 +2,8 @@
 
 This is a developer-only local Anvil harness. `smoke` compares read-only quote parity; the separate opt-in `simulate` command records local-fork `eth_call` and gas-estimate evidence for the exact backend-prepared unsigned transaction. Neither command establishes production Arbitrum One Check/simulation support or enables transaction execution.
 
+The Backend `/api/check` local-fork path serializes snapshot/mutate/simulate/revert/restore sections by verified fork-instance UUID within one Node process. This is not a distributed lock: run only one Backend process per Anvil fork and do not let other processes or tools mutate that same Anvil instance. Cross-process or external writers are not coordinated, so isolation is not guaranteed when the fork is shared.
+
 The smoke reuses the merged `ARBITRUM_ONE_RUNTIME_PROFILE` and `createArbitrumOneQuoteFlow` directly. It does not copy the Camelot route or Quoter ABI. It compares the exact `0.001 ETH → USDC` quote from the upstream read-only proxy and the local fork at source block `515881859` (`0x304b694bc77e488eca3af067e45712e71753e2c42ca04881e21039b71da4560e`), using the PR 1B capture's verified profile and route.
 
 Identity is reported in separate fields:
@@ -12,6 +14,8 @@ Identity is reported in separate fields:
 - fork instance: a fresh UUID per start/reset;
 - Anvil: Foundry `1.8.5`, pinned by the multi-architecture OCI digest in `config.json`;
 - read-only proxy: Node `22.23.2`, pinned by its OCI digest in `config.json`.
+
+The complete local EVM state revision is explicitly `UNKNOWN` (`NO_QUALIFIED_ANVIL_STATE_REVISION_TOKEN`). The pinned base block identity, local chain ID, Anvil version, and fork-instance UUID are recorded and checked, but they do not identify the current local state after the ephemeral sender-balance override. Do not infer or claim a full state-revision check from those facts.
 
 Compose is scoped to the Git checkout, not its absolute filesystem path. On first use, the host
 runner atomically stores a checkout UUID in Git metadata as
@@ -111,7 +115,7 @@ node --disable-warning=ExperimentalWarning --experimental-strip-types --experime
 
 The runner obtains the existing backend-owned ETH → exact-USDC quote at the configured source block, prepares one unsigned transaction from that quote and the verified Intent, then validates the exact payload before using it. The local fork instance, chain ID, block number/hash, Anvil version, and quote provenance must match the pinned configuration. It funds only the ephemeral sender with native ETH inside an Anvil snapshot, performs `eth_call` and `eth_estimateGas` against the current local state (the head remains the pinned source block), then reverts the snapshot. It does not submit, sign, broadcast, or mine a transaction and does not write to the upstream chain.
 
-The sanitized capture is written to `.git/parallax-arbitrum-one-fork-transaction-capture.json` and printed as JSON. It binds the prepared-transaction fingerprint and normalized transaction fields to the fork/source block and observation time. Call success/revert/unavailable and gas-estimate available/unavailable are independent fields; `gasUnits` is an estimate, not gas used. The exact `eth_call` return bytes are fingerprinted but not decoded without a verified router return ABI. When local Anvil supports the bounded `debug_traceCall`/`callTracer` request, the capture summarizes the matching USDC `Transfer` event amount to the exact recipient and compares it with the quote and encoded minimum-output protection; unsupported tracing is reported as unavailable. A simulated transfer event is not a committed state diff, recipient balance delta, or mined receipt. Raw transaction payloads, return bytes, trace logs, RPC errors, and endpoints are not included. This remains developer-only Backend evidence: it does not establish Product acceptance or enable production Check/simulation support.
+The sanitized capture is written to `.git/parallax-arbitrum-one-fork-transaction-capture.json` and printed as JSON. It binds the prepared-transaction fingerprint and normalized transaction fields to the fork/source block and observation time, and marks the complete post-override local state revision as `UNKNOWN`. Call success/revert/unavailable and gas-estimate available/unavailable are independent fields; `gasUnits` is an estimate, not gas used. The exact `eth_call` return bytes are fingerprinted but not decoded without a verified router return ABI. When local Anvil supports the bounded `debug_traceCall`/`callTracer` request, the capture summarizes only a structurally validated USDC `Transfer` event amount to the exact recipient and compares it with the quote and encoded minimum-output protection; unsupported, failed, incomplete, malformed, duplicate, foreign-token, or misdirected trace evidence is reported as unavailable. A simulated transfer event is not a committed state diff, recipient balance delta, or mined receipt. Raw transaction payloads, return bytes, trace logs, RPC errors, and endpoints are not included. This remains developer-only Backend evidence: it does not establish Product acceptance or enable production Check/simulation support.
 
 ## Required Mac-host ↔ Hermes dev-container connectivity smoke
 
