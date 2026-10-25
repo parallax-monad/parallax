@@ -200,6 +200,14 @@ function validateSimulationProvenance(
   const quoteProvenance = result.quote?.provenance;
   if (
     quoteProvenance === undefined ||
+    assetIdentity({
+      chainId: quoteProvenance.inputAsset.chainId,
+      asset: quoteProvenance.inputAsset.asset,
+    }) !==
+      assetIdentity({
+        chainId: result.intent.chainId,
+        asset: result.intent.tokenIn,
+      }) ||
     provenance.sourceChainId !== quoteProvenance.sourceChainId ||
     provenance.sourceBlockNumber !== quoteProvenance.sourceBlock.number ||
     provenance.sourceBlockHash.toLowerCase() !==

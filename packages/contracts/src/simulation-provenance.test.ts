@@ -124,6 +124,12 @@ describe("provider-neutral simulation provenance contract", () => {
         capabilities: { amountReceived: { status: "UNAVAILABLE" } },
       },
     );
+    expect(
+      providerNeutralSimulationProvenanceSchema.safeParse({
+        ...live,
+        executionChainId: 31337,
+      }).success,
+    ).toBe(false);
   });
 
   it("retains an exact signed mismatch rather than applying a tolerance", () => {

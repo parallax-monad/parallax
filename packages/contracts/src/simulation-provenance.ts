@@ -259,6 +259,17 @@ export const providerNeutralSimulationProvenanceSchema = z
     }
 
     if (
+      provenance.executionEnvironment === "LIVE" &&
+      provenance.executionChainId !== provenance.sourceChainId
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["executionChainId"],
+        message: "Live execution must use the source chain",
+      });
+    }
+
+    if (
       provenance.transactionBinding.chainId !== provenance.sourceChainId ||
       provenance.transactionBinding.amountInAtomic !==
         provenance.quote.amountInAtomic ||

@@ -1786,6 +1786,75 @@ describe("Arbitrum One local-fork Check/Run provenance", () => {
     }
   });
 
+  it("binds the quote input asset to the Intent, including the native-asset path", async () => {
+    const fixture = createLocalCheckFixture();
+    const result = runResultSchema.parse(
+      await fixture.flow.check(fixture.input),
+    );
+    const quote = result.quote;
+    const quoteProvenance = quote?.provenance;
+    const simulation = result.simulationProvenance;
+    if (quote === undefined || quoteProvenance === undefined) {
+      throw new Error("Expected quote provenance");
+    }
+    if (simulation === undefined) {
+      throw new Error("Expected provider-neutral simulation provenance");
+    }
+
+    expect(result.intent.tokenIn).toEqual({ kind: "native" });
+    expect(simulation.transactionBinding.tokenIn).toBe("native");
+    expect(runResultSchema.safeParse(result).success).toBe(true);
+
+    const otherInputToken = "0x7777777777777777777777777777777777777777";
+    const tamperedRun = {
+      ...result,
+      quote: {
+        ...quote,
+        provenance: {
+          ...quoteProvenance,
+          inputAsset: {
+            chainId: quoteProvenance.inputAsset.chainId,
+            asset: { kind: "erc20" as const, address: otherInputToken },
+            symbol: "OTHER",
+            decimals: 18,
+            decimalsSource: "onchain_verified" as const,
+            verifiedAtBlock: quoteProvenance.sourceBlock.number,
+          },
+          route: {
+            ...quoteProvenance.route,
+            tokenPath: [
+              otherInputToken,
+              quoteProvenance.route.tokenPath[1],
+            ] as [string, string],
+          },
+        },
+      },
+      simulationProvenance: {
+        ...simulation,
+        quote: {
+          ...simulation.quote,
+          tokenPath: [otherInputToken, simulation.quote.tokenPath[1]] as [
+            string,
+            string,
+          ],
+        },
+      },
+    };
+
+    expect(tamperedRun.intent.tokenIn).toEqual({ kind: "native" });
+    expect(tamperedRun.simulationProvenance.transactionBinding.tokenIn).toBe(
+      "native",
+    );
+    expect(tamperedRun.quote.provenance.inputAsset.asset).toEqual({
+      kind: "erc20",
+      address: otherInputToken,
+    });
+    expect(tamperedRun.simulationProvenance.quote.tokenPath[0]).toBe(
+      otherInputToken,
+    );
+    expect(runResultSchema.safeParse(tamperedRun).success).toBe(false);
+  });
+
   it("serializes concurrent checks for one fork and restores both senders' state", async () => {
     const runtime = createLocalRuntime();
     const source = createRpc();
