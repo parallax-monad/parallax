@@ -48,7 +48,11 @@ export type ArbitrumOneTransactionBinding = NonNullable<
 
 export type ArbitrumOneTransactionInspection =
   | { readonly ok: true; readonly binding: ArbitrumOneTransactionBinding }
-  | { readonly ok: false; readonly reason: string };
+  | {
+      readonly ok: false;
+      readonly reason: string;
+      readonly failureCode?: "SOURCE_MISMATCH";
+    };
 
 /**
  * Prepare the exact unsigned One transaction only from the backend-owned route
@@ -133,6 +137,11 @@ export function inspectArbitrumOneTransaction(input: {
   readonly intent: NormalizedSwapIntent;
   readonly quote: Quote;
   readonly transaction: unknown;
+  readonly expectedSourceBlock?: {
+    readonly chainId: number;
+    readonly number: string;
+    readonly hash: string;
+  };
   readonly now?: Date;
 }): ArbitrumOneTransactionInspection {
   const intentResult = normalizedSwapIntentSchema.safeParse(input.intent);
@@ -144,6 +153,19 @@ export function inspectArbitrumOneTransaction(input: {
   const quote = quoteResult.data;
   const provenance = quote.provenance;
   if (provenance === undefined) return invalid("Quote provenance is missing");
+  if (
+    input.expectedSourceBlock !== undefined &&
+    (provenance.sourceChainId !== input.expectedSourceBlock.chainId ||
+      provenance.sourceBlock.number !== input.expectedSourceBlock.number ||
+      provenance.sourceBlock.hash.toLowerCase() !==
+        input.expectedSourceBlock.hash.toLowerCase())
+  ) {
+    return {
+      ok: false,
+      failureCode: "SOURCE_MISMATCH",
+      reason: "Quote source does not match the expected source block",
+    };
+  }
   const tokenMetadata: TokenMetadataPair = {
     tokenIn: provenance.inputAsset,
     tokenOut: provenance.outputAsset,

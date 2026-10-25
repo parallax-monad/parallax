@@ -24,7 +24,11 @@ export type AnvilStateRevision =
       readonly method: "ANVIL_DUMP_STATE";
       readonly fingerprint: string;
     }
-  | typeof UNKNOWN_STATE_REVISION;
+  | typeof UNKNOWN_STATE_REVISION
+  | {
+      readonly status: "UNKNOWN";
+      readonly reason: "STATE_CHANGED_DURING_SIMULATION";
+    };
 
 export type StateDiffAmountReceived =
   | {

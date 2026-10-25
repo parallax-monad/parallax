@@ -15,6 +15,8 @@ export const CHECK_RUN_FAILURE_CODES = [
   "UNSUPPORTED",
   "AGENT_FLOW_ERROR",
   "INVALID_AGENT_FLOW_RESPONSE",
+  "SOURCE_MISMATCH",
+  "FORK_STATE_CHANGED",
 ] as const;
 
 export type CheckRunFailureCode = (typeof CHECK_RUN_FAILURE_CODES)[number];

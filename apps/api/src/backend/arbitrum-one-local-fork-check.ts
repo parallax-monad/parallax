@@ -3,6 +3,8 @@ import {
   convertAtomicAmountToHuman,
   type GenericEvidence,
   genericEvidenceSchema,
+  type ProviderNeutralSimulationProvenance,
+  providerNeutralSimulationProvenanceSchema,
   type Quote,
   quoteResultSchema,
   runResultSchema,
@@ -66,10 +68,36 @@ const localForkSimulationTails = new Map<string, Promise<void>>();
 
 type LocalForkFailureReason =
   | "EVM_REVERT"
+  | "SLIPPAGE_GUARD"
   | "RPC_TIMEOUT"
   | "RPC_UNAVAILABLE"
   | "MALFORMED_RESPONSE"
-  | "INSUFFICIENT_NATIVE_BALANCE";
+  | "INSUFFICIENT_NATIVE_BALANCE"
+  | "FORK_STATE_CHANGED";
+
+export class ArbitrumOneSourceMismatchError extends Error {
+  public readonly code = "SOURCE_MISMATCH";
+  public readonly integrationStatus = "INTEGRATION_ERROR";
+  public readonly source = "rpc";
+  public readonly stage = "simulation";
+
+  public constructor() {
+    super("Pinned source quote does not match the verified local fork context");
+    this.name = "ArbitrumOneSourceMismatchError";
+  }
+}
+
+export class ArbitrumOneForkStateChangedError extends Error {
+  public readonly code = "FORK_STATE_CHANGED";
+  public readonly integrationStatus = "INTEGRATION_ERROR";
+  public readonly source = "rpc";
+  public readonly stage = "simulation";
+
+  public constructor() {
+    super("Local fork state changed during read-only simulation");
+    this.name = "ArbitrumOneForkStateChangedError";
+  }
+}
 
 export type ArbitrumOneLocalForkCheckFlowOptions = {
   /** Internal deterministic-test seam. Never populated from an API request. */
@@ -131,7 +159,7 @@ export function createArbitrumOneLocalForkCheckFlow(
         sourceBlockBefore.hash.toLowerCase() !==
         localIdentity.block.hash.toLowerCase()
       ) {
-        throw new Error("Local fork source block identity does not match");
+        throw new ArbitrumOneSourceMismatchError();
       }
 
       const localRouterCode = await requestLocal(localRpc, "eth_getCode", [
@@ -164,9 +192,7 @@ export function createArbitrumOneLocalForkCheckFlow(
         quoteProvenance.sourceBlock.hash.toLowerCase() !==
           localIdentity.block.hash.toLowerCase()
       ) {
-        throw new Error(
-          "Source quote does not match the local fork base block",
-        );
+        throw new ArbitrumOneSourceMismatchError();
       }
 
       const prepared = prepareArbitrumOneTransaction({
@@ -178,9 +204,17 @@ export function createArbitrumOneLocalForkCheckFlow(
         intent: input.intent,
         quote,
         transaction: prepared.payload,
+        expectedSourceBlock: {
+          chainId: ARBITRUM_ONE_CHAIN_ID,
+          number: localIdentity.block.number,
+          hash: localIdentity.block.hash,
+        },
         now: observedAtDate,
       });
       if (!inspection.ok) {
+        if (inspection.failureCode === "SOURCE_MISMATCH") {
+          throw new ArbitrumOneSourceMismatchError();
+        }
         throw new Error("Prepared local fork transaction binding is invalid");
       }
       const senderNativeBalanceOverrideAtomic =
@@ -220,10 +254,12 @@ export function createArbitrumOneLocalForkCheckFlow(
       ).toString();
       if (
         sourceBlockAfter.hash.toLowerCase() !==
-          sourceBlockBefore.hash.toLowerCase() ||
-        localHeadAfter !== localIdentity.block.number
+        sourceBlockBefore.hash.toLowerCase()
       ) {
-        throw new Error("Fork execution block changed during local Check");
+        throw new ArbitrumOneSourceMismatchError();
+      }
+      if (localHeadAfter !== localIdentity.block.number) {
+        throw new ArbitrumOneForkStateChangedError();
       }
 
       const provenance = {
@@ -267,6 +303,42 @@ export function createArbitrumOneLocalForkCheckFlow(
         },
       };
       const evidence = buildUnknownOutcomeEvidence(input, quote, observedAt);
+      const simulationProvenance =
+        providerNeutralSimulationProvenanceSchema.parse({
+          schemaVersion: 1,
+          status: "AVAILABLE",
+          sourceChainId: quoteProvenance.sourceChainId,
+          sourceBlockNumber: quoteProvenance.sourceBlock.number,
+          sourceBlockHash: quoteProvenance.sourceBlock.hash,
+          sourceObservedAt: quoteProvenance.sourceBlock.observedAt,
+          executionEnvironment: "LOCAL_FORK",
+          executionChainId: simulation.executionChainId,
+          executionBlockContext: {
+            baseBlockNumber: localIdentity.block.number,
+            baseBlockHash: localIdentity.block.hash,
+            observedHeadNumber: localIdentity.block.number,
+          },
+          forkRunId: localIdentity.forkInstanceId,
+          stateRevision: providerNeutralStateRevision(simulation.stateRevision),
+          accountOverridesApplied: true,
+          transactionFingerprint: prepared.fingerprint,
+          transactionBinding: inspection.binding,
+          quote: {
+            amountInAtomic: quoteProvenance.amountInAtomic,
+            amountOutAtomic: quoteProvenance.amountOutAtomic,
+            poolAddress: quoteProvenance.route.poolAddress,
+            tokenPath: quoteProvenance.route.tokenPath,
+          },
+          capabilities: {
+            call: simulation.call,
+            gasEstimate: simulation.gasEstimate,
+            amountReceived: simulation.amountReceived,
+          },
+          quoteReconciliation: quoteReconciliation(
+            quoteProvenance.amountOutAtomic,
+            simulation.amountReceived,
+          ),
+        } satisfies ProviderNeutralSimulationProvenance);
       const baseResult = projectGenericEvidenceToRunResult(
         input.runId,
         input.intent,
@@ -276,6 +348,7 @@ export function createArbitrumOneLocalForkCheckFlow(
         ...baseResult,
         quote,
         arbitrumOneForkProvenance: provenance,
+        simulationProvenance,
       });
     },
   };
@@ -462,6 +535,7 @@ async function simulateInSnapshot(input: {
         readonly failureReason: LocalForkFailureReason;
       };
   readonly stateRevision: AnvilStateRevision;
+  readonly executionChainId: number;
   readonly amountReceived:
     | StateDiffAmountReceived
     | {
@@ -569,7 +643,10 @@ async function simulateInSnapshot(input: {
     } catch (error) {
       const failureReason = classifyRpcFailure(error);
       call = {
-        status: failureReason === "EVM_REVERT" ? "REVERTED" : "UNAVAILABLE",
+        status:
+          failureReason === "EVM_REVERT" || failureReason === "SLIPPAGE_GUARD"
+            ? "REVERTED"
+            : "UNAVAILABLE",
         failureReason,
       };
     }
@@ -592,12 +669,28 @@ async function simulateInSnapshot(input: {
       input.rpc,
       revisionContext,
     );
+    const executionRevisionChanged =
+      stateRevisionBefore.status === "AVAILABLE" &&
+      stateRevisionAfter.status === "AVAILABLE" &&
+      stateRevisionBefore.fingerprint !== stateRevisionAfter.fingerprint;
     const stableExecutionRevision =
       baselineStateRevision.status === "AVAILABLE" &&
       stateRevisionBefore.status === "AVAILABLE" &&
       stateRevisionAfter.status === "AVAILABLE" &&
       stateRevisionBefore.fingerprint === stateRevisionAfter.fingerprint;
     if (stableExecutionRevision) stateRevision = stateRevisionBefore;
+
+    if (executionRevisionChanged) {
+      stateRevision = {
+        status: "UNKNOWN",
+        reason: "STATE_CHANGED_DURING_SIMULATION",
+      };
+      call = { status: "UNAVAILABLE", failureReason: "FORK_STATE_CHANGED" };
+      gasEstimate = {
+        status: "UNAVAILABLE",
+        failureReason: "FORK_STATE_CHANGED",
+      };
+    }
 
     if (call.status !== "SUCCEEDED") {
       amountReceived = {
@@ -641,8 +734,18 @@ async function simulateInSnapshot(input: {
       ) {
         stateRevision = {
           status: "UNKNOWN",
-          reason: "NO_QUALIFIED_ANVIL_STATE_REVISION_TOKEN",
+          reason:
+            stateRevisionAfterQualification.status === "AVAILABLE"
+              ? "STATE_CHANGED_DURING_SIMULATION"
+              : "NO_QUALIFIED_ANVIL_STATE_REVISION_TOKEN",
         };
+        if (stateRevisionAfterQualification.status === "AVAILABLE") {
+          call = { status: "UNAVAILABLE", failureReason: "FORK_STATE_CHANGED" };
+          gasEstimate = {
+            status: "UNAVAILABLE",
+            failureReason: "FORK_STATE_CHANGED",
+          };
+        }
         amountReceived = {
           status: "UNAVAILABLE",
           reason: "STATE_DIFF_NOT_QUALIFIED",
@@ -703,7 +806,13 @@ async function simulateInSnapshot(input: {
   if (snapshotCreated || cleanupError !== undefined) {
     throw new Error("Local fork snapshot restoration failed");
   }
-  return { call, gasEstimate, stateRevision, amountReceived };
+  return {
+    call,
+    gasEstimate,
+    stateRevision,
+    executionChainId: Number(LOCAL_FORK_CHAIN_ID),
+    amountReceived,
+  };
 }
 
 async function readRecipientUsdcBalance(
@@ -723,6 +832,59 @@ async function readRecipientUsdcBalance(
   } catch {
     return undefined;
   }
+}
+
+function providerNeutralStateRevision(revision: AnvilStateRevision) {
+  if (revision.status === "AVAILABLE") {
+    return {
+      status: "AVAILABLE" as const,
+      fingerprint: revision.fingerprint,
+    };
+  }
+  return {
+    status: "UNKNOWN" as const,
+    reason:
+      revision.reason === "STATE_CHANGED_DURING_SIMULATION"
+        ? ("STATE_CHANGED_DURING_SIMULATION" as const)
+        : ("NO_QUALIFIED_STATE_REVISION_TOKEN" as const),
+  };
+}
+
+function quoteReconciliation(
+  quoteAmountOutAtomic: string,
+  amountReceived:
+    | StateDiffAmountReceived
+    | {
+        readonly status: "UNAVAILABLE";
+        readonly reason: "CALL_NOT_SUCCEEDED";
+      },
+) {
+  if (amountReceived.status !== "AVAILABLE") {
+    return {
+      status: "UNAVAILABLE" as const,
+      comparisonMethod: "ATOMIC_INTEGER_EQUALITY" as const,
+      quoteAmountOutAtomic,
+      reason: "SIMULATED_OUTPUT_UNAVAILABLE" as const,
+    };
+  }
+  const difference =
+    BigInt(amountReceived.amountReceivedAtomic) - BigInt(quoteAmountOutAtomic);
+  if (difference === 0n) {
+    return {
+      status: "MATCHED" as const,
+      comparisonMethod: "ATOMIC_INTEGER_EQUALITY" as const,
+      quoteAmountOutAtomic,
+      simulatedAmountReceivedAtomic: amountReceived.amountReceivedAtomic,
+      differenceAtomic: "0" as const,
+    };
+  }
+  return {
+    status: "MISMATCHED" as const,
+    comparisonMethod: "ATOMIC_INTEGER_EQUALITY" as const,
+    quoteAmountOutAtomic,
+    simulatedAmountReceivedAtomic: amountReceived.amountReceivedAtomic,
+    differenceAtomic: difference.toString(),
+  };
 }
 
 function buildUnknownOutcomeEvidence(
@@ -905,7 +1067,11 @@ function classifyRpcFailure(error: unknown): LocalForkFailureReason {
       return "INSUFFICIENT_NATIVE_BALANCE";
     }
     if (rpcCode === 3 || /execution reverted|revert/i.test(message)) {
-      return "EVM_REVERT";
+      return /too little received|amount.?out.?minimum|minimum output|slippage/i.test(
+        message,
+      )
+        ? "SLIPPAGE_GUARD"
+        : "EVM_REVERT";
     }
   }
   return "RPC_UNAVAILABLE";

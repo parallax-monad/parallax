@@ -1211,6 +1211,7 @@ describe("Arbitrum One local-fork Check/Run provenance", () => {
       const postBody = (await response.json()) as {
         runId: string;
         arbitrumOneForkProvenance?: unknown;
+        simulationProvenance?: unknown;
       };
       expect(postBody.runId).toBeTruthy();
       expect(postBody.arbitrumOneForkProvenance).toMatchObject({
@@ -1243,6 +1244,49 @@ describe("Arbitrum One local-fork Check/Run provenance", () => {
           signingOrBroadcastingPerformed: false,
           transactionSubmissionPerformed: false,
           localTransactionsMined: false,
+        },
+      });
+      expect(postBody.simulationProvenance).toMatchObject({
+        schemaVersion: 1,
+        status: "AVAILABLE",
+        sourceChainId: ARBITRUM_ONE_CHAIN_ID,
+        sourceBlockNumber,
+        sourceBlockHash: blockHash,
+        executionEnvironment: "LOCAL_FORK",
+        executionChainId: 31_337,
+        executionBlockContext: {
+          baseBlockNumber: sourceBlockNumber,
+          baseBlockHash: blockHash,
+          observedHeadNumber: sourceBlockNumber,
+        },
+        forkRunId: localForkInstanceId,
+        stateRevision: { status: "AVAILABLE" },
+        accountOverridesApplied: true,
+        transactionFingerprint: expect.stringMatching(/^sha256:[a-f0-9]{64}$/),
+        quote: {
+          amountInAtomic: "1000000000000000",
+          amountOutAtomic: "2413423",
+          poolAddress: ARBITRUM_ONE_RUNTIME_PROFILE.route.poolAddress,
+          tokenPath: [
+            ARBITRUM_ONE_RUNTIME_PROFILE.deployments.wrappedNativeAddress,
+            ARBITRUM_ONE_RUNTIME_PROFILE.deployments.usdcAddress,
+          ],
+        },
+        capabilities: {
+          call: { status: "SUCCEEDED" },
+          gasEstimate: { status: "AVAILABLE", gasUnits: "21000" },
+          amountReceived: {
+            status: "AVAILABLE",
+            amountReceivedAtomic: "2413423",
+            source: "VALIDATED_STATE_DIFF",
+          },
+        },
+        quoteReconciliation: {
+          status: "MATCHED",
+          comparisonMethod: "ATOMIC_INTEGER_EQUALITY",
+          quoteAmountOutAtomic: "2413423",
+          simulatedAmountReceivedAtomic: "2413423",
+          differenceAtomic: "0",
         },
       });
       const provenanceBody = postBody.arbitrumOneForkProvenance as {
@@ -1294,10 +1338,16 @@ describe("Arbitrum One local-fork Check/Run provenance", () => {
       );
       expect(getResponse.status).toBe(200);
       const getBody = (await getResponse.json()) as {
-        result?: { arbitrumOneForkProvenance?: unknown };
+        result?: {
+          arbitrumOneForkProvenance?: unknown;
+          simulationProvenance?: unknown;
+        };
       };
       expect(getBody.result?.arbitrumOneForkProvenance).toEqual(
         postBody.arbitrumOneForkProvenance,
+      );
+      expect(getBody.result?.simulationProvenance).toEqual(
+        postBody.simulationProvenance,
       );
       expect(source.calls.length + local.calls.length).toBe(rpcCallCount);
     } finally {
@@ -1327,6 +1377,24 @@ describe("Arbitrum One local-fork Check/Run provenance", () => {
         ),
       },
       checkOptions: { minimumReceived: "3" },
+      expected: {
+        call: { status: "REVERTED", failureReason: "SLIPPAGE_GUARD" },
+        gasEstimate: {
+          status: "UNAVAILABLE",
+          failureReason: "SLIPPAGE_GUARD",
+        },
+      },
+    },
+    {
+      name: "non-slippage EVM revert",
+      rpcOptions: {
+        callError: createRpcError(3, "execution reverted: invalid pool state"),
+        gasEstimateError: createRpcError(
+          3,
+          "execution reverted: invalid pool state",
+        ),
+      },
+      checkOptions: {},
       expected: {
         call: { status: "REVERTED", failureReason: "EVM_REVERT" },
         gasEstimate: { status: "UNAVAILABLE", failureReason: "EVM_REVERT" },
@@ -1362,6 +1430,16 @@ describe("Arbitrum One local-fork Check/Run provenance", () => {
       expect(provenance.simulation).toMatchObject({
         ...expected,
         amountReceived: { status: "UNAVAILABLE" },
+      });
+      expect(result.verdict).toBe("UNKNOWN");
+      expect(result.simulationProvenance?.capabilities).toMatchObject({
+        ...expected,
+        amountReceived: { status: "UNAVAILABLE" },
+      });
+      expect(result.simulationProvenance?.quoteReconciliation).toMatchObject({
+        status: "UNAVAILABLE",
+        comparisonMethod: "ATOMIC_INTEGER_EQUALITY",
+        quoteAmountOutAtomic: "2413423",
       });
       expect(provenance.simulation.amountReceived).not.toHaveProperty(
         "amountReceivedAtomic",
@@ -1449,6 +1527,165 @@ describe("Arbitrum One local-fork Check/Run provenance", () => {
       },
     };
     expect(runResultSchema.safeParse(invalidResult).success).toBe(false);
+  });
+
+  it("marks a changed Anvil state revision unavailable without Risk promotion", async () => {
+    const runtime = createLocalRuntime();
+    const source = createRpc();
+    const local = createLocalForkRpc();
+    let stateDumpCount = 0;
+    const localRpcClient: ArbitrumRpcClient = {
+      async request(method, params, operationOptions) {
+        const response = await local.rpcClient.request(
+          method,
+          params,
+          operationOptions,
+        );
+        if (method === "anvil_dumpState") {
+          stateDumpCount += 1;
+          if (stateDumpCount === 3) return "0x02";
+        }
+        return response;
+      },
+    };
+    const flow = createArbitrumOneLocalForkCheckFlow(runtime, {
+      sourceRpcClient: source.rpcClient,
+      localRpcClient,
+      now: () => new Date("2026-10-17T19:17:33.990Z"),
+    });
+    const result = runResultSchema.parse(
+      await flow.check(createLocalCheckInput(runtime)),
+    );
+    const fork = result.arbitrumOneForkProvenance;
+    if (fork?.status !== "AVAILABLE") {
+      throw new Error("Expected local-fork context to remain available");
+    }
+
+    expect(fork.localExecution.stateRevision).toEqual({
+      status: "UNKNOWN",
+      reason: "STATE_CHANGED_DURING_SIMULATION",
+    });
+    expect(fork.simulation).toMatchObject({
+      call: { status: "UNAVAILABLE", failureReason: "FORK_STATE_CHANGED" },
+      gasEstimate: {
+        status: "UNAVAILABLE",
+        failureReason: "FORK_STATE_CHANGED",
+      },
+      amountReceived: { status: "UNAVAILABLE" },
+    });
+    expect(result.simulationProvenance?.quoteReconciliation).toMatchObject({
+      status: "UNAVAILABLE",
+      reason: "SIMULATED_OUTPUT_UNAVAILABLE",
+    });
+    expect(result.verdict).toBe("UNKNOWN");
+    expect(local.calls.some((call) => call.method === "debug_traceCall")).toBe(
+      false,
+    );
+    expect(local.calls.some((call) => call.method === "evm_revert")).toBe(true);
+  });
+
+  it("rejects mutations to recipient, amount, router, chain, quote source, route, and revision", async () => {
+    const fixture = createLocalCheckFixture();
+    const result = runResultSchema.parse(
+      await fixture.flow.check(fixture.input),
+    );
+    const provenance = result.simulationProvenance;
+    if (provenance === undefined) {
+      throw new Error("Expected provider-neutral simulation provenance");
+    }
+    const changedFingerprint = `sha256:${"cd".repeat(32)}`;
+    const changedAddress = "0x3333333333333333333333333333333333333333";
+    const invalidRuns = [
+      {
+        ...result,
+        simulationProvenance: {
+          ...provenance,
+          transactionBinding: {
+            ...provenance.transactionBinding,
+            recipient: concurrentSender,
+          },
+        },
+      },
+      {
+        ...result,
+        simulationProvenance: {
+          ...provenance,
+          transactionBinding: {
+            ...provenance.transactionBinding,
+            amountInAtomic: "1000000000000001",
+          },
+        },
+      },
+      {
+        ...result,
+        simulationProvenance: {
+          ...provenance,
+          transactionBinding: {
+            ...provenance.transactionBinding,
+            router: changedAddress,
+            to: changedAddress,
+          },
+        },
+      },
+      {
+        ...result,
+        simulationProvenance: {
+          ...provenance,
+          transactionBinding: {
+            ...provenance.transactionBinding,
+            chainId: 421614,
+          },
+        },
+      },
+      {
+        ...result,
+        simulationProvenance: {
+          ...provenance,
+          sourceBlockHash: `0x${"cd".repeat(32)}`,
+        },
+      },
+      {
+        ...result,
+        simulationProvenance: {
+          ...provenance,
+          quote: { ...provenance.quote, poolAddress: changedAddress },
+        },
+      },
+      {
+        ...result,
+        simulationProvenance: {
+          ...provenance,
+          quote: {
+            ...provenance.quote,
+            tokenPath: [provenance.quote.tokenPath[0], changedAddress] as [
+              string,
+              string,
+            ],
+          },
+        },
+      },
+      {
+        ...result,
+        simulationProvenance: {
+          ...provenance,
+          transactionFingerprint: changedFingerprint,
+        },
+      },
+      {
+        ...result,
+        simulationProvenance: {
+          ...provenance,
+          stateRevision: {
+            status: "AVAILABLE" as const,
+            fingerprint: changedFingerprint,
+          },
+        },
+      },
+    ];
+
+    for (const invalidRun of invalidRuns) {
+      expect(runResultSchema.safeParse(invalidRun).success).toBe(false);
+    }
   });
 
   it("serializes concurrent checks for one fork and restores both senders' state", async () => {
@@ -1612,7 +1849,7 @@ describe("Arbitrum One local-fork Check/Run provenance", () => {
       blockHash: `0x${"cd".repeat(32)}`,
     });
     await expect(fixture.flow.check(fixture.input)).rejects.toThrow(
-      "Local fork source block identity does not match",
+      "Pinned source quote does not match the verified local fork context",
     );
     expect(fixture.local.calls.some((call) => call.method === "eth_call")).toBe(
       false,
@@ -1620,6 +1857,45 @@ describe("Arbitrum One local-fork Check/Run provenance", () => {
     expect(
       fixture.local.calls.some((call) => call.method === "evm_snapshot"),
     ).toBe(false);
+  });
+
+  it("projects a source mismatch as a distinct UNKNOWN integration failure", async () => {
+    const fixture = createLocalCheckFixture({
+      blockHash: `0x${"cd".repeat(32)}`,
+    });
+    const app = createLocalCheckApp(fixture.flow);
+    try {
+      const response = await app.fetch(
+        new Request("https://api.example.test/api/check", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            ...quoteRequest,
+            economicBoundary: {
+              availability: "unavailable",
+              source: "unavailable",
+            },
+          }),
+        }),
+      );
+      expect(response.status).toBe(502);
+      await expect(response.json()).resolves.toMatchObject({
+        error: { code: "SOURCE_MISMATCH" },
+        run: {
+          status: "integration_error",
+          verdict: "UNKNOWN",
+          error: { code: "SOURCE_MISMATCH", stage: "simulation" },
+        },
+      });
+      expect(
+        fixture.local.calls.some((call) => call.method === "eth_call"),
+      ).toBe(false);
+      expect(
+        fixture.local.calls.some((call) => call.method === "evm_snapshot"),
+      ).toBe(false);
+    } finally {
+      await app.close();
+    }
   });
 
   it.each([

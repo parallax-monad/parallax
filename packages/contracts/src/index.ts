@@ -18,3 +18,4 @@ export * from "./rerun.js";
 export * from "./route.js";
 export * from "./run.js";
 export * from "./serialization.js";
+export * from "./simulation-provenance.js";

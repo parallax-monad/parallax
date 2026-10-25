@@ -54,6 +54,8 @@ export type CheckApiErrorCode =
   | "INVALID_AGENT_FLOW_RESPONSE"
   | "INSUFFICIENT_NATIVE_BALANCE"
   | "EXECUTION_REVERT"
+  | "SOURCE_MISMATCH"
+  | "FORK_STATE_CHANGED"
   | "RUN_STORE_ERROR";
 
 export type CheckApiError =
@@ -209,7 +211,9 @@ export class CheckApplicationService {
       );
       const publicError: CheckApiError =
         mappedError.code === "INSUFFICIENT_NATIVE_BALANCE" ||
-        mappedError.code === "EXECUTION_REVERT"
+        mappedError.code === "EXECUTION_REVERT" ||
+        mappedError.code === "SOURCE_MISMATCH" ||
+        mappedError.code === "FORK_STATE_CHANGED"
           ? {
               code: mappedError.code,
               message: mappedError.message,
@@ -220,9 +224,17 @@ export class CheckApplicationService {
                 ? unsupportedCheckMessage(invoked.error)
                 : "Agent Flow could not complete the check",
             };
+      const failure: CheckRunFailureCode =
+        mappedError.code === "SOURCE_MISMATCH"
+          ? "SOURCE_MISMATCH"
+          : mappedError.code === "FORK_STATE_CHANGED"
+            ? "FORK_STATE_CHANGED"
+            : unsupported
+              ? "UNSUPPORTED"
+              : "AGENT_FLOW_ERROR";
       return this.recordFailure(
         runId,
-        unsupported ? "UNSUPPORTED" : "AGENT_FLOW_ERROR",
+        failure,
         normalized.intent,
         childFields,
         createdAt,
@@ -885,7 +897,7 @@ function integrationErrorForFailure(
   }
 
   const fields = asRecord(cause);
-  const rawCode = stringField(fields, "code");
+  const rawCode = stringField(fields, "code") ?? stringField(fields, "kind");
   const rawStatus = stringField(fields, "integrationStatus");
   const source = stringField(fields, "source");
   const stage = integrationErrorStage(stringField(fields, "stage"));
@@ -910,6 +922,18 @@ function integrationErrorForFailure(
     };
   }
 
+  if (rawCode === "SOURCE_MISMATCH" || rawCode === "FORK_STATE_CHANGED") {
+    return {
+      code: rawCode,
+      stage: "simulation",
+      message:
+        rawCode === "SOURCE_MISMATCH"
+          ? "The quote source does not match the verified execution context"
+          : "The local fork state changed during simulation",
+      retryable: false,
+    };
+  }
+
   if (rawCode === "TIMEOUT" || rawStatus === "TIMEOUT") {
     return {
       code: "TIMEOUT",
@@ -921,6 +945,9 @@ function integrationErrorForFailure(
 
   if (
     rawCode === "RPC_UNAVAILABLE" ||
+    rawCode === "NETWORK_FAILURE" ||
+    rawCode === "HTTP_FAILURE" ||
+    rawCode === "ABORTED" ||
     (rawStatus === "UNAVAILABLE" && source === "rpc")
   ) {
     return {
@@ -928,6 +955,20 @@ function integrationErrorForFailure(
       stage,
       message: "The RPC dependency was unavailable",
       retryable: true,
+    };
+  }
+
+  if (
+    rawCode === "JSON_PARSE_FAILURE" ||
+    rawCode === "INVALID_ENVELOPE" ||
+    rawCode === "ID_MISMATCH" ||
+    rawCode === "MISSING_RESULT"
+  ) {
+    return {
+      code: "INVALID_RESPONSE",
+      stage,
+      message: "The RPC dependency returned an invalid response",
+      retryable: false,
     };
   }
 

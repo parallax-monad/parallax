@@ -24,7 +24,10 @@ export const arbitrumOneForkStateRevisionSchema = z.discriminatedUnion(
     z
       .object({
         status: z.literal("UNKNOWN"),
-        reason: z.literal("NO_QUALIFIED_ANVIL_STATE_REVISION_TOKEN"),
+        reason: z.enum([
+          "NO_QUALIFIED_ANVIL_STATE_REVISION_TOKEN",
+          "STATE_CHANGED_DURING_SIMULATION",
+        ]),
       })
       .strict(),
   ],
@@ -41,6 +44,8 @@ const forkSimulationCallSchema = z
         "RPC_UNAVAILABLE",
         "MALFORMED_RESPONSE",
         "INSUFFICIENT_NATIVE_BALANCE",
+        "SLIPPAGE_GUARD",
+        "FORK_STATE_CHANGED",
       ])
       .optional(),
   })
@@ -80,6 +85,8 @@ const forkGasEstimateSchema = z
         "RPC_UNAVAILABLE",
         "MALFORMED_RESPONSE",
         "INSUFFICIENT_NATIVE_BALANCE",
+        "SLIPPAGE_GUARD",
+        "FORK_STATE_CHANGED",
       ])
       .optional(),
   })

@@ -29,6 +29,7 @@ import { p0RunResultSchema } from "./p0-run-result.js";
 import { quoteSchema } from "./quote.js";
 import { tokenMetadataPairSchema } from "./registry.js";
 import { routeSchema } from "./route.js";
+import { providerNeutralSimulationProvenanceSchema } from "./simulation-provenance.js";
 
 export const runDiffFieldSchema = z.enum([
   "amountInAtomic",
@@ -67,6 +68,9 @@ const runIdentitySchema = z.object({
   tokenMetadata: tokenMetadataPairSchema.optional(),
   /** Optional, versioned local-fork Check provenance added after legacy Runs. */
   arbitrumOneForkProvenance: arbitrumOneForkProvenanceSchema.optional(),
+  /** Provider-neutral additive projection; legacy Runs remain readable. */
+  simulationProvenance: providerNeutralSimulationProvenanceSchema.optional(),
+  quote: quoteSchema.optional(),
 });
 
 type RunIdentity = z.infer<typeof runIdentitySchema>;
@@ -151,6 +155,160 @@ function validateRunIdentity(result: RunIdentity, context: z.RefinementCtx) {
         });
       }
     }
+  }
+  validateSimulationProvenance(result, context);
+}
+
+function validateSimulationProvenance(
+  result: RunIdentity,
+  context: z.RefinementCtx,
+) {
+  const provenance = result.simulationProvenance;
+  if (provenance === undefined) return;
+
+  const binding = provenance.transactionBinding;
+  const tokenInMatchesIntent =
+    result.intent.tokenIn.kind === "native"
+      ? binding.tokenIn === "native"
+      : binding.tokenIn.toLowerCase() ===
+        result.intent.tokenIn.address.toLowerCase();
+  const tokenOutMatchesIntent =
+    result.intent.tokenOut.kind === "erc20" &&
+    binding.tokenOut.toLowerCase() ===
+      result.intent.tokenOut.address.toLowerCase();
+  if (
+    provenance.sourceChainId !== result.intent.chainId ||
+    binding.chainId !== result.intent.chainId ||
+    binding.protocol !== result.intent.protocol ||
+    binding.sender.toLowerCase() !== result.intent.sender.toLowerCase() ||
+    binding.recipient.toLowerCase() !== result.intent.recipient.toLowerCase() ||
+    binding.amountInAtomic !== result.intent.amountInAtomic ||
+    !tokenInMatchesIntent ||
+    !tokenOutMatchesIntent ||
+    binding.router.toLowerCase() !== binding.to.toLowerCase() ||
+    (result.intent.economicBoundary.availability === "available" &&
+      binding.amountOutMinimumAtomic !==
+        result.intent.economicBoundary.minimumReceivedAtomic)
+  ) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Provider-neutral simulation binding must match the Run Intent",
+      path: ["simulationProvenance", "transactionBinding"],
+    });
+  }
+
+  const quoteProvenance = result.quote?.provenance;
+  if (
+    quoteProvenance === undefined ||
+    provenance.sourceChainId !== quoteProvenance.sourceChainId ||
+    provenance.sourceBlockNumber !== quoteProvenance.sourceBlock.number ||
+    provenance.sourceBlockHash.toLowerCase() !==
+      quoteProvenance.sourceBlock.hash.toLowerCase() ||
+    provenance.sourceObservedAt !== quoteProvenance.sourceBlock.observedAt ||
+    provenance.quote.amountInAtomic !== quoteProvenance.amountInAtomic ||
+    provenance.quote.amountOutAtomic !== quoteProvenance.amountOutAtomic ||
+    provenance.quote.poolAddress.toLowerCase() !==
+      quoteProvenance.route.poolAddress.toLowerCase() ||
+    provenance.quote.tokenPath.some(
+      (address, index) =>
+        address.toLowerCase() !==
+        quoteProvenance.route.tokenPath[index]?.toLowerCase(),
+    )
+  ) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message:
+        "Simulation provenance must match the exact quote source and route",
+      path: ["simulationProvenance", "quote"],
+    });
+  }
+
+  const fork = result.arbitrumOneForkProvenance;
+  if (fork?.status !== "AVAILABLE") return;
+  const legacyRevision = fork.localExecution.stateRevision;
+  const revisionMatches =
+    provenance.stateRevision.status === legacyRevision.status &&
+    (provenance.stateRevision.status === "AVAILABLE"
+      ? legacyRevision.status === "AVAILABLE" &&
+        provenance.stateRevision.fingerprint === legacyRevision.fingerprint
+      : legacyRevision.status === "UNKNOWN" &&
+        (provenance.stateRevision.reason ===
+          "STATE_CHANGED_DURING_SIMULATION") ===
+          (legacyRevision.reason === "STATE_CHANGED_DURING_SIMULATION"));
+  const neutralCall = provenance.capabilities.call;
+  const legacyCall = fork.simulation.call;
+  const neutralGas = provenance.capabilities.gasEstimate;
+  const legacyGas = fork.simulation.gasEstimate;
+  const neutralAmount = provenance.capabilities.amountReceived;
+  const legacyAmount = fork.simulation.amountReceived;
+  if (
+    provenance.executionEnvironment !== "LOCAL_FORK" ||
+    provenance.forkRunId?.toLowerCase() !==
+      fork.localExecution.forkInstanceId.toLowerCase() ||
+    provenance.sourceChainId !== fork.source.chainId ||
+    provenance.sourceBlockNumber !== fork.source.blockNumber ||
+    provenance.sourceBlockHash.toLowerCase() !==
+      fork.source.blockHash.toLowerCase() ||
+    provenance.sourceObservedAt !== fork.source.observedAt ||
+    provenance.executionChainId !== fork.localExecution.chainId ||
+    provenance.executionBlockContext.baseBlockNumber !==
+      fork.localExecution.baseBlockNumber ||
+    provenance.executionBlockContext.baseBlockHash.toLowerCase() !==
+      fork.localExecution.baseBlockHash.toLowerCase() ||
+    provenance.executionBlockContext.observedHeadNumber !==
+      fork.localExecution.observedHeadNumber ||
+    provenance.transactionFingerprint !==
+      fork.transaction.preparedTransactionFingerprint ||
+    provenance.accountOverridesApplied !== true ||
+    !revisionMatches ||
+    provenance.transactionBinding.chainId !==
+      fork.transaction.binding.chainId ||
+    provenance.transactionBinding.protocol !==
+      fork.transaction.binding.protocol ||
+    provenance.transactionBinding.sender.toLowerCase() !==
+      fork.transaction.binding.sender.toLowerCase() ||
+    provenance.transactionBinding.recipient.toLowerCase() !==
+      fork.transaction.binding.recipient.toLowerCase() ||
+    provenance.transactionBinding.tokenIn.toLowerCase() !==
+      fork.transaction.binding.tokenIn.toLowerCase() ||
+    provenance.transactionBinding.tokenOut.toLowerCase() !==
+      fork.transaction.binding.tokenOut.toLowerCase() ||
+    provenance.transactionBinding.amountInAtomic !==
+      fork.transaction.binding.amountInAtomic ||
+    provenance.transactionBinding.amountOutMinimumAtomic !==
+      fork.transaction.binding.amountOutMinimumAtomic ||
+    provenance.transactionBinding.router.toLowerCase() !==
+      fork.transaction.binding.router.toLowerCase() ||
+    provenance.transactionBinding.from.toLowerCase() !==
+      fork.transaction.binding.from.toLowerCase() ||
+    provenance.transactionBinding.to.toLowerCase() !==
+      fork.transaction.binding.to.toLowerCase() ||
+    provenance.transactionBinding.value.toLowerCase() !==
+      fork.transaction.binding.value.toLowerCase() ||
+    provenance.transactionBinding.dataFingerprint !==
+      fork.transaction.binding.dataFingerprint ||
+    neutralCall.status !== legacyCall.status ||
+    neutralCall.failureReason !== legacyCall.failureReason ||
+    neutralCall.returnDataFingerprint !== legacyCall.returnDataFingerprint ||
+    neutralGas.status !== legacyGas.status ||
+    neutralGas.gasUnits !== legacyGas.gasUnits ||
+    neutralGas.failureReason !== legacyGas.failureReason ||
+    neutralAmount.status !== legacyAmount.status ||
+    (neutralAmount.status === "AVAILABLE" &&
+      legacyAmount.status === "AVAILABLE" &&
+      (neutralAmount.amountReceivedAtomic !==
+        legacyAmount.amountReceivedAtomic ||
+        neutralAmount.source !== legacyAmount.source)) ||
+    (neutralAmount.status === "UNAVAILABLE" &&
+      legacyAmount.status === "UNAVAILABLE" &&
+      neutralAmount.reason !== legacyAmount.reason)
+  ) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message:
+        "Provider-neutral provenance must match its legacy Run projection",
+      path: ["simulationProvenance"],
+    });
   }
 }
 
@@ -1611,6 +1769,8 @@ export const integrationErrorSchema = z
     code: z.enum([
       "MOSS_UNAVAILABLE",
       "RPC_UNAVAILABLE",
+      "SOURCE_MISMATCH",
+      "FORK_STATE_CHANGED",
       "TIMEOUT",
       "UNSUPPORTED",
       "INVALID_RESPONSE",
