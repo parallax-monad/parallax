@@ -1,5 +1,27 @@
 # Project State
 
+## 2026-10-26 — PR #179 Run provenance identity follow-up
+
+Code commit `806cc13aeddda676340e8af3d25cabd459c71dd6` (parent
+`d656b5ac84f4641d095cc67e0efdb32740c56e36`) closes two Run evidence-binding findings on the
+existing PR #179 branch. `runResultSchema` now requires quote provenance `outputAsset` identity,
+including chain and native/ERC-20 kind, to match `Intent.tokenOut`; LIVE simulation provenance also
+requires the normalized transaction's EVM `from` to match `Intent.sender`. LOCAL_FORK validation
+remains supported. Regression coverage accepts matching ERC-20/native quote outputs and valid LIVE
+and LOCAL_FORK provenance, and rejects native output metadata substituted for an ERC-20 Intent
+output plus a LIVE `from` mismatch despite a correct declared sender. Product/Risk and transaction
+execution semantics are unchanged.
+
+The contracts suite passed (10 files / 157 tests); full tests passed (131 files / 1,932 passed / 2
+skipped); all 7 workspace typechecks, scoped formatter/Biome, `git diff --check`, and lint passed.
+Lint exited 0 with 27 informational `useTemplate` diagnostics only in unchanged
+`scripts/provider-probes/` files. Exact code-head Actions run `40225724633` / job `121266542727`
+passed Lint, Typecheck, Test, and PostgreSQL-backed Integration test. Local PostgreSQL integration
+was not run because the configured database was not verified isolated and the suite truncates its
+tables. The code commit was normally pushed to PR #179's existing branch; the task branch and PR
+head ref read back at this SHA. PR #179 remains OPEN; no new PR, merge, or GitHub review/comment
+submission occurred. User acceptance remains pending.
+
 ## 2026-10-26 — PR #179 quote-protocol binding follow-up
 
 Code commit `6eebd1b666c402e8e086f1a72f7639c78fd9d71e` (parent

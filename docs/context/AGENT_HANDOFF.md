@@ -1,5 +1,22 @@
 # Current Agent Handoff
 
+## 2026-10-26 — PR #179 Run provenance identity follow-up
+
+Code commit `806cc13aeddda676340e8af3d25cabd459c71dd6` on
+`task/t_4b0f39b2-pr3-contract-evidence` binds quote provenance output-asset identity to
+`Intent.tokenOut` and requires LIVE simulation transaction `from` to equal `Intent.sender`.
+Tests preserve valid ERC-20/native output, LIVE, and LOCAL_FORK paths while rejecting tampered
+native-output metadata for an ERC-20 Intent and a mismatched LIVE transaction `from`.
+
+Full tests passed (131 files / 1,932 passed / 2 skipped), workspace typecheck, scoped Biome/format,
+`git diff --check`, and lint passed (27 informational diagnostics in unchanged provider-probe
+scripts). Exact code-head Actions run `40225724633` / job `121266542727` passed Lint, Typecheck,
+Test, and Integration test. Local PostgreSQL integration was not run against an unverified
+database that the suite truncates. The code commit was normally pushed to the existing PR #179
+branch and both the branch and PR ref read back at the code SHA; PR #179 remains OPEN with no
+reviews. Keep this task in review pending explicit user acceptance; do not merge or submit a GitHub
+review/comment. Refresh live PR head and CI before any future mutation.
+
 ## 2026-10-26 — PR #179 quote-protocol binding follow-up
 
 Code commit `6eebd1b666c402e8e086f1a72f7639c78fd9d71e` on

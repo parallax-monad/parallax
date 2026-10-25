@@ -1,5 +1,16 @@
 # Mutation / Incident Ledger
 
+## 2026-10-26 — PR #179 Run provenance identity follow-up
+
+Code commit `806cc13aeddda676340e8af3d25cabd459c71dd6` was normally pushed to the existing
+`task/t_4b0f39b2-pr3-contract-evidence` branch for PR #179. The change binds quote output-asset
+identity to Run Intent and LIVE EVM transaction `from` to Intent sender. Fresh readback confirmed
+the remote task branch and `refs/pull/179/head` at the code commit; exact-head Actions run
+`40225724633` / job `121266542727` passed Lint, Typecheck, Test, and PostgreSQL-backed Integration
+test. Local integration was not run because the destructive suite's configured DB was not
+verified isolated. PR #179 remains open; no new PR, merge, or GitHub review/comment submission
+occurred. Explicit user acceptance remains pending.
+
 ## 2026-09-19 — #69 Git identity attribution incident
 
 Old commits:
