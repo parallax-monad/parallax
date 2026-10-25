@@ -114,6 +114,17 @@ function validateRunIdentity(result: RunIdentity, context: z.RefinementCtx) {
   }
 
   if (result.quote?.provenance !== undefined) {
+    if (
+      result.quote.provenance.route.protocol !== result.intent.protocol ||
+      result.quote.provenance.quoteSource.protocol !== result.intent.protocol
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Quote provenance protocol must match the Run Intent",
+        path: ["quote", "provenance", "route", "protocol"],
+      });
+    }
+
     const displayAmountOutAtomic = exactHumanAmountToAtomic(
       result.quote.estimatedAmountOut,
       result.quote.provenance.outputAsset.decimals,

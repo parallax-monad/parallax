@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { ProtocolId } from "./common.js";
 import {
   type ActionEvaluation,
   actionEvaluationSchema,
@@ -271,6 +272,7 @@ const usdcQuoteMetadata = {
 function quoteWithProvenance(input: {
   estimatedAmountOut: string;
   amountOutAtomic: string;
+  protocol?: ProtocolId;
   inputAsset?: typeof nativeQuoteMetadata | typeof usdcQuoteMetadata;
   outputAsset?: typeof nativeQuoteMetadata | typeof usdcQuoteMetadata;
   amountInAtomic?: string;
@@ -285,6 +287,7 @@ function quoteWithProvenance(input: {
     outputAsset.asset.kind === "erc20"
       ? outputAsset.asset.address
       : otherToken.address;
+  const protocol = input.protocol ?? "kuru";
 
   return {
     estimatedAmountOut: input.estimatedAmountOut,
@@ -307,18 +310,79 @@ function quoteWithProvenance(input: {
       amountInAtomic: input.amountInAtomic ?? "1500000000000000000",
       amountOutAtomic: input.amountOutAtomic,
       route: {
-        protocol: "kuru" as const,
+        protocol,
         kind: "direct" as const,
         poolAddress: otherRecipient,
         tokenPath: [routeInputToken, routeOutputToken],
       },
       quoteSource: {
         kind: "quoter" as const,
-        protocol: "kuru" as const,
+        protocol,
         address: otherRecipient,
       },
     },
   };
+}
+
+function simulationProvenance(protocol: ProtocolId) {
+  const sourceBlockHash = `0x${"ab".repeat(32)}`;
+  const dataFingerprint = `sha256:${"33".repeat(32)}`;
+  return {
+    schemaVersion: 1,
+    status: "AVAILABLE",
+    sourceChainId: 143,
+    sourceBlockNumber: "12345",
+    sourceBlockHash,
+    sourceObservedAt: "2026-10-17T19:17:33.990Z",
+    executionEnvironment: "LIVE",
+    executionChainId: 143,
+    executionBlockContext: {
+      baseBlockNumber: "12345",
+      baseBlockHash: sourceBlockHash,
+      observedHeadNumber: "12345",
+    },
+    stateRevision: {
+      status: "UNKNOWN",
+      reason: "NO_QUALIFIED_STATE_REVISION_TOKEN",
+    },
+    accountOverridesApplied: false,
+    transactionFingerprint: `sha256:${"11".repeat(32)}`,
+    transactionBinding: {
+      chainId: 143,
+      protocol,
+      sender,
+      recipient: sender,
+      tokenIn: "native",
+      tokenOut: usdc.address,
+      amountInAtomic: normalizedIntent.amountInAtomic,
+      amountOutMinimumAtomic: "0",
+      router: otherRecipient,
+      from: sender,
+      to: otherRecipient,
+      value: "0x0",
+      dataFingerprint,
+    },
+    quote: {
+      amountInAtomic: normalizedIntent.amountInAtomic,
+      amountOutAtomic: "2413423",
+      poolAddress: otherRecipient,
+      tokenPath: [otherToken.address, usdc.address],
+    },
+    capabilities: {
+      call: { status: "NOT_RUN" },
+      gasEstimate: { status: "NOT_RUN" },
+      amountReceived: {
+        status: "UNAVAILABLE",
+        reason: "STATE_DIFF_NOT_QUALIFIED",
+      },
+    },
+    quoteReconciliation: {
+      status: "UNAVAILABLE",
+      comparisonMethod: "ATOMIC_INTEGER_EQUALITY",
+      quoteAmountOutAtomic: "2413423",
+      reason: "SIMULATED_OUTPUT_UNAVAILABLE",
+    },
+  } as const;
 }
 
 function economicRun(
@@ -894,6 +958,43 @@ describe("completed Run Result contract", () => {
         }),
       }).success,
     ).toBe(true);
+  });
+
+  it("binds quote provenance protocol to the checked Intent and transaction", () => {
+    const protocol = "camelot-v3";
+    const matchingResult = {
+      ...completedResult,
+      intent: { ...normalizedIntent, protocol },
+      route: { ...completedResult.route, protocol },
+      quote: quoteWithProvenance({
+        estimatedAmountOut: "2.413423",
+        amountOutAtomic: "2413423",
+        protocol,
+      }),
+      simulationProvenance: simulationProvenance(protocol),
+    };
+
+    expect(runResultSchema.safeParse(matchingResult).success).toBe(true);
+
+    const mismatchedQuoteProtocol = {
+      ...matchingResult,
+      quote: quoteWithProvenance({
+        estimatedAmountOut: "2.413423",
+        amountOutAtomic: "2413423",
+        protocol: "kuru",
+      }),
+    };
+    expect(runResultSchema.safeParse(mismatchedQuoteProtocol).success).toBe(
+      false,
+    );
+
+    const mismatchedTransactionProtocol = {
+      ...matchingResult,
+      simulationProvenance: simulationProvenance("kuru"),
+    };
+    expect(
+      runResultSchema.safeParse(mismatchedTransactionProtocol).success,
+    ).toBe(false);
   });
 
   it("preserves an optional parent Run on a Re-run result", () => {
