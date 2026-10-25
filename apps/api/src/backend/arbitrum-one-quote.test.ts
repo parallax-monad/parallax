@@ -136,6 +136,8 @@ type LocalForkRpcOptions = {
   stateOverrideError?: Error;
   stateDumpError?: Error;
   revertResult?: unknown;
+  senderUsdcBalanceAtomic?: bigint;
+  senderUsdcBalanceAfterNativeOverrideAtomic?: bigint;
 };
 
 const recipientBalanceSlot = `0x${"22".repeat(32)}`;
@@ -153,10 +155,15 @@ function createLocalForkRpc(options: LocalForkRpcOptions = {}) {
   const balances = new Map<string, string>();
   const snapshots = new Map<
     string,
-    { readonly balances: Map<string, string>; readonly stateRevision: number }
+    {
+      readonly balances: Map<string, string>;
+      readonly stateRevision: number;
+      readonly senderUsdcBalanceAtomic: bigint;
+    }
   >();
   let snapshotId = 0;
   let stateRevision = 0;
+  let senderUsdcBalanceAtomic = options.senderUsdcBalanceAtomic ?? 0n;
   const usdcAddress =
     ARBITRUM_ONE_RUNTIME_PROFILE.deployments.usdcAddress.toLowerCase();
   const rpcClient: ArbitrumRpcClient = {
@@ -187,23 +194,37 @@ function createLocalForkRpc(options: LocalForkRpcOptions = {}) {
             ? (balances.get(address) ?? "0x0")
             : "0x0";
         }
-        case "eth_getStorageAt":
-          return String(params[1]).toLowerCase() === poolBalanceSlot
-            ? storageWord(poolBalanceBefore)
-            : storageWord(0n);
+        case "eth_getStorageAt": {
+          const slot = String(params[1]).toLowerCase();
+          if (slot === poolBalanceSlot) return storageWord(poolBalanceBefore);
+          if (slot === recipientBalanceSlot) {
+            return storageWord(senderUsdcBalanceAtomic);
+          }
+          return storageWord(0n);
+        }
         case "evm_snapshot": {
           snapshotId += 1;
           const id = `0x${snapshotId.toString(16)}`;
           snapshots.set(id, {
             balances: new Map(balances),
             stateRevision,
+            senderUsdcBalanceAtomic,
           });
           return id;
         }
-        case "anvil_setBalance":
-          balances.set(String(params[0]).toLowerCase(), String(params[1]));
+        case "anvil_setBalance": {
+          const address = String(params[0]).toLowerCase();
+          balances.set(address, String(params[1]));
+          if (
+            address === sender.toLowerCase() &&
+            options.senderUsdcBalanceAfterNativeOverrideAtomic !== undefined
+          ) {
+            senderUsdcBalanceAtomic =
+              options.senderUsdcBalanceAfterNativeOverrideAtomic;
+          }
           stateRevision += 1;
           return null;
+        }
         case "anvil_dumpState":
           if (options.stateDumpError !== undefined) {
             throw options.stateDumpError;
@@ -234,7 +255,12 @@ function createLocalForkRpc(options: LocalForkRpcOptions = {}) {
             to === usdcAddress &&
             data.slice(0, 10).toLowerCase() === "0x70a08231"
           ) {
-            return storageWord(0n);
+            const queriedAddress = `0x${data.slice(-40)}`.toLowerCase();
+            return storageWord(
+              queriedAddress === sender.toLowerCase()
+                ? senderUsdcBalanceAtomic
+                : 0n,
+            );
           }
           if (options.callError !== undefined) throw options.callError;
           return "0x";
@@ -251,7 +277,10 @@ function createLocalForkRpc(options: LocalForkRpcOptions = {}) {
                 balance: "0x0",
                 code: "0x6000",
                 nonce: 0,
-                storage: { [poolBalanceSlot]: storageWord(poolBalanceBefore) },
+                storage: {
+                  [poolBalanceSlot]: storageWord(poolBalanceBefore),
+                  [recipientBalanceSlot]: storageWord(senderUsdcBalanceAtomic),
+                },
               },
             },
             post: {
@@ -259,7 +288,7 @@ function createLocalForkRpc(options: LocalForkRpcOptions = {}) {
                 storage: {
                   [poolBalanceSlot]: storageWord(poolBalanceAfter),
                   [recipientBalanceSlot]: storageWord(
-                    simulatedRecipientBalance,
+                    senderUsdcBalanceAtomic + simulatedRecipientBalance,
                   ),
                 },
               },
@@ -275,6 +304,7 @@ function createLocalForkRpc(options: LocalForkRpcOptions = {}) {
             balances.set(address, balance);
           }
           stateRevision = snapshot.stateRevision;
+          senderUsdcBalanceAtomic = snapshot.senderUsdcBalanceAtomic;
           return true;
         }
         default:
@@ -577,6 +607,28 @@ function createLocalCheckFixture(
     flow,
     input: createLocalCheckInput(runtime, checkOptions),
   };
+}
+
+function findSenderUsdcBalanceReadIndexes(calls: readonly RpcCall[]): number[] {
+  const usdcAddress =
+    ARBITRUM_ONE_RUNTIME_PROFILE.deployments.usdcAddress.toLowerCase();
+  return calls.flatMap((call, index) => {
+    if (call.method !== "eth_call") return [];
+    const balanceCall = call.params[0] as
+      | { to?: unknown; data?: unknown }
+      | undefined;
+    if (
+      typeof balanceCall?.to !== "string" ||
+      balanceCall.to.toLowerCase() !== usdcAddress ||
+      typeof balanceCall.data !== "string" ||
+      balanceCall.data.slice(0, 10).toLowerCase() !== "0x70a08231" ||
+      balanceCall.data.slice(-40).toLowerCase() !==
+        sender.slice(2).toLowerCase()
+    ) {
+      return [];
+    }
+    return [index];
+  });
 }
 
 function createLocalCheckApp(
@@ -969,6 +1021,86 @@ describe("Arbitrum One Camelot pinned quote flow", () => {
 });
 
 describe("Arbitrum One local-fork Check/Run provenance", () => {
+  it.each([
+    { name: "zero", senderUsdcBalanceAtomic: 0n },
+    { name: "nonzero", senderUsdcBalanceAtomic: 8_765_432n },
+  ])(
+    "accepts a $name sender USDC baseline when native balance is overridden",
+    async ({ senderUsdcBalanceAtomic }) => {
+      const fixture = createLocalCheckFixture({ senderUsdcBalanceAtomic });
+      const result = runResultSchema.parse(
+        await fixture.flow.check(fixture.input),
+      );
+      const provenance = result.arbitrumOneForkProvenance;
+      if (provenance?.status !== "AVAILABLE") {
+        throw new Error("Expected available local-fork provenance");
+      }
+
+      expect(provenance.simulation).toMatchObject({
+        call: { status: "SUCCEEDED" },
+        amountReceived: {
+          status: "AVAILABLE",
+          amountReceivedAtomic: simulatedRecipientBalance.toString(),
+          source: "VALIDATED_STATE_DIFF",
+        },
+      });
+      expect(provenance.accountOverride.snapshotRestored).toBe(true);
+
+      const overrideIndex = fixture.local.calls.findIndex(
+        (call) => call.method === "anvil_setBalance",
+      );
+      const senderBalanceReadIndexes = findSenderUsdcBalanceReadIndexes(
+        fixture.local.calls,
+      );
+      expect(senderBalanceReadIndexes.length).toBeGreaterThanOrEqual(2);
+      expect(senderBalanceReadIndexes[0]).toBeLessThan(overrideIndex);
+      expect(senderBalanceReadIndexes[1]).toBeGreaterThan(overrideIndex);
+    },
+  );
+
+  it("fails closed when the native-balance override changes sender USDC", async () => {
+    const baselineUsdcBalance = 1_234_567n;
+    const fixture = createLocalCheckFixture({
+      senderUsdcBalanceAtomic: baselineUsdcBalance,
+      senderUsdcBalanceAfterNativeOverrideAtomic: baselineUsdcBalance + 1n,
+    });
+
+    await expect(fixture.flow.check(fixture.input)).rejects.toThrow(
+      "Local fork snapshot restoration failed",
+    );
+    const senderBalanceReadIndexes = findSenderUsdcBalanceReadIndexes(
+      fixture.local.calls,
+    );
+    const overrideIndex = fixture.local.calls.findIndex(
+      (call) => call.method === "anvil_setBalance",
+    );
+    expect(senderBalanceReadIndexes).toHaveLength(2);
+    expect(senderBalanceReadIndexes[0]).toBeLessThan(overrideIndex);
+    expect(senderBalanceReadIndexes[1]).toBeGreaterThan(overrideIndex);
+    expect(
+      fixture.local.calls.some((call) => {
+        if (call.method !== "eth_call") return false;
+        const callTransaction = call.params[0] as
+          | { from?: unknown }
+          | undefined;
+        return callTransaction?.from === sender;
+      }),
+    ).toBe(false);
+    expect(
+      fixture.local.calls.some((call) => call.method === "evm_revert"),
+    ).toBe(true);
+
+    const restoredBalance = await fixture.local.rpcClient.request("eth_call", [
+      {
+        to: ARBITRUM_ONE_RUNTIME_PROFILE.deployments.usdcAddress,
+        data: `0x70a08231${sender.slice(2).toLowerCase().padStart(64, "0")}`,
+      },
+      "latest",
+    ]);
+    expect(typeof restoredBalance).toBe("string");
+    expect(BigInt(restoredBalance as string)).toBe(baselineUsdcBalance);
+  });
+
   it("persists Check provenance and returns it on GET without rerunning RPCs", async () => {
     const { flow, source, local } = createLocalCheckFixture();
     const app = createLocalCheckApp(flow);

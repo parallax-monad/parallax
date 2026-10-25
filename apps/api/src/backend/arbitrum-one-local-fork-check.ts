@@ -513,6 +513,14 @@ async function simulateInSnapshot(input: {
   };
   let cleanupError: unknown;
   try {
+    const localUsdcBeforeOverride = await readRecipientUsdcBalance(
+      input.rpc,
+      input.sender,
+    );
+    if (localUsdcBeforeOverride === undefined) {
+      throw new Error("Local sender USDC balance is unavailable");
+    }
+
     await requestLocal(input.rpc, "anvil_setBalance", [
       input.sender,
       SENDER_NATIVE_BALANCE_OVERRIDE_HEX,
@@ -528,7 +536,10 @@ async function simulateInSnapshot(input: {
       input.rpc,
       input.sender,
     );
-    if (localUsdcAfterOverride !== "0") {
+    if (
+      localUsdcAfterOverride === undefined ||
+      localUsdcAfterOverride !== localUsdcBeforeOverride
+    ) {
       throw new Error(
         "Native-only sender preparation changed the USDC balance",
       );
