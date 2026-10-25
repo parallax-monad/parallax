@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { createArbitrumRpcClient } from "../../apps/api/src/backend/arbitrum-chain-adapter.js";
-import { prepareArbitrumOneTransaction } from "../../apps/api/src/backend/arbitrum-one-transaction.js";
+import {
+  fingerprintArbitrumOneTransaction,
+  type PreparedArbitrumOneTransaction,
+  prepareArbitrumOneTransaction,
+} from "../../apps/api/src/backend/arbitrum-one-transaction.js";
 import { NativeRpcClientError } from "../../apps/api/src/backend/native-rpc-client.js";
 import { ARBITRUM_ONE_RUNTIME_PROFILE } from "../../apps/api/src/runtime-config.js";
 import {
@@ -49,6 +53,7 @@ class FakeRpc implements RpcClient {
       failRevert?: boolean;
       transactionCallFailure?: "revert" | "unavailable";
       transactionTraceFailure?: boolean;
+      transactionTraceResponse?: unknown;
       transactionReturnAmount?: bigint;
       failGasEstimate?: boolean;
       forkInstanceId?: string;
@@ -63,6 +68,7 @@ class FakeRpc implements RpcClient {
     this.failRevert = options.failRevert ?? false;
     this.transactionCallFailure = options.transactionCallFailure;
     this.transactionTraceFailure = options.transactionTraceFailure ?? false;
+    this.transactionTraceResponse = options.transactionTraceResponse;
     this.transactionReturnAmount =
       options.transactionReturnAmount ?? quoterAmount;
     this.failGasEstimate = options.failGasEstimate ?? false;
@@ -71,6 +77,7 @@ class FakeRpc implements RpcClient {
 
   transactionCallFailure: "revert" | "unavailable" | undefined;
   transactionTraceFailure: boolean;
+  transactionTraceResponse: unknown;
   transactionReturnAmount: bigint;
   failGasEstimate: boolean;
 
@@ -121,6 +128,9 @@ class FakeRpc implements RpcClient {
     if (method === "debug_traceCall") {
       if (this.transactionTraceFailure) {
         throw new Error("TRACE_ENDPOINT_SENTINEL TRACE_PAYLOAD_SENTINEL");
+      }
+      if (this.transactionTraceResponse !== undefined) {
+        return this.transactionTraceResponse;
       }
       const transaction = params[0] as { data?: unknown };
       if (typeof transaction.data !== "string") {
@@ -264,6 +274,30 @@ function toQuantity(value: bigint): string {
   return `0x${value.toString(16)}`;
 }
 
+function makeTransferLog(
+  tokenAddress: string,
+  recipientAddress: string,
+  amount: bigint,
+  data = word(amount),
+): Record<string, unknown> {
+  return {
+    address: tokenAddress,
+    topics: [
+      "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+      `0x${"00".repeat(12)}${"22".repeat(20)}`,
+      `0x${"00".repeat(12)}${recipientAddress.slice(2).toLowerCase()}`,
+    ],
+    data,
+  };
+}
+
+function makeTransferTrace(logs: readonly unknown[]): unknown {
+  return {
+    type: "CALL",
+    calls: [{ type: "CALL", logs }],
+  };
+}
+
 function isUsdcBalanceCall(call: {
   readonly method: string;
   readonly params: readonly unknown[];
@@ -300,6 +334,20 @@ async function runTransactionSimulation(
   sourceRpc = new FakeRpc("source"),
   localRpc: RpcClient = new FakeRpc("local"),
 ) {
+  const scenario = await createTransactionScenario(sourceRpc);
+  const evidence = await runForkTransactionSimulation({
+    sourceRpc: scenario.sourceRpc,
+    localRpc,
+    forkInstanceId: instanceId,
+    intent: scenario.intent,
+    quote: scenario.quote,
+    preparedTransaction: scenario.preparedTransaction,
+    now: () => scenario.now,
+  });
+  return { evidence, localRpc, ...scenario };
+}
+
+async function createTransactionScenario(sourceRpc = new FakeRpc("source")) {
   const now = new Date("2026-10-18T06:00:00.000Z");
   const quote = await readArbitrumOnePinnedQuote({
     rpc: createReadOnlyForkRpcClient(sourceRpc, "upstream"),
@@ -311,16 +359,49 @@ async function runTransactionSimulation(
     quote: quote.quote,
     now: () => now,
   });
-  const evidence = await runForkTransactionSimulation({
+  return {
     sourceRpc,
-    localRpc,
-    forkInstanceId: instanceId,
     intent: quote.intent,
     quote: quote.quote,
     preparedTransaction,
-    now: () => now,
+    now,
+  };
+}
+
+function replaceCalldataWord(
+  data: string,
+  wordIndex: number,
+  value: string,
+): string {
+  const wordValue = value.replace(/^0x/i, "").toLowerCase().padStart(64, "0");
+  if (!/^[0-9a-f]{64}$/.test(wordValue)) {
+    throw new Error("Test calldata word must fit in 32 bytes");
+  }
+  const start = 10 + wordIndex * 64;
+  return `${data.slice(0, start)}${wordValue}${data.slice(start + 64)}`;
+}
+
+function transactionSimulationRpcWasCalled(rpc: FakeRpc): boolean {
+  return rpc.calls.some(({ method, params }) => {
+    if (
+      method === "eth_estimateGas" ||
+      method === "debug_traceCall" ||
+      method === "anvil_setBalance" ||
+      method === "evm_snapshot" ||
+      method === "evm_revert"
+    ) {
+      return true;
+    }
+    if (method !== "eth_call") return false;
+    const request = params[0];
+    return (
+      typeof request === "object" &&
+      request !== null &&
+      "data" in request &&
+      typeof request.data === "string" &&
+      request.data.slice(0, 10).toLowerCase() === "0xbc651188"
+    );
   });
-  return { evidence, localRpc, preparedTransaction, quote, sourceRpc };
 }
 
 type ClientGeneratedFailure =
@@ -566,6 +647,10 @@ describe("Arbitrum One local fork transaction simulation", () => {
         baseBlockNumber: config.source.blockNumber,
         observedHeadNumber: config.source.blockNumber,
         forkInstanceId: instanceId,
+        stateRevision: {
+          status: "UNKNOWN",
+          reason: "NO_QUALIFIED_ANVIL_STATE_REVISION_TOKEN",
+        },
       },
       backendEvidence: {
         call: { status: "SUCCEEDED" },
@@ -758,9 +843,19 @@ describe("Arbitrum One local fork transaction simulation", () => {
   });
 
   it("distinguishes reverts, RPC failures, and unavailable gas estimates", async () => {
+    const revertedLocal = new FakeRpc("local", {
+      transactionCallFailure: "revert",
+      transactionTraceResponse: makeTransferTrace([
+        makeTransferLog(
+          ARBITRUM_ONE_RUNTIME_PROFILE.deployments.usdcAddress,
+          sender,
+          quoterAmount,
+        ),
+      ]),
+    });
     const reverted = await runTransactionSimulation(
       new FakeRpc("source"),
-      new FakeRpc("local", { transactionCallFailure: "revert" }),
+      revertedLocal,
     );
     expect(reverted.evidence.backendEvidence).toMatchObject({
       call: { status: "REVERTED" },
@@ -768,6 +863,21 @@ describe("Arbitrum One local fork transaction simulation", () => {
       failureStage: "CALL",
       reason: "LOCAL_FORK_EVM_REVERT",
     });
+    expect(
+      reverted.evidence.transactionOutcome.recipientTransfer,
+    ).toMatchObject({
+      status: "UNAVAILABLE",
+      source: "NOT_OBSERVED",
+    });
+    expect(
+      Object.hasOwn(
+        reverted.evidence.transactionOutcome.recipientTransfer,
+        "amountOutAtomic",
+      ),
+    ).toBe(false);
+    expect(
+      revertedLocal.calls.some(({ method }) => method === "debug_traceCall"),
+    ).toBe(false);
 
     const unavailable = await runTransactionSimulation(
       new FakeRpc("source"),
@@ -823,6 +933,178 @@ describe("Arbitrum One local fork transaction simulation", () => {
     });
   });
 
+  it("uses only the exact output-token Transfer to the exact recipient", async () => {
+    const usdc = ARBITRUM_ONE_RUNTIME_PROFILE.deployments.usdcAddress;
+    const transferAmount = quoterAmount - 100_000n;
+    const traceResponse = makeTransferTrace([
+      makeTransferLog(usdc, sender, transferAmount),
+      makeTransferLog(
+        usdc,
+        "0x3333333333333333333333333333333333333333",
+        quoterAmount,
+      ),
+      makeTransferLog(
+        "0x4444444444444444444444444444444444444444",
+        sender,
+        quoterAmount,
+      ),
+    ]);
+    const { evidence } = await runTransactionSimulation(
+      new FakeRpc("source"),
+      new FakeRpc("local", { transactionTraceResponse: traceResponse }),
+    );
+
+    expect(evidence.transactionOutcome.recipientTransfer).toMatchObject({
+      status: "AVAILABLE",
+      source: "LOCAL_DEBUG_TRACE_TRANSFER_LOG",
+      tokenAddress: usdc.toLowerCase(),
+      recipient: sender,
+      amountOutAtomic: transferAmount.toString(),
+      transferEventCount: 1,
+    });
+  });
+
+  it.each([
+    {
+      caseName: "a misdirected recipient",
+      logs: [
+        makeTransferLog(
+          ARBITRUM_ONE_RUNTIME_PROFILE.deployments.usdcAddress,
+          "0x3333333333333333333333333333333333333333",
+          quoterAmount,
+        ),
+      ],
+    },
+    {
+      caseName: "a foreign token contract",
+      logs: [
+        makeTransferLog(
+          "0x4444444444444444444444444444444444444444",
+          sender,
+          quoterAmount,
+        ),
+      ],
+    },
+  ])("does not accept Transfer evidence from $caseName", async ({ logs }) => {
+    const { evidence } = await runTransactionSimulation(
+      new FakeRpc("source"),
+      new FakeRpc("local", {
+        transactionTraceResponse: makeTransferTrace(logs),
+      }),
+    );
+    const transfer = evidence.transactionOutcome.recipientTransfer;
+    expect(transfer).toMatchObject({
+      status: "UNAVAILABLE",
+      source: "NOT_OBSERVED",
+    });
+    expect(Object.hasOwn(transfer, "amountOutAtomic")).toBe(false);
+  });
+
+  it.each([
+    {
+      caseName: "a malformed matching transfer amount",
+      traceResponse: makeTransferTrace([
+        makeTransferLog(
+          ARBITRUM_ONE_RUNTIME_PROFILE.deployments.usdcAddress,
+          sender,
+          quoterAmount,
+          "0x1234",
+        ),
+      ]),
+    },
+    {
+      caseName: "a malformed trace log",
+      traceResponse: makeTransferTrace([
+        {
+          address: ARBITRUM_ONE_RUNTIME_PROFILE.deployments.usdcAddress,
+          topics: "malformed",
+          data: "0x",
+        },
+      ]),
+    },
+    {
+      caseName: "a malformed sender topic on a matching transfer",
+      traceResponse: makeTransferTrace([
+        {
+          ...makeTransferLog(
+            ARBITRUM_ONE_RUNTIME_PROFILE.deployments.usdcAddress,
+            sender,
+            quoterAmount,
+          ),
+          topics: [
+            "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+            `0x${"11".repeat(32)}`,
+            `0x${"00".repeat(12)}${sender.slice(2)}`,
+          ],
+        },
+      ]),
+    },
+    {
+      caseName: "duplicate matching transfer events",
+      traceResponse: makeTransferTrace([
+        makeTransferLog(
+          ARBITRUM_ONE_RUNTIME_PROFILE.deployments.usdcAddress,
+          sender,
+          quoterAmount,
+        ),
+        makeTransferLog(
+          ARBITRUM_ONE_RUNTIME_PROFILE.deployments.usdcAddress,
+          sender,
+          quoterAmount,
+        ),
+      ]),
+    },
+    {
+      caseName: "an incomplete trace tree",
+      traceResponse: { type: "CALL" },
+    },
+    {
+      caseName: "a failed trace frame containing an apparent transfer",
+      traceResponse: {
+        type: "CALL",
+        error: "TRACE_FAILURE_SENTINEL",
+        calls: [
+          {
+            type: "CALL",
+            logs: [
+              makeTransferLog(
+                ARBITRUM_ONE_RUNTIME_PROFILE.deployments.usdcAddress,
+                sender,
+                quoterAmount,
+              ),
+            ],
+          },
+        ],
+      },
+    },
+    {
+      caseName: "a structured trace error containing an apparent transfer",
+      traceResponse: {
+        type: "CALL",
+        error: { code: -32000, message: "TRACE_ERROR_SENTINEL" },
+        logs: [
+          makeTransferLog(
+            ARBITRUM_ONE_RUNTIME_PROFILE.deployments.usdcAddress,
+            sender,
+            quoterAmount,
+          ),
+        ],
+      },
+    },
+  ])("does not report output for $caseName", async ({ traceResponse }) => {
+    const { evidence } = await runTransactionSimulation(
+      new FakeRpc("source"),
+      new FakeRpc("local", { transactionTraceResponse: traceResponse }),
+    );
+    const transfer = evidence.transactionOutcome.recipientTransfer;
+    expect(transfer).toMatchObject({
+      status: "UNAVAILABLE",
+      source: "NOT_OBSERVED",
+    });
+    expect(Object.hasOwn(transfer, "amountOutAtomic")).toBe(false);
+    expect(JSON.stringify(evidence)).not.toContain("TRACE_FAILURE_SENTINEL");
+  });
+
   it("keeps recipient transfer unavailable when local tracing is unsupported", async () => {
     const traceUnavailable = await runTransactionSimulation(
       new FakeRpc("source"),
@@ -831,6 +1113,12 @@ describe("Arbitrum One local fork transaction simulation", () => {
     expect(
       traceUnavailable.evidence.transactionOutcome.recipientTransfer,
     ).toMatchObject({ status: "UNAVAILABLE", source: "NOT_OBSERVED" });
+    expect(
+      Object.hasOwn(
+        traceUnavailable.evidence.transactionOutcome.recipientTransfer,
+        "amountOutAtomic",
+      ),
+    ).toBe(false);
     const serialized = JSON.stringify(traceUnavailable.evidence);
     expect(serialized).not.toContain("TRACE_ENDPOINT_SENTINEL");
     expect(serialized).not.toContain("TRACE_PAYLOAD_SENTINEL");
@@ -863,26 +1151,115 @@ describe("Arbitrum One local fork transaction simulation", () => {
     }
   });
 
-  it("rejects a modified payload before contacting either RPC", async () => {
+  it.each([
+    {
+      field: "recipient",
+      mutatePayload: (payload: PreparedArbitrumOneTransaction["payload"]) => ({
+        ...payload,
+        data: replaceCalldataWord(
+          payload.data,
+          2,
+          "0x3333333333333333333333333333333333333333",
+        ),
+      }),
+    },
+    {
+      field: "input amount",
+      mutatePayload: (payload: PreparedArbitrumOneTransaction["payload"]) => {
+        const amountWordStart = 10 + 4 * 64;
+        const amount = BigInt(
+          `0x${payload.data.slice(amountWordStart, amountWordStart + 64)}`,
+        );
+        return {
+          ...payload,
+          data: replaceCalldataWord(
+            payload.data,
+            4,
+            (amount + 1n).toString(16),
+          ),
+        };
+      },
+    },
+    {
+      field: "minimum-output amount",
+      mutatePayload: (payload: PreparedArbitrumOneTransaction["payload"]) => {
+        const amountWordStart = 10 + 5 * 64;
+        const amount = BigInt(
+          `0x${payload.data.slice(amountWordStart, amountWordStart + 64)}`,
+        );
+        return {
+          ...payload,
+          data: replaceCalldataWord(
+            payload.data,
+            5,
+            (amount + 1n).toString(16),
+          ),
+        };
+      },
+    },
+    {
+      field: "native transaction value",
+      mutatePayload: (payload: PreparedArbitrumOneTransaction["payload"]) => ({
+        ...payload,
+        value: toQuantity(BigInt(payload.value) + 1n),
+      }),
+    },
+    {
+      field: "router",
+      mutatePayload: (payload: PreparedArbitrumOneTransaction["payload"]) => ({
+        ...payload,
+        to: "0x3333333333333333333333333333333333333333",
+      }),
+    },
+    {
+      field: "chain ID",
+      mutatePayload: (payload: PreparedArbitrumOneTransaction["payload"]) => ({
+        ...payload,
+        chainId: "0x1",
+      }),
+    },
+  ])(
+    "rejects a modified $field even with a recomputed fingerprint before RPC",
+    async ({ mutatePayload }) => {
+      const source = new FakeRpc("source");
+      const local = new FakeRpc("local");
+      const scenario = await createTransactionScenario(source);
+      const sourceCallCount = source.calls.length;
+      const payload = mutatePayload(scenario.preparedTransaction.payload);
+      const modified: PreparedArbitrumOneTransaction = {
+        ...scenario.preparedTransaction,
+        payload,
+        fingerprint: fingerprintArbitrumOneTransaction(payload),
+      };
+
+      await expect(
+        runForkTransactionSimulation({
+          sourceRpc: source,
+          localRpc: local,
+          forkInstanceId: instanceId,
+          intent: scenario.intent,
+          quote: scenario.quote,
+          preparedTransaction: modified,
+          now: () => scenario.now,
+        }),
+      ).rejects.toMatchObject({ code: "TRANSACTION_BINDING_MISMATCH" });
+      expect(source.calls).toHaveLength(sourceCallCount);
+      expect(local.calls).toEqual([]);
+    },
+  );
+
+  it("rejects a changed payload with its original fingerprint before contacting RPC", async () => {
     const source = new FakeRpc("source");
     const local = new FakeRpc("local");
-    const now = new Date("2026-10-18T06:00:00.000Z");
-    const quote = await readArbitrumOnePinnedQuote({
-      rpc: createReadOnlyForkRpcClient(source, "upstream"),
-      senderAddress: sender,
-      observedAt: now.toISOString(),
-    });
-    const prepared = prepareArbitrumOneTransaction({
-      intent: quote.intent,
-      quote: quote.quote,
-      now: () => now,
-    });
-    const sourceCallCountBeforeSimulation = source.calls.length;
-    const modified = {
-      ...prepared,
+    const scenario = await createTransactionScenario(source);
+    const sourceCallCount = source.calls.length;
+    const preparedTransaction: PreparedArbitrumOneTransaction = {
+      ...scenario.preparedTransaction,
       payload: {
-        ...prepared.payload,
-        data: `${prepared.payload.data.slice(0, -2)}01`,
+        ...scenario.preparedTransaction.payload,
+        value: toQuantity(
+          BigInt(scenario.preparedTransaction.payload.value) + 1n,
+        ),
       },
     };
 
@@ -891,95 +1268,109 @@ describe("Arbitrum One local fork transaction simulation", () => {
         sourceRpc: source,
         localRpc: local,
         forkInstanceId: instanceId,
-        intent: quote.intent,
-        quote: quote.quote,
-        preparedTransaction: modified,
-        now: () => now,
+        intent: scenario.intent,
+        quote: scenario.quote,
+        preparedTransaction,
+        now: () => scenario.now,
       }),
     ).rejects.toMatchObject({ code: "TRANSACTION_FINGERPRINT_MISMATCH" });
-    expect(source.calls).toHaveLength(sourceCallCountBeforeSimulation);
+    expect(source.calls).toHaveLength(sourceCallCount);
     expect(local.calls).toEqual([]);
   });
 
-  it("rejects the wrong fork instance and local block before transaction simulation", async () => {
-    const wrongInstance = new FakeRpc("local", {
-      forkInstanceId: "00000000-0000-4000-8000-000000000002",
-    });
-    await expect(
-      runTransactionSimulation(new FakeRpc("source"), wrongInstance),
-    ).rejects.toMatchObject({ code: "FORK_INSTANCE_IDENTITY_MISMATCH" });
-    expect(
-      wrongInstance.calls.some(
-        (call) =>
-          call.method === "eth_call" &&
-          typeof call.params[0] === "object" &&
-          call.params[0] !== null &&
-          "data" in call.params[0] &&
-          typeof call.params[0].data === "string" &&
-          call.params[0].data.startsWith("0xbc651188"),
-      ),
-    ).toBe(false);
+  it.each([
+    {
+      field: "fork instance UUID",
+      options: { forkInstanceId: "00000000-0000-4000-8000-000000000002" },
+      code: "FORK_INSTANCE_IDENTITY_MISMATCH",
+    },
+    {
+      field: "local chain ID",
+      options: { chainId: "0x1" },
+      code: "LOCAL_CHAIN_ID_MISMATCH",
+    },
+    {
+      field: "local fork height",
+      options: { headNumber: `0x${(blockNumber + 1n).toString(16)}` },
+      code: "LOCAL_FORK_BLOCK_MISMATCH",
+    },
+    {
+      field: "local fork block hash",
+      options: { blockHash: `0x${"ab".repeat(32)}` },
+      code: "SOURCE_BLOCK_HASH_MISMATCH",
+    },
+    {
+      field: "Anvil version",
+      options: { version: "anvil/v0.0.0" },
+      code: "ANVIL_VERSION_MISMATCH",
+    },
+  ])(
+    "rejects a mismatched $field before transaction RPC",
+    async ({ options, code }) => {
+      const source = new FakeRpc("source");
+      const scenario = await createTransactionScenario(source);
+      const local = new FakeRpc("local", options);
+      await expect(
+        runForkTransactionSimulation({
+          sourceRpc: source,
+          localRpc: local,
+          forkInstanceId: instanceId,
+          intent: scenario.intent,
+          quote: scenario.quote,
+          preparedTransaction: scenario.preparedTransaction,
+          now: () => scenario.now,
+        }),
+      ).rejects.toMatchObject({ code });
+      expect(transactionSimulationRpcWasCalled(local)).toBe(false);
+    },
+  );
 
-    const wrongBlock = new FakeRpc("local", {
-      headNumber: `0x${(blockNumber + 1n).toString(16)}`,
-    });
-    await expect(
-      runTransactionSimulation(new FakeRpc("source"), wrongBlock),
-    ).rejects.toMatchObject({ code: "LOCAL_FORK_BLOCK_MISMATCH" });
-    expect(
-      wrongBlock.calls.some(
-        (call) =>
-          call.method === "eth_call" &&
-          typeof call.params[0] === "object" &&
-          call.params[0] !== null &&
-          "data" in call.params[0] &&
-          typeof call.params[0].data === "string" &&
-          call.params[0].data.startsWith("0xbc651188"),
-      ),
-    ).toBe(false);
-  });
+  it.each(["number", "hash"] as const)(
+    "rejects a quote source-block %s mismatch before contacting either RPC",
+    async (identityField) => {
+      const source = new FakeRpc("source");
+      const local = new FakeRpc("local");
+      const scenario = await createTransactionScenario(source);
+      const sourceCallCount = source.calls.length;
+      const provenance = scenario.quote.provenance;
+      if (provenance === undefined) {
+        throw new Error("Test quote unexpectedly has no provenance");
+      }
+      const sourceBlock =
+        identityField === "number"
+          ? {
+              ...provenance.sourceBlock,
+              number: (blockNumber + 1n).toString(),
+            }
+          : {
+              ...provenance.sourceBlock,
+              hash: `0x${"ab".repeat(32)}`,
+            };
+      const mismatchedQuote = {
+        ...scenario.quote,
+        provenance: { ...provenance, sourceBlock },
+      };
 
-  it("rejects quote block provenance mismatch before contacting either RPC", async () => {
-    const source = new FakeRpc("source");
-    const local = new FakeRpc("local");
-    const now = new Date("2026-10-18T06:00:00.000Z");
-    const quote = await readArbitrumOnePinnedQuote({
-      rpc: createReadOnlyForkRpcClient(source, "upstream"),
-      senderAddress: sender,
-      observedAt: now.toISOString(),
-    });
-    const preparedTransaction = prepareArbitrumOneTransaction({
-      intent: quote.intent,
-      quote: quote.quote,
-      now: () => now,
-    });
-    if (quote.quote.provenance === undefined) {
-      throw new Error("Test quote unexpectedly has no provenance");
-    }
-    const mismatchedQuote = {
-      ...quote.quote,
-      provenance: {
-        ...quote.quote.provenance,
-        sourceBlock: {
-          ...quote.quote.provenance.sourceBlock,
-          hash: `0x${"ab".repeat(32)}`,
-        },
-      },
-    };
-
-    await expect(
-      runForkTransactionSimulation({
-        sourceRpc: source,
-        localRpc: local,
-        forkInstanceId: instanceId,
-        intent: quote.intent,
-        quote: mismatchedQuote,
-        preparedTransaction,
-        now: () => now,
-      }),
-    ).rejects.toMatchObject({ code: "QUOTE_BLOCK_MISMATCH" });
-    expect(local.calls).toEqual([]);
-  });
+      await expect(
+        runForkTransactionSimulation({
+          sourceRpc: source,
+          localRpc: local,
+          forkInstanceId: instanceId,
+          intent: scenario.intent,
+          quote: mismatchedQuote,
+          preparedTransaction: scenario.preparedTransaction,
+          now: () => scenario.now,
+        }),
+      ).rejects.toMatchObject({
+        code:
+          identityField === "number"
+            ? "TRANSACTION_BINDING_MISMATCH"
+            : "QUOTE_BLOCK_MISMATCH",
+      });
+      expect(source.calls).toHaveLength(sourceCallCount);
+      expect(local.calls).toEqual([]);
+    },
+  );
 
   it("fails closed when snapshot reset does not restore state", async () => {
     const local = new FakeRpc("local", { failRevert: true });

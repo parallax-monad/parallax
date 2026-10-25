@@ -163,7 +163,7 @@ const p0RemediationSchema = z.discriminatedUnion("status", [
 
 const fingerprintSchema = z.string().regex(/^sha256:[0-9a-f]{64}$/);
 
-const p0BasicSimulationBindingSchema = z
+export const p0BasicSimulationTransactionBindingSchema = z
   .object({
     chainId: chainIdSchema,
     protocol: z.string().trim().min(1),
@@ -211,7 +211,7 @@ export const p0BasicSimulationSchema = z
     observedAt: z.string().datetime(),
     validityAtExecution: z.enum(["VALID", "INVALID", "UNKNOWN"]),
     preparedTransactionFingerprint: fingerprintSchema,
-    transactionBinding: p0BasicSimulationBindingSchema.optional(),
+    transactionBinding: p0BasicSimulationTransactionBindingSchema.optional(),
     failureStage: z
       .enum(["PREPARE", "BLOCK", "CALL", "GAS_ESTIMATE", "FRESHNESS"])
       .optional(),

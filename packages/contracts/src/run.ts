@@ -22,6 +22,7 @@ import {
   scopeDisclosureSchema,
 } from "./evidence.js";
 import { evidencePresentationSchema } from "./evidence-presentation.js";
+import { arbitrumOneForkProvenanceSchema } from "./fork-provenance.js";
 import { genericEvidenceSchema } from "./generic-evidence.js";
 import { normalizedSwapIntentSchema } from "./intent.js";
 import { p0RunResultSchema } from "./p0-run-result.js";
@@ -64,6 +65,8 @@ const runIdentitySchema = z.object({
   intent: normalizedSwapIntentSchema,
   /** Absent on legacy Runs; present only as a persisted Backend snapshot. */
   tokenMetadata: tokenMetadataPairSchema.optional(),
+  /** Optional, versioned local-fork Check provenance added after legacy Runs. */
+  arbitrumOneForkProvenance: arbitrumOneForkProvenanceSchema.optional(),
 });
 
 type RunIdentity = z.infer<typeof runIdentitySchema>;
@@ -116,6 +119,38 @@ function validateRunIdentity(result: RunIdentity, context: z.RefinementCtx) {
       message: "Live runs cannot use a demo_preset Economic Boundary",
       path: ["intent", "economicBoundary", "source"],
     });
+  }
+
+  const forkProvenance = result.arbitrumOneForkProvenance;
+  if (forkProvenance !== undefined) {
+    if (
+      result.intent.chainId !== 42161 ||
+      result.intent.protocol !== "camelot-v3"
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Arbitrum One fork provenance requires a One Camelot Run",
+        path: ["arbitrumOneForkProvenance"],
+      });
+    }
+    if (forkProvenance.status === "AVAILABLE") {
+      const binding = forkProvenance.transaction.binding;
+      if (
+        binding.sender.toLowerCase() !== result.intent.sender.toLowerCase() ||
+        binding.recipient.toLowerCase() !==
+          result.intent.recipient.toLowerCase() ||
+        binding.amountInAtomic !== result.intent.amountInAtomic ||
+        result.intent.tokenOut.kind !== "erc20" ||
+        binding.tokenOut.toLowerCase() !==
+          result.intent.tokenOut.address.toLowerCase()
+      ) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Fork transaction binding must match the Run Intent",
+          path: ["arbitrumOneForkProvenance", "transaction", "binding"],
+        });
+      }
+    }
   }
 }
 

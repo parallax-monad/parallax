@@ -2,6 +2,8 @@ import { type ServerType, serve as serveNode } from "@hono/node-server";
 import {
   assetIdentity,
   CAMELOT_V3_PROTOCOL_ID,
+  type CheckSwapRequest,
+  checkSwapRequestSchema,
   quoteRequestSchema,
   quoteResultSchema,
   serializeJson,
@@ -35,6 +37,7 @@ import type {
   ArbitrumProductionComposition,
 } from "../backend/arbitrum-composition.js";
 import { createArbitrumProductionComposition } from "../backend/arbitrum-composition.js";
+import { createArbitrumOneLocalForkCheckFlow } from "../backend/arbitrum-one-local-fork-check.js";
 import { createArbitrumOneQuoteFlow } from "../backend/arbitrum-one-quote.js";
 import { CAMELOT_V3_WETH_ADDRESS } from "../backend/camelot-v3-binding.js";
 import { CAMELOT_SEPOLIA_USDC } from "../backend/camelot-v3-protocol-adapter.js";
@@ -51,7 +54,10 @@ import {
   type TraceRpcEvidenceSource,
 } from "../backend/trace-rpc-evidence-source.js";
 import { createCheckApp, createQuoteApp } from "../http.js";
-import { normalizeQuoteRequestForChain } from "../normalization.js";
+import {
+  normalizeArbitrumOneCheckSwapRequest,
+  normalizeQuoteRequestForChain,
+} from "../normalization.js";
 import {
   type AgentFlowPort,
   type QuoteAgentFlowPort,
@@ -443,6 +449,8 @@ export type BootstrapBackendAppOptions = {
   quoteFlow?: QuoteAgentFlowPort;
   /** Optional quote-only Arbitrum One flow for deterministic integration tests. */
   arbitrumOneQuoteFlow?: QuoteAgentFlowPort;
+  /** Internal injection seam, accepted only with explicit dev local-fork opt-in. */
+  arbitrumOneLocalForkCheckFlow?: AgentFlowPort;
   quoteRunner?: KuruLiveQuoteRunner;
   store?: RunStore;
   /** Optional dependency probe exposed through `/readyz`. */
@@ -471,6 +479,14 @@ export function bootstrapBackendApp(
     environment,
     tokenRegistry: options.tokenRegistry,
   });
+  if (
+    options.arbitrumOneLocalForkCheckFlow !== undefined &&
+    runtime.config.arbitrumOneLocalForkCheck === undefined
+  ) {
+    throw new TypeError(
+      "Local fork Check flow injection requires explicit development opt-in",
+    );
+  }
   if (
     options.traceRpcEvidenceSource !== undefined &&
     options.composition === undefined &&
@@ -597,14 +613,21 @@ export function bootstrapBackendApp(
     chainId: ARBITRUM_ONE_CHAIN_ID,
     composition: {
       runStore: store,
-      normalize: () => ({
-        success: false,
-        error: {
-          code: "UNSUPPORTED_CHAIN",
-          field: "chainId",
-          message: "Arbitrum One Check and simulation are unavailable",
-        },
-      }),
+      normalize:
+        runtime.config.arbitrumOneLocalForkCheck === undefined
+          ? () => ({
+              success: false,
+              error: {
+                code: "UNSUPPORTED_CHAIN",
+                field: "chainId",
+                message: "Arbitrum One Check and simulation are unavailable",
+              },
+            })
+          : (input: unknown) =>
+              normalizeArbitrumOneCheckSwapRequest(
+                checkSwapRequestSchema.parse(input) as CheckSwapRequest,
+                runtime.tokenRegistry,
+              ),
     },
     quoteNormalization: (input: unknown) =>
       normalizeQuoteRequestForChain(
@@ -612,8 +635,12 @@ export function bootstrapBackendApp(
         runtime.tokenRegistry,
         ARBITRUM_ONE_CHAIN_ID,
       ),
-    // Mainnet remains quote-only: this route has no Check composition.
-    agentFlow: new UnavailableAgentFlow(),
+    // Mainnet remains quote-only unless a local dev fork is explicitly enabled.
+    agentFlow:
+      runtime.config.arbitrumOneLocalForkCheck === undefined
+        ? new UnavailableAgentFlow()
+        : (options.arbitrumOneLocalForkCheckFlow ??
+          createArbitrumOneLocalForkCheckFlow(runtime)),
     quoteFlow:
       options.arbitrumOneQuoteFlow ?? createArbitrumOneQuoteFlow(runtime),
   });

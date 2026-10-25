@@ -34,6 +34,8 @@ export type ArbitrumOneQuoteFlowOptions = {
   readonly fetchImplementation?: typeof fetch;
   /** Clock seam used only to make pinned-block provenance tests deterministic. */
   readonly now?: () => Date;
+  /** Optional source block pin supplied only by the validated local-fork Check. */
+  readonly sourceBlockNumber?: string;
 };
 
 type RpcBlock = {
@@ -77,6 +79,7 @@ export function createArbitrumOneQuoteFlow(
           metadata.tokenIn,
           metadata.tokenOut,
           options.now ?? (() => new Date()),
+          options.sourceBlockNumber,
         );
         return { status: "available", quote };
       } catch {
@@ -144,12 +147,20 @@ async function readPinnedQuote(
   inputAsset: TrustedTokenMetadata,
   outputAsset: TrustedTokenMetadata,
   now: () => Date,
+  sourceBlockNumber?: string,
 ): Promise<Record<string, unknown>> {
-  const selectedBlock = parseRpcQuantity(
+  const sourceHead = parseRpcQuantity(
     await rpc.request("eth_blockNumber", [], {
       timeoutMs: defaultRpcTimeoutMs,
     }),
   );
+  const selectedBlock =
+    sourceBlockNumber === undefined
+      ? sourceHead
+      : parseDecimalBlockNumber(sourceBlockNumber);
+  if (selectedBlock > sourceHead) {
+    throw new Error("Pinned source block is ahead of the source RPC head");
+  }
   const blockTag = toRpcQuantity(selectedBlock);
   const sourceBlock = await readBlock(rpc, blockTag, selectedBlock);
   if (
@@ -551,6 +562,13 @@ function parseAtomicAmount(value: string): bigint {
     throw new Error("Quote input atomic amount is outside the valid range");
   }
   return amount;
+}
+
+function parseDecimalBlockNumber(value: string): bigint {
+  if (!/^(0|[1-9]\d*)$/.test(value)) {
+    throw new Error("Pinned source block number is malformed");
+  }
+  return BigInt(value);
 }
 
 function parseRpcQuantity(value: unknown): bigint {

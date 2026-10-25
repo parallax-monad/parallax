@@ -1,4 +1,7 @@
-import type { NormalizedSwapIntent } from "@parallax/contracts";
+import {
+  failedRunResultSchema,
+  type NormalizedSwapIntent,
+} from "@parallax/contracts";
 import { describe, expect, it, vi } from "vitest";
 import {
   RunQueryApplicationService,
@@ -99,5 +102,74 @@ describe("RunQueryApplicationService", () => {
         },
       },
     });
+  });
+
+  it("projects absent legacy Arbitrum One provenance as UNKNOWN without rewriting storage", async () => {
+    const arbitrumOneIntent = {
+      chainId: 42161,
+      protocol: "camelot-v3",
+      sender: "0x1111111111111111111111111111111111111111",
+      recipient: "0x1111111111111111111111111111111111111111",
+      recipientSource: "defaulted_from_sender",
+      tokenIn: { kind: "native" },
+      tokenOut: {
+        kind: "erc20",
+        address: "0xaf88d065e77c8cc2239327c5edb3a432268e5831",
+      },
+      amountInAtomic: "1",
+      economicBoundary: { availability: "unavailable", source: "unavailable" },
+    } as NormalizedSwapIntent;
+    const result = failedRunResultSchema.parse({
+      runId: "legacy-one-run",
+      createdAt: "2026-10-17T19:17:33.990Z",
+      replayMode: false,
+      intent: arbitrumOneIntent,
+      status: "integration_error",
+      systemStatus: "INTEGRATION_ERROR",
+      verdict: "UNKNOWN",
+      summary: "The check could not be completed",
+      error: {
+        code: "INTERNAL_ERROR",
+        stage: "unknown",
+        message: "Agent Flow failed internally",
+        retryable: false,
+      },
+      ruleResults: [],
+      recommendedActions: [],
+      irrelevantActions: [],
+      evidence: [],
+      scope: [
+        {
+          key: "P0-CHECK-SIMULATION-001",
+          label: "Moss simulation",
+          status: "unknown",
+          reason: "REQUIRED_CHECK_INTERRUPTED",
+        },
+      ],
+    });
+    const storedRecord = {
+      runId: result.runId,
+      createdAt: result.createdAt ?? "2026-10-17T19:17:33.990Z",
+      intent: arbitrumOneIntent,
+      status: "failed" as const,
+      failure: "AGENT_FLOW_ERROR" as const,
+      result,
+    };
+    const get = vi.fn<RunStore["get"]>().mockResolvedValue(storedRecord);
+    const service = createService({ store: fakeStore(get) });
+
+    const response = await service.getRun("legacy-one-run");
+
+    expect(response.status).toBe(200);
+    if (response.status !== 200 || response.body.status !== "failed") {
+      throw new Error("Legacy Run was not returned");
+    }
+    expect(response.body.result.arbitrumOneForkProvenance).toEqual({
+      schemaVersion: 1,
+      status: "UNKNOWN",
+      reason: "NOT_RECORDED",
+    });
+    expect(storedRecord.result.arbitrumOneForkProvenance).toBeUndefined();
+    expect(get).toHaveBeenCalledTimes(1);
   });
 });

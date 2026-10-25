@@ -39,8 +39,48 @@ export class RunQueryApplicationService {
 
     return record === undefined
       ? notFoundResponse()
-      : { status: 200, body: record };
+      : { status: 200, body: projectLegacyArbitrumOneForkProvenance(record) };
   }
+}
+
+const LEGACY_ARBITRUM_ONE_FORK_PROVENANCE = {
+  schemaVersion: 1,
+  status: "UNKNOWN",
+  reason: "NOT_RECORDED",
+} as const;
+
+/**
+ * Historical Arbitrum One Camelot Runs predate the optional fork provenance.
+ * Expose its absence as UNKNOWN on GET without persisting new claims or
+ * re-querying the source/fork RPCs.
+ */
+function projectLegacyArbitrumOneForkProvenance(
+  record: CheckRunRecord,
+): CheckRunRecord {
+  if (
+    record.status === "started" ||
+    record.intent.chainId !== 42161 ||
+    record.intent.protocol !== "camelot-v3" ||
+    record.result.arbitrumOneForkProvenance !== undefined
+  ) {
+    return record;
+  }
+  if (record.status === "failed") {
+    return {
+      ...record,
+      result: {
+        ...record.result,
+        arbitrumOneForkProvenance: LEGACY_ARBITRUM_ONE_FORK_PROVENANCE,
+      },
+    };
+  }
+  return {
+    ...record,
+    result: {
+      ...record.result,
+      arbitrumOneForkProvenance: LEGACY_ARBITRUM_ONE_FORK_PROVENANCE,
+    },
+  };
 }
 
 function notFoundResponse(): {

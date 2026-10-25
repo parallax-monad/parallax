@@ -148,14 +148,13 @@ describe("#90 historical Arbitrum One capture static integrity", () => {
     ).toBe(
       "sha256:2f35988c768b9c10ed376261b940c1b28ddb574396ab5b38aa2690514bb7de1e",
     );
-    // Manifest entries describe the historical source head. Later main
-    // may legitimately edit or remove them; capture integrity must not demand
-    // that a historical Backend/Frontend/SDK snapshot remain the live runtime.
-    for (const path of ["apps/api/src/backend/native-rpc-client.ts"]) {
-      expect(sha(readFileSync(resolve(root, path))), path).toBe(
-        capture.provenance.manifest[path],
-      );
-    }
+    // Manifest entries identify the historical source head; later runtime
+    // changes must not rewrite or constrain that immutable evidence snapshot.
+    expect(
+      capture.provenance.manifest["apps/api/src/backend/native-rpc-client.ts"],
+    ).toBe(
+      "sha256:a223781a34a7c1e40cae244575aa71aebe588a24e4e31799492047b04228f2b1",
+    );
   });
 
   it("collects a current manifest without removed Backend or SDK dependencies", () => {

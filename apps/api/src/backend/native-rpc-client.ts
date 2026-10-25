@@ -11,6 +11,8 @@ export type NativeRpcClientFailure =
   | "TIMEOUT"
   | "ABORTED";
 
+export type NativeRpcClientSemanticReason = "INSUFFICIENT_NATIVE_BALANCE";
+
 /** Only controlled error text crosses the Provider boundary. */
 export class NativeRpcClientError extends Error {
   public readonly name = "NativeRpcClientError";
@@ -19,6 +21,7 @@ export class NativeRpcClientError extends Error {
     public readonly kind: NativeRpcClientFailure,
     message: string,
     public readonly rpcCode?: number,
+    public readonly semanticReason?: NativeRpcClientSemanticReason,
   ) {
     super(message);
   }
@@ -130,6 +133,12 @@ export function createNativeRpcClient(
           }
           // RPC messages can contain endpoint URLs or echoed request data.
           // Keep the code and a bounded semantic classification only.
+          const semanticReason =
+            /^insufficient funds for gas\s*\*\s*price\s*\+\s*value(?:\b|:)/i.test(
+              rpcError.message,
+            )
+              ? "INSUFFICIENT_NATIVE_BALANCE"
+              : undefined;
           const semantic = /execution reverted|revert/i.test(rpcError.message)
             ? "execution reverted"
             : rpcError.code === -32601
@@ -141,6 +150,7 @@ export function createNativeRpcClient(
             "RPC_ERROR",
             semantic,
             rpcError.code as number,
+            semanticReason,
           );
         }
         if (!Object.hasOwn(payload, "result")) {

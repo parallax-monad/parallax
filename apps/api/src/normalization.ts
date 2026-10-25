@@ -12,6 +12,7 @@ import {
   type QuoteRequest,
   type TrustedTokenRegistry,
 } from "@parallax/contracts";
+import { ARBITRUM_ONE_CHAIN_ID } from "./runtime-config.js";
 
 /** Backend live Check is intentionally scoped to Monad Chain 143. */
 export const BACKEND_CHAIN_ID = 143;
@@ -21,6 +22,14 @@ export function normalizeArbitrumCheckSwapRequest(
   registry: TrustedTokenRegistry,
 ): IntentNormalizationResult {
   return normalizeSwapRequest(request, registry, ARBITRUM_SEPOLIA_CHAIN_ID);
+}
+
+/** Development-only normalizer; bootstrap enables it only for local fork Check. */
+export function normalizeArbitrumOneCheckSwapRequest(
+  request: CheckSwapRequest,
+  registry: TrustedTokenRegistry,
+): IntentNormalizationResult {
+  return normalizeSwapRequest(request, registry, ARBITRUM_ONE_CHAIN_ID);
 }
 
 /**

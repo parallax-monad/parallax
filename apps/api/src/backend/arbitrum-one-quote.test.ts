@@ -1,7 +1,15 @@
-import { type QuoteRequest, quoteResultSchema } from "@parallax/contracts";
+import {
+  type CheckSwapRequest,
+  type QuoteRequest,
+  quoteResultSchema,
+  runResultSchema,
+} from "@parallax/contracts";
 import { describe, expect, it } from "vitest";
 import { bootstrapBackendApp } from "../bootstrap/backend.js";
-import { normalizeQuoteRequestForChain } from "../normalization.js";
+import {
+  normalizeArbitrumOneCheckSwapRequest,
+  normalizeQuoteRequestForChain,
+} from "../normalization.js";
 import type { QuoteAgentFlowPort } from "../ports.js";
 import {
   ARBITRUM_ONE_CHAIN_ID,
@@ -10,9 +18,15 @@ import {
 } from "../runtime-config.js";
 import { InMemoryRunStore } from "../store.js";
 import type { ArbitrumRpcClient } from "./arbitrum-chain-adapter.js";
+import { createArbitrumOneLocalForkCheckFlow } from "./arbitrum-one-local-fork-check.js";
 import { createArbitrumOneQuoteFlow } from "./arbitrum-one-quote.js";
+import {
+  createNativeRpcClient,
+  NativeRpcClientError,
+} from "./native-rpc-client.js";
 
 const sender = "0x1111111111111111111111111111111111111111";
+const concurrentSender = "0x2222222222222222222222222222222222222222";
 const blockHash = `0x${"ab".repeat(32)}`;
 const sourceBlockNumber = "7";
 const sourceBlockTag = "0x7";
@@ -39,6 +53,18 @@ const tokenRegistry = {
       verifiedAtBlock: "6",
     },
   ],
+};
+
+const localForkInstanceId = "00000000-0000-4000-8000-000000000001";
+const localForkEnvironment = {
+  MONAD_RPC_URL: "https://monad.example.test",
+  ARBITRUM_ONE_RPC_URL: "https://arbitrum-one.example.test",
+  NODE_ENV: "development",
+  ARBITRUM_ONE_LOCAL_FORK_CHECK_ENABLED: "true",
+  ARBITRUM_ONE_FORK_LOCAL_RPC_URL: "http://127.0.0.1:8545",
+  ARBITRUM_ONE_FORK_INSTANCE_ID: localForkInstanceId,
+  MOSS_RUNTIME_VERSION: "test-runtime",
+  MOSS_RUNTIME_REVISION: "test-revision",
 };
 
 function createRuntime(
@@ -97,6 +123,294 @@ function createRpc(responder?: RpcResponder) {
   return { rpcClient, calls };
 }
 
+type LocalForkRpcOptions = {
+  forkInstanceId?: string;
+  clientVersion?: string;
+  chainId?: string;
+  accounts?: unknown;
+  blockNumber?: string;
+  blockHash?: string;
+  callError?: Error;
+  gasEstimateError?: Error;
+  prestateError?: Error;
+  stateOverrideError?: Error;
+  stateDumpError?: Error;
+  revertResult?: unknown;
+};
+
+const recipientBalanceSlot = `0x${"22".repeat(32)}`;
+const poolBalanceSlot = `0x${"11".repeat(32)}`;
+const poolBalanceBefore = 1_000_000_000n;
+const poolBalanceAfter = poolBalanceBefore - 2_413_423n;
+const simulatedRecipientBalance = 2_413_423n;
+
+function storageWord(value: bigint): string {
+  return `0x${value.toString(16).padStart(64, "0")}`;
+}
+
+function createLocalForkRpc(options: LocalForkRpcOptions = {}) {
+  const calls: RpcCall[] = [];
+  const balances = new Map<string, string>();
+  const snapshots = new Map<
+    string,
+    { readonly balances: Map<string, string>; readonly stateRevision: number }
+  >();
+  let snapshotId = 0;
+  let stateRevision = 0;
+  const usdcAddress =
+    ARBITRUM_ONE_RUNTIME_PROFILE.deployments.usdcAddress.toLowerCase();
+  const rpcClient: ArbitrumRpcClient = {
+    async request(method, params = [], operationOptions) {
+      calls.push({ method, params, timeoutMs: operationOptions?.timeoutMs });
+      switch (method) {
+        case "parallax_forkInstanceId":
+          return options.forkInstanceId ?? localForkInstanceId;
+        case "web3_clientVersion":
+          return options.clientVersion ?? "anvil/v1.8.5 (test build)";
+        case "eth_chainId":
+          return options.chainId ?? "0x7a69";
+        case "eth_accounts":
+          return options.accounts ?? [];
+        case "eth_blockNumber":
+          return options.blockNumber ?? sourceBlockTag;
+        case "eth_getBlockByNumber":
+          return {
+            number: options.blockNumber ?? sourceBlockTag,
+            hash: options.blockHash ?? blockHash,
+            timestamp: "0x6ad3c5b0",
+          };
+        case "eth_getCode":
+          return "0x6000";
+        case "eth_getBalance": {
+          const address = String(params[0]).toLowerCase();
+          return params[1] === "latest"
+            ? (balances.get(address) ?? "0x0")
+            : "0x0";
+        }
+        case "eth_getStorageAt":
+          return String(params[1]).toLowerCase() === poolBalanceSlot
+            ? storageWord(poolBalanceBefore)
+            : storageWord(0n);
+        case "evm_snapshot": {
+          snapshotId += 1;
+          const id = `0x${snapshotId.toString(16)}`;
+          snapshots.set(id, {
+            balances: new Map(balances),
+            stateRevision,
+          });
+          return id;
+        }
+        case "anvil_setBalance":
+          balances.set(String(params[0]).toLowerCase(), String(params[1]));
+          stateRevision += 1;
+          return null;
+        case "anvil_dumpState":
+          if (options.stateDumpError !== undefined) {
+            throw options.stateDumpError;
+          }
+          return stateRevision === 0 ? "0x00" : "0x01";
+        case "eth_call": {
+          const call = params[0] as { to?: unknown; data?: unknown };
+          const to = typeof call?.to === "string" ? call.to.toLowerCase() : "";
+          const data = typeof call?.data === "string" ? call.data : "";
+          if (params[2] !== undefined) {
+            if (options.stateOverrideError !== undefined) {
+              throw options.stateOverrideError;
+            }
+            const overrides = params[2] as Record<
+              string,
+              { stateDiff?: Record<string, string> }
+            >;
+            const tokenOverride = Object.entries(overrides).find(
+              ([address]) => address.toLowerCase() === usdcAddress,
+            )?.[1];
+            const recipientValue =
+              tokenOverride?.stateDiff?.[recipientBalanceSlot];
+            return storageWord(
+              recipientValue === undefined ? 0n : BigInt(recipientValue),
+            );
+          }
+          if (
+            to === usdcAddress &&
+            data.slice(0, 10).toLowerCase() === "0x70a08231"
+          ) {
+            return storageWord(0n);
+          }
+          if (options.callError !== undefined) throw options.callError;
+          return "0x";
+        }
+        case "eth_estimateGas":
+          if (options.gasEstimateError !== undefined)
+            throw options.gasEstimateError;
+          return "0x5208";
+        case "debug_traceCall":
+          if (options.prestateError !== undefined) throw options.prestateError;
+          return {
+            pre: {
+              [ARBITRUM_ONE_RUNTIME_PROFILE.deployments.usdcAddress]: {
+                balance: "0x0",
+                code: "0x6000",
+                nonce: 0,
+                storage: { [poolBalanceSlot]: storageWord(poolBalanceBefore) },
+              },
+            },
+            post: {
+              [ARBITRUM_ONE_RUNTIME_PROFILE.deployments.usdcAddress]: {
+                storage: {
+                  [poolBalanceSlot]: storageWord(poolBalanceAfter),
+                  [recipientBalanceSlot]: storageWord(
+                    simulatedRecipientBalance,
+                  ),
+                },
+              },
+            },
+          };
+        case "evm_revert": {
+          if (options.revertResult === false) return false;
+          const id = String(params[0]);
+          const snapshot = snapshots.get(id);
+          if (snapshot === undefined) return false;
+          balances.clear();
+          for (const [address, balance] of snapshot.balances) {
+            balances.set(address, balance);
+          }
+          stateRevision = snapshot.stateRevision;
+          return true;
+        }
+        default:
+          throw new Error(`Unexpected local fork RPC method: ${method}`);
+      }
+    },
+  };
+  return { rpcClient, calls };
+}
+
+function createRpcError(code: number, message: string): Error {
+  return Object.assign(new Error(message), { rpcCode: code });
+}
+
+function createConcurrentLocalForkRpc() {
+  const calls: RpcCall[] = [];
+  const usdcAddress =
+    ARBITRUM_ONE_RUNTIME_PROFILE.deployments.usdcAddress.toLowerCase();
+  const initialBalances = new Map([
+    [sender.toLowerCase(), "0x64"],
+    [concurrentSender.toLowerCase(), "0xc8"],
+  ]);
+  const balances = new Map(initialBalances);
+  const snapshots = new Map<string, Map<string, string>>();
+  const observations: Array<{
+    sender: string;
+    firstSenderBalance: string | undefined;
+    secondSenderBalance: string | undefined;
+  }> = [];
+  let snapshotId = 0;
+  let transactionCallCount = 0;
+  let baseBalanceReadCount = 0;
+  let resolveFirstCallStarted!: () => void;
+  let resolveBothBaseBalancesRead!: () => void;
+  let releaseFirstCall!: () => void;
+  const firstCallStarted = new Promise<void>((resolve) => {
+    resolveFirstCallStarted = resolve;
+  });
+  const bothBaseBalancesRead = new Promise<void>((resolve) => {
+    resolveBothBaseBalancesRead = resolve;
+  });
+  const firstCallGate = new Promise<void>((resolve) => {
+    releaseFirstCall = resolve;
+  });
+  const rpcClient: ArbitrumRpcClient = {
+    async request(method, params = [], operationOptions) {
+      calls.push({ method, params, timeoutMs: operationOptions?.timeoutMs });
+      switch (method) {
+        case "parallax_forkInstanceId":
+          return localForkInstanceId;
+        case "web3_clientVersion":
+          return "anvil/v1.8.5 (test build)";
+        case "eth_chainId":
+          return "0x7a69";
+        case "eth_accounts":
+          return [];
+        case "eth_blockNumber":
+          return sourceBlockTag;
+        case "eth_getBlockByNumber":
+          return {
+            number: sourceBlockTag,
+            hash: blockHash,
+            timestamp: "0x6ad3c5b0",
+          };
+        case "eth_getCode":
+          return "0x6000";
+        case "eth_getBalance": {
+          const address = String(params[0]).toLowerCase();
+          if (params[1] === "latest") return balances.get(address) ?? "0x0";
+          baseBalanceReadCount += 1;
+          if (baseBalanceReadCount === 2) resolveBothBaseBalancesRead();
+          return initialBalances.get(address) ?? "0x0";
+        }
+        case "evm_snapshot": {
+          snapshotId += 1;
+          const id = `0x${snapshotId.toString(16)}`;
+          snapshots.set(id, new Map(balances));
+          return id;
+        }
+        case "anvil_setBalance":
+          balances.set(String(params[0]).toLowerCase(), String(params[1]));
+          return true;
+        case "eth_call": {
+          const transaction = params[0] as {
+            from?: string;
+            to?: string;
+            data?: string;
+          };
+          if (transaction.to?.toLowerCase() === usdcAddress) {
+            return storageWord(0n);
+          }
+          transactionCallCount += 1;
+          observations.push({
+            sender: transaction.from?.toLowerCase() ?? "",
+            firstSenderBalance: balances.get(sender.toLowerCase()),
+            secondSenderBalance: balances.get(concurrentSender.toLowerCase()),
+          });
+          if (transactionCallCount === 1) {
+            resolveFirstCallStarted();
+            await firstCallGate;
+          }
+          return "0x";
+        }
+        case "eth_estimateGas":
+          return "0x5208";
+        case "evm_revert": {
+          const id = String(params[0]);
+          const snapshot = snapshots.get(id);
+          if (snapshot === undefined) return false;
+          balances.clear();
+          for (const [address, balance] of snapshot) {
+            balances.set(address, balance);
+          }
+          const revertedId = BigInt(id);
+          for (const existingId of snapshots.keys()) {
+            if (BigInt(existingId) >= revertedId) snapshots.delete(existingId);
+          }
+          return true;
+        }
+        default:
+          throw new Error(`Unexpected local fork RPC method: ${method}`);
+      }
+    },
+  };
+  return {
+    rpcClient,
+    calls,
+    initialBalances,
+    balances,
+    observations,
+    firstCallStarted,
+    bothBaseBalancesRead,
+    releaseFirstCall,
+  };
+}
+
 function defaultRpcResponse(
   method: string,
   params: readonly unknown[],
@@ -107,7 +421,7 @@ function defaultRpcResponse(
     return {
       number: sourceBlockTag,
       hash: blockHash,
-      timestamp: "0x6b1f2b5f",
+      timestamp: "0x6ad3c5b0",
     };
   }
   if (method === "eth_getCode") return "0x6000";
@@ -185,6 +499,7 @@ function createQuoteApp(arbitrumOneQuoteFlow: QuoteAgentFlowPort) {
   return bootstrapBackendApp({
     environment: {
       MONAD_RPC_URL: "https://monad.example.test",
+      NODE_ENV: "production",
       ARBITRUM_ONE_RPC_URL: "https://arbitrum-one.example.test",
       MOSS_RUNTIME_VERSION: "test-runtime",
       MOSS_RUNTIME_REVISION: "test-revision",
@@ -192,6 +507,86 @@ function createQuoteApp(arbitrumOneQuoteFlow: QuoteAgentFlowPort) {
     tokenRegistry,
     store: new InMemoryRunStore(),
     arbitrumOneQuoteFlow,
+  });
+}
+
+function createLocalRuntime() {
+  return bootstrapBackendRuntime({
+    environment: localForkEnvironment,
+    tokenRegistry,
+  });
+}
+
+function createLocalCheckInput(
+  runtime = createLocalRuntime(),
+  options: {
+    amountIn?: string;
+    minimumReceived?: string;
+    sender?: string;
+  } = {},
+) {
+  const request: CheckSwapRequest = {
+    ...quoteRequest,
+    sender: options.sender ?? quoteRequest.sender,
+    amountIn: options.amountIn ?? quoteRequest.amountIn,
+    economicBoundary:
+      options.minimumReceived === undefined
+        ? { availability: "unavailable", source: "unavailable" }
+        : {
+            availability: "available",
+            minimumReceived: options.minimumReceived,
+            source: "user_declared",
+          },
+  };
+  const normalized = normalizeArbitrumOneCheckSwapRequest(
+    request,
+    runtime.tokenRegistry,
+  );
+  if (!normalized.success)
+    throw new Error("Test local-fork check request did not normalize");
+  return {
+    runId: "local-fork-check-test",
+    intent: normalized.intent,
+    executionPurpose: "primary" as const,
+    tokenInDecimals: 18,
+    tokenOutDecimals: 6,
+    moss: runtime.config.moss,
+  };
+}
+
+function createLocalCheckFixture(
+  rpcOptions: LocalForkRpcOptions = {},
+  checkOptions: {
+    amountIn?: string;
+    minimumReceived?: string;
+    sender?: string;
+  } = {},
+) {
+  const runtime = createLocalRuntime();
+  const source = createRpc();
+  const local = createLocalForkRpc(rpcOptions);
+  const flow = createArbitrumOneLocalForkCheckFlow(runtime, {
+    sourceRpcClient: source.rpcClient,
+    localRpcClient: local.rpcClient,
+    now: () => new Date("2026-10-17T19:17:33.990Z"),
+  });
+  return {
+    runtime,
+    source,
+    local,
+    flow,
+    input: createLocalCheckInput(runtime, checkOptions),
+  };
+}
+
+function createLocalCheckApp(
+  flow: ReturnType<typeof createArbitrumOneLocalForkCheckFlow>,
+) {
+  return bootstrapBackendApp({
+    environment: localForkEnvironment,
+    tokenRegistry,
+    store: new InMemoryRunStore(),
+    arbitrumOneLocalForkCheckFlow: flow,
   });
 }
 
@@ -221,7 +616,7 @@ describe("Arbitrum One Camelot pinned quote flow", () => {
         sourceBlock: {
           number: sourceBlockNumber,
           hash: blockHash,
-          timestamp: BigInt("0x6b1f2b5f").toString(),
+          timestamp: BigInt("0x6ad3c5b0").toString(),
           observedAt: "2026-10-17T19:17:33.990Z",
         },
         amountInAtomic: "1000000000000000",
@@ -525,5 +920,532 @@ describe("Arbitrum One Camelot pinned quote flow", () => {
     await expect(
       timeoutFlow.quote(createQuoteInput(runtime)),
     ).resolves.toMatchObject({ status: "unavailable" });
+  });
+  it("keeps the production Arbitrum One path quote-only without local opt-in", async () => {
+    const source = createRpc();
+    const runtime = createRuntime();
+    const app = createQuoteApp(
+      createArbitrumOneQuoteFlow(runtime, { rpcClient: source.rpcClient }),
+    );
+    try {
+      const checkResponse = await app.fetch(
+        new Request("https://api.example.test/api/check", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            ...quoteRequest,
+            economicBoundary: {
+              availability: "unavailable",
+              source: "unavailable",
+            },
+          }),
+        }),
+      );
+      expect(checkResponse.status).toBe(400);
+      await expect(checkResponse.json()).resolves.toMatchObject({
+        error: {
+          code: "NORMALIZATION_FAILED",
+          issues: { code: "UNSUPPORTED_CHAIN" },
+        },
+      });
+      expect(source.calls).toHaveLength(0);
+
+      const quoteResponse = await app.fetch(
+        new Request("https://api.example.test/api/quote", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(quoteRequest),
+        }),
+      );
+      expect(quoteResponse.status).toBe(200);
+      await expect(quoteResponse.json()).resolves.toMatchObject({
+        status: "available",
+      });
+      expect(source.calls.length).toBeGreaterThan(0);
+    } finally {
+      await app.close();
+    }
+  });
+});
+
+describe("Arbitrum One local-fork Check/Run provenance", () => {
+  it("persists Check provenance and returns it on GET without rerunning RPCs", async () => {
+    const { flow, source, local } = createLocalCheckFixture();
+    const app = createLocalCheckApp(flow);
+    try {
+      const response = await app.fetch(
+        new Request("https://api.example.test/api/check", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            ...quoteRequest,
+            economicBoundary: {
+              availability: "unavailable",
+              source: "unavailable",
+            },
+          }),
+        }),
+      );
+      expect(response.status).toBe(200);
+      const postBody = (await response.json()) as {
+        runId: string;
+        arbitrumOneForkProvenance?: unknown;
+      };
+      expect(postBody.runId).toBeTruthy();
+      expect(postBody.arbitrumOneForkProvenance).toMatchObject({
+        schemaVersion: 1,
+        status: "AVAILABLE",
+        source: {
+          chainId: ARBITRUM_ONE_CHAIN_ID,
+          blockNumber: sourceBlockNumber,
+          blockHash,
+        },
+        localExecution: {
+          chainId: 31_337,
+          stateRevision: {
+            status: "AVAILABLE",
+            method: "ANVIL_DUMP_STATE",
+          },
+        },
+        simulation: {
+          call: { status: "SUCCEEDED" },
+          gasEstimate: { status: "AVAILABLE", gasUnits: "21000" },
+          amountReceived: {
+            status: "AVAILABLE",
+            amountReceivedAtomic: simulatedRecipientBalance.toString(),
+            source: "VALIDATED_STATE_DIFF",
+          },
+        },
+        accountOverride: { snapshotRestored: true },
+        safety: {
+          upstreamWritesAllowed: false,
+          signingOrBroadcastingPerformed: false,
+          transactionSubmissionPerformed: false,
+          localTransactionsMined: false,
+        },
+      });
+      const provenanceBody = postBody.arbitrumOneForkProvenance as {
+        localExecution?: {
+          stateRevision?: { fingerprint?: unknown };
+        };
+      };
+      expect(provenanceBody.localExecution?.stateRevision?.fingerprint).toMatch(
+        /^sha256:[a-f0-9]{64}$/,
+      );
+      const txCalls = local.calls.filter((call) => {
+        if (call.method !== "eth_call" && call.method !== "eth_estimateGas") {
+          return false;
+        }
+        const transaction = call.params[0] as { to?: unknown } | undefined;
+        return (
+          typeof transaction?.to === "string" &&
+          transaction.to.toLowerCase() ===
+            ARBITRUM_ONE_RUNTIME_PROFILE.deployments.routerAddress.toLowerCase()
+        );
+      });
+      expect(txCalls).toHaveLength(2);
+      expect(txCalls[0]?.params[0]).toEqual(txCalls[1]?.params[0]);
+      expect(txCalls[0]?.params[0]).not.toHaveProperty("chainId");
+      const prestateTrace = local.calls.find(
+        (call) => call.method === "debug_traceCall",
+      );
+      expect(prestateTrace?.params[0]).toEqual(txCalls[0]?.params[0]);
+      expect(prestateTrace?.params[2]).toEqual({
+        tracer: "prestateTracer",
+        tracerConfig: { diffMode: true },
+      });
+      expect(
+        local.calls.some((call) =>
+          [
+            "eth_sendTransaction",
+            "eth_sendRawTransaction",
+            "evm_mine",
+            "anvil_mine",
+          ].includes(call.method),
+        ),
+      ).toBe(false);
+
+      const rpcCallCount = source.calls.length + local.calls.length;
+      const getResponse = await app.fetch(
+        new Request(
+          `https://api.example.test/api/runs/${encodeURIComponent(postBody.runId)}`,
+        ),
+      );
+      expect(getResponse.status).toBe(200);
+      const getBody = (await getResponse.json()) as {
+        result?: { arbitrumOneForkProvenance?: unknown };
+      };
+      expect(getBody.result?.arbitrumOneForkProvenance).toEqual(
+        postBody.arbitrumOneForkProvenance,
+      );
+      expect(source.calls.length + local.calls.length).toBe(rpcCallCount);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it.each([
+    {
+      name: "timeout",
+      rpcOptions: {
+        callError: new NativeRpcClientError("TIMEOUT", "simulated timeout"),
+      },
+      checkOptions: {},
+      expected: {
+        call: { status: "UNAVAILABLE", failureReason: "RPC_TIMEOUT" },
+        gasEstimate: { status: "AVAILABLE", gasUnits: "21000" },
+      },
+    },
+    {
+      name: "minimum-output protection revert",
+      rpcOptions: {
+        callError: createRpcError(3, "execution reverted: minimum output"),
+        gasEstimateError: createRpcError(
+          3,
+          "execution reverted: minimum output",
+        ),
+      },
+      checkOptions: { minimumReceived: "3" },
+      expected: {
+        call: { status: "REVERTED", failureReason: "EVM_REVERT" },
+        gasEstimate: { status: "UNAVAILABLE", failureReason: "EVM_REVERT" },
+      },
+    },
+    {
+      name: "insufficient native balance",
+      rpcOptions: {
+        callError: createRpcError(
+          -32000,
+          "insufficient funds for gas * price + value",
+        ),
+      },
+      checkOptions: { amountIn: "2" },
+      expected: {
+        call: {
+          status: "UNAVAILABLE",
+          failureReason: "INSUFFICIENT_NATIVE_BALANCE",
+        },
+        gasEstimate: { status: "AVAILABLE", gasUnits: "21000" },
+      },
+    },
+  ])(
+    "records $name without claiming received output",
+    async ({ rpcOptions, checkOptions, expected }) => {
+      const fixture = createLocalCheckFixture(rpcOptions, checkOptions);
+      const result = runResultSchema.parse(
+        await fixture.flow.check(fixture.input),
+      );
+      const provenance = result.arbitrumOneForkProvenance;
+      if (provenance?.status !== "AVAILABLE")
+        throw new Error("Expected local-fork provenance");
+      expect(provenance.simulation).toMatchObject({
+        ...expected,
+        amountReceived: { status: "UNAVAILABLE" },
+      });
+      expect(provenance.simulation.amountReceived).not.toHaveProperty(
+        "amountReceivedAtomic",
+      );
+      expect(provenance.accountOverride.snapshotRestored).toBe(true);
+      expect(
+        fixture.local.calls.some((call) => call.method === "evm_revert"),
+      ).toBe(true);
+      expect(
+        fixture.local.calls.some(
+          (call) =>
+            call.method === "eth_getBalance" && call.params[1] === "latest",
+        ),
+      ).toBe(true);
+    },
+  );
+
+  it.each([
+    {
+      name: "prestateTracer is unsupported",
+      rpcOptions: {
+        prestateError: createRpcError(-32601, "method not found"),
+      },
+      expectedStateRevision: "AVAILABLE",
+    },
+    {
+      name: "state overrides are unsupported",
+      rpcOptions: {
+        stateOverrideError: createRpcError(-32602, "invalid params"),
+      },
+      expectedStateRevision: "AVAILABLE",
+    },
+    {
+      name: "Anvil state dump is unsupported",
+      rpcOptions: {
+        stateDumpError: createRpcError(-32601, "method not found"),
+      },
+      expectedStateRevision: "UNKNOWN",
+    },
+  ])(
+    "fails closed when $name",
+    async ({ rpcOptions, expectedStateRevision }) => {
+      const fixture = createLocalCheckFixture(rpcOptions);
+      const result = runResultSchema.parse(
+        await fixture.flow.check(fixture.input),
+      );
+      const provenance = result.arbitrumOneForkProvenance;
+      if (provenance?.status !== "AVAILABLE") {
+        throw new Error("Expected available local-fork provenance");
+      }
+      expect(provenance.localExecution.stateRevision.status).toBe(
+        expectedStateRevision,
+      );
+      expect(provenance.simulation.amountReceived).toEqual({
+        status: "UNAVAILABLE",
+        reason: "STATE_DIFF_NOT_QUALIFIED",
+      });
+      expect(provenance.simulation.amountReceived).not.toHaveProperty(
+        "amountReceivedAtomic",
+      );
+      expect(provenance.accountOverride.snapshotRestored).toBe(true);
+    },
+  );
+
+  it("rejects a claimed balance delta without a qualified state revision", async () => {
+    const fixture = createLocalCheckFixture();
+    const result = runResultSchema.parse(
+      await fixture.flow.check(fixture.input),
+    );
+    const provenance = result.arbitrumOneForkProvenance;
+    if (provenance?.status !== "AVAILABLE") {
+      throw new Error("Expected available local-fork provenance");
+    }
+    const invalidResult = {
+      ...result,
+      arbitrumOneForkProvenance: {
+        ...provenance,
+        localExecution: {
+          ...provenance.localExecution,
+          stateRevision: {
+            status: "UNKNOWN",
+            reason: "NO_QUALIFIED_ANVIL_STATE_REVISION_TOKEN",
+          },
+        },
+      },
+    };
+    expect(runResultSchema.safeParse(invalidResult).success).toBe(false);
+  });
+
+  it("serializes concurrent checks for one fork and restores both senders' state", async () => {
+    const runtime = createLocalRuntime();
+    const source = createRpc();
+    const local = createConcurrentLocalForkRpc();
+    const flow = createArbitrumOneLocalForkCheckFlow(runtime, {
+      sourceRpcClient: source.rpcClient,
+      localRpcClient: local.rpcClient,
+      now: () => new Date("2026-10-17T19:17:33.990Z"),
+    });
+    const firstCheck = flow.check(createLocalCheckInput(runtime, { sender }));
+    await local.firstCallStarted;
+
+    const secondCheck = flow.check(
+      createLocalCheckInput(runtime, { sender: concurrentSender }),
+    );
+    try {
+      await local.bothBaseBalancesRead;
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(
+        local.calls.filter((call) => call.method === "evm_snapshot"),
+      ).toHaveLength(1);
+    } finally {
+      local.releaseFirstCall();
+    }
+
+    const [firstResult, secondResult] = await Promise.all([
+      firstCheck,
+      secondCheck,
+    ]);
+    expect(
+      runResultSchema.parse(firstResult).arbitrumOneForkProvenance,
+    ).toMatchObject({ accountOverride: { snapshotRestored: true } });
+    expect(
+      runResultSchema.parse(secondResult).arbitrumOneForkProvenance,
+    ).toMatchObject({ accountOverride: { snapshotRestored: true } });
+    expect(local.observations).toEqual([
+      {
+        sender: sender.toLowerCase(),
+        firstSenderBalance: "0xde0b6b3a7640000",
+        secondSenderBalance: "0xc8",
+      },
+      {
+        sender: concurrentSender.toLowerCase(),
+        firstSenderBalance: "0x64",
+        secondSenderBalance: "0xde0b6b3a7640000",
+      },
+    ]);
+    expect(local.balances).toEqual(local.initialBalances);
+    const firstRevertIndex = local.calls.findIndex(
+      (call) => call.method === "evm_revert",
+    );
+    const secondSnapshotIndex = local.calls.findIndex(
+      (call, index) =>
+        index > firstRevertIndex && call.method === "evm_snapshot",
+    );
+    expect(firstRevertIndex).toBeGreaterThan(-1);
+    expect(secondSnapshotIndex).toBeGreaterThan(firstRevertIndex);
+    expect(
+      local.calls.filter((call) => call.method === "evm_revert"),
+    ).toHaveLength(2);
+  });
+
+  it("classifies insufficient balance from the actual Native RPC adapter", async () => {
+    const runtime = createLocalRuntime();
+    const source = createRpc();
+    const rawInsufficientBalanceMessage =
+      "insufficient funds for gas * price + value: address 0x1111111111111111111111111111111111111111 have 50883771891842106 want 100000000000000000000";
+    const methods: string[] = [];
+    let nativeBalance = "0x0";
+    const fetchImplementation: typeof fetch = async (_input, init) => {
+      const request = JSON.parse(String(init?.body)) as {
+        id: number;
+        method: string;
+        params: readonly unknown[];
+      };
+      methods.push(request.method);
+      if (request.method === "anvil_setBalance") {
+        nativeBalance = String(request.params[1]);
+      }
+      if (request.method === "evm_revert") nativeBalance = "0x0";
+      const resultByMethod: Record<string, unknown> = {
+        parallax_forkInstanceId: localForkInstanceId,
+        web3_clientVersion: "anvil/v1.8.5 (test build)",
+        eth_chainId: "0x7a69",
+        eth_accounts: [],
+        eth_blockNumber: sourceBlockTag,
+        eth_getBlockByNumber: {
+          number: sourceBlockTag,
+          hash: blockHash,
+          timestamp: "0x6ad3c5b0",
+        },
+        eth_getCode: "0x6000",
+        eth_getBalance: request.params[1] === "latest" ? nativeBalance : "0x0",
+        evm_snapshot: "0x1",
+        anvil_setBalance: null,
+        eth_estimateGas: "0x5208",
+        evm_revert: true,
+      };
+      const call = request.params[0] as
+        | { to?: unknown; data?: unknown }
+        | undefined;
+      const isBalanceOfCall =
+        call?.to === ARBITRUM_ONE_RUNTIME_PROFILE.deployments.usdcAddress &&
+        typeof call.data === "string" &&
+        call.data.slice(0, 10).toLowerCase() === "0x70a08231";
+      const responseBody =
+        request.method === "eth_call" && isBalanceOfCall
+          ? {
+              jsonrpc: "2.0",
+              id: request.id,
+              result: storageWord(0n),
+            }
+          : request.method === "eth_call"
+            ? {
+                jsonrpc: "2.0",
+                id: request.id,
+                error: {
+                  code: -32000,
+                  message: rawInsufficientBalanceMessage,
+                },
+              }
+            : {
+                jsonrpc: "2.0",
+                id: request.id,
+                result: resultByMethod[request.method],
+              };
+      return new Response(JSON.stringify(responseBody), { status: 200 });
+    };
+    const localRpcClient = createNativeRpcClient({
+      rpcUrl: localForkEnvironment.ARBITRUM_ONE_FORK_LOCAL_RPC_URL,
+      fetchImplementation,
+    });
+    const flow = createArbitrumOneLocalForkCheckFlow(runtime, {
+      sourceRpcClient: source.rpcClient,
+      localRpcClient,
+      now: () => new Date("2026-10-17T19:17:33.990Z"),
+    });
+    const result = runResultSchema.parse(
+      await flow.check(createLocalCheckInput(runtime, { amountIn: "2" })),
+    );
+    const provenance = result.arbitrumOneForkProvenance;
+    if (provenance?.status !== "AVAILABLE") {
+      throw new Error("Expected available local-fork provenance");
+    }
+
+    expect(provenance.simulation.call).toEqual({
+      status: "UNAVAILABLE",
+      failureReason: "INSUFFICIENT_NATIVE_BALANCE",
+    });
+    expect(methods).toContain("eth_call");
+    const publicResult = JSON.stringify(result);
+    expect(publicResult).not.toContain("have 50883771891842106");
+    expect(publicResult).not.toContain("want 100000000000000000000");
+    expect(publicResult).not.toContain(rawInsufficientBalanceMessage);
+  });
+
+  it("rejects a fork/source identity mismatch before transaction simulation", async () => {
+    const fixture = createLocalCheckFixture({
+      blockHash: `0x${"cd".repeat(32)}`,
+    });
+    await expect(fixture.flow.check(fixture.input)).rejects.toThrow(
+      "Local fork source block identity does not match",
+    );
+    expect(fixture.local.calls.some((call) => call.method === "eth_call")).toBe(
+      false,
+    );
+    expect(
+      fixture.local.calls.some((call) => call.method === "evm_snapshot"),
+    ).toBe(false);
+  });
+
+  it.each([
+    {
+      name: "fork instance",
+      rpcOptions: {
+        forkInstanceId: "00000000-0000-4000-8000-000000000002",
+      },
+      message: "Local fork instance identity does not match configuration",
+    },
+    {
+      name: "Anvil version",
+      rpcOptions: { clientVersion: "anvil/v1.8.4 (test build)" },
+      message: "Local Anvil version does not match configuration",
+    },
+    {
+      name: "chain ID",
+      rpcOptions: { chainId: "0xa4b1" },
+      message: "Local fork chain identity is invalid",
+    },
+    {
+      name: "unlocked accounts",
+      rpcOptions: { accounts: [sender] },
+      message: "Local fork must not expose unlocked signing accounts",
+    },
+  ])(
+    "rejects a $name mismatch before transaction simulation",
+    async ({ rpcOptions, message }) => {
+      const fixture = createLocalCheckFixture(rpcOptions);
+      await expect(fixture.flow.check(fixture.input)).rejects.toThrow(message);
+      expect(
+        fixture.local.calls.some((call) => call.method === "evm_snapshot"),
+      ).toBe(false);
+      expect(
+        fixture.local.calls.some((call) => call.method === "eth_call"),
+      ).toBe(false);
+      expect(
+        fixture.source.calls.filter((call) => call.method !== "eth_chainId"),
+      ).toHaveLength(0);
+    },
+  );
+
+  it("fails closed when the snapshot cannot be restored", async () => {
+    const fixture = createLocalCheckFixture({ revertResult: false });
+    await expect(fixture.flow.check(fixture.input)).rejects.toThrow(
+      "Local fork snapshot restoration failed",
+    );
+    expect(fixture.local.calls.at(-1)?.method).toBe("evm_revert");
   });
 });

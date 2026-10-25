@@ -192,4 +192,97 @@ describe("Arbitrum runtime configuration", () => {
       }).success,
     ).toBe(false);
   });
+
+  it("enables local-fork Check only in development and keeps the public profile quote-only", () => {
+    const environment = {
+      ...baseEnvironment,
+      NODE_ENV: "development",
+      ARBITRUM_ONE_RPC_URL: "https://one.example.test",
+      ARBITRUM_ONE_LOCAL_FORK_CHECK_ENABLED: "true",
+      ARBITRUM_ONE_FORK_LOCAL_RPC_URL: "http://127.0.0.1:8545",
+      ARBITRUM_ONE_FORK_INSTANCE_ID: "00000000-0000-4000-8000-000000000001",
+    };
+    const runtime = bootstrapBackendRuntime({
+      environment,
+      tokenRegistry: {
+        chains: [
+          { chainId: ARBITRUM_ONE_CHAIN_ID, symbol: "ETH", decimals: 18 },
+        ],
+        tokens: [],
+      },
+    });
+
+    expect(runtime.config.arbitrumOneLocalForkCheck).toEqual({
+      rpcUrl: "http://127.0.0.1:8545",
+      forkInstanceId: "00000000-0000-4000-8000-000000000001",
+      anvilVersion: "1.8.5",
+    });
+    expect(runtime.config.arbitrumOne?.capabilities).toEqual({
+      quote: true,
+      check: false,
+      simulation: false,
+    });
+    expect(() =>
+      bootstrapBackendRuntime({
+        environment: { ...environment, NODE_ENV: "production" },
+        tokenRegistry: {
+          chains: [
+            { chainId: ARBITRUM_ONE_CHAIN_ID, symbol: "ETH", decimals: 18 },
+          ],
+          tokens: [],
+        },
+      }),
+    ).toThrow();
+  });
+
+  it("fails closed for non-development opt-in and incomplete local fork configuration", () => {
+    const enabledEnvironment = {
+      ...baseEnvironment,
+      NODE_ENV: "development",
+      ARBITRUM_ONE_RPC_URL: "https://one.example.test",
+      ARBITRUM_ONE_LOCAL_FORK_CHECK_ENABLED: "true",
+      ARBITRUM_ONE_FORK_LOCAL_RPC_URL: "http://127.0.0.1:8545",
+      ARBITRUM_ONE_FORK_INSTANCE_ID: "00000000-0000-4000-8000-000000000001",
+    };
+    for (const environment of [
+      { ...enabledEnvironment, NODE_ENV: "production" },
+      { ...enabledEnvironment, ARBITRUM_ONE_RPC_URL: undefined },
+      { ...enabledEnvironment, ARBITRUM_ONE_FORK_LOCAL_RPC_URL: undefined },
+      { ...enabledEnvironment, ARBITRUM_ONE_FORK_INSTANCE_ID: undefined },
+      { ...enabledEnvironment, NODE_ENV: undefined },
+    ]) {
+      expect(backendEnvironmentSchema.safeParse(environment).success).toBe(
+        false,
+      );
+    }
+    expect(
+      backendEnvironmentSchema.safeParse({
+        ...baseEnvironment,
+        ARBITRUM_ONE_LOCAL_FORK_CHECK_ENABLED: "true",
+      }).success,
+    ).toBe(false);
+  });
+
+  it("accepts only unauthenticated local HTTP fork RPC endpoints", () => {
+    const base = {
+      ...baseEnvironment,
+      NODE_ENV: "development",
+      ARBITRUM_ONE_RPC_URL: "https://one.example.test",
+      ARBITRUM_ONE_LOCAL_FORK_CHECK_ENABLED: "true",
+      ARBITRUM_ONE_FORK_INSTANCE_ID: "00000000-0000-4000-8000-000000000001",
+    };
+    for (const rpcUrl of [
+      "https://127.0.0.1:8545",
+      "http://192.0.2.1:8545",
+      "http://user:pass@localhost:8545",
+      "http://host.docker.internal:8545?token=secret",
+    ]) {
+      expect(
+        backendEnvironmentSchema.safeParse({
+          ...base,
+          ARBITRUM_ONE_FORK_LOCAL_RPC_URL: rpcUrl,
+        }).success,
+      ).toBe(false);
+    }
+  });
 });

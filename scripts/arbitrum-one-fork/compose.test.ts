@@ -87,13 +87,10 @@ describe("Arbitrum One fork container configuration", () => {
     );
   });
 
-  it("keeps the rpc-proxy and Anvil root filesystems read-only", () => {
-    const rpcProxyService = compose.match(
-      /^ {2}rpc-proxy:\n([\s\S]*?)(?=^ {2}[\w-]+:\n|^networks:\n)/m,
-    )?.[1];
-    const anvilService = compose.match(
-      /^ {2}anvil:\n([\s\S]*?)(?=^ {2}[\w-]+:\n|^networks:\n)/m,
-    )?.[1];
+  it("keeps the environment-backed RPC secret compatible with proxy hardening", () => {
+    const rpcProxyService = serviceBlock("rpc-proxy");
+    const anvilService = serviceBlock("anvil");
+    const forwarderService = serviceBlock("anvil-host-forwarder");
 
     expect(rpcProxyService).toContain("- upstream_rpc_url");
     expect(rpcProxyService).toContain(
@@ -102,11 +99,14 @@ describe("Arbitrum One fork container configuration", () => {
     expect(compose).toContain(
       "upstream_rpc_url:\n    environment: ARBITRUM_ONE_FORK_UPSTREAM_RPC_URL",
     );
-    expect(rpcProxyService).toMatch(/^ {4}read_only: true$/m);
+    expect(rpcProxyService).not.toMatch(/^ {4}read_only: true$/m);
+    expect(rpcProxyService).toContain("cap_drop:\n      - ALL");
+    expect(rpcProxyService).toContain("no-new-privileges:true");
     expect(rpcProxyService).toContain(
       "tmpfs:\n      - /tmp:rw,noexec,nosuid,size=16m",
     );
     expect(anvilService).toMatch(/^ {4}read_only: true$/m);
+    expect(forwarderService).toMatch(/^ {4}read_only: true$/m);
   });
 
   it("accepts Cast's quoted chain ID in the read-only Anvil healthcheck", () => {

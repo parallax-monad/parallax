@@ -72,6 +72,10 @@ export interface ForkTransactionSimulationEvidence {
     readonly observedHeadNumber: string;
     readonly forkInstanceId: string;
     readonly anvilVersion: string;
+    readonly stateRevision: {
+      readonly status: "UNKNOWN";
+      readonly reason: "NO_QUALIFIED_ANVIL_STATE_REVISION_TOKEN";
+    };
   };
   readonly quote: {
     readonly profileId: string;
@@ -401,6 +405,10 @@ export async function runForkTransactionSimulation(
       observedHeadNumber: restoredHead,
       forkInstanceId: input.forkInstanceId,
       anvilVersion,
+      stateRevision: {
+        status: "UNKNOWN",
+        reason: "NO_QUALIFIED_ANVIL_STATE_REVISION_TOKEN",
+      },
     },
     quote: {
       profileId: provenance.profileId,
@@ -467,6 +475,7 @@ export async function runForkTransactionSimulation(
       "The exact eth_call return bytes are represented only by a fingerprint. If local Anvil supports the bounded debug_traceCall callTracer request, matching USDC Transfer events to the prepared recipient are summarized and compared with the quote and encoded minimum-output protection; raw trace payloads and logs are discarded.",
       "A simulated Transfer event is not a recipient balance delta or receipt.",
       "Recipient balance delta and committed asset state are unavailable because eth_call and debug_traceCall do not persist transaction state.",
+      "The qualified harness has no complete local EVM state-revision token; stateRevision is UNKNOWN. Chain ID, base block identity, Anvil version, and fork-instance UUID do not identify the post-override execution state.",
     ],
   };
 }
@@ -870,6 +879,9 @@ async function observeRecipientTransfer(
     ) {
       continue;
     }
+    if (!/^0x0{24}[0-9a-fA-F]{40}$/.test(log.topics[1] ?? "")) {
+      return { status: "unavailable", reason: "MALFORMED_RESPONSE" };
+    }
     if (!ABI_UINT256_RETURN_PATTERN.test(log.data)) {
       return { status: "unavailable", reason: "MALFORMED_RESPONSE" };
     }
@@ -896,13 +908,29 @@ interface SanitizedTraceLog {
 }
 
 function collectTraceLogs(value: unknown): SanitizedTraceLog[] | undefined {
-  if (!isRecord(value)) return undefined;
+  if (
+    !isRecord(value) ||
+    (value.logs === undefined && value.calls === undefined)
+  ) {
+    return undefined;
+  }
   const pending: Record<string, unknown>[] = [value];
   const logs: SanitizedTraceLog[] = [];
   let visited = 0;
   while (pending.length > 0) {
     const frame = pending.pop();
     if (frame === undefined || ++visited > 10_000) return undefined;
+    if (
+      (frame.failed !== undefined && frame.failed !== false) ||
+      (frame.error !== undefined &&
+        frame.error !== null &&
+        frame.error !== "") ||
+      (frame.revertReason !== undefined &&
+        frame.revertReason !== null &&
+        frame.revertReason !== "")
+    ) {
+      return undefined;
+    }
     if (frame.logs !== undefined) {
       if (!Array.isArray(frame.logs)) return undefined;
       for (const rawLog of frame.logs) {
