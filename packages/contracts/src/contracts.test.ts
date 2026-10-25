@@ -268,13 +268,27 @@ const usdcQuoteMetadata = {
   decimalsSource: "onchain_verified" as const,
   verifiedAtBlock: "12345",
 };
+const otherTokenQuoteMetadata = {
+  chainId: 143,
+  asset: otherToken,
+  symbol: "OTHER",
+  decimals: 18,
+  decimalsSource: "onchain_verified" as const,
+  verifiedAtBlock: "12345",
+};
 
 function quoteWithProvenance(input: {
   estimatedAmountOut: string;
   amountOutAtomic: string;
   protocol?: ProtocolId;
-  inputAsset?: typeof nativeQuoteMetadata | typeof usdcQuoteMetadata;
-  outputAsset?: typeof nativeQuoteMetadata | typeof usdcQuoteMetadata;
+  inputAsset?:
+    | typeof nativeQuoteMetadata
+    | typeof usdcQuoteMetadata
+    | typeof otherTokenQuoteMetadata;
+  outputAsset?:
+    | typeof nativeQuoteMetadata
+    | typeof usdcQuoteMetadata
+    | typeof otherTokenQuoteMetadata;
   amountInAtomic?: string;
 }) {
   const inputAsset = input.inputAsset ?? nativeQuoteMetadata;
@@ -960,6 +974,46 @@ describe("completed Run Result contract", () => {
     ).toBe(true);
   });
 
+  it("binds quote provenance output identity to the Run Intent", () => {
+    const result = {
+      ...completedResult,
+      intent: {
+        ...normalizedIntent,
+        tokenIn: usdc,
+        tokenOut: otherToken,
+        amountInAtomic: "1500000",
+      },
+      route: {
+        ...completedResult.route,
+        path: [usdc, otherToken],
+      },
+      quote: quoteWithProvenance({
+        estimatedAmountOut: "0.000000000000000001",
+        amountOutAtomic: "1",
+        inputAsset: usdcQuoteMetadata,
+        outputAsset: otherTokenQuoteMetadata,
+        amountInAtomic: "1500000",
+      }),
+    };
+
+    expect(runResultSchema.safeParse(result).success).toBe(true);
+
+    const nativeMetadataForErc20Output = {
+      ...result,
+      quote: quoteWithProvenance({
+        estimatedAmountOut: "0.000000000000000001",
+        amountOutAtomic: "1",
+        inputAsset: usdcQuoteMetadata,
+        outputAsset: nativeQuoteMetadata,
+        amountInAtomic: "1500000",
+      }),
+    };
+
+    expect(
+      runResultSchema.safeParse(nativeMetadataForErc20Output).success,
+    ).toBe(false);
+  });
+
   it("binds quote provenance protocol to the checked Intent and transaction", () => {
     const protocol = "camelot-v3";
     const matchingResult = {
@@ -995,6 +1049,50 @@ describe("completed Run Result contract", () => {
     expect(
       runResultSchema.safeParse(mismatchedTransactionProtocol).success,
     ).toBe(false);
+  });
+
+  it("binds the LIVE transaction from address to the Intent sender", () => {
+    const protocol = normalizedIntent.protocol;
+    const matchingResult = {
+      ...completedResult,
+      quote: quoteWithProvenance({
+        estimatedAmountOut: "2.413423",
+        amountOutAtomic: "2413423",
+        protocol,
+      }),
+      simulationProvenance: simulationProvenance(protocol),
+    };
+
+    expect(runResultSchema.safeParse(matchingResult).success).toBe(true);
+
+    const mismatchedTransactionFrom = {
+      ...matchingResult,
+      simulationProvenance: {
+        ...matchingResult.simulationProvenance,
+        transactionBinding: {
+          ...matchingResult.simulationProvenance.transactionBinding,
+          from: otherRecipient,
+        },
+      },
+    };
+
+    expect(runResultSchema.safeParse(mismatchedTransactionFrom).success).toBe(
+      false,
+    );
+
+    const localForkProvenance = {
+      ...simulationProvenance(protocol),
+      executionEnvironment: "LOCAL_FORK" as const,
+      executionChainId: 31337,
+      forkRunId: "123e4567-e89b-12d3-a456-426614174000",
+      accountOverridesApplied: true,
+    };
+    expect(
+      runResultSchema.safeParse({
+        ...matchingResult,
+        simulationProvenance: localForkProvenance,
+      }).success,
+    ).toBe(true);
   });
 
   it("preserves an optional parent Run on a Re-run result", () => {

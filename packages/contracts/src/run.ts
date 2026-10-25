@@ -125,6 +125,23 @@ function validateRunIdentity(result: RunIdentity, context: z.RefinementCtx) {
       });
     }
 
+    if (
+      assetIdentity({
+        chainId: result.quote.provenance.outputAsset.chainId,
+        asset: result.quote.provenance.outputAsset.asset,
+      }) !==
+      assetIdentity({
+        chainId: result.intent.chainId,
+        asset: result.intent.tokenOut,
+      })
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Quote provenance output asset must match the Run Intent",
+        path: ["quote", "provenance", "outputAsset"],
+      });
+    }
+
     const displayAmountOutAtomic = exactHumanAmountToAtomic(
       result.quote.estimatedAmountOut,
       result.quote.provenance.outputAsset.decimals,
@@ -227,6 +244,8 @@ function validateSimulationProvenance(
     binding.chainId !== result.intent.chainId ||
     binding.protocol !== result.intent.protocol ||
     binding.sender.toLowerCase() !== result.intent.sender.toLowerCase() ||
+    (provenance.executionEnvironment === "LIVE" &&
+      binding.from.toLowerCase() !== result.intent.sender.toLowerCase()) ||
     binding.recipient.toLowerCase() !== result.intent.recipient.toLowerCase() ||
     binding.amountInAtomic !== result.intent.amountInAtomic ||
     !tokenInMatchesIntent ||
