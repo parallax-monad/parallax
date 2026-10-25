@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { convertHumanAmountToAtomic } from "./amount.js";
 import {
   type AssetReference,
   assetIdentity,
@@ -75,6 +76,24 @@ const runIdentitySchema = z.object({
 
 type RunIdentity = z.infer<typeof runIdentitySchema>;
 
+function exactHumanAmountToAtomic(
+  amount: string,
+  decimals: number,
+): string | undefined {
+  const [whole, fraction = ""] = amount.split(".");
+  const extraFraction = fraction.slice(decimals);
+  if (/[1-9]/.test(extraFraction)) return undefined;
+
+  const exactAmount =
+    fraction.length > decimals
+      ? decimals === 0
+        ? whole
+        : `${whole}.${fraction.slice(0, decimals)}`
+      : amount;
+  const converted = convertHumanAmountToAtomic(exactAmount, decimals);
+  return converted.success ? converted.amountAtomic : undefined;
+}
+
 function validateRunIdentity(result: RunIdentity, context: z.RefinementCtx) {
   for (const field of ["tokenIn", "tokenOut"] as const) {
     const metadata = result.tokenMetadata?.[field];
@@ -93,6 +112,22 @@ function validateRunIdentity(result: RunIdentity, context: z.RefinementCtx) {
       });
     }
   }
+
+  if (result.quote?.provenance !== undefined) {
+    const displayAmountOutAtomic = exactHumanAmountToAtomic(
+      result.quote.estimatedAmountOut,
+      result.quote.provenance.outputAsset.decimals,
+    );
+    if (displayAmountOutAtomic !== result.quote.provenance.amountOutAtomic) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          "Displayed quote output must exactly match its atomic provenance amount",
+        path: ["quote", "estimatedAmountOut"],
+      });
+    }
+  }
+
   if (result.parentRunId === result.runId) {
     context.addIssue({
       code: z.ZodIssueCode.custom,

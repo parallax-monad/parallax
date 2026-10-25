@@ -132,6 +132,89 @@ describe("provider-neutral simulation provenance contract", () => {
     ).toBe(false);
   });
 
+  it("accepts state-change evidence only after clearing call and gas capabilities", () => {
+    const provenance = validProvenance();
+    expect(
+      providerNeutralSimulationProvenanceSchema.safeParse({
+        ...provenance,
+        stateRevision: {
+          status: "UNKNOWN",
+          reason: "STATE_CHANGED_DURING_SIMULATION",
+        },
+        capabilities: {
+          call: {
+            status: "UNAVAILABLE",
+            failureReason: "FORK_STATE_CHANGED",
+          },
+          gasEstimate: {
+            status: "UNAVAILABLE",
+            failureReason: "FORK_STATE_CHANGED",
+          },
+          amountReceived: {
+            status: "UNAVAILABLE",
+            reason: "CALL_NOT_SUCCEEDED",
+          },
+        },
+        quoteReconciliation: {
+          status: "UNAVAILABLE",
+          comparisonMethod: "ATOMIC_INTEGER_EQUALITY",
+          quoteAmountOutAtomic: "2413423",
+          reason: "SIMULATED_OUTPUT_UNAVAILABLE",
+        },
+      }).success,
+    ).toBe(true);
+  });
+
+  it.each([
+    {
+      name: "a successful call",
+      call: {
+        status: "SUCCEEDED",
+        returnDataFingerprint: dataFingerprint,
+      },
+      gasEstimate: {
+        status: "UNAVAILABLE",
+        failureReason: "FORK_STATE_CHANGED",
+      },
+    },
+    {
+      name: "an available gas estimate",
+      call: {
+        status: "UNAVAILABLE",
+        failureReason: "FORK_STATE_CHANGED",
+      },
+      gasEstimate: { status: "AVAILABLE", gasUnits: "21000" },
+    },
+  ] as const)(
+    "rejects $name when state changed during simulation",
+    ({ call, gasEstimate }) => {
+      const provenance = validProvenance();
+      expect(
+        providerNeutralSimulationProvenanceSchema.safeParse({
+          ...provenance,
+          stateRevision: {
+            status: "UNKNOWN",
+            reason: "STATE_CHANGED_DURING_SIMULATION",
+          },
+          capabilities: {
+            call,
+            gasEstimate,
+            amountReceived: {
+              status: "UNAVAILABLE",
+              reason: "CALL_NOT_SUCCEEDED",
+            },
+          },
+          quoteReconciliation: {
+            status: "UNAVAILABLE",
+            comparisonMethod: "ATOMIC_INTEGER_EQUALITY",
+            quoteAmountOutAtomic: "2413423",
+            reason: "SIMULATED_OUTPUT_UNAVAILABLE",
+          },
+        }).success,
+      ).toBe(false);
+    },
+  );
+
   it("retains an exact signed mismatch rather than applying a tolerance", () => {
     const provenance = validProvenance();
     const mismatched = {

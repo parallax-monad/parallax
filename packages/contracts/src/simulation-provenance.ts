@@ -270,6 +270,20 @@ export const providerNeutralSimulationProvenanceSchema = z
     }
 
     if (
+      provenance.stateRevision.status === "UNKNOWN" &&
+      provenance.stateRevision.reason === "STATE_CHANGED_DURING_SIMULATION" &&
+      (provenance.capabilities.call.status === "SUCCEEDED" ||
+        provenance.capabilities.gasEstimate.status === "AVAILABLE")
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["stateRevision"],
+        message:
+          "A changed state revision invalidates successful call and gas evidence",
+      });
+    }
+
+    if (
       provenance.transactionBinding.chainId !== provenance.sourceChainId ||
       provenance.transactionBinding.amountInAtomic !==
         provenance.quote.amountInAtomic ||

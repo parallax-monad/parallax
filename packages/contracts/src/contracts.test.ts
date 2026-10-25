@@ -252,6 +252,75 @@ const completedResult = {
   },
 };
 
+const nativeQuoteMetadata = {
+  chainId: 143,
+  asset: mon,
+  symbol: "MON",
+  decimals: 18,
+  decimalsSource: "chain_config" as const,
+};
+const usdcQuoteMetadata = {
+  chainId: 143,
+  asset: usdc,
+  symbol: "USDC",
+  decimals: 6,
+  decimalsSource: "onchain_verified" as const,
+  verifiedAtBlock: "12345",
+};
+
+function quoteWithProvenance(input: {
+  estimatedAmountOut: string;
+  amountOutAtomic: string;
+  inputAsset?: typeof nativeQuoteMetadata | typeof usdcQuoteMetadata;
+  outputAsset?: typeof nativeQuoteMetadata | typeof usdcQuoteMetadata;
+  amountInAtomic?: string;
+}) {
+  const inputAsset = input.inputAsset ?? nativeQuoteMetadata;
+  const outputAsset = input.outputAsset ?? usdcQuoteMetadata;
+  const routeInputToken =
+    inputAsset.asset.kind === "erc20"
+      ? inputAsset.asset.address
+      : otherToken.address;
+  const routeOutputToken =
+    outputAsset.asset.kind === "erc20"
+      ? outputAsset.asset.address
+      : otherToken.address;
+
+  return {
+    estimatedAmountOut: input.estimatedAmountOut,
+    source: "quote" as const,
+    blockNumber: "12345",
+    runtimeVersion: "moss-v1",
+    runtimeRevision: "revision-1",
+    provenance: {
+      version: 1,
+      profileId: "test-profile",
+      sourceChainId: 143,
+      sourceBlock: {
+        number: "12345",
+        hash: `0x${"ab".repeat(32)}`,
+        timestamp: "1792264607",
+        observedAt: "2026-10-17T19:17:33.990Z",
+      },
+      inputAsset,
+      outputAsset,
+      amountInAtomic: input.amountInAtomic ?? "1500000000000000000",
+      amountOutAtomic: input.amountOutAtomic,
+      route: {
+        protocol: "kuru" as const,
+        kind: "direct" as const,
+        poolAddress: otherRecipient,
+        tokenPath: [routeInputToken, routeOutputToken],
+      },
+      quoteSource: {
+        kind: "quoter" as const,
+        protocol: "kuru" as const,
+        address: otherRecipient,
+      },
+    },
+  };
+}
+
 function economicRun(
   status: "PASS" | "FAIL",
   amountReceivedAtomic: string,
@@ -767,6 +836,64 @@ describe("completed Run Result contract", () => {
     const result = runResultSchema.parse(completedResult);
     expect(result.status).toBe("completed");
     expect(result.ruleResults[0]?.status).toBe("NOT_APPLICABLE");
+  });
+
+  it.each([
+    { estimatedAmountOut: "2.413423", amountOutAtomic: "2413423" },
+    { estimatedAmountOut: "0.000001", amountOutAtomic: "1" },
+    { estimatedAmountOut: "2.4134230", amountOutAtomic: "2413423" },
+  ])(
+    "accepts exact displayed quote output $estimatedAmountOut at 6 decimals",
+    ({ estimatedAmountOut, amountOutAtomic }) => {
+      expect(
+        runResultSchema.safeParse({
+          ...completedResult,
+          quote: quoteWithProvenance({
+            estimatedAmountOut,
+            amountOutAtomic,
+          }),
+        }).success,
+      ).toBe(true);
+    },
+  );
+
+  it("rejects display amounts that mismatch or exceed output precision", () => {
+    for (const estimatedAmountOut of ["2.413424", "2.4134231"]) {
+      expect(
+        runResultSchema.safeParse({
+          ...completedResult,
+          quote: quoteWithProvenance({
+            estimatedAmountOut,
+            amountOutAtomic: "2413423",
+          }),
+        }).success,
+      ).toBe(false);
+    }
+  });
+
+  it("uses native output metadata decimals for exact quote reconciliation", () => {
+    expect(
+      runResultSchema.safeParse({
+        ...completedResult,
+        intent: {
+          ...normalizedIntent,
+          tokenIn: usdc,
+          tokenOut: mon,
+          amountInAtomic: "1500000",
+        },
+        route: {
+          ...completedResult.route,
+          path: [usdc, mon],
+        },
+        quote: quoteWithProvenance({
+          estimatedAmountOut: "0.000000000000000123",
+          amountOutAtomic: "123",
+          inputAsset: usdcQuoteMetadata,
+          outputAsset: nativeQuoteMetadata,
+          amountInAtomic: "1500000",
+        }),
+      }).success,
+    ).toBe(true);
   });
 
   it("preserves an optional parent Run on a Re-run result", () => {
