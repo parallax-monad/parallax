@@ -478,3 +478,22 @@ GitHub state/body mismatches are surfaced for Product Owner reconciliation rathe
   scoped Biome passed and `git diff --check` was clean. Lint reported only 27 informational
   diagnostics in untouched provider-probe scripts. Exact-head Actions run `40217146813` / job
   `121240648760` succeeded. No new PR, merge, or GitHub review/comment submission occurred.
+
+## 2026-10-26 — PR #179 quote-protocol binding correction
+
+- On `task/t_4b0f39b2-pr3-contract-evidence`, code commit
+  `6eebd1b666c402e8e086f1a72f7639c78fd9d71e` (parent
+  `74883332520e0038ef4f40f6619fd809a575dfa0`) changed only
+  `packages/contracts/src/run.ts` and `packages/contracts/src/contracts.test.ts`. Run validation
+  now requires quote provenance route and quote-source protocol to match the Intent; regression
+  coverage verifies matching Camelot, tampered Kuru quote provenance, and transaction-binding
+  mismatch cases.
+- Repository write preflight passed; normal non-force push read back both the remote task branch
+  and `refs/pull/179/head` at the new commit. PR #179 remained OPEN. No force push, new PR, merge,
+  or GitHub review/comment submission occurred.
+- Full tests passed (131 files / 1,930 passed / 2 skipped), workspace typecheck passed, lint exited
+  0 with 27 informational diagnostics in unchanged provider-probe scripts, and scoped Biome plus
+  `git diff --check` passed. Exact-head Actions run `40223538869` / job `121260036880` succeeded
+  for Lint, Typecheck, Test, and PostgreSQL-backed Integration test. Local PostgreSQL integration
+  was not run because the configured DB was not verified isolated and the test setup truncates
+  tables; no local DB pass is claimed.

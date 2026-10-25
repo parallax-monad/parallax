@@ -1,5 +1,25 @@
 # Project State
 
+## 2026-10-26 — PR #179 quote-protocol binding follow-up
+
+Code commit `6eebd1b666c402e8e086f1a72f7639c78fd9d71e` (parent
+`74883332520e0038ef4f40f6619fd809a575dfa0`) closes the remaining quote-provenance protocol
+cross-binding finding on the existing PR #179 branch. `runResultSchema` now requires both
+`quote.provenance.route.protocol` and `quoteSource.protocol` to match the Run Intent; the existing
+transaction-binding-to-Intent validation remains enforced. Regression coverage accepts matching
+Camelot Intent/transaction/quote evidence and rejects a Kuru route+source against Camelot, plus a
+separate mismatched transaction-protocol control.
+
+The contract suite passed (10 files / 155 tests), full tests passed (131 files / 1,930 passed / 2
+skipped), workspace typecheck passed, scoped Biome and `git diff --check` passed, and lint exited 0
+with 27 informational diagnostics confined to unchanged `scripts/provider-probes/` files. Exact
+code-head Actions run `40223538869` / job `121260036880` succeeded for Lint, Typecheck, Test, and
+PostgreSQL-backed Integration test. Local PostgreSQL integration was not run because the configured
+database is not verified isolated and the suite truncates its tables; no local DB pass is claimed.
+At code-commit readback, the remote task branch and `refs/pull/179/head` matched this SHA and PR #179
+remained OPEN. No new PR, merge, or GitHub review/comment submission occurred; user acceptance is
+pending.
+
 ## 2026-10-26 — PR #179 provenance validation follow-up
 
 PR #179 remains OPEN on `task/t_4b0f39b2-pr3-contract-evidence`. Code commit

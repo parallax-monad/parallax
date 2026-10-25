@@ -1,5 +1,22 @@
 # Current Agent Handoff
 
+## 2026-10-26 — PR #179 quote-protocol binding follow-up
+
+Code commit `6eebd1b666c402e8e086f1a72f7639c78fd9d71e` on
+`task/t_4b0f39b2-pr3-contract-evidence` binds both quote-provenance route/source protocol values to
+the Run Intent. Tests accept matching Camelot Intent/transaction/quote provenance and reject a
+schema-valid Kuru quote route+source against a Camelot Intent/transaction; a separate mismatch
+confirms the existing transaction-binding check. This is a consistency fix only; no Product, Risk,
+or transaction-execution behavior changed.
+
+Full tests passed (131 files / 1,930 passed / 2 skipped), workspace typecheck and lint passed,
+scoped Biome and whitespace checks passed. Exact code-head Actions run `40223538869` / job
+`121260036880` succeeded for Lint, Typecheck, Test, and Integration test. Local PostgreSQL
+integration was not run because the configured DB is unverified and the suite truncates tables.
+At code-commit readback, PR #179 remained OPEN and both the remote branch and PR ref matched the
+commit. No new PR, merge, or GitHub review/comment was submitted. Keep the task in review pending
+explicit user acceptance; refresh exact-head checks after the durable-context sync commit.
+
 ## 2026-10-26 — PR #179 reviewer-finding follow-up
 
 The existing PR #179 branch received code commit
