@@ -36,8 +36,8 @@ import {
 
 const LOCAL_FORK_CHAIN_ID = 31_337n;
 const LOCAL_RPC_TIMEOUT_MS = 5_000;
-const SENDER_NATIVE_BALANCE_OVERRIDE_ATOMIC = "1000000000000000000";
-const SENDER_NATIVE_BALANCE_OVERRIDE_HEX = "0xde0b6b3a7640000";
+const SENDER_NATIVE_GAS_HEADROOM_ATOMIC = 1_000_000_000_000_000_000n;
+const MAX_NATIVE_BALANCE_ATOMIC = (1n << 256n) - 1n;
 const RPC_QUANTITY_PATTERN = /^0x(?:0|[1-9a-fA-F][0-9a-fA-F]*)$/;
 const DATA_PATTERN = /^0x(?:[0-9a-fA-F]{2})*$/;
 const BLOCK_HASH_PATTERN = /^0x[0-9a-fA-F]{64}$/;
@@ -183,6 +183,8 @@ export function createArbitrumOneLocalForkCheckFlow(
       if (!inspection.ok) {
         throw new Error("Prepared local fork transaction binding is invalid");
       }
+      const senderNativeBalanceOverrideAtomic =
+        calculateSenderNativeBalanceOverrideAtomic(prepared.payload.value);
 
       const senderBalanceAtBase = parseRpcQuantity(
         await requestLocal(localRpc, "eth_getBalance", [
@@ -203,6 +205,7 @@ export function createArbitrumOneLocalForkCheckFlow(
             baseBlockNumber: localIdentity.block.number,
             baseBlockHash: localIdentity.block.hash,
             senderBalanceAtBase,
+            senderNativeBalanceOverrideAtomic,
             forkInstanceId: localIdentity.forkInstanceId,
           }),
       );
@@ -253,7 +256,7 @@ export function createArbitrumOneLocalForkCheckFlow(
         },
         accountOverride: {
           address: input.intent.sender,
-          nativeBalanceAtomic: SENDER_NATIVE_BALANCE_OVERRIDE_ATOMIC,
+          nativeBalanceAtomic: senderNativeBalanceOverrideAtomic.toString(),
           snapshotRestored: true as const,
         },
         safety: {
@@ -440,6 +443,7 @@ async function simulateInSnapshot(input: {
   readonly baseBlockNumber: string;
   readonly baseBlockHash: string;
   readonly senderBalanceAtBase: bigint;
+  readonly senderNativeBalanceOverrideAtomic: bigint;
   readonly forkInstanceId: string;
 }): Promise<{
   readonly call:
@@ -523,12 +527,12 @@ async function simulateInSnapshot(input: {
 
     await requestLocal(input.rpc, "anvil_setBalance", [
       input.sender,
-      SENDER_NATIVE_BALANCE_OVERRIDE_HEX,
+      toRpcQuantity(input.senderNativeBalanceOverrideAtomic),
     ]);
     const observedNativeBalance = parseRpcQuantity(
       await requestLocal(input.rpc, "eth_getBalance", [input.sender, "latest"]),
-    ).toString();
-    if (observedNativeBalance !== SENDER_NATIVE_BALANCE_OVERRIDE_ATOMIC) {
+    );
+    if (observedNativeBalance !== input.senderNativeBalanceOverrideAtomic) {
       throw new Error("Local sender balance override was not observed");
     }
 
@@ -856,6 +860,21 @@ function parseRpcQuantity(value: unknown): bigint {
 function toRpcQuantity(value: bigint): string {
   if (value < 0n) throw new Error("Fork RPC quantity cannot be negative");
   return `0x${value.toString(16)}`;
+}
+
+function calculateSenderNativeBalanceOverrideAtomic(
+  transactionValue: string,
+): bigint {
+  const transactionValueAtomic = parseRpcQuantity(transactionValue);
+  if (
+    transactionValueAtomic >
+    MAX_NATIVE_BALANCE_ATOMIC - SENDER_NATIVE_GAS_HEADROOM_ATOMIC
+  ) {
+    throw new Error(
+      "Local fork transaction value leaves no room for native gas headroom",
+    );
+  }
+  return transactionValueAtomic + SENDER_NATIVE_GAS_HEADROOM_ATOMIC;
 }
 
 function fingerprintReturnData(value: string): string {

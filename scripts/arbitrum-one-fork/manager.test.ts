@@ -174,6 +174,117 @@ describe("Arbitrum One fork Git metadata path resolution", () => {
     }
   });
 
+  it("resolves external linked-worktree metadata and rejects invalid pointers", () => {
+    const temporaryDirectory = mkdtempSync(
+      join(tmpdir(), "parallax-fork-external-worktree-"),
+    );
+    try {
+      const repositoryRoot = join(temporaryDirectory, "repository");
+      const worktreeRoot = join(temporaryDirectory, "external-checkout");
+      mkdirSync(repositoryRoot, { recursive: true });
+
+      const gitInit = spawnSync("git", ["init", repositoryRoot], {
+        encoding: "utf8",
+        stdio: "ignore",
+      });
+      expect(gitInit.error).toBeUndefined();
+      expect(gitInit.status).toBe(0);
+      const gitCommit = spawnSync(
+        "git",
+        [
+          "-C",
+          repositoryRoot,
+          "-c",
+          "user.name=Parallax Test",
+          "-c",
+          "user.email=parallax-test@example.invalid",
+          "commit",
+          "--allow-empty",
+          "--message",
+          "external worktree fixture",
+        ],
+        { encoding: "utf8", stdio: "ignore" },
+      );
+      expect(gitCommit.error).toBeUndefined();
+      expect(gitCommit.status).toBe(0);
+      const gitWorktree = spawnSync(
+        "git",
+        [
+          "-C",
+          repositoryRoot,
+          "worktree",
+          "add",
+          "-b",
+          "external-fixture",
+          worktreeRoot,
+        ],
+        { encoding: "utf8", stdio: "ignore" },
+      );
+      expect(gitWorktree.error).toBeUndefined();
+      expect(gitWorktree.status).toBe(0);
+      expect(existsSync(join(temporaryDirectory, ".git"))).toBe(false);
+
+      const worktreeGitFile = join(worktreeRoot, ".git");
+      const originalPointer = readFileSync(worktreeGitFile, "utf8");
+      const declaredGitDirectory = /^gitdir:\s*(.+)$/m.exec(
+        originalPointer,
+      )?.[1];
+      expect(declaredGitDirectory).toBeDefined();
+      const worktreeGitDirectory = declaredGitDirectory ?? "";
+      const expectedMetadataPath = join(
+        worktreeGitDirectory,
+        "parallax-test-metadata",
+      );
+      const backlinkPath = join(worktreeGitDirectory, "gitdir");
+      const commonDirectoryPath = join(worktreeGitDirectory, "commondir");
+      const originalBacklink = readFileSync(backlinkPath, "utf8");
+      const originalCommonDirectory = readFileSync(commonDirectoryPath, "utf8");
+
+      expect(
+        resolveGitMetadataPath("parallax-test-metadata", worktreeRoot),
+      ).toBe(expectedMetadataPath);
+
+      writeFileSync(
+        worktreeGitFile,
+        "gitdir: relative/.git/worktrees/external-fixture\n",
+      );
+      expect(() =>
+        resolveGitMetadataPath("parallax-test-metadata", worktreeRoot),
+      ).toThrowError(
+        expect.objectContaining({ code: "GIT_METADATA_UNAVAILABLE" }),
+      );
+      writeFileSync(worktreeGitFile, originalPointer);
+
+      writeFileSync(
+        backlinkPath,
+        `${join(temporaryDirectory, "foreign", ".git")}\n`,
+      );
+      expect(() =>
+        resolveGitMetadataPath("parallax-test-metadata", worktreeRoot),
+      ).toThrowError(
+        expect.objectContaining({ code: "GIT_METADATA_UNAVAILABLE" }),
+      );
+      writeFileSync(backlinkPath, originalBacklink);
+
+      writeFileSync(
+        commonDirectoryPath,
+        `${join(temporaryDirectory, "foreign-git-admin")}\n`,
+      );
+      expect(() =>
+        resolveGitMetadataPath("parallax-test-metadata", worktreeRoot),
+      ).toThrowError(
+        expect.objectContaining({ code: "GIT_METADATA_UNAVAILABLE" }),
+      );
+      writeFileSync(commonDirectoryPath, originalCommonDirectory);
+
+      expect(
+        resolveGitMetadataPath("parallax-test-metadata", worktreeRoot),
+      ).toBe(expectedMetadataPath);
+    } finally {
+      rmSync(temporaryDirectory, { recursive: true, force: true });
+    }
+  });
+
   it("rejects a stale pointer to another worktree with the same path suffix", () => {
     const temporaryDirectory = mkdtempSync(
       join(tmpdir(), "parallax-fork-foreign-worktree-"),

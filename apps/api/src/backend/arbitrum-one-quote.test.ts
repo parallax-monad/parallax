@@ -1,5 +1,6 @@
 import {
   type CheckSwapRequest,
+  convertAtomicAmountToHuman,
   type QuoteRequest,
   quoteResultSchema,
   runResultSchema,
@@ -28,6 +29,8 @@ import {
 const sender = "0x1111111111111111111111111111111111111111";
 const concurrentSender = "0x2222222222222222222222222222222222222222";
 const blockHash = `0x${"ab".repeat(32)}`;
+const nativeGasHeadroomAtomic = 1_000_000_000_000_000_000n;
+const uint256Max = (1n << 256n) - 1n;
 const sourceBlockNumber = "7";
 const sourceBlockTag = "0x7";
 const quoteRequest: QuoteRequest = {
@@ -1021,6 +1024,92 @@ describe("Arbitrum One Camelot pinned quote flow", () => {
 });
 
 describe("Arbitrum One local-fork Check/Run provenance", () => {
+  it("covers input above one ETH and preserves a full ETH of gas headroom", async () => {
+    const fixture = createLocalCheckFixture({}, { amountIn: "2" });
+    const result = runResultSchema.parse(
+      await fixture.flow.check(fixture.input),
+    );
+    const provenance = result.arbitrumOneForkProvenance;
+    if (provenance?.status !== "AVAILABLE") {
+      throw new Error("Expected available local-fork provenance");
+    }
+
+    const overrideCall = fixture.local.calls.find(
+      (call) => call.method === "anvil_setBalance",
+    );
+    const executionCall = fixture.local.calls.find((call) => {
+      if (call.method !== "eth_call") return false;
+      const transaction = call.params[0] as { to?: unknown } | undefined;
+      return (
+        typeof transaction?.to === "string" &&
+        transaction.to.toLowerCase() ===
+          ARBITRUM_ONE_RUNTIME_PROFILE.deployments.routerAddress.toLowerCase()
+      );
+    });
+    expect(overrideCall).toBeDefined();
+    expect(executionCall).toBeDefined();
+    const estimateCall = fixture.local.calls.find(
+      (call) => call.method === "eth_estimateGas",
+    );
+    const configuredBalance = BigInt(String(overrideCall?.params[1]));
+    const transaction = executionCall?.params[0] as
+      | { value?: unknown }
+      | undefined;
+    const transactionValue = BigInt(String(transaction?.value));
+    expect(estimateCall?.params[0]).toEqual(executionCall?.params[0]);
+    expect(transactionValue).toBe(2n * 10n ** 18n);
+    expect(configuredBalance - transactionValue).toBe(nativeGasHeadroomAtomic);
+    expect(configuredBalance).toBe(3n * 10n ** 18n);
+    expect(provenance.accountOverride.nativeBalanceAtomic).toBe(
+      configuredBalance.toString(),
+    );
+    expect(provenance.accountOverride.snapshotRestored).toBe(true);
+    expect(
+      fixture.local.calls.some(
+        (call) => call.method === "evm_revert" && call.params[0] === "0x1",
+      ),
+    ).toBe(true);
+  });
+
+  it("allows the largest input whose gas headroom fits in uint256", async () => {
+    const amountIn = convertAtomicAmountToHuman(
+      (uint256Max - nativeGasHeadroomAtomic).toString(),
+      18,
+    );
+    const fixture = createLocalCheckFixture({}, { amountIn });
+    const result = runResultSchema.parse(
+      await fixture.flow.check(fixture.input),
+    );
+    const provenance = result.arbitrumOneForkProvenance;
+    if (provenance?.status !== "AVAILABLE") {
+      throw new Error("Expected available local-fork provenance");
+    }
+    const overrideCall = fixture.local.calls.find(
+      (call) => call.method === "anvil_setBalance",
+    );
+
+    expect(BigInt(String(overrideCall?.params[1]))).toBe(uint256Max);
+    expect(provenance.accountOverride.nativeBalanceAtomic).toBe(
+      uint256Max.toString(),
+    );
+    expect(provenance.accountOverride.snapshotRestored).toBe(true);
+  });
+
+  it("fails closed before snapshot when input leaves no uint256 gas headroom", async () => {
+    const amountIn = convertAtomicAmountToHuman(uint256Max.toString(), 18);
+    const fixture = createLocalCheckFixture({}, { amountIn });
+
+    await expect(fixture.flow.check(fixture.input)).rejects.toThrow(
+      "Local fork transaction value leaves no room for native gas headroom",
+    );
+    expect(
+      fixture.local.calls.some((call) => call.method === "evm_snapshot"),
+    ).toBe(false);
+    expect(
+      fixture.local.calls.some((call) => call.method === "anvil_setBalance"),
+    ).toBe(false);
+  });
+
   it.each([
     { name: "zero", senderUsdcBalanceAtomic: 0n },
     { name: "nonzero", senderUsdcBalanceAtomic: 8_765_432n },
@@ -1400,13 +1489,13 @@ describe("Arbitrum One local-fork Check/Run provenance", () => {
     expect(local.observations).toEqual([
       {
         sender: sender.toLowerCase(),
-        firstSenderBalance: "0xde0b6b3a7640000",
+        firstSenderBalance: `0x${(nativeGasHeadroomAtomic + 10n ** 15n).toString(16)}`,
         secondSenderBalance: "0xc8",
       },
       {
         sender: concurrentSender.toLowerCase(),
         firstSenderBalance: "0x64",
-        secondSenderBalance: "0xde0b6b3a7640000",
+        secondSenderBalance: `0x${(nativeGasHeadroomAtomic + 10n ** 15n).toString(16)}`,
       },
     ]);
     expect(local.balances).toEqual(local.initialBalances);

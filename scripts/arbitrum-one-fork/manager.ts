@@ -12,7 +12,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { createServer, isIP } from "node:net";
-import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { performance } from "node:perf_hooks";
 import { fileURLToPath } from "node:url";
 import { createArbitrumRpcClient } from "../../apps/api/src/backend/arbitrum-chain-adapter.js";
@@ -348,6 +348,23 @@ function nearestCommonGitDirectory(repositoryRoot: string): string | undefined {
   }
 }
 
+function reportedCommonGitDirectory(
+  worktreeGitDirectory: string,
+): string | undefined {
+  const commonDirectoryText = readMetadataText(
+    join(worktreeGitDirectory, "commondir"),
+  );
+  if (commonDirectoryText === undefined) return undefined;
+  const reportedCommonDirectory = isAbsolute(commonDirectoryText)
+    ? resolve(commonDirectoryText)
+    : resolve(worktreeGitDirectory, commonDirectoryText);
+  try {
+    return realpathSync(reportedCommonDirectory);
+  } catch {
+    return undefined;
+  }
+}
+
 function portableWorktreeGitDirectory(
   repositoryRoot: string,
 ): string | undefined {
@@ -395,73 +412,72 @@ function portableWorktreeGitDirectory(
     return undefined;
   }
 
-  const commonGitDirectory = nearestCommonGitDirectory(repositoryRoot);
-  if (commonGitDirectory === undefined) return undefined;
-  const candidate = join(commonGitDirectory, "worktrees", worktreeId);
-  if (!isDirectory(candidate)) return undefined;
+  if (existsSync(declaredGitDirectory) && !isDirectory(declaredGitDirectory)) {
+    return undefined;
+  }
+  const declaredGitDirectoryExists = isDirectory(declaredGitDirectory);
+  const commonGitDirectories = [
+    nearestCommonGitDirectory(repositoryRoot),
+    declaredGitDirectoryExists
+      ? reportedCommonGitDirectory(declaredGitDirectory)
+      : undefined,
+  ].filter(
+    (path, index, paths): path is string =>
+      path !== undefined && paths.indexOf(path) === index,
+  );
+  for (const commonGitDirectory of commonGitDirectories) {
+    const candidate = join(commonGitDirectory, "worktrees", worktreeId);
+    if (!isDirectory(candidate)) continue;
 
-  let canonicalCandidate: string;
-  try {
-    canonicalCandidate = realpathSync(candidate);
-  } catch {
-    return undefined;
-  }
-  if (
-    relative(commonGitDirectory, canonicalCandidate) !==
-    join("worktrees", worktreeId)
-  ) {
-    return undefined;
-  }
-  if (existsSync(declaredGitDirectory)) {
-    if (!sameGitDirectoryIdentity(declaredGitDirectory, canonicalCandidate)) {
-      return undefined;
+    let canonicalCandidate: string;
+    try {
+      canonicalCandidate = realpathSync(candidate);
+    } catch {
+      continue;
     }
-  }
-
-  const commonDirectoryText = readMetadataText(
-    join(canonicalCandidate, "commondir"),
-  );
-  if (commonDirectoryText === undefined) return undefined;
-  const reportedCommonDirectory = isAbsolute(commonDirectoryText)
-    ? resolve(commonDirectoryText)
-    : resolve(canonicalCandidate, commonDirectoryText);
-  try {
-    if (realpathSync(reportedCommonDirectory) !== commonGitDirectory) {
-      return undefined;
+    if (
+      relative(commonGitDirectory, canonicalCandidate) !==
+      join("worktrees", worktreeId)
+    ) {
+      continue;
     }
-  } catch {
-    return undefined;
-  }
+    if (
+      declaredGitDirectoryExists &&
+      !sameGitDirectoryIdentity(declaredGitDirectory, canonicalCandidate)
+    ) {
+      continue;
+    }
 
-  const repositoryRelativePath = relative(
-    dirname(commonGitDirectory),
-    resolve(repositoryRoot),
-  );
-  if (
-    repositoryRelativePath === "" ||
-    repositoryRelativePath === ".." ||
-    repositoryRelativePath.startsWith(`..${sep}`) ||
-    isAbsolute(repositoryRelativePath)
-  ) {
-    return undefined;
-  }
-  const gitDirectoryBacklink = readMetadataText(
-    join(canonicalCandidate, "gitdir"),
-  );
-  if (
-    gitDirectoryBacklink === undefined ||
-    !isAbsolute(gitDirectoryBacklink) ||
-    resolve(gitDirectoryBacklink) !==
-      resolve(
-        dirname(declaredCommonGitDirectory),
-        repositoryRelativePath,
-        ".git",
-      )
-  ) {
-    return undefined;
-  }
+    if (reportedCommonGitDirectory(canonicalCandidate) !== commonGitDirectory) {
+      continue;
+    }
 
-  return canonicalCandidate;
+    const repositoryRelativePath = relative(
+      dirname(commonGitDirectory),
+      resolve(repositoryRoot),
+    );
+    if (repositoryRelativePath === "" || isAbsolute(repositoryRelativePath)) {
+      continue;
+    }
+    const gitDirectoryBacklink = readMetadataText(
+      join(canonicalCandidate, "gitdir"),
+    );
+    if (
+      gitDirectoryBacklink === undefined ||
+      !isAbsolute(gitDirectoryBacklink) ||
+      resolve(gitDirectoryBacklink) !==
+        resolve(
+          dirname(declaredCommonGitDirectory),
+          repositoryRelativePath,
+          ".git",
+        )
+    ) {
+      continue;
+    }
+
+    return canonicalCandidate;
+  }
+  return undefined;
 }
 
 function checkoutGitDirectory(repositoryRoot: string): string | undefined {
