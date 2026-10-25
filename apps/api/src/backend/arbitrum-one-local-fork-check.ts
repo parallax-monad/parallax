@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
 import {
   convertAtomicAmountToHuman,
+  type FailedRunResult,
+  failedRunResultSchema,
   type GenericEvidence,
   genericEvidenceSchema,
   type ProviderNeutralSimulationProvenance,
@@ -80,10 +82,12 @@ export class ArbitrumOneSourceMismatchError extends Error {
   public readonly integrationStatus = "INTEGRATION_ERROR";
   public readonly source = "rpc";
   public readonly stage = "simulation";
+  public readonly partialRunResult: FailedRunResult | undefined;
 
-  public constructor() {
+  public constructor(partialRunResult?: FailedRunResult) {
     super("Pinned source quote does not match the verified local fork context");
     this.name = "ArbitrumOneSourceMismatchError";
+    this.partialRunResult = partialRunResult;
   }
 }
 
@@ -92,10 +96,12 @@ export class ArbitrumOneForkStateChangedError extends Error {
   public readonly integrationStatus = "INTEGRATION_ERROR";
   public readonly source = "rpc";
   public readonly stage = "simulation";
+  public readonly partialRunResult: FailedRunResult | undefined;
 
-  public constructor() {
+  public constructor(partialRunResult?: FailedRunResult) {
     super("Local fork state changed during read-only simulation");
     this.name = "ArbitrumOneForkStateChangedError";
+    this.partialRunResult = partialRunResult;
   }
 }
 
@@ -256,10 +262,24 @@ export function createArbitrumOneLocalForkCheckFlow(
         sourceBlockAfter.hash.toLowerCase() !==
         sourceBlockBefore.hash.toLowerCase()
       ) {
-        throw new ArbitrumOneSourceMismatchError();
+        throw new ArbitrumOneSourceMismatchError(
+          postSimulationFailureRunResult(
+            input,
+            quote,
+            observedAt,
+            "SOURCE_MISMATCH",
+          ),
+        );
       }
       if (localHeadAfter !== localIdentity.block.number) {
-        throw new ArbitrumOneForkStateChangedError();
+        throw new ArbitrumOneForkStateChangedError(
+          postSimulationFailureRunResult(
+            input,
+            quote,
+            observedAt,
+            "FORK_STATE_CHANGED",
+          ),
+        );
       }
 
       const provenance = {
@@ -998,6 +1018,36 @@ function buildUnknownOutcomeEvidence(
       "fork_state_revision",
     ],
     providerData: {},
+  });
+}
+
+function postSimulationFailureRunResult(
+  input: AgentFlowCheckInput,
+  quote: Quote,
+  observedAt: string,
+  code: "SOURCE_MISMATCH" | "FORK_STATE_CHANGED",
+): FailedRunResult {
+  const baseResult = projectGenericEvidenceToRunResult(
+    input.runId,
+    input.intent,
+    buildUnknownOutcomeEvidence(input, quote, observedAt),
+  );
+  return failedRunResultSchema.parse({
+    ...baseResult,
+    status: "integration_error",
+    systemStatus: "INTEGRATION_ERROR",
+    verdict: "UNKNOWN",
+    summary: "The local-fork simulation context could not be verified",
+    error: {
+      code,
+      stage: "simulation",
+      message:
+        code === "SOURCE_MISMATCH"
+          ? "The quote source does not match the verified execution context"
+          : "The local fork state changed during simulation",
+      retryable: false,
+    },
+    quote,
   });
 }
 

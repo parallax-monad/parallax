@@ -132,6 +132,7 @@ type LocalForkRpcOptions = {
   chainId?: string;
   accounts?: unknown;
   blockNumber?: string;
+  postSimulationBlockNumber?: string;
   blockHash?: string;
   callError?: Error;
   gasEstimateError?: Error;
@@ -166,6 +167,7 @@ function createLocalForkRpc(options: LocalForkRpcOptions = {}) {
   >();
   let snapshotId = 0;
   let stateRevision = 0;
+  let blockNumberCalls = 0;
   let senderUsdcBalanceAtomic = options.senderUsdcBalanceAtomic ?? 0n;
   const usdcAddress =
     ARBITRUM_ONE_RUNTIME_PROFILE.deployments.usdcAddress.toLowerCase();
@@ -181,8 +183,13 @@ function createLocalForkRpc(options: LocalForkRpcOptions = {}) {
           return options.chainId ?? "0x7a69";
         case "eth_accounts":
           return options.accounts ?? [];
-        case "eth_blockNumber":
-          return options.blockNumber ?? sourceBlockTag;
+        case "eth_blockNumber": {
+          blockNumberCalls += 1;
+          return options.postSimulationBlockNumber !== undefined &&
+            blockNumberCalls >= 3
+            ? options.postSimulationBlockNumber
+            : (options.blockNumber ?? sourceBlockTag);
+        }
         case "eth_getBlockByNumber":
           return {
             number: options.blockNumber ?? sourceBlockTag,
@@ -2152,6 +2159,114 @@ describe("Arbitrum One local-fork Check/Run provenance", () => {
       expect(
         fixture.local.calls.some((call) => call.method === "evm_snapshot"),
       ).toBe(false);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("persists the completed quote as UNKNOWN when the fork head advances after simulation", async () => {
+    const fixture = createLocalCheckFixture({
+      postSimulationBlockNumber: "0x8",
+    });
+    const app = createLocalCheckApp(fixture.flow);
+    try {
+      const response = await app.fetch(
+        new Request("https://api.example.test/api/check", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            ...quoteRequest,
+            economicBoundary: {
+              availability: "unavailable",
+              source: "unavailable",
+            },
+          }),
+        }),
+      );
+
+      expect(response.status).toBe(502);
+      const postBody = (await response.json()) as {
+        error: { code: string };
+        run: {
+          runId: string;
+          status: string;
+          verdict: string;
+          error: { code: string; stage: string };
+          quote?: {
+            estimatedAmountOut: string;
+            provenance?: {
+              amountInAtomic: string;
+              amountOutAtomic: string;
+            };
+          };
+          simulationProvenance?: unknown;
+          providerEvidence?: {
+            execution?: { status: string };
+            simulation?: { value: unknown };
+            assetChanges?: { value: unknown };
+          };
+        };
+      };
+      expect(postBody.error.code).toBe("FORK_STATE_CHANGED");
+      expect(postBody.run).toMatchObject({
+        status: "integration_error",
+        verdict: "UNKNOWN",
+        error: { code: "FORK_STATE_CHANGED", stage: "simulation" },
+        quote: {
+          estimatedAmountOut: "2.413423",
+          provenance: {
+            amountInAtomic: "1000000000000000",
+            amountOutAtomic: "2413423",
+          },
+        },
+        providerEvidence: {
+          execution: { status: "UNKNOWN" },
+          simulation: { value: null },
+          assetChanges: { value: null },
+        },
+      });
+      expect(postBody.run.simulationProvenance).toBeUndefined();
+      expect(
+        fixture.local.calls.filter((call) => call.method === "eth_blockNumber"),
+      ).toHaveLength(3);
+      expect(
+        fixture.local.calls.some((call) => call.method === "evm_revert"),
+      ).toBe(true);
+
+      const getResponse = await app.fetch(
+        new Request(
+          `https://api.example.test/api/runs/${encodeURIComponent(postBody.run.runId)}`,
+        ),
+      );
+      expect(getResponse.status).toBe(200);
+      const getBody = (await getResponse.json()) as {
+        result?: {
+          status: string;
+          verdict: string;
+          quote?: {
+            estimatedAmountOut: string;
+            provenance?: { amountOutAtomic: string };
+          };
+          providerEvidence?: {
+            execution?: { status: string };
+            simulation?: { value: unknown };
+            assetChanges?: { value: unknown };
+          };
+        };
+      };
+      expect(getBody.result).toMatchObject({
+        status: "integration_error",
+        verdict: "UNKNOWN",
+        quote: {
+          estimatedAmountOut: "2.413423",
+          provenance: { amountOutAtomic: "2413423" },
+        },
+        providerEvidence: {
+          execution: { status: "UNKNOWN" },
+          simulation: { value: null },
+          assetChanges: { value: null },
+        },
+      });
     } finally {
       await app.close();
     }

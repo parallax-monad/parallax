@@ -113,49 +113,6 @@ function validateRunIdentity(result: RunIdentity, context: z.RefinementCtx) {
     }
   }
 
-  if (result.quote?.provenance !== undefined) {
-    if (
-      result.quote.provenance.route.protocol !== result.intent.protocol ||
-      result.quote.provenance.quoteSource.protocol !== result.intent.protocol
-    ) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "Quote provenance protocol must match the Run Intent",
-        path: ["quote", "provenance", "route", "protocol"],
-      });
-    }
-
-    if (
-      assetIdentity({
-        chainId: result.quote.provenance.outputAsset.chainId,
-        asset: result.quote.provenance.outputAsset.asset,
-      }) !==
-      assetIdentity({
-        chainId: result.intent.chainId,
-        asset: result.intent.tokenOut,
-      })
-    ) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "Quote provenance output asset must match the Run Intent",
-        path: ["quote", "provenance", "outputAsset"],
-      });
-    }
-
-    const displayAmountOutAtomic = exactHumanAmountToAtomic(
-      result.quote.estimatedAmountOut,
-      result.quote.provenance.outputAsset.decimals,
-    );
-    if (displayAmountOutAtomic !== result.quote.provenance.amountOutAtomic) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        message:
-          "Displayed quote output must exactly match its atomic provenance amount",
-        path: ["quote", "estimatedAmountOut"],
-      });
-    }
-  }
-
   if (result.parentRunId === result.runId) {
     context.addIssue({
       code: z.ZodIssueCode.custom,
@@ -1278,6 +1235,8 @@ function validateRunQuote(
 ) {
   if (result.quote === undefined) return;
 
+  validateQuoteProvenanceBindings(result, context);
+
   const quoteEvidence = result.evidence.filter(
     (evidence) =>
       evidence.kind === "generic" &&
@@ -1341,6 +1300,115 @@ function validateRunQuote(
       code: z.ZodIssueCode.custom,
       message: "Quote-sourced Route blockNumber must match the top-level Quote",
       path: ["route", "blockNumber"],
+    });
+  }
+}
+
+function validateQuoteProvenanceBindings(
+  result: {
+    intent: z.infer<typeof normalizedSwapIntentSchema>;
+    quote?: z.infer<typeof quoteSchema>;
+    route?: z.infer<typeof routeSchema>;
+  },
+  context: z.RefinementCtx,
+) {
+  const quoteProvenance = result.quote?.provenance;
+  if (quoteProvenance === undefined || result.quote === undefined) return;
+
+  if (
+    quoteProvenance.route.protocol !== result.intent.protocol ||
+    quoteProvenance.quoteSource.protocol !== result.intent.protocol
+  ) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Quote provenance protocol must match the Run Intent",
+      path: ["quote", "provenance", "route", "protocol"],
+    });
+  }
+
+  if (
+    assetIdentity({
+      chainId: quoteProvenance.inputAsset.chainId,
+      asset: quoteProvenance.inputAsset.asset,
+    }) !==
+    assetIdentity({
+      chainId: result.intent.chainId,
+      asset: result.intent.tokenIn,
+    })
+  ) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Quote provenance input asset must match the Run Intent",
+      path: ["quote", "provenance", "inputAsset"],
+    });
+  }
+
+  if (
+    assetIdentity({
+      chainId: quoteProvenance.outputAsset.chainId,
+      asset: quoteProvenance.outputAsset.asset,
+    }) !==
+    assetIdentity({
+      chainId: result.intent.chainId,
+      asset: result.intent.tokenOut,
+    })
+  ) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Quote provenance output asset must match the Run Intent",
+      path: ["quote", "provenance", "outputAsset"],
+    });
+  }
+
+  if (quoteProvenance.amountInAtomic !== result.intent.amountInAtomic) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Quote provenance input amount must match the Run Intent",
+      path: ["quote", "provenance", "amountInAtomic"],
+    });
+  }
+
+  const displayAmountOutAtomic = exactHumanAmountToAtomic(
+    result.quote.estimatedAmountOut,
+    quoteProvenance.outputAsset.decimals,
+  );
+  if (displayAmountOutAtomic !== quoteProvenance.amountOutAtomic) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message:
+        "Displayed quote output must exactly match its atomic provenance amount",
+      path: ["quote", "estimatedAmountOut"],
+    });
+  }
+
+  const route = result.route;
+  if (route?.availability !== "available" || route.source !== "quote") return;
+
+  const directQuoteRouteMatches =
+    route.protocol === quoteProvenance.route.protocol &&
+    route.path.length === quoteProvenance.route.tokenPath.length &&
+    route.path.every((asset, index) => {
+      const intentAsset =
+        index === 0
+          ? result.intent.tokenIn
+          : index === 1
+            ? result.intent.tokenOut
+            : undefined;
+      const quoteToken = quoteProvenance.route.tokenPath[index];
+      return (
+        intentAsset !== undefined &&
+        quoteToken !== undefined &&
+        sameAsset(result.intent.chainId, asset, intentAsset) &&
+        (intentAsset.kind === "native" ||
+          quoteToken.toLowerCase() === intentAsset.address.toLowerCase())
+      );
+    });
+  if (!directQuoteRouteMatches) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message:
+        "Quote provenance direct path must match the top-level quote Route",
+      path: ["route", "path"],
     });
   }
 }

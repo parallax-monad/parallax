@@ -12,6 +12,7 @@ import {
   genericEvidenceItemSchema,
   genericEvidenceSchema,
   normalizedSwapIntentSchema,
+  quoteSchema,
   type RuleResult,
   rerunRejectionReasonSchema,
   ruleResultSchema,
@@ -1012,6 +1013,80 @@ describe("completed Run Result contract", () => {
     expect(
       runResultSchema.safeParse(nativeMetadataForErc20Output).success,
     ).toBe(false);
+  });
+
+  it("binds quote-only provenance to the Intent and top-level direct Route", () => {
+    const nativeQuoteOnly = {
+      ...completedResult,
+      quote: quoteWithProvenance({
+        estimatedAmountOut: "2.413423",
+        amountOutAtomic: "2413423",
+      }),
+    };
+    expect(nativeQuoteOnly).not.toHaveProperty("simulationProvenance");
+    expect(runResultSchema.safeParse(nativeQuoteOnly).success).toBe(true);
+
+    const erc20Intent = {
+      ...normalizedIntent,
+      tokenIn: otherToken,
+      amountInAtomic: "1500000",
+    };
+    const erc20QuoteOnly = {
+      ...completedResult,
+      intent: erc20Intent,
+      route: {
+        ...completedResult.route,
+        path: [otherToken, usdc],
+      },
+      quote: quoteWithProvenance({
+        estimatedAmountOut: "2.413423",
+        amountOutAtomic: "2413423",
+        inputAsset: otherTokenQuoteMetadata,
+        amountInAtomic: "1500000",
+      }),
+    };
+    expect(runResultSchema.safeParse(erc20QuoteOnly).success).toBe(true);
+
+    const mismatchedInputAndTokenPath = quoteWithProvenance({
+      estimatedAmountOut: "2.413423",
+      amountOutAtomic: "2413423",
+      inputAsset: usdcQuoteMetadata,
+      amountInAtomic: "1500000",
+    });
+    expect(quoteSchema.safeParse(mismatchedInputAndTokenPath).success).toBe(
+      true,
+    );
+    expect(
+      runResultSchema.safeParse({
+        ...erc20QuoteOnly,
+        quote: mismatchedInputAndTokenPath,
+      }).success,
+    ).toBe(false);
+
+    const mismatchedInputAmount = quoteWithProvenance({
+      estimatedAmountOut: "2.413423",
+      amountOutAtomic: "2413423",
+      inputAsset: otherTokenQuoteMetadata,
+      amountInAtomic: "1500001",
+    });
+    expect(quoteSchema.safeParse(mismatchedInputAmount).success).toBe(true);
+    expect(
+      runResultSchema.safeParse({
+        ...erc20QuoteOnly,
+        quote: mismatchedInputAmount,
+      }).success,
+    ).toBe(false);
+
+    const mismatchedTopLevelRoute = {
+      ...erc20QuoteOnly,
+      route: {
+        ...erc20QuoteOnly.route,
+        path: [otherToken, mon, usdc],
+      },
+    };
+    expect(runResultSchema.safeParse(mismatchedTopLevelRoute).success).toBe(
+      false,
+    );
   });
 
   it("binds quote provenance protocol to the checked Intent and transaction", () => {
