@@ -4,6 +4,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  realpathSync,
   rmSync,
   statSync,
   symlinkSync,
@@ -51,6 +52,33 @@ function withCheckoutMetadata<T>(run: (metadataDir: string) => T): T {
   }
 }
 
+function createPathAlias(directory: string): string {
+  const canonicalDirectory = realpathSync(directory);
+  if (
+    process.platform === "darwin" &&
+    canonicalDirectory.startsWith("/private/var/")
+  ) {
+    const macOSAlias = `/var/${canonicalDirectory.slice("/private/var/".length)}`;
+    try {
+      const canonicalStats = statSync(canonicalDirectory, { bigint: true });
+      const aliasStats = statSync(macOSAlias, { bigint: true });
+      if (
+        aliasStats.isDirectory() &&
+        canonicalStats.dev === aliasStats.dev &&
+        canonicalStats.ino === aliasStats.ino
+      ) {
+        return macOSAlias;
+      }
+    } catch {
+      // Fall back to a test-local symlink alias below.
+    }
+  }
+
+  const aliasDirectory = join(directory, "path-alias");
+  symlinkSync(directory, aliasDirectory, "dir");
+  return aliasDirectory;
+}
+
 describe("Arbitrum One fork Git metadata path resolution", () => {
   it("accepts the same Git admin directory through distinct mount path aliases", () => {
     const temporaryDirectory = mkdtempSync(
@@ -94,14 +122,22 @@ describe("Arbitrum One fork Git metadata path resolution", () => {
     }
   });
 
-  it("recovers only the matching worktree metadata when .git contains a container path", () => {
+  it("recovers matching metadata across checkout aliases when .git contains a container path", () => {
     const temporaryDirectory = mkdtempSync(
       join(tmpdir(), "parallax-fork-git-path-"),
     );
     try {
-      const repositoryRoot = join(temporaryDirectory, "checkout");
+      const checkoutAlias = createPathAlias(temporaryDirectory);
+      const repositoryRoot = join(checkoutAlias, "checkout");
       const worktreeRoot = join(repositoryRoot, ".worktrees", "fork");
       mkdirSync(dirname(worktreeRoot), { recursive: true });
+
+      if (process.platform === "darwin") {
+        expect(checkoutAlias.startsWith("/var/")).toBe(true);
+        expect(realpathSync(checkoutAlias).startsWith("/private/var/")).toBe(
+          true,
+        );
+      }
 
       const gitInit = spawnSync("git", ["init", repositoryRoot], {
         encoding: "utf8",
@@ -168,7 +204,9 @@ describe("Arbitrum One fork Git metadata path resolution", () => {
 
       expect(
         resolveGitMetadataPath("parallax-test-metadata", worktreeRoot),
-      ).toBe(join(worktreeGitDirectory, "parallax-test-metadata"));
+      ).toBe(
+        join(realpathSync(worktreeGitDirectory), "parallax-test-metadata"),
+      );
     } finally {
       rmSync(temporaryDirectory, { recursive: true, force: true });
     }
@@ -179,8 +217,9 @@ describe("Arbitrum One fork Git metadata path resolution", () => {
       join(tmpdir(), "parallax-fork-external-worktree-"),
     );
     try {
-      const repositoryRoot = join(temporaryDirectory, "repository");
-      const worktreeRoot = join(temporaryDirectory, "external-checkout");
+      const checkoutAlias = createPathAlias(temporaryDirectory);
+      const repositoryRoot = join(checkoutAlias, "repository");
+      const worktreeRoot = join(checkoutAlias, "external-checkout");
       mkdirSync(repositoryRoot, { recursive: true });
 
       const gitInit = spawnSync("git", ["init", repositoryRoot], {
@@ -232,7 +271,7 @@ describe("Arbitrum One fork Git metadata path resolution", () => {
       expect(declaredGitDirectory).toBeDefined();
       const worktreeGitDirectory = declaredGitDirectory ?? "";
       const expectedMetadataPath = join(
-        worktreeGitDirectory,
+        realpathSync(worktreeGitDirectory),
         "parallax-test-metadata",
       );
       const backlinkPath = join(worktreeGitDirectory, "gitdir");
@@ -290,10 +329,11 @@ describe("Arbitrum One fork Git metadata path resolution", () => {
       join(tmpdir(), "parallax-fork-foreign-worktree-"),
     );
     try {
-      const repositoryRoot = join(temporaryDirectory, "main");
+      const checkoutAlias = createPathAlias(temporaryDirectory);
+      const repositoryRoot = join(checkoutAlias, "main");
       const currentWorktreeRoot = join(repositoryRoot, ".worktrees", "fork");
       const foreignWorktreeRoot = join(
-        temporaryDirectory,
+        checkoutAlias,
         "other",
         ".worktrees",
         "fork",
@@ -382,15 +422,16 @@ describe("Arbitrum One fork Git metadata path resolution", () => {
     }
   });
 
-  it("rejects an existing pointer to another worktree's admin directory", () => {
+  it("rejects existing foreign and escaping worktree admin directories", () => {
     const temporaryDirectory = mkdtempSync(
       join(tmpdir(), "parallax-fork-existing-foreign-worktree-"),
     );
     try {
-      const repositoryRoot = join(temporaryDirectory, "main");
+      const checkoutAlias = createPathAlias(temporaryDirectory);
+      const repositoryRoot = join(checkoutAlias, "main");
       const currentWorktreeRoot = join(repositoryRoot, ".worktrees", "fork");
       const foreignWorktreeRoot = join(
-        temporaryDirectory,
+        checkoutAlias,
         "other",
         ".worktrees",
         "fork",
@@ -464,8 +505,14 @@ describe("Arbitrum One fork Git metadata path resolution", () => {
       expect(initialGitLookup.error).toBeUndefined();
       expect(initialGitLookup.status).toBe(0);
       const initialGitPaths = initialGitLookup.stdout.trimEnd().split(/\r?\n/);
-      expect(initialGitPaths[0]).toBe(foreignGitDirectory);
-      expect(initialGitPaths[1]).toBe(currentWorktreeRoot);
+      expect(initialGitPaths[0]).toBeDefined();
+      expect(realpathSync(initialGitPaths[0] ?? "")).toBe(
+        realpathSync(foreignGitDirectory ?? ""),
+      );
+      expect(initialGitPaths[1]).toBeDefined();
+      expect(realpathSync(initialGitPaths[1] ?? "")).toBe(
+        realpathSync(currentWorktreeRoot),
+      );
 
       expect(() =>
         resolveGitMetadataPath("parallax-test-metadata", currentWorktreeRoot),
@@ -476,6 +523,62 @@ describe("Arbitrum One fork Git metadata path resolution", () => {
             "Could not resolve metadata for this worktree",
           ),
         }),
+      );
+
+      const escapedRepositoryRoot = join(checkoutAlias, "escaped-repository");
+      const escapedGitInit = spawnSync("git", ["init", escapedRepositoryRoot], {
+        encoding: "utf8",
+        stdio: "ignore",
+      });
+      expect(escapedGitInit.error).toBeUndefined();
+      expect(escapedGitInit.status).toBe(0);
+      const escapedGitDirectory = join(escapedRepositoryRoot, ".git");
+      const escapedWorktreeId = "escaped-admin";
+      const escapedAdminPath = join(
+        repositoryRoot,
+        ".git",
+        "worktrees",
+        escapedWorktreeId,
+      );
+      symlinkSync(escapedGitDirectory, escapedAdminPath, "dir");
+      const escapedGitPointer = `gitdir: ${escapedAdminPath}
+`;
+      writeFileSync(join(currentWorktreeRoot, ".git"), escapedGitPointer);
+      expect(realpathSync(escapedAdminPath)).toBe(
+        realpathSync(escapedGitDirectory),
+      );
+      expect(realpathSync(escapedAdminPath)).not.toBe(
+        realpathSync(join(repositoryRoot, ".git")),
+      );
+
+      const escapedGitLookup = spawnSync(
+        "git",
+        [
+          "-C",
+          currentWorktreeRoot,
+          "rev-parse",
+          "--path-format=absolute",
+          "--absolute-git-dir",
+          "--show-toplevel",
+        ],
+        { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] },
+      );
+      expect(escapedGitLookup.error).toBeUndefined();
+      expect(escapedGitLookup.status).toBe(0);
+      const escapedGitPaths = escapedGitLookup.stdout.trimEnd().split(/\r?\n/);
+      expect(escapedGitPaths[0]).toBeDefined();
+      expect(realpathSync(escapedGitPaths[0] ?? "")).toBe(
+        realpathSync(escapedAdminPath),
+      );
+      expect(escapedGitPaths[1]).toBeDefined();
+      expect(realpathSync(escapedGitPaths[1] ?? "")).toBe(
+        realpathSync(currentWorktreeRoot),
+      );
+
+      expect(() =>
+        resolveGitMetadataPath("parallax-test-metadata", currentWorktreeRoot),
+      ).toThrowError(
+        expect.objectContaining({ code: "GIT_METADATA_UNAVAILABLE" }),
       );
     } finally {
       rmSync(temporaryDirectory, { recursive: true, force: true });
