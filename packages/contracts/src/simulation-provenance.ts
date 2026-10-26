@@ -325,17 +325,24 @@ export const providerNeutralSimulationProvenanceSchema = z
       });
     }
     if (
-      reconciliation.status !== "UNAVAILABLE" &&
-      (provenance.capabilities.amountReceived.status !== "AVAILABLE" ||
-        reconciliation.simulatedAmountReceivedAtomic !==
-          provenance.capabilities.amountReceived.amountReceivedAtomic ||
-        reconciliation.quoteAmountOutAtomic !==
-          provenance.quote.amountOutAtomic)
+      reconciliation.quoteAmountOutAtomic !== provenance.quote.amountOutAtomic
     ) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["quoteReconciliation"],
-        message: "Reconciliation must compare the recorded quote and output",
+        message: "Reconciliation quote amount must match the recorded quote",
+      });
+    }
+    if (
+      reconciliation.status !== "UNAVAILABLE" &&
+      (provenance.capabilities.amountReceived.status !== "AVAILABLE" ||
+        reconciliation.simulatedAmountReceivedAtomic !==
+          provenance.capabilities.amountReceived.amountReceivedAtomic)
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["quoteReconciliation"],
+        message: "Available reconciliation must match the recorded output",
       });
     }
   });

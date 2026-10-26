@@ -91,6 +91,67 @@ describe("provider-neutral simulation provenance contract", () => {
     });
   });
 
+  it.each([
+    {
+      name: "MATCHED",
+      amountReceived: {
+        status: "AVAILABLE" as const,
+        amountReceivedAtomic: "2413424",
+        source: "VALIDATED_STATE_DIFF" as const,
+      },
+      quoteReconciliation: {
+        status: "MATCHED" as const,
+        comparisonMethod: "ATOMIC_INTEGER_EQUALITY" as const,
+        quoteAmountOutAtomic: "2413424",
+        simulatedAmountReceivedAtomic: "2413424",
+        differenceAtomic: "0" as const,
+      },
+    },
+    {
+      name: "MISMATCHED",
+      amountReceived: {
+        status: "AVAILABLE" as const,
+        amountReceivedAtomic: "2413423",
+        source: "VALIDATED_STATE_DIFF" as const,
+      },
+      quoteReconciliation: {
+        status: "MISMATCHED" as const,
+        comparisonMethod: "ATOMIC_INTEGER_EQUALITY" as const,
+        quoteAmountOutAtomic: "2413424",
+        simulatedAmountReceivedAtomic: "2413423",
+        differenceAtomic: "-1",
+      },
+    },
+    {
+      name: "UNAVAILABLE",
+      amountReceived: {
+        status: "UNAVAILABLE" as const,
+        reason: "STATE_DIFF_NOT_QUALIFIED" as const,
+      },
+      quoteReconciliation: {
+        status: "UNAVAILABLE" as const,
+        comparisonMethod: "ATOMIC_INTEGER_EQUALITY" as const,
+        quoteAmountOutAtomic: "2413424",
+        reason: "SIMULATED_OUTPUT_UNAVAILABLE" as const,
+      },
+    },
+  ])(
+    "rejects $name when its quote amount differs from the recorded quote",
+    ({ amountReceived, quoteReconciliation }) => {
+      const provenance = validProvenance();
+      expect(
+        providerNeutralSimulationProvenanceSchema.safeParse({
+          ...provenance,
+          capabilities: {
+            ...provenance.capabilities,
+            amountReceived,
+          },
+          quoteReconciliation,
+        }).success,
+      ).toBe(false);
+    },
+  );
+
   it("accepts provider-neutral live evidence without local-fork-only claims", () => {
     const { forkRunId: _forkRunId, ...base } = validProvenance();
     const live = {
