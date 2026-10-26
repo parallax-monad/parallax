@@ -339,9 +339,15 @@ function quoteWithProvenance(input: {
   };
 }
 
-function simulationProvenance(protocol: ProtocolId) {
+function simulationProvenance(
+  protocol: ProtocolId,
+  input: { tokenIn?: string; amountInAtomic?: string } = {},
+) {
   const sourceBlockHash = `0x${"ab".repeat(32)}`;
   const dataFingerprint = `sha256:${"33".repeat(32)}`;
+  const tokenIn = input.tokenIn ?? "native";
+  const amountInAtomic =
+    input.amountInAtomic ?? normalizedIntent.amountInAtomic;
   return {
     schemaVersion: 1,
     status: "AVAILABLE",
@@ -367,18 +373,21 @@ function simulationProvenance(protocol: ProtocolId) {
       protocol,
       sender,
       recipient: sender,
-      tokenIn: "native",
+      tokenIn,
       tokenOut: usdc.address,
-      amountInAtomic: normalizedIntent.amountInAtomic,
+      amountInAtomic,
       amountOutMinimumAtomic: "0",
       router: otherRecipient,
       from: sender,
       to: otherRecipient,
-      value: "0x0",
+      value:
+        tokenIn === "native"
+          ? `0x${BigInt(amountInAtomic).toString(16)}`
+          : "0x0",
       dataFingerprint,
     },
     quote: {
-      amountInAtomic: normalizedIntent.amountInAtomic,
+      amountInAtomic,
       amountOutAtomic: "2413423",
       poolAddress: otherRecipient,
       tokenPath: [otherToken.address, usdc.address],
@@ -1087,6 +1096,83 @@ describe("completed Run Result contract", () => {
     expect(runResultSchema.safeParse(mismatchedTopLevelRoute).success).toBe(
       false,
     );
+  });
+
+  it("binds the actual direct-native EVM transaction value to the exact input amount", () => {
+    const matchingNativeResult = {
+      ...completedResult,
+      quote: quoteWithProvenance({
+        estimatedAmountOut: "2.413423",
+        amountOutAtomic: "2413423",
+      }),
+      simulationProvenance: simulationProvenance(normalizedIntent.protocol),
+    };
+    expect(runResultSchema.safeParse(matchingNativeResult).success).toBe(true);
+
+    const nativeBinding =
+      matchingNativeResult.simulationProvenance.transactionBinding;
+    expect(nativeBinding.amountInAtomic).toBe(normalizedIntent.amountInAtomic);
+    expect(nativeBinding.value).toBe(
+      `0x${BigInt(normalizedIntent.amountInAtomic).toString(16)}`,
+    );
+
+    const zeroNativeValueWithMatchingDeclaredAmount = {
+      ...matchingNativeResult,
+      simulationProvenance: {
+        ...matchingNativeResult.simulationProvenance,
+        transactionBinding: {
+          ...nativeBinding,
+          value: "0x0",
+        },
+      },
+    };
+    expect(
+      zeroNativeValueWithMatchingDeclaredAmount.simulationProvenance
+        .transactionBinding.amountInAtomic,
+    ).toBe(normalizedIntent.amountInAtomic);
+    expect(
+      runResultSchema.safeParse(zeroNativeValueWithMatchingDeclaredAmount)
+        .success,
+    ).toBe(false);
+
+    const canonicalDecimalNativeValue = {
+      ...matchingNativeResult,
+      simulationProvenance: {
+        ...matchingNativeResult.simulationProvenance,
+        transactionBinding: {
+          ...nativeBinding,
+          value: normalizedIntent.amountInAtomic,
+        },
+      },
+    };
+    expect(runResultSchema.safeParse(canonicalDecimalNativeValue).success).toBe(
+      true,
+    );
+
+    const erc20Intent = {
+      ...normalizedIntent,
+      tokenIn: otherToken,
+      amountInAtomic: "1500000",
+    };
+    const matchingErc20Result = {
+      ...completedResult,
+      intent: erc20Intent,
+      route: {
+        ...completedResult.route,
+        path: [otherToken, usdc],
+      },
+      quote: quoteWithProvenance({
+        estimatedAmountOut: "2.413423",
+        amountOutAtomic: "2413423",
+        inputAsset: otherTokenQuoteMetadata,
+        amountInAtomic: "1500000",
+      }),
+      simulationProvenance: simulationProvenance(erc20Intent.protocol, {
+        tokenIn: otherToken.address,
+        amountInAtomic: "1500000",
+      }),
+    };
+    expect(runResultSchema.safeParse(matchingErc20Result).success).toBe(true);
   });
 
   it("binds quote provenance protocol to the checked Intent and transaction", () => {

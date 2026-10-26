@@ -7,6 +7,19 @@ import {
   uint256AmountSchema,
 } from "./common.js";
 
+const UINT256_MAX = (1n << 256n) - 1n;
+
+function isCanonicalEvmValue(value: string): boolean {
+  const isCanonicalDecimal = /^(?:0|[1-9]\d*)$/.test(value);
+  const isCanonicalHex = /^0x(?:0|[1-9a-fA-F][0-9a-fA-F]*)$/.test(value);
+  if (!isCanonicalDecimal && !isCanonicalHex) return false;
+  try {
+    return BigInt(value) <= UINT256_MAX;
+  } catch {
+    return false;
+  }
+}
+
 export const p0EvidenceStateSchema = z.enum([
   "VERIFIED",
   "INCOMPLETE",
@@ -176,7 +189,9 @@ export const p0BasicSimulationTransactionBindingSchema = z
     router: addressSchema,
     from: addressSchema,
     to: addressSchema,
-    value: z.string().regex(/^0x(?:0|[1-9a-f][0-9a-f]*)$/i),
+    value: z.string().refine(isCanonicalEvmValue, {
+      message: "Must be a canonical uint256 EVM value",
+    }),
     dataFingerprint: fingerprintSchema,
   })
   .strict();

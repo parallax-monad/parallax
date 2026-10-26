@@ -94,6 +94,14 @@ function exactHumanAmountToAtomic(
   return converted.success ? converted.amountAtomic : undefined;
 }
 
+function parseCanonicalEvmValue(value: string): bigint | undefined {
+  if (/^(?:0|[1-9]\d*)$/.test(value)) return BigInt(value);
+  if (/^0x(?:0|[1-9a-fA-F][0-9a-fA-F]*)$/.test(value)) {
+    return BigInt(value);
+  }
+  return undefined;
+}
+
 function validateRunIdentity(result: RunIdentity, context: z.RefinementCtx) {
   for (const field of ["tokenIn", "tokenOut"] as const) {
     const metadata = result.tokenMetadata?.[field];
@@ -187,6 +195,19 @@ function validateSimulationProvenance(
   if (provenance === undefined) return;
 
   const binding = provenance.transactionBinding;
+  const quoteProvenance = result.quote?.provenance;
+  const directNativeQuoteAmountInAtomic =
+    quoteProvenance?.route.kind === "direct"
+      ? quoteProvenance.amountInAtomic
+      : undefined;
+  const transactionValueAtomic = parseCanonicalEvmValue(binding.value);
+  const directNativeTransactionValueMismatch =
+    result.intent.tokenIn.kind === "native" &&
+    directNativeQuoteAmountInAtomic !== undefined &&
+    binding.router.toLowerCase() === binding.to.toLowerCase() &&
+    (transactionValueAtomic === undefined ||
+      transactionValueAtomic !== BigInt(result.intent.amountInAtomic) ||
+      transactionValueAtomic !== BigInt(directNativeQuoteAmountInAtomic));
   const tokenInMatchesIntent =
     result.intent.tokenIn.kind === "native"
       ? binding.tokenIn === "native"
@@ -205,6 +226,7 @@ function validateSimulationProvenance(
       binding.from.toLowerCase() !== result.intent.sender.toLowerCase()) ||
     binding.recipient.toLowerCase() !== result.intent.recipient.toLowerCase() ||
     binding.amountInAtomic !== result.intent.amountInAtomic ||
+    directNativeTransactionValueMismatch ||
     !tokenInMatchesIntent ||
     !tokenOutMatchesIntent ||
     binding.router.toLowerCase() !== binding.to.toLowerCase() ||
@@ -219,7 +241,6 @@ function validateSimulationProvenance(
     });
   }
 
-  const quoteProvenance = result.quote?.provenance;
   if (
     quoteProvenance === undefined ||
     assetIdentity({

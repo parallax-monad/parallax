@@ -126,6 +126,11 @@ function createRpc(responder?: RpcResponder) {
   return { rpcClient, calls };
 }
 
+type SourceRpcOptions = {
+  finalBlockResponse?: unknown;
+  finalBlockError?: Error;
+};
+
 type LocalForkRpcOptions = {
   forkInstanceId?: string;
   clientVersion?: string;
@@ -133,6 +138,8 @@ type LocalForkRpcOptions = {
   accounts?: unknown;
   blockNumber?: string;
   postSimulationBlockNumber?: string;
+  postSimulationHeadResponse?: unknown;
+  postSimulationHeadError?: Error;
   blockHash?: string;
   callError?: Error;
   gasEstimateError?: Error;
@@ -186,10 +193,18 @@ function createLocalForkRpc(options: LocalForkRpcOptions = {}) {
           return options.accounts ?? [];
         case "eth_blockNumber": {
           blockNumberCalls += 1;
-          return options.postSimulationBlockNumber !== undefined &&
-            blockNumberCalls >= 3
-            ? options.postSimulationBlockNumber
-            : (options.blockNumber ?? sourceBlockTag);
+          if (blockNumberCalls >= 3) {
+            if (options.postSimulationHeadError !== undefined) {
+              throw options.postSimulationHeadError;
+            }
+            if (options.postSimulationHeadResponse !== undefined) {
+              return options.postSimulationHeadResponse;
+            }
+            if (options.postSimulationBlockNumber !== undefined) {
+              return options.postSimulationBlockNumber;
+            }
+          }
+          return options.blockNumber ?? sourceBlockTag;
         }
         case "eth_getBlockByNumber":
           return {
@@ -604,9 +619,24 @@ function createLocalCheckFixture(
     minimumReceived?: string;
     sender?: string;
   } = {},
+  sourceOptions: SourceRpcOptions = {},
 ) {
   const runtime = createLocalRuntime();
-  const source = createRpc();
+  let sourceBlockReadCount = 0;
+  const source = createRpc((method, params) => {
+    if (method === "eth_getBlockByNumber") {
+      sourceBlockReadCount += 1;
+      if (sourceBlockReadCount >= 4) {
+        if (sourceOptions.finalBlockError !== undefined) {
+          throw sourceOptions.finalBlockError;
+        }
+        if (sourceOptions.finalBlockResponse !== undefined) {
+          return sourceOptions.finalBlockResponse;
+        }
+      }
+    }
+    return defaultRpcResponse(method, params);
+  });
   const local = createLocalForkRpc(rpcOptions);
   const flow = createArbitrumOneLocalForkCheckFlow(runtime, {
     sourceRpcClient: source.rpcClient,
@@ -1455,6 +1485,132 @@ describe("Arbitrum One local-fork Check/Run provenance", () => {
       await app.close();
     }
   });
+
+  it.each([
+    {
+      name: "final source-head RPC error",
+      sourceOptions: {
+        finalBlockError: new NativeRpcClientError(
+          "NETWORK_FAILURE",
+          "source head unavailable",
+        ),
+      },
+      localOptions: {},
+      expectedErrorCode: "RPC_UNAVAILABLE",
+      expectedLocalHeadReadCount: 2,
+    },
+    {
+      name: "malformed final source-head response",
+      sourceOptions: { finalBlockResponse: null },
+      localOptions: {},
+      expectedErrorCode: "INVALID_RESPONSE",
+      expectedLocalHeadReadCount: 2,
+    },
+    {
+      name: "final fork-head RPC error",
+      sourceOptions: {},
+      localOptions: {
+        postSimulationHeadError: new NativeRpcClientError(
+          "NETWORK_FAILURE",
+          "fork head unavailable",
+        ),
+      },
+      expectedErrorCode: "RPC_UNAVAILABLE",
+      expectedLocalHeadReadCount: 3,
+    },
+    {
+      name: "malformed final fork-head response",
+      sourceOptions: {},
+      localOptions: { postSimulationHeadResponse: "0x07" },
+      expectedErrorCode: "INVALID_RESPONSE",
+      expectedLocalHeadReadCount: 3,
+    },
+  ] as const)(
+    "preserves the completed quote through POST/GET after $name",
+    async ({
+      sourceOptions,
+      localOptions,
+      expectedErrorCode,
+      expectedLocalHeadReadCount,
+    }) => {
+      const fixture = createLocalCheckFixture(localOptions, {}, sourceOptions);
+      const app = createLocalCheckApp(fixture.flow);
+      try {
+        const response = await app.fetch(
+          new Request("https://api.example.test/api/check", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              ...quoteRequest,
+              economicBoundary: {
+                availability: "unavailable",
+                source: "unavailable",
+              },
+            }),
+          }),
+        );
+        expect(response.status).toBe(502);
+        const postBody = (await response.json()) as {
+          run: { runId: string };
+        };
+        const postedRun = runResultSchema.parse(postBody.run);
+        expect(postedRun).toMatchObject({
+          status: "integration_error",
+          verdict: "UNKNOWN",
+          quote: {
+            estimatedAmountOut: "2.413423",
+            provenance: { amountOutAtomic: "2413423" },
+          },
+          providerEvidence: {
+            execution: { status: "UNKNOWN" },
+            simulation: { value: null },
+            assetChanges: { value: null },
+          },
+          error: { code: expectedErrorCode, stage: "simulation" },
+        });
+        expect(postedRun.simulationProvenance).toBeUndefined();
+        expect(
+          fixture.local.calls.some((call) => call.method === "evm_revert"),
+        ).toBe(true);
+        expect(
+          fixture.source.calls.filter(
+            (call) => call.method === "eth_getBlockByNumber",
+          ),
+        ).toHaveLength(4);
+        expect(
+          fixture.local.calls.filter(
+            (call) => call.method === "eth_blockNumber",
+          ),
+        ).toHaveLength(expectedLocalHeadReadCount);
+
+        const getResponse = await app.fetch(
+          new Request(
+            `https://api.example.test/api/runs/${encodeURIComponent(postedRun.runId)}`,
+          ),
+        );
+        expect(getResponse.status).toBe(200);
+        const getBody = (await getResponse.json()) as { result: unknown };
+        const persistedRun = runResultSchema.parse(getBody.result);
+        expect(persistedRun).toMatchObject({
+          status: "integration_error",
+          verdict: "UNKNOWN",
+          quote: {
+            estimatedAmountOut: "2.413423",
+            provenance: { amountOutAtomic: "2413423" },
+          },
+          providerEvidence: {
+            execution: { status: "UNKNOWN" },
+            simulation: { value: null },
+            assetChanges: { value: null },
+          },
+          error: { code: expectedErrorCode, stage: "simulation" },
+        });
+        expect(persistedRun.simulationProvenance).toBeUndefined();
+      } finally {
+        await app.close();
+      }
+    },
+  );
 
   it("records an exact runtime recipient mismatch without promoting Risk", async () => {
     const simulatedAmountReceivedAtomic = 2_409_000n;

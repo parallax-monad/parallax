@@ -68,6 +68,11 @@ const LOCAL_FORK_METHODS = new Set([
 // cannot coordinate another backend process or an external Anvil RPC writer.
 const localForkSimulationTails = new Map<string, Promise<void>>();
 
+type PostSimulationReadFailureCode =
+  | "RPC_UNAVAILABLE"
+  | "TIMEOUT"
+  | "INVALID_RESPONSE";
+
 type LocalForkFailureReason =
   | "EVM_REVERT"
   | "SLIPPAGE_GUARD"
@@ -101,6 +106,24 @@ export class ArbitrumOneForkStateChangedError extends Error {
   public constructor(partialRunResult?: FailedRunResult) {
     super("Local fork state changed during read-only simulation");
     this.name = "ArbitrumOneForkStateChangedError";
+    this.partialRunResult = partialRunResult;
+  }
+}
+
+export class ArbitrumOnePostSimulationReadError extends Error {
+  public readonly code: PostSimulationReadFailureCode;
+  public readonly integrationStatus = "INTEGRATION_ERROR";
+  public readonly source = "rpc";
+  public readonly stage = "simulation";
+  public readonly partialRunResult: FailedRunResult;
+
+  public constructor(
+    code: PostSimulationReadFailureCode,
+    partialRunResult: FailedRunResult,
+  ) {
+    super("Final source or local-fork head verification failed");
+    this.name = "ArbitrumOnePostSimulationReadError";
+    this.code = code;
     this.partialRunResult = partialRunResult;
   }
 }
@@ -250,14 +273,33 @@ export function createArbitrumOneLocalForkCheckFlow(
           }),
       );
 
-      const sourceBlockAfter = await readSourceBlock(
-        sourceRuntime.rpcClient,
-        sourceBlockTag,
-        localIdentity.block.number,
-      );
-      const localHeadAfter = parseRpcQuantity(
-        await requestLocal(localRpc, "eth_blockNumber", []),
-      ).toString();
+      let sourceBlockAfter: Awaited<ReturnType<typeof readSourceBlock>>;
+      try {
+        sourceBlockAfter = await readSourceBlock(
+          sourceRuntime.rpcClient,
+          sourceBlockTag,
+          localIdentity.block.number,
+        );
+      } catch (error) {
+        throw postSimulationReadError(input, quote, observedAt, error);
+      }
+      let localHeadAfter: string;
+      try {
+        const rawLocalHeadAfter = await requestLocal(
+          localRpc,
+          "eth_blockNumber",
+          [],
+        );
+        try {
+          localHeadAfter = parseRpcQuantity(rawLocalHeadAfter).toString();
+        } catch {
+          throw new MalformedRpcResponseError(
+            "Local fork head response is malformed",
+          );
+        }
+      } catch (error) {
+        throw postSimulationReadError(input, quote, observedAt, error);
+      }
       if (
         sourceBlockAfter.hash.toLowerCase() !==
         sourceBlockBefore.hash.toLowerCase()
@@ -470,6 +512,13 @@ async function readLocalBlock(
   return { number, hash, timestamp };
 }
 
+class MalformedRpcResponseError extends Error {
+  public constructor(message: string) {
+    super(message);
+    this.name = "MalformedRpcResponseError";
+  }
+}
+
 async function readSourceBlock(
   rpc: {
     request(
@@ -484,15 +533,22 @@ async function readSourceBlock(
   const raw = await rpc.request("eth_getBlockByNumber", [blockTag, false], {
     timeoutMs: LOCAL_RPC_TIMEOUT_MS,
   });
-  if (!isRecord(raw)) throw new Error("Source block is unavailable");
-  const number = parseRpcQuantity(raw.number).toString();
+  if (!isRecord(raw)) {
+    throw new MalformedRpcResponseError("Source block response is malformed");
+  }
+  let number: string;
+  try {
+    number = parseRpcQuantity(raw.number).toString();
+  } catch {
+    throw new MalformedRpcResponseError("Source block response is malformed");
+  }
   const hash = raw.hash;
   if (
     number !== expectedNumber ||
     typeof hash !== "string" ||
     !BLOCK_HASH_PATTERN.test(hash)
   ) {
-    throw new Error("Source block response is malformed");
+    throw new MalformedRpcResponseError("Source block response is malformed");
   }
   return { number, hash };
 }
@@ -1025,13 +1081,26 @@ function postSimulationFailureRunResult(
   input: AgentFlowCheckInput,
   quote: Quote,
   observedAt: string,
-  code: "SOURCE_MISMATCH" | "FORK_STATE_CHANGED",
+  code:
+    | "SOURCE_MISMATCH"
+    | "FORK_STATE_CHANGED"
+    | PostSimulationReadFailureCode,
 ): FailedRunResult {
   const baseResult = projectGenericEvidenceToRunResult(
     input.runId,
     input.intent,
     buildUnknownOutcomeEvidence(input, quote, observedAt),
   );
+  const message =
+    code === "SOURCE_MISMATCH"
+      ? "The quote source does not match the verified execution context"
+      : code === "FORK_STATE_CHANGED"
+        ? "The local fork state changed during simulation"
+        : code === "RPC_UNAVAILABLE"
+          ? "A final source or local-fork head read was unavailable"
+          : code === "TIMEOUT"
+            ? "A final source or local-fork head read timed out"
+            : "A final source or local-fork head response was malformed";
   return failedRunResultSchema.parse({
     ...baseResult,
     status: "integration_error",
@@ -1041,14 +1110,31 @@ function postSimulationFailureRunResult(
     error: {
       code,
       stage: "simulation",
-      message:
-        code === "SOURCE_MISMATCH"
-          ? "The quote source does not match the verified execution context"
-          : "The local fork state changed during simulation",
-      retryable: false,
+      message,
+      retryable: code === "RPC_UNAVAILABLE" || code === "TIMEOUT",
     },
     quote,
   });
+}
+
+function postSimulationReadError(
+  input: AgentFlowCheckInput,
+  quote: Quote,
+  observedAt: string,
+  error: unknown,
+): ArbitrumOnePostSimulationReadError {
+  const reason = classifyRpcFailure(error);
+  const code: PostSimulationReadFailureCode =
+    error instanceof MalformedRpcResponseError ||
+    reason === "MALFORMED_RESPONSE"
+      ? "INVALID_RESPONSE"
+      : reason === "RPC_TIMEOUT"
+        ? "TIMEOUT"
+        : "RPC_UNAVAILABLE";
+  return new ArbitrumOnePostSimulationReadError(
+    code,
+    postSimulationFailureRunResult(input, quote, observedAt, code),
+  );
 }
 
 async function requestLocal(
