@@ -1126,6 +1126,40 @@ describe("completed Run Result contract", () => {
     ).toBe(false);
   });
 
+  it("rejects a nested quote source block hash that differs from simulation provenance", () => {
+    const matchingResult = {
+      ...completedResult,
+      quote: quoteWithProvenance({
+        estimatedAmountOut: "2.413423",
+        amountOutAtomic: "2413423",
+      }),
+      simulationProvenance: simulationProvenance(normalizedIntent.protocol),
+    };
+
+    expect(runResultSchema.safeParse(matchingResult).success).toBe(true);
+
+    const mismatchedQuoteSourceHash = {
+      ...matchingResult,
+      quote: {
+        ...matchingResult.quote,
+        provenance: {
+          ...matchingResult.quote.provenance,
+          sourceBlock: {
+            ...matchingResult.quote.provenance.sourceBlock,
+            hash: `0x${"cd".repeat(32)}`,
+          },
+        },
+      },
+    };
+
+    expect(quoteSchema.safeParse(mismatchedQuoteSourceHash.quote).success).toBe(
+      true,
+    );
+    expect(runResultSchema.safeParse(mismatchedQuoteSourceHash).success).toBe(
+      false,
+    );
+  });
+
   it("binds the LIVE transaction from address to the Intent sender", () => {
     const protocol = normalizedIntent.protocol;
     const matchingResult = {

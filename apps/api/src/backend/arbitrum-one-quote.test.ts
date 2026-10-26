@@ -142,6 +142,7 @@ type LocalForkRpcOptions = {
   revertResult?: unknown;
   senderUsdcBalanceAtomic?: bigint;
   senderUsdcBalanceAfterNativeOverrideAtomic?: bigint;
+  simulatedRecipientBalanceAtomic?: bigint;
 };
 
 const recipientBalanceSlot = `0x${"22".repeat(32)}`;
@@ -298,7 +299,9 @@ function createLocalForkRpc(options: LocalForkRpcOptions = {}) {
                 storage: {
                   [poolBalanceSlot]: storageWord(poolBalanceAfter),
                   [recipientBalanceSlot]: storageWord(
-                    senderUsdcBalanceAtomic + simulatedRecipientBalance,
+                    senderUsdcBalanceAtomic +
+                      (options.simulatedRecipientBalanceAtomic ??
+                        simulatedRecipientBalance),
                   ),
                 },
               },
@@ -1451,6 +1454,44 @@ describe("Arbitrum One local-fork Check/Run provenance", () => {
     } finally {
       await app.close();
     }
+  });
+
+  it("records an exact runtime recipient mismatch without promoting Risk", async () => {
+    const simulatedAmountReceivedAtomic = 2_409_000n;
+    const fixture = createLocalCheckFixture({
+      simulatedRecipientBalanceAtomic: simulatedAmountReceivedAtomic,
+    });
+    const result = runResultSchema.parse(
+      await fixture.flow.check(fixture.input),
+    );
+    const simulation = result.simulationProvenance;
+    if (simulation === undefined) {
+      throw new Error("Expected provider-neutral simulation provenance");
+    }
+    const fork = result.arbitrumOneForkProvenance;
+    if (fork?.status !== "AVAILABLE") {
+      throw new Error("Expected local-fork provenance");
+    }
+
+    expect(result.verdict).toBe("UNKNOWN");
+    expect(simulation.capabilities.amountReceived).toEqual({
+      status: "AVAILABLE",
+      amountReceivedAtomic: simulatedAmountReceivedAtomic.toString(),
+      source: "VALIDATED_STATE_DIFF",
+    });
+    expect(simulation.quoteReconciliation).toEqual({
+      status: "MISMATCHED",
+      comparisonMethod: "ATOMIC_INTEGER_EQUALITY",
+      quoteAmountOutAtomic: "2413423",
+      simulatedAmountReceivedAtomic: "2409000",
+      differenceAtomic: "-4423",
+    });
+    expect(fork.simulation.amountReceived).toEqual({
+      status: "AVAILABLE",
+      amountReceivedAtomic: "2409000",
+      source: "VALIDATED_STATE_DIFF",
+    });
+    expect(fork.accountOverride.snapshotRestored).toBe(true);
   });
 
   it.each([
