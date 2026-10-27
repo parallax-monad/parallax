@@ -12,7 +12,14 @@ import {
   writeFileSync,
 } from "node:fs";
 import { createServer, isIP } from "node:net";
-import { dirname, isAbsolute, join, relative, resolve } from "node:path";
+import {
+  basename,
+  dirname,
+  isAbsolute,
+  join,
+  relative,
+  resolve,
+} from "node:path";
 import { performance } from "node:perf_hooks";
 import { fileURLToPath } from "node:url";
 import { createArbitrumRpcClient } from "../../apps/api/src/backend/arbitrum-chain-adapter.js";
@@ -293,6 +300,32 @@ function isDirectory(path: string): boolean {
   }
 }
 
+function normalizeGitMetadataPath(path: string): string | undefined {
+  let existingPrefix = resolve(path);
+  const remainingSegments: string[] = [];
+
+  while (true) {
+    try {
+      const canonicalPrefix = realpathSync(existingPrefix);
+      if (remainingSegments.length > 0 && !isDirectory(existingPrefix)) {
+        return undefined;
+      }
+      return resolve(canonicalPrefix, ...remainingSegments);
+    } catch (error) {
+      if (
+        !isNodeError(error) ||
+        (error.code !== "ENOENT" && error.code !== "ENOTDIR")
+      ) {
+        return undefined;
+      }
+      const parent = dirname(existingPrefix);
+      if (parent === existingPrefix) return undefined;
+      remainingSegments.unshift(basename(existingPrefix));
+      existingPrefix = parent;
+    }
+  }
+}
+
 export function sameGitDirectoryIdentity(
   firstPath: string,
   secondPath: string,
@@ -404,10 +437,24 @@ function portableWorktreeGitDirectory(
   ) {
     return undefined;
   }
-  const declaredCommonGitDirectory = resolve(declaredGitDirectory, "..", "..");
+  const declaredCommonGitDirectoryPath = resolve(
+    declaredGitDirectory,
+    "..",
+    "..",
+  );
   if (
-    resolve(declaredCommonGitDirectory, "worktrees", worktreeId) !==
+    resolve(declaredCommonGitDirectoryPath, "worktrees", worktreeId) !==
     resolve(declaredGitDirectory)
+  ) {
+    return undefined;
+  }
+  const declaredCommonGitDirectory = normalizeGitMetadataPath(
+    declaredCommonGitDirectoryPath,
+  );
+  const canonicalRepositoryRoot = normalizeGitMetadataPath(repositoryRoot);
+  if (
+    declaredCommonGitDirectory === undefined ||
+    canonicalRepositoryRoot === undefined
   ) {
     return undefined;
   }
@@ -416,17 +463,33 @@ function portableWorktreeGitDirectory(
     return undefined;
   }
   const declaredGitDirectoryExists = isDirectory(declaredGitDirectory);
-  const commonGitDirectories = [
+  const commonGitDirectories: string[] = [];
+  for (const path of [
     nearestCommonGitDirectory(repositoryRoot),
     declaredGitDirectoryExists
       ? reportedCommonGitDirectory(declaredGitDirectory)
       : undefined,
-  ].filter(
-    (path, index, paths): path is string =>
-      path !== undefined && paths.indexOf(path) === index,
-  );
+  ]) {
+    if (
+      path !== undefined &&
+      !commonGitDirectories.some((knownPath) =>
+        sameGitDirectoryIdentity(path, knownPath),
+      )
+    ) {
+      commonGitDirectories.push(path);
+    }
+  }
+
   for (const commonGitDirectory of commonGitDirectories) {
-    const candidate = join(commonGitDirectory, "worktrees", worktreeId);
+    const canonicalCommonGitDirectory =
+      normalizeGitMetadataPath(commonGitDirectory);
+    if (canonicalCommonGitDirectory === undefined) continue;
+
+    const candidate = join(
+      canonicalCommonGitDirectory,
+      "worktrees",
+      worktreeId,
+    );
     if (!isDirectory(candidate)) continue;
 
     let canonicalCandidate: string;
@@ -436,7 +499,7 @@ function portableWorktreeGitDirectory(
       continue;
     }
     if (
-      relative(commonGitDirectory, canonicalCandidate) !==
+      relative(canonicalCommonGitDirectory, canonicalCandidate) !==
       join("worktrees", worktreeId)
     ) {
       continue;
@@ -448,13 +511,21 @@ function portableWorktreeGitDirectory(
       continue;
     }
 
-    if (reportedCommonGitDirectory(canonicalCandidate) !== commonGitDirectory) {
+    const reportedCommonDirectory =
+      reportedCommonGitDirectory(canonicalCandidate);
+    if (
+      reportedCommonDirectory === undefined ||
+      !sameGitDirectoryIdentity(
+        reportedCommonDirectory,
+        canonicalCommonGitDirectory,
+      )
+    ) {
       continue;
     }
 
     const repositoryRelativePath = relative(
-      dirname(commonGitDirectory),
-      resolve(repositoryRoot),
+      dirname(canonicalCommonGitDirectory),
+      canonicalRepositoryRoot,
     );
     if (repositoryRelativePath === "" || isAbsolute(repositoryRelativePath)) {
       continue;
@@ -464,13 +535,22 @@ function portableWorktreeGitDirectory(
     );
     if (
       gitDirectoryBacklink === undefined ||
-      !isAbsolute(gitDirectoryBacklink) ||
-      resolve(gitDirectoryBacklink) !==
-        resolve(
-          dirname(declaredCommonGitDirectory),
-          repositoryRelativePath,
-          ".git",
-        )
+      !isAbsolute(gitDirectoryBacklink)
+    ) {
+      continue;
+    }
+    const normalizedBacklink = normalizeGitMetadataPath(gitDirectoryBacklink);
+    const expectedBacklink = normalizeGitMetadataPath(
+      resolve(
+        dirname(declaredCommonGitDirectory),
+        repositoryRelativePath,
+        ".git",
+      ),
+    );
+    if (
+      normalizedBacklink === undefined ||
+      expectedBacklink === undefined ||
+      normalizedBacklink !== expectedBacklink
     ) {
       continue;
     }
@@ -536,17 +616,25 @@ function validatedGitMetadataPath(
     return undefined;
   }
 
-  const gitDirectory = resolve(gitDirectoryText);
-  const worktreeRoot = resolve(worktreeRootText);
-  const metadataPath = resolve(metadataPathText);
+  const gitDirectory = normalizeGitMetadataPath(gitDirectoryText);
+  const worktreeRoot = normalizeGitMetadataPath(worktreeRootText);
+  const metadataPath = normalizeGitMetadataPath(metadataPathText);
+  const expectedGitDirectoryPath =
+    normalizeGitMetadataPath(expectedGitDirectory);
+  const expectedWorktreeRoot = normalizeGitMetadataPath(repositoryRoot);
   if (
-    worktreeRoot !== resolve(repositoryRoot) ||
-    gitDirectory !== resolve(expectedGitDirectory) ||
+    gitDirectory === undefined ||
+    worktreeRoot === undefined ||
+    metadataPath === undefined ||
+    expectedGitDirectoryPath === undefined ||
+    expectedWorktreeRoot === undefined ||
+    worktreeRoot !== expectedWorktreeRoot ||
+    gitDirectory !== expectedGitDirectoryPath ||
     relative(gitDirectory, metadataPath) !== name
   ) {
     return undefined;
   }
-  return metadataPath;
+  return resolve(metadataPathText);
 }
 
 function throwGitMetadataFailure(output: {
