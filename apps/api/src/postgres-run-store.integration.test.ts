@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
+import { economicFailStopResult } from "@parallax/orchestrator/application/action-gate-fixtures";
 import { runner } from "node-pg-migrate";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { accountStateSnapshotSchema } from "./account-state-model.js";
@@ -9,7 +10,10 @@ import {
   CAMELOT_SEPOLIA_WETH,
 } from "./backend/camelot-v3-protocol-adapter.js";
 import { CAMELOT_V3_ALLOWANCE_SPENDER_QUALIFICATION_REF } from "./backend/camelot-v3-qualified-spender.js";
+import { createBackendApp } from "./bootstrap/backend.js";
+import type { AgentFlowCheckInput } from "./ports.js";
 import { createPostgresPool, PostgresRunStore } from "./postgres-run-store.js";
+import { bootstrapBackendRuntime } from "./runtime-config.js";
 import { migratePostgres } from "./storage/migrations.js";
 import { runStoreContract } from "./store.contract.js";
 import { CHECK_RUN_FAILURE_CODES } from "./store.js";
@@ -199,6 +203,208 @@ integration("PostgresRunStore", () => {
       await secondPool.end();
     }
   });
+
+  it("recovers a posted Check through a fresh API app and re-checks its persisted parent", async () => {
+    if (databaseUrl === undefined) return;
+
+    const tokenAddress = "0xabcdefabcdefabcdefabcdefabcdefabcdefabcd";
+    const sender = "0x1111111111111111111111111111111111111111";
+    const runtime = bootstrapBackendRuntime({
+      environment: {
+        MONAD_RPC_URL: "https://rpc.example.test",
+        MOSS_RUNTIME_VERSION: "fixture-runtime",
+        MOSS_RUNTIME_REVISION: "fixture-revision",
+      },
+      tokenRegistry: {
+        chains: [{ chainId: 143, symbol: "MON", decimals: 18 }],
+        tokens: [
+          {
+            chainId: 143,
+            address: tokenAddress,
+            symbol: "USDC",
+            decimals: 6,
+            decimalsSource: "onchain_verified",
+            verifiedAtBlock: "90000000",
+          },
+        ],
+      },
+    });
+    const requestBody = {
+      chainId: 143,
+      protocol: "kuru",
+      sender,
+      tokenIn: { kind: "native" },
+      tokenOut: { kind: "erc20", address: tokenAddress },
+      amountIn: "1.5",
+      economicBoundary: {
+        availability: "available",
+        minimumReceived: "0.02",
+        source: "user_declared",
+      },
+    };
+    const createAgentFlow = (calls: { count: number }) => ({
+      async check(input: AgentFlowCheckInput): Promise<unknown> {
+        calls.count += 1;
+        if (
+          input.intent.tokenIn.kind !== "native" ||
+          input.intent.tokenOut.kind !== "erc20"
+        ) {
+          throw new Error("Expected the fixed native-to-USDC test Intent");
+        }
+        return economicFailStopResult(
+          {
+            sender: input.intent.sender,
+            mon: input.intent.tokenIn,
+            usdc: input.intent.tokenOut,
+            simulatorPinnedBlock: "42",
+            runtimeVersion: runtime.config.moss.runtimeVersion,
+            runtimeRevision: runtime.config.moss.runtimeRevision,
+          },
+          input.runId,
+          input.intent,
+        );
+      },
+    });
+
+    let firstPool: ReturnType<typeof createPostgresPool> | undefined =
+      createPostgresPool(databaseUrl);
+    let secondPool: ReturnType<typeof createPostgresPool> | undefined;
+    let firstApp: ReturnType<typeof createBackendApp> | undefined;
+    let secondApp: ReturnType<typeof createBackendApp> | undefined;
+    try {
+      const firstCalls = { count: 0 };
+      const firstStore = new PostgresRunStore({
+        pool: firstPool,
+        poolOwnership: "borrowed",
+      });
+      firstApp = createBackendApp({
+        runtime,
+        store: firstStore,
+        agentFlow: createAgentFlow(firstCalls),
+      });
+      const checkResponse = await firstApp.fetch(
+        new Request("https://api.example.test/api/check", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(requestBody),
+        }),
+      );
+      expect(checkResponse.status).toBe(200);
+      const postedRun = (await checkResponse.json()) as {
+        runId: string;
+        status: string;
+        createdAt: string;
+      };
+      expect(postedRun.status).toBe("completed");
+      expect(firstCalls.count).toBeGreaterThan(0);
+
+      await firstApp.close();
+      firstApp = undefined;
+      await firstPool.end();
+      firstPool = undefined;
+
+      secondPool = createPostgresPool(databaseUrl);
+      const secondCalls = { count: 0 };
+      const secondStore = new PostgresRunStore({
+        pool: secondPool,
+        poolOwnership: "borrowed",
+      });
+      secondApp = createBackendApp({
+        runtime,
+        store: secondStore,
+        agentFlow: createAgentFlow(secondCalls),
+      });
+      const getResponse = await secondApp.fetch(
+        new Request(
+          `https://api.example.test/api/runs/${encodeURIComponent(postedRun.runId)}`,
+        ),
+      );
+      expect(getResponse.status).toBe(200);
+      const recoveredRecord = (await getResponse.json()) as {
+        runId: string;
+        status: string;
+        createdAt: string;
+        result: unknown;
+      };
+      expect(recoveredRecord).toMatchObject({
+        runId: postedRun.runId,
+        status: "completed",
+        createdAt: postedRun.createdAt,
+      });
+      expect(recoveredRecord.result).toEqual(postedRun);
+      expect(secondCalls.count).toBe(0);
+
+      const rerunResponse = await secondApp.fetch(
+        new Request("https://api.example.test/api/check", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            ...requestBody,
+            amountIn: "2",
+            parentRunId: postedRun.runId,
+          }),
+        }),
+      );
+      expect(rerunResponse.status).toBe(200);
+      const childRun = (await rerunResponse.json()) as {
+        runId: string;
+        status: string;
+        parentRunId?: string;
+        diff?: {
+          previousRunId: string;
+          changedFields: readonly {
+            field: string;
+            before: string;
+            after: string;
+          }[];
+        };
+      };
+      expect(childRun).toMatchObject({
+        status: "completed",
+        parentRunId: postedRun.runId,
+        diff: {
+          previousRunId: postedRun.runId,
+          changedFields: [
+            {
+              field: "amountInAtomic",
+              before: "1500000000000000000",
+              after: "2000000000000000000",
+            },
+          ],
+        },
+      });
+      expect(childRun.runId).not.toBe(postedRun.runId);
+      const callsAfterRerun = secondCalls.count;
+      expect(callsAfterRerun).toBeGreaterThan(0);
+
+      const [parentReadAfterRerun, childRead] = await Promise.all([
+        secondApp.fetch(
+          new Request(
+            `https://api.example.test/api/runs/${encodeURIComponent(postedRun.runId)}`,
+          ),
+        ),
+        secondApp.fetch(
+          new Request(
+            `https://api.example.test/api/runs/${encodeURIComponent(childRun.runId)}`,
+          ),
+        ),
+      ]);
+      expect(parentReadAfterRerun.status).toBe(200);
+      const parentRecordAfterRerun = (await parentReadAfterRerun.json()) as {
+        result: unknown;
+      };
+      expect(parentRecordAfterRerun.result).toEqual(postedRun);
+      expect(childRead.status).toBe(200);
+      const childRecord = (await childRead.json()) as { result: unknown };
+      expect(childRecord.result).toEqual(childRun);
+      expect(secondCalls.count).toBe(callsAfterRerun);
+    } finally {
+      await firstApp?.close();
+      await secondApp?.close();
+      await firstPool?.end();
+      await secondPool?.end();
+    }
+  }, 30_000);
 
   it("persists and round-trips block-bound account-state snapshots", async () => {
     if (pool === undefined) return;
