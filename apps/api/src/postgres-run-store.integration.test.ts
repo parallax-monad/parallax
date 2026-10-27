@@ -101,6 +101,31 @@ async function insertFailureCodeRow(
   );
 }
 
+function rememberRunIds(runIds: Set<string>, body: unknown): void {
+  if (typeof body !== "object" || body === null) return;
+
+  if ("parentRunId" in body && typeof body.parentRunId === "string") {
+    runIds.add(body.parentRunId);
+  }
+  if ("runId" in body && typeof body.runId === "string") {
+    runIds.add(body.runId);
+  }
+}
+
+function assertTeardownSucceeded(
+  results: readonly PromiseSettledResult<void>[],
+): void {
+  const errors = results
+    .filter((result) => result.status === "rejected")
+    .map((result) => result.reason);
+  if (errors.length > 0) {
+    throw new AggregateError(
+      errors,
+      "Failed to tear down fresh-app Run test resources",
+    );
+  }
+}
+
 integration("PostgresRunStore", () => {
   let pool: ReturnType<typeof createPostgresPool>;
 
@@ -271,6 +296,7 @@ integration("PostgresRunStore", () => {
     let secondPool: ReturnType<typeof createPostgresPool> | undefined;
     let firstApp: ReturnType<typeof createBackendApp> | undefined;
     let secondApp: ReturnType<typeof createBackendApp> | undefined;
+    const createdRunIds = new Set<string>();
     try {
       const firstCalls = { count: 0 };
       const firstStore = new PostgresRunStore({
@@ -289,8 +315,10 @@ integration("PostgresRunStore", () => {
           body: JSON.stringify(requestBody),
         }),
       );
+      const checkBody: unknown = await checkResponse.json();
+      rememberRunIds(createdRunIds, checkBody);
       expect(checkResponse.status).toBe(200);
-      const postedRun = (await checkResponse.json()) as {
+      const postedRun = checkBody as {
         runId: string;
         status: string;
         createdAt: string;
@@ -345,8 +373,10 @@ integration("PostgresRunStore", () => {
           }),
         }),
       );
+      const rerunBody: unknown = await rerunResponse.json();
+      rememberRunIds(createdRunIds, rerunBody);
       expect(rerunResponse.status).toBe(200);
-      const childRun = (await rerunResponse.json()) as {
+      const childRun = rerunBody as {
         runId: string;
         status: string;
         parentRunId?: string;
@@ -399,10 +429,34 @@ integration("PostgresRunStore", () => {
       expect(childRecord.result).toEqual(childRun);
       expect(secondCalls.count).toBe(callsAfterRerun);
     } finally {
-      await firstApp?.close();
-      await secondApp?.close();
-      await firstPool?.end();
-      await secondPool?.end();
+      const appTeardown = await Promise.allSettled(
+        [firstApp?.close(), secondApp?.close()].filter(
+          (operation): operation is Promise<void> => operation !== undefined,
+        ),
+      );
+      const poolTeardown = await Promise.allSettled(
+        [firstPool?.end(), secondPool?.end()].filter(
+          (operation): operation is Promise<void> => operation !== undefined,
+        ),
+      );
+      try {
+        if (createdRunIds.size > 0) {
+          const cleanupPool = createPostgresPool(databaseUrl);
+          try {
+            // The schema has a RESTRICT self-reference; delete the child before its parent.
+            for (const runId of [...createdRunIds].reverse()) {
+              await cleanupPool.query(
+                "DELETE FROM check_runs WHERE run_id = $1",
+                [runId],
+              );
+            }
+          } finally {
+            await cleanupPool.end();
+          }
+        }
+      } finally {
+        assertTeardownSucceeded([...appTeardown, ...poolTeardown]);
+      }
     }
   }, 30_000);
 
