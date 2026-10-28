@@ -1,7 +1,9 @@
 import {
   failedRunResultSchema,
   type NormalizedSwapIntent,
+  runResultSchema,
 } from "@parallax/contracts";
+import { economicFailStopResult } from "@parallax/orchestrator/application/action-gate-fixtures";
 import { describe, expect, it, vi } from "vitest";
 import {
   RunQueryApplicationService,
@@ -26,6 +28,58 @@ const intent = {
     source: "unavailable",
   },
 } as NormalizedSwapIntent;
+
+const legacyArbitrumOneIntent = {
+  chainId: 42161,
+  protocol: "camelot-v3",
+  sender: "0x1111111111111111111111111111111111111111",
+  recipient: "0x1111111111111111111111111111111111111111",
+  recipientSource: "defaulted_from_sender",
+  tokenIn: { kind: "native" },
+  tokenOut: {
+    kind: "erc20",
+    address: "0xaf88d065e77c8cc2239327c5edb3a432268e5831",
+  },
+  amountInAtomic: "1",
+  economicBoundary: {
+    availability: "unavailable",
+    source: "unavailable",
+  },
+} as NormalizedSwapIntent;
+
+function createCompletedLegacyArbitrumOneResult() {
+  const intent: NormalizedSwapIntent = {
+    ...legacyArbitrumOneIntent,
+    economicBoundary: {
+      availability: "available",
+      minimumReceivedAtomic: "20000",
+      source: "user_declared",
+    },
+  };
+  if (intent.tokenOut.kind !== "erc20") {
+    throw new Error("Expected an ERC-20 output for the legacy Run fixture");
+  }
+  const result = economicFailStopResult(
+    {
+      sender: intent.sender,
+      mon: { kind: "native" },
+      usdc: intent.tokenOut,
+      simulatorPinnedBlock: "42",
+      runtimeVersion: "legacy-runtime",
+      runtimeRevision: "legacy-revision",
+    },
+    "legacy-one-completed-run",
+    intent,
+  );
+  if (result.route.availability !== "available") {
+    throw new Error("Expected an available legacy Run route");
+  }
+  result.route.protocol = "camelot-v3";
+  return runResultSchema.parse({
+    ...result,
+    createdAt: "2026-10-17T19:17:33.990Z",
+  });
+}
 
 function createService(
   dependencies: Partial<RunQueryApplicationServiceDependencies> = {},
@@ -61,6 +115,27 @@ describe("RunQueryApplicationService", () => {
         status: "started",
       },
     });
+  });
+
+  it("does not fabricate a result when recovering a started legacy Arbitrum One Run", async () => {
+    const storedRecord = {
+      runId: "legacy-one-started-run",
+      createdAt: "2026-10-17T19:17:33.990Z",
+      intent: legacyArbitrumOneIntent,
+      status: "started" as const,
+    };
+    const get = vi.fn<RunStore["get"]>().mockResolvedValue(storedRecord);
+    const service = createService({ store: fakeStore(get) });
+
+    const response = await service.getRun(storedRecord.runId);
+
+    expect(response).toEqual({ status: 200, body: storedRecord });
+    if (response.status !== 200) {
+      throw new Error("Started legacy Run was not returned");
+    }
+    expect(response.body).not.toHaveProperty("result");
+    expect(response.body.intent).toEqual(legacyArbitrumOneIntent);
+    expect(get).toHaveBeenCalledTimes(1);
   });
 
   it("returns the same not-found response for invalid and unknown IDs", async () => {
@@ -105,20 +180,7 @@ describe("RunQueryApplicationService", () => {
   });
 
   it("projects absent legacy Arbitrum One provenance as UNKNOWN without rewriting storage", async () => {
-    const arbitrumOneIntent = {
-      chainId: 42161,
-      protocol: "camelot-v3",
-      sender: "0x1111111111111111111111111111111111111111",
-      recipient: "0x1111111111111111111111111111111111111111",
-      recipientSource: "defaulted_from_sender",
-      tokenIn: { kind: "native" },
-      tokenOut: {
-        kind: "erc20",
-        address: "0xaf88d065e77c8cc2239327c5edb3a432268e5831",
-      },
-      amountInAtomic: "1",
-      economicBoundary: { availability: "unavailable", source: "unavailable" },
-    } as NormalizedSwapIntent;
+    const arbitrumOneIntent = legacyArbitrumOneIntent;
     const result = failedRunResultSchema.parse({
       runId: "legacy-one-run",
       createdAt: "2026-10-17T19:17:33.990Z",
@@ -169,6 +231,38 @@ describe("RunQueryApplicationService", () => {
       status: "UNKNOWN",
       reason: "NOT_RECORDED",
     });
+    expect(storedRecord.result.arbitrumOneForkProvenance).toBeUndefined();
+    expect(get).toHaveBeenCalledTimes(1);
+  });
+
+  it("projects absent legacy Arbitrum One provenance on completed Runs without rewriting storage", async () => {
+    const result = createCompletedLegacyArbitrumOneResult();
+    if (result.status !== "completed") {
+      throw new Error("Expected a completed legacy Run fixture");
+    }
+    const originalResult = structuredClone(result);
+    const storedRecord = {
+      runId: result.runId,
+      createdAt: result.createdAt ?? "2026-10-17T19:17:33.990Z",
+      intent: result.intent,
+      status: "completed" as const,
+      result,
+    };
+    const get = vi.fn<RunStore["get"]>().mockResolvedValue(storedRecord);
+    const service = createService({ store: fakeStore(get) });
+
+    const response = await service.getRun(result.runId);
+
+    expect(response.status).toBe(200);
+    if (response.status !== 200 || response.body.status !== "completed") {
+      throw new Error("Completed legacy Run was not returned");
+    }
+    expect(response.body.result.arbitrumOneForkProvenance).toEqual({
+      schemaVersion: 1,
+      status: "UNKNOWN",
+      reason: "NOT_RECORDED",
+    });
+    expect(storedRecord.result).toEqual(originalResult);
     expect(storedRecord.result.arbitrumOneForkProvenance).toBeUndefined();
     expect(get).toHaveBeenCalledTimes(1);
   });

@@ -1474,6 +1474,7 @@ describe("Arbitrum One local-fork Check/Run provenance", () => {
           simulationProvenance?: unknown;
         };
       };
+      expect(getBody.result).toEqual(postBody);
       expect(getBody.result?.arbitrumOneForkProvenance).toEqual(
         postBody.arbitrumOneForkProvenance,
       );
