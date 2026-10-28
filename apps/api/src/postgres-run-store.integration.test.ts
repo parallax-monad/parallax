@@ -423,13 +423,13 @@ integration("PostgresRunStore", () => {
       const childRecord = (await childRead.json()) as { result: unknown };
       expect(childRecord.result).toEqual(childRun);
       expect(secondCalls.count).toBe(callsAfterRerun);
-      // Each economic FAIL STOP also persists an internal Action Gate child.
-      // These Runs must be tracked even though they are not the POST's Run ID.
+      // The initial Check also persists an internal Action Gate child that is
+      // not the POST's Run ID. The explicit re-check already has a parent, so
+      // isActionGateCandidate excludes it from creating another internal child.
       expect(createdRuns).toEqual([
         { runId: postedRun.runId, parentRunId: undefined },
         { runId: expect.any(String), parentRunId: postedRun.runId },
         { runId: childRun.runId, parentRunId: postedRun.runId },
-        { runId: expect.any(String), parentRunId: childRun.runId },
       ]);
       const persistedRuns = await secondPool.query(
         "SELECT run_id, parent_run_id FROM check_runs WHERE run_id = ANY($1::text[])",
