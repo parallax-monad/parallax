@@ -101,17 +101,6 @@ async function insertFailureCodeRow(
   );
 }
 
-function rememberRunIds(runIds: Set<string>, body: unknown): void {
-  if (typeof body !== "object" || body === null) return;
-
-  if ("parentRunId" in body && typeof body.parentRunId === "string") {
-    runIds.add(body.parentRunId);
-  }
-  if ("runId" in body && typeof body.runId === "string") {
-    runIds.add(body.runId);
-  }
-}
-
 function assertTeardownSucceeded(
   results: readonly PromiseSettledResult<void>[],
 ): void {
@@ -296,10 +285,18 @@ integration("PostgresRunStore", () => {
     let secondPool: ReturnType<typeof createPostgresPool> | undefined;
     let firstApp: ReturnType<typeof createBackendApp> | undefined;
     let secondApp: ReturnType<typeof createBackendApp> | undefined;
-    const createdRunIds = new Set<string>();
+    const createdRuns: { runId: string; parentRunId?: string }[] = [];
+    class TrackedPostgresRunStore extends PostgresRunStore {
+      public override async start(
+        ...args: Parameters<PostgresRunStore["start"]>
+      ): Promise<void> {
+        await super.start(...args);
+        createdRuns.push({ runId: args[0], parentRunId: args[2] });
+      }
+    }
     try {
       const firstCalls = { count: 0 };
-      const firstStore = new PostgresRunStore({
+      const firstStore = new TrackedPostgresRunStore({
         pool: firstPool,
         poolOwnership: "borrowed",
       });
@@ -316,7 +313,6 @@ integration("PostgresRunStore", () => {
         }),
       );
       const checkBody: unknown = await checkResponse.json();
-      rememberRunIds(createdRunIds, checkBody);
       expect(checkResponse.status).toBe(200);
       const postedRun = checkBody as {
         runId: string;
@@ -333,7 +329,7 @@ integration("PostgresRunStore", () => {
 
       secondPool = createPostgresPool(databaseUrl);
       const secondCalls = { count: 0 };
-      const secondStore = new PostgresRunStore({
+      const secondStore = new TrackedPostgresRunStore({
         pool: secondPool,
         poolOwnership: "borrowed",
       });
@@ -374,7 +370,6 @@ integration("PostgresRunStore", () => {
         }),
       );
       const rerunBody: unknown = await rerunResponse.json();
-      rememberRunIds(createdRunIds, rerunBody);
       expect(rerunResponse.status).toBe(200);
       const childRun = rerunBody as {
         runId: string;
@@ -428,6 +423,27 @@ integration("PostgresRunStore", () => {
       const childRecord = (await childRead.json()) as { result: unknown };
       expect(childRecord.result).toEqual(childRun);
       expect(secondCalls.count).toBe(callsAfterRerun);
+      // Each economic FAIL STOP also persists an internal Action Gate child.
+      // These Runs must be tracked even though they are not the POST's Run ID.
+      expect(createdRuns).toEqual([
+        { runId: postedRun.runId, parentRunId: undefined },
+        { runId: expect.any(String), parentRunId: postedRun.runId },
+        { runId: childRun.runId, parentRunId: postedRun.runId },
+        { runId: expect.any(String), parentRunId: childRun.runId },
+      ]);
+      const persistedRuns = await secondPool.query(
+        "SELECT run_id, parent_run_id FROM check_runs WHERE run_id = ANY($1::text[])",
+        [createdRuns.map(({ runId }) => runId)],
+      );
+      expect(persistedRuns.rows).toHaveLength(createdRuns.length);
+      expect(persistedRuns.rows).toEqual(
+        expect.arrayContaining(
+          createdRuns.map(({ runId, parentRunId }) => ({
+            run_id: runId,
+            parent_run_id: parentRunId ?? null,
+          })),
+        ),
+      );
     } finally {
       const appTeardown = await Promise.allSettled(
         [firstApp?.close(), secondApp?.close()].filter(
@@ -440,16 +456,23 @@ integration("PostgresRunStore", () => {
         ),
       );
       try {
-        if (createdRunIds.size > 0) {
+        if (createdRuns.length > 0) {
           const cleanupPool = createPostgresPool(databaseUrl);
           try {
-            // The schema has a RESTRICT self-reference; delete the child before its parent.
-            for (const runId of [...createdRunIds].reverse()) {
+            // Successful starts include internal verification children, even if a
+            // POST fails before returning a Run ID. Every parent already exists
+            // when its child starts, so reverse start order satisfies RESTRICT.
+            for (const { runId } of [...createdRuns].reverse()) {
               await cleanupPool.query(
                 "DELETE FROM check_runs WHERE run_id = $1",
                 [runId],
               );
             }
+            const remainingRuns = await cleanupPool.query(
+              "SELECT run_id FROM check_runs WHERE run_id = ANY($1::text[])",
+              [createdRuns.map(({ runId }) => runId)],
+            );
+            expect(remainingRuns.rows).toEqual([]);
           } finally {
             await cleanupPool.end();
           }
