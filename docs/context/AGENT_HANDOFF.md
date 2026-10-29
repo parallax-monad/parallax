@@ -1,6 +1,29 @@
 # Current Agent Handoff
 
-## 2026-10-26 — PR #179 quote-only binding and post-simulation failure follow-up
+## Current handoff — merged #179/#180/#181 — 2026-10-29
+
+Fresh-fetch/readback confirms `origin/main = 9f4fdb741c89725cb2589d888b9964ac3dfab428`,
+the PR #181 merge. It includes all three verified merge commits:
+
+- #179 — provider-neutral simulation provenance, merged 2026-10-26 at
+  `2091b95d566cf3a0f990d35805cc3d81dc3703dd`.
+- #180 — Arbitrum One fork Git metadata path normalization, merged 2026-10-27 at
+  `d9e19ba27f6eb69d449a1947507fab12ff53d03f`.
+- #181 — Run recovery and legacy projection coverage, merged 2026-10-28 at
+  `9f4fdb741c89725cb2589d888b9964ac3dfab428`.
+
+Do not reopen publication or merge work for these merged PRs. Future work requires its own
+scoped authorization and fresh GitHub verification; `/docs/` CODEOWNERS remain
+`@chin0312 @rainypilgrimage`. No Product/Risk/Contract semantics, evidence acceptance, or
+unsigned/read-only boundary changes are inferred from this docs sync.
+
+### Historical PR3 pre-merge handoff — 2026-10-25–26
+
+The five sections below retain pre-merge technical details and code-head checks. Their OPEN,
+publication-pending, awaiting-acceptance, and do-not-merge instructions are historical only,
+superseded by the merged checkpoint above; they are not current task directions.
+
+## Historical 2026-10-26 — PR #179 quote-only binding and post-simulation failure follow-up
 
 Code commit `fd27b105185f73a75daec29907fb8a279fc888af` on
 `task/t_4b0f39b2-pr3-contract-evidence` validates quote provenance against Intent/top-level Route
@@ -19,7 +42,7 @@ pushed to the existing PR #179 branch and the task branch plus PR ref read back 
 #179 remains OPEN; no new PR, merge, or GitHub review/comment was submitted. Keep this task in
 review pending explicit user acceptance.
 
-## 2026-10-26 — PR #179 Run provenance identity follow-up
+## Historical 2026-10-26 — PR #179 Run provenance identity follow-up
 
 Code commit `806cc13aeddda676340e8af3d25cabd459c71dd6` on
 `task/t_4b0f39b2-pr3-contract-evidence` binds quote provenance output-asset identity to
@@ -36,7 +59,7 @@ branch and both the branch and PR ref read back at the code SHA; PR #179 remains
 reviews. Keep this task in review pending explicit user acceptance; do not merge or submit a GitHub
 review/comment. Refresh live PR head and CI before any future mutation.
 
-## 2026-10-26 — PR #179 quote-protocol binding follow-up
+## Historical 2026-10-26 — PR #179 quote-protocol binding follow-up
 
 Code commit `6eebd1b666c402e8e086f1a72f7639c78fd9d71e` on
 `task/t_4b0f39b2-pr3-contract-evidence` binds both quote-provenance route/source protocol values to
@@ -53,7 +76,7 @@ At code-commit readback, PR #179 remained OPEN and both the remote branch and PR
 commit. No new PR, merge, or GitHub review/comment was submitted. Keep the task in review pending
 explicit user acceptance; refresh exact-head checks after the durable-context sync commit.
 
-## 2026-10-26 — PR #179 reviewer-finding follow-up
+## Historical 2026-10-26 — PR #179 reviewer-finding follow-up
 
 The existing PR #179 branch received code commit
 `9fead2514f687f544b2d8b1061bbd530acf16e5d` after
@@ -71,7 +94,7 @@ typecheck passed, lint exited 0 with 27 informational diagnostics confined to un
 review/acceptance; do not merge or submit a GitHub review/comment. Refresh live PR head/checks before
 any later mutation.
 
-## PR3 provenance task — exact-head capture complete, publication pending — 2026-10-25
+## Historical PR3 provenance task — exact-head capture complete, publication pending — 2026-10-25
 
 Kanban task `t_4b0f39b2` is on `task/t_4b0f39b2-pr3-contract-evidence`, based on
 `origin/main` `08fda1d886138ef30cad68d3cf0655a1e14380aa`. Implementation/test commit
