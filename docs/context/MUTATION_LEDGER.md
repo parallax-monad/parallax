@@ -1,6 +1,30 @@
 # Mutation / Incident Ledger
 
-## 2026-10-26 — PR #179 quote-only binding and post-simulation failure follow-up
+## 2026-10-29 — reconcile context to merged #179/#180/#181
+
+Fresh GitHub readback and fetch confirm `origin/main` at
+`9f4fdb741c89725cb2589d888b9964ac3dfab428` (the #181 merge), with these merge commits
+verified as ancestors:
+
+- #179 — provider-neutral simulation provenance, merged 2026-10-26 at
+  `2091b95d566cf3a0f990d35805cc3d81dc3703dd`.
+- #180 — Arbitrum One fork Git metadata path normalization, merged 2026-10-27 at
+  `d9e19ba27f6eb69d449a1947507fab12ff53d03f`.
+- #181 — Run recovery and legacy projection coverage, merged 2026-10-28 at
+  `9f4fdb741c89725cb2589d888b9964ac3dfab428`.
+
+Task `t_4fcaad52` synchronizes only the current context and historical status framing in
+`PROJECT_STATE.md`, `AGENT_HANDOFF.md`, and this ledger. The earlier code-head checks remain
+historical evidence, not checks rerun for this documentation change. No runtime, CI, Product,
+Risk, Contract, or accepted-evidence meaning changes; no merge or GitHub review is authorized
+by this correction. `/docs/` CODEOWNERS remain `@chin0312 @rainypilgrimage`.
+
+### Historical PR #179 pre-merge mutation records — 2026-10-26
+
+The next two entries preserve the status at their code-head readback. Their open/pending
+acceptance language is historical, superseded by the merged facts above, not a current gate.
+
+## Historical 2026-10-26 — PR #179 quote-only binding and post-simulation failure follow-up
 
 Code commit `fd27b105185f73a75daec29907fb8a279fc888af` was normally pushed to the existing
 `task/t_4b0f39b2-pr3-contract-evidence` branch for PR #179. It adds unconditional quote-provenance
@@ -12,7 +36,7 @@ integration was not run because the configured destructive test database was not
 PR #179 remains open; no new PR, merge, or GitHub review/comment submission occurred. Explicit user
 acceptance remains pending.
 
-## 2026-10-26 — PR #179 Run provenance identity follow-up
+## Historical 2026-10-26 — PR #179 Run provenance identity follow-up
 
 Code commit `806cc13aeddda676340e8af3d25cabd459c71dd6` was normally pushed to the existing
 `task/t_4b0f39b2-pr3-contract-evidence` branch for PR #179. The change binds quote output-asset
@@ -488,7 +512,7 @@ GitHub state/body mismatches are surfaced for Product Owner reconciliation rathe
   and shared-contract tests, 11-file scoped Biome, `pnpm lint` (exit 0), and `git diff --check`.
   Lint's 27 informational diagnostics are only in unchanged `scripts/provider-probes/` files.
 
-## 2026-10-26 — PR #179 provenance validation follow-up
+## Historical 2026-10-26 — PR #179 provenance validation follow-up
 
 - Code commit `9fead2514f687f544b2d8b1061bbd530acf16e5d` (parent
   `bba62930953e792c46b862a152e928759c178a8f`) was pushed normally, without force, to the existing
@@ -502,7 +526,7 @@ GitHub state/body mismatches are surfaced for Product Owner reconciliation rathe
   diagnostics in untouched provider-probe scripts. Exact-head Actions run `40217146813` / job
   `121240648760` succeeded. No new PR, merge, or GitHub review/comment submission occurred.
 
-## 2026-10-26 — PR #179 quote-protocol binding correction
+## Historical 2026-10-26 — PR #179 quote-protocol binding correction
 
 - On `task/t_4b0f39b2-pr3-contract-evidence`, code commit
   `6eebd1b666c402e8e086f1a72f7639c78fd9d71e` (parent

@@ -1,6 +1,29 @@
 # Project State
 
-## 2026-10-26 — PR #179 quote-only binding and post-simulation failure follow-up
+## Current merged checkpoint — 2026-10-29
+
+Fresh GitHub readback and `git fetch origin --prune` confirm that `main` includes:
+
+- PR #179, provider-neutral simulation provenance — merged 2026-10-26 at
+  `2091b95d566cf3a0f990d35805cc3d81dc3703dd`.
+- PR #180, Arbitrum One fork Git metadata path normalization — merged 2026-10-27 at
+  `d9e19ba27f6eb69d449a1947507fab12ff53d03f`.
+- PR #181, Run recovery and legacy projection coverage — merged 2026-10-28 at
+  `9f4fdb741c89725cb2589d888b9964ac3dfab428`.
+
+`checkpoint_head = 9f4fdb741c89725cb2589d888b9964ac3dfab428` is the fetched `origin/main`
+tip, the #181 merge. All three merge commits are ancestors of that tip; future takeovers must
+fresh-fetch and verify ancestry, not require equality. These PRs are merged, not open or awaiting
+publication/merge acceptance. This status sync changes no Product/Risk/Contract semantics or
+evidence acceptance, and preserves the unsigned/read-only boundary.
+
+### Historical PR3 pre-merge checkpoints — 2026-10-25–26
+
+The five PR3 sections below retain code-head verification and technical narrative from before
+the #179 merge. Their OPEN, publication-pending, and user-acceptance language describes that
+historical checkpoint only; it is superseded by the merged facts above, not active instructions.
+
+## Historical 2026-10-26 — PR #179 quote-only binding and post-simulation failure follow-up
 
 Code commit `fd27b105185f73a75daec29907fb8a279fc888af` (parent
 `aa623df4a74acb64b34d81dde0650749eb57b9f6`) closes two further review findings on the existing
@@ -23,7 +46,7 @@ existing PR #179 branch; at code-head readback, the task branch and PR head ref 
 PR #179 remains OPEN; no new PR, merge, or GitHub review/comment submission occurred. User
 acceptance remains pending.
 
-## 2026-10-26 — PR #179 Run provenance identity follow-up
+## Historical 2026-10-26 — PR #179 Run provenance identity follow-up
 
 Code commit `806cc13aeddda676340e8af3d25cabd459c71dd6` (parent
 `d656b5ac84f4641d095cc67e0efdb32740c56e36`) closes two Run evidence-binding findings on the
@@ -45,7 +68,7 @@ tables. The code commit was normally pushed to PR #179's existing branch; the ta
 head ref read back at this SHA. PR #179 remains OPEN; no new PR, merge, or GitHub review/comment
 submission occurred. User acceptance remains pending.
 
-## 2026-10-26 — PR #179 quote-protocol binding follow-up
+## Historical 2026-10-26 — PR #179 quote-protocol binding follow-up
 
 Code commit `6eebd1b666c402e8e086f1a72f7639c78fd9d71e` (parent
 `74883332520e0038ef4f40f6619fd809a575dfa0`) closes the remaining quote-provenance protocol
@@ -65,7 +88,7 @@ At code-commit readback, the remote task branch and `refs/pull/179/head` matched
 remained OPEN. No new PR, merge, or GitHub review/comment submission occurred; user acceptance is
 pending.
 
-## 2026-10-26 — PR #179 provenance validation follow-up
+## Historical 2026-10-26 — PR #179 provenance validation follow-up
 
 PR #179 remains OPEN on `task/t_4b0f39b2-pr3-contract-evidence`. Code commit
 `9fead2514f687f544b2d8b1061bbd530acf16e5d` (parent
@@ -83,7 +106,7 @@ unchanged provider-probe scripts, and scoped Biome plus `git diff --check` passe
 GitHub Actions run `40217146813` / job `121240648760` succeeded on the code commit. No new PR,
 merge, or GitHub review/comment submission occurred; user acceptance remains pending.
 
-## PR3 simulation provenance task — implementation and exact-head capture complete — 2026-10-25
+## Historical PR3 simulation provenance task — implementation and exact-head capture complete — 2026-10-25
 
 Kanban task `t_4b0f39b2` is implemented on branch
 `task/t_4b0f39b2-pr3-contract-evidence`, based on freshly verified `origin/main`
